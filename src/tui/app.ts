@@ -3,12 +3,29 @@ import { KeypressHandler, type Keypress } from "./keypress.js";
 import { InputWidget } from "./input.js";
 import { renderHeader, type HeaderState } from "./header.js";
 import { renderStatusBar, type StatusState } from "./status-bar.js";
-import { GREEN, GRAY, RESET, BOLD, DIM, RED } from "../utils/ansi.js";
+import { GREEN, GRAY, RESET, BOLD, DIM, RED, WHITE } from "../utils/ansi.js";
 
 interface ChatMessage {
   role: "user" | "assistant" | "system";
   content: string;
 }
+
+// BrokeCLI logo — Silkscreen pixel font style, 3 lines tall
+const LOGO = [
+  `${GREEN}██▄  █▀▄  ▄▄▄  █ █  ▄▄▄   ▄▄  █    █${RESET}`,
+  `${GREEN}█▄█  █▀▄  █ █  ██▀  █▄▄  █    █    █${RESET}`,
+  `${GREEN}██▀  █ █  ▀▀▀  █ █  ▀▀▀   ▀▀  ▀▀▀  █${RESET}`,
+];
+
+// Available slash commands
+const COMMANDS = [
+  { name: "help", desc: "show commands" },
+  { name: "model", desc: "switch model" },
+  { name: "setup", desc: "add provider" },
+  { name: "cost", desc: "session spend" },
+  { name: "clear", desc: "clear chat" },
+  { name: "exit", desc: "quit" },
+];
 
 /**
  * Main TUI application.
@@ -178,10 +195,24 @@ export class App {
     return lines;
   }
 
+  /** Get matching commands for current input */
+  private getCommandSuggestions(): string[] {
+    const text = this.input.getText();
+    if (!text.startsWith("/")) return [];
+    const query = text.slice(1).toLowerCase();
+    return COMMANDS
+      .filter((c) => c.name.startsWith(query))
+      .map((c) => `  ${GREEN}/${c.name}${RESET}  ${DIM}${c.desc}${RESET}`);
+  }
+
   /** Build the full screen buffer and render */
   private draw(): void {
     const { height, width } = this.screen;
     const lines: string[] = [];
+    const inputText = this.input.getText();
+    const cursor = this.input.getCursor();
+    const isHome = this.messages.length === 0;
+    const suggestions = this.getCommandSuggestions();
 
     // 1. Header (row 1)
     lines.push(renderHeader(this.headerState, width));
@@ -189,35 +220,62 @@ export class App {
     // 2. Separator
     lines.push(`${GREEN}${"─".repeat(width)}${RESET}`);
 
-    // 3. Chat area (fills remaining space)
-    const chatHeight = height - 4; // header + separator + input + status
-    const messageLines = this.renderMessages();
-    const visible = messageLines.slice(this.scrollOffset, this.scrollOffset + chatHeight);
+    // 3. Content area
+    const reservedBottom = 2 + suggestions.length; // input + status + suggestions
+    const chatHeight = height - 2 - reservedBottom; // header + separator + bottom
 
-    for (let i = 0; i < chatHeight; i++) {
-      lines.push(visible[i] ?? "");
+    if (isHome) {
+      // Home screen — centered logo
+      const padTop = Math.max(0, Math.floor((chatHeight - LOGO.length - 4) / 3));
+
+      for (let i = 0; i < padTop; i++) lines.push("");
+
+      // Center each logo line
+      for (const logoLine of LOGO) {
+        const pad = Math.max(0, Math.floor((width - 39) / 2)); // 39 = visible logo width
+        lines.push(" ".repeat(pad) + logoLine);
+      }
+
+      lines.push("");
+      const tagline = `${DIM}AI coding that doesn't waste your money${RESET}`;
+      const tagPad = Math.max(0, Math.floor((width - 39) / 2));
+      lines.push(" ".repeat(tagPad) + tagline);
+
+      // Fill remaining
+      const filled = padTop + LOGO.length + 2;
+      for (let i = filled; i < chatHeight; i++) lines.push("");
+    } else {
+      // Chat view — messages
+      const messageLines = this.renderMessages();
+      const visible = messageLines.slice(this.scrollOffset, this.scrollOffset + chatHeight);
+      for (let i = 0; i < chatHeight; i++) {
+        lines.push(visible[i] ?? "");
+      }
     }
 
-    // 4. Input line
-    const inputText = this.input.getText();
-    const cursor = this.input.getCursor();
+    // 4. Command suggestions (shown above input when typing /)
+    for (const s of suggestions) {
+      lines.push(s);
+    }
+
+    // 5. Input line
     if (this.headerState.isStreaming) {
       lines.push(`${DIM}  waiting for response...${RESET}`);
     } else if (inputText) {
       lines.push(`${GREEN}❯${RESET} ${inputText}`);
     } else {
-      lines.push(`${GREEN}❯${RESET} ${DIM}Ask anything...${RESET}`);
+      lines.push(`${GREEN}❯${RESET} ${DIM}Ask anything... "Fix broken tests"${RESET}`);
     }
 
-    // 5. Status bar
+    // 6. Status bar
     lines.push(renderStatusBar(this.statusState, width));
 
     this.screen.render(lines);
 
     // Position cursor in input area
     if (!this.headerState.isStreaming) {
-      const inputRow = height - 1; // 1-based, second to last line
-      const inputCol = 3 + cursor; // "❯ " = 2 chars + 1-based
+      const inputRow = height - 1; // second to last line (1-based)
+      const inputCol = 3 + cursor;
       this.screen.setCursor(inputRow, inputCol);
     }
   }
@@ -248,9 +306,11 @@ export class App {
     this.keypress.stop();
     this.screen.exit();
 
-    // Show exit message
-    console.log(`\n${GREEN}${BOLD}brokecli${RESET} — session ended`);
-    console.log(`${DIM}Cost: $${this.headerState.cost.toFixed(4)} | Tokens: ${this.headerState.tokens}${RESET}\n`);
+    // Show exit with logo
+    console.log("");
+    for (const line of LOGO) console.log(line);
+    console.log(`${DIM}Session ended · $${this.headerState.cost.toFixed(4)} · ${this.headerState.tokens} tokens${RESET}`);
+    console.log("");
 
     process.exit(0);
   }
