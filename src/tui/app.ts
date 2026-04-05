@@ -10,11 +10,13 @@ interface ChatMessage {
   content: string;
 }
 
-// BrokeCLI logo — Silkscreen pixel font style, 3 lines tall
+// BrokeCLI logo — traced from Silkscreen Bold pixel font (brokecli-text-v1.svg)
 const LOGO = [
-  `${GREEN}██▄  █▀▄  ▄▄▄  █ █  ▄▄▄   ▄▄  █    █${RESET}`,
-  `${GREEN}█▄█  █▀▄  █ █  ██▀  █▄▄  █    █    █${RESET}`,
-  `${GREEN}██▀  █ █  ▀▀▀  █ █  ▀▀▀   ▀▀  ▀▀▀  █${RESET}`,
+  `${GREEN}████                 █  █           ████  █      ███${RESET}`,
+  `${GREEN}█   █  █ ██    ███   █ █     ███   █      █       █${RESET}`,
+  `${GREEN}████   ██     █   █  ██     ████   █      █       █${RESET}`,
+  `${GREEN}█   █  █      █   █  █ █    █      █      █       █${RESET}`,
+  `${GREEN}████   █       ███   █  █    ███    ████  █████  ███${RESET}`,
 ];
 
 // Available slash commands
@@ -225,24 +227,15 @@ export class App {
     const chatHeight = height - 2 - reservedBottom; // header + separator + bottom
 
     if (isHome) {
-      // Home screen — centered logo
-      const padTop = Math.max(0, Math.floor((chatHeight - LOGO.length - 4) / 3));
-
-      for (let i = 0; i < padTop; i++) lines.push("");
-
-      // Center each logo line
+      // Home screen — logo top left, then empty space, input at bottom
       for (const logoLine of LOGO) {
-        const pad = Math.max(0, Math.floor((width - 39) / 2)); // 39 = visible logo width
-        lines.push(" ".repeat(pad) + logoLine);
+        lines.push(` ${logoLine}`);
       }
-
+      lines.push(`${DIM} AI coding that doesn't waste your money${RESET}`);
       lines.push("");
-      const tagline = `${DIM}AI coding that doesn't waste your money${RESET}`;
-      const tagPad = Math.max(0, Math.floor((width - 39) / 2));
-      lines.push(" ".repeat(tagPad) + tagline);
 
-      // Fill remaining
-      const filled = padTop + LOGO.length + 2;
+      // Fill remaining with empty
+      const filled = LOGO.length + 2;
       for (let i = filled; i < chatHeight; i++) lines.push("");
     } else {
       // Chat view — messages
