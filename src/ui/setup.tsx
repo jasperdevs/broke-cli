@@ -1,17 +1,18 @@
 import React, { useState } from "react";
 import { Box, Text, useInput } from "ink";
+import { isCodexAvailable } from "../providers/adapters/codex-auth.js";
 
 interface SetupProps {
   onComplete: (provider: string, apiKey: string) => void;
   onSkip: () => void;
 }
 
-type SetupStep = "choose-provider" | "enter-key" | "codex-hint";
+type SetupStep = "choose-provider" | "enter-key";
 
 const PROVIDERS = [
-  { id: "openai", name: "OpenAI", envVar: "OPENAI_API_KEY", hint: "sk-..." },
-  { id: "anthropic", name: "Anthropic", envVar: "ANTHROPIC_API_KEY", hint: "sk-ant-..." },
-  { id: "codex", name: "OpenAI (Codex login — uses ChatGPT subscription, free)", envVar: "", hint: "" },
+  { id: "openai", name: "OpenAI", hint: "sk-..." },
+  { id: "anthropic", name: "Anthropic", hint: "sk-ant-..." },
+  { id: "openrouter", name: "OpenRouter (many models, one key)", hint: "sk-or-..." },
 ];
 
 export function Setup({ onComplete, onSkip }: SetupProps) {
@@ -19,6 +20,9 @@ export function Setup({ onComplete, onSkip }: SetupProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [apiKey, setApiKey] = useState("");
   const [selectedProvider, setSelectedProvider] = useState(PROVIDERS[0]);
+
+  // Check codex on render
+  const codexReady = isCodexAvailable();
 
   useInput((char, key) => {
     if (step === "choose-provider") {
@@ -28,12 +32,8 @@ export function Setup({ onComplete, onSkip }: SetupProps) {
         setSelectedIndex((i) => Math.min(PROVIDERS.length - 1, i + 1));
       } else if (key.return) {
         const provider = PROVIDERS[selectedIndex];
-        if (provider.id === "codex") {
-          setStep("codex-hint");
-        } else {
-          setSelectedProvider(provider);
-          setStep("enter-key");
-        }
+        setSelectedProvider(provider);
+        setStep("enter-key");
       } else if (key.escape) {
         onSkip();
       }
@@ -51,29 +51,32 @@ export function Setup({ onComplete, onSkip }: SetupProps) {
       } else if (char && !key.ctrl && !key.meta) {
         setApiKey((prev) => prev + char);
       }
-    } else if (step === "codex-hint") {
-      if (key.return || key.escape) {
-        setStep("choose-provider");
-      }
     }
   });
 
   return (
-    <Box flexDirection="column">
-      <Box marginBottom={1}>
-        <Text color="green" bold>
-          brokecli setup
-        </Text>
-      </Box>
+    <Box flexDirection="column" paddingX={2} paddingY={1}>
+      <Text color="#3AC73A" bold>
+        brokecli setup
+      </Text>
+      <Text dimColor>────────────────</Text>
+
+      {codexReady && (
+        <Box marginTop={1} marginBottom={1}>
+          <Text color="#3AC73A">
+            ● Codex OAuth detected — you can skip setup (Esc) and use your ChatGPT subscription for free.
+          </Text>
+        </Box>
+      )}
 
       {step === "choose-provider" && (
-        <Box flexDirection="column">
+        <Box flexDirection="column" marginTop={1}>
           <Text>Select a provider:</Text>
-          <Text dimColor>(arrow keys to move, enter to select, esc to skip)</Text>
+          <Text dimColor>↑↓ to move, Enter to select, Esc to skip</Text>
           <Box flexDirection="column" marginTop={1}>
             {PROVIDERS.map((p, i) => (
               <Box key={p.id}>
-                <Text color={i === selectedIndex ? "green" : undefined}>
+                <Text color={i === selectedIndex ? "#3AC73A" : "gray"}>
                   {i === selectedIndex ? "❯ " : "  "}
                   {p.name}
                 </Text>
@@ -84,43 +87,17 @@ export function Setup({ onComplete, onSkip }: SetupProps) {
       )}
 
       {step === "enter-key" && (
-        <Box flexDirection="column">
+        <Box flexDirection="column" marginTop={1}>
           <Text>
-            Paste your {selectedProvider.name} API key:
+            Paste your <Text color="#3AC73A">{selectedProvider.name}</Text> API key:
           </Text>
-          <Text dimColor>
-            (starts with {selectedProvider.hint})
-          </Text>
+          <Text dimColor>starts with {selectedProvider.hint}</Text>
           <Box marginTop={1}>
-            <Text color="blue">❯ </Text>
-            <Text>{apiKey ? "•".repeat(apiKey.length) : ""}</Text>
+            <Text color="#3AC73A">❯ </Text>
+            <Text>{apiKey ? "•".repeat(Math.min(apiKey.length, 40)) : ""}</Text>
             <Text color="gray">█</Text>
           </Box>
-          <Box marginTop={1}>
-            <Text dimColor>
-              Enter to confirm, Esc to go back
-            </Text>
-          </Box>
-        </Box>
-      )}
-
-      {step === "codex-hint" && (
-        <Box flexDirection="column">
-          <Text>
-            To use your ChatGPT subscription, install and authenticate Codex CLI:
-          </Text>
-          <Box flexDirection="column" marginTop={1} marginLeft={2}>
-            <Text color="cyan">npm install -g @openai/codex</Text>
-            <Text color="cyan">codex auth login</Text>
-          </Box>
-          <Box marginTop={1}>
-            <Text dimColor>
-              Then restart brokecli — it will auto-detect your login.
-            </Text>
-          </Box>
-          <Box marginTop={1}>
-            <Text dimColor>Press Enter or Esc to go back.</Text>
-          </Box>
+          <Text dimColor>Enter to confirm, Esc to go back</Text>
         </Box>
       )}
     </Box>

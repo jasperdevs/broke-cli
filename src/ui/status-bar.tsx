@@ -22,22 +22,22 @@ export function StatusBar({
   return (
     <Box
       borderStyle="single"
-      borderColor="gray"
+      borderColor="#3AC73A"
       paddingX={1}
       justifyContent="space-between"
     >
       <Box gap={1}>
-        <Text color="cyan" bold>
-          {provider}/{model}
+        <Text color="#3AC73A" bold>
+          {model}
         </Text>
-        {isStreaming && <Text color="yellow">streaming...</Text>}
+        {isStreaming && <Text color="yellow">●</Text>}
       </Box>
-      <Box gap={1}>
+      <Box gap={2}>
         {turnCost > 0 && (
-          <Text color="green">turn: {formatCost(turnCost)}</Text>
+          <Text dimColor>turn {formatCost(turnCost)}</Text>
         )}
-        <Text color="green">session: {formatCost(sessionCost)}</Text>
-        <Text dimColor>{formatTokens(tokenCount)} tokens</Text>
+        <Text color="#3AC73A">{formatCost(sessionCost)}</Text>
+        <Text dimColor>{formatTokens(tokenCount)} tok</Text>
       </Box>
     </Box>
   );

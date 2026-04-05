@@ -9,14 +9,14 @@ interface MessageProps {
 
 export function Message({ role, content }: MessageProps) {
   const label = role === "user" ? "you" : "brokecli";
-  const color = role === "user" ? "blue" : "green";
+  const color = role === "user" ? "white" : "#3AC73A";
 
   return (
     <Box flexDirection="column" marginBottom={1}>
       <Text color={color} bold>
         {label}
       </Text>
-      <Box marginLeft={0}>
+      <Box>
         <Text>{role === "assistant" ? renderMarkdown(content) : content}</Text>
       </Box>
     </Box>
@@ -32,10 +32,10 @@ export function StreamingMessage({ content }: StreamingMessageProps) {
 
   return (
     <Box flexDirection="column" marginBottom={1}>
-      <Text color="green" bold>
+      <Text color="#3AC73A" bold>
         brokecli
       </Text>
-      <Box marginLeft={0}>
+      <Box>
         <Text>{renderMarkdown(content)}</Text>
       </Box>
     </Box>

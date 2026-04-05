@@ -2,6 +2,7 @@ import React from "react";
 import { Box, Text } from "ink";
 import type { DetectionResult } from "../providers/detect.js";
 import { formatDetection } from "../providers/detect.js";
+import { MASCOT_LINES } from "./mascot.js";
 
 interface WelcomeProps {
   version: string;
@@ -10,71 +11,64 @@ interface WelcomeProps {
   activeProvider?: string;
 }
 
-export function Welcome({ version, detectedProviders, activeModel, activeProvider }: WelcomeProps) {
+export function Welcome({
+  version,
+  detectedProviders,
+  activeModel,
+  activeProvider,
+}: WelcomeProps) {
   return (
-    <Box flexDirection="row" marginBottom={1}>
-      {/* Left: mascot + info */}
-      <Box flexDirection="column" marginRight={4}>
-        <Box flexDirection="column">
-          <Text color="#3AC73A" bold>
-            {`  ┌──────────────────┐`}
-          </Text>
-          <Text color="#3AC73A" bold>
-            {`  │  ╔════╗  ╔════╗  │`}
-          </Text>
-          <Text color="#3AC73A" bold>
-            {`  │  ║ $$ ║  ║ $$ ║  │`}
-          </Text>
-          <Text color="#3AC73A" bold>
-            {`  │  ╚════╝  ╚════╝  │`}
-          </Text>
-          <Text color="#3AC73A" bold>
-            {`  │        ▄▄        │`}
-          </Text>
-          <Text color="#3AC73A" bold>
-            {`  └──────────────────┘`}
-          </Text>
-        </Box>
-        <Box marginTop={1} flexDirection="column">
-          <Text color="#3AC73A" bold>
-            brokecli
-          </Text>
-          <Text dimColor>v{version}</Text>
-        </Box>
-        {activeModel && (
-          <Box marginTop={1}>
-            <Text dimColor>
-              {activeProvider}/{activeModel}
-            </Text>
-          </Box>
+    <Box
+      borderStyle="round"
+      borderColor="#3AC73A"
+      paddingX={1}
+      paddingY={0}
+      marginBottom={1}
+      flexDirection="row"
+      gap={3}
+    >
+      {/* Left: mascot + name */}
+      <Box flexDirection="column">
+        {MASCOT_LINES.map((line, i) => (
+          <Text key={i}>{line}</Text>
+        ))}
+        <Text color="#3AC73A" bold>
+          {" "}brokecli <Text dimColor>v{version}</Text>
+        </Text>
+        {activeModel && activeProvider && (
+          <Text dimColor> {activeProvider} · {activeModel}</Text>
         )}
       </Box>
 
-      {/* Right: providers + help */}
-      <Box flexDirection="column">
-        <Text color="#3AC73A" bold>Providers</Text>
-        <Box flexDirection="column" marginTop={1}>
+      {/* Right: providers + commands */}
+      <Box flexDirection="column" gap={1} marginTop={1}>
+        <Box flexDirection="column">
+          <Text color="#3AC73A" bold>
+            Providers
+          </Text>
           {detectedProviders.length > 0 ? (
             detectedProviders.map((d) => (
               <Text key={d.id}>
-                <Text color="green">  + </Text>
+                <Text color="#3AC73A"> ● </Text>
                 <Text>{formatDetection(d)}</Text>
               </Text>
             ))
           ) : (
-            <Text color="yellow">  No providers detected</Text>
+            <Box flexDirection="column">
+              <Text color="yellow"> ○ No providers detected</Text>
+              <Text dimColor>   /setup to configure</Text>
+            </Box>
           )}
         </Box>
 
-        <Box flexDirection="column" marginTop={1}>
-          <Text color="#3AC73A" bold>Quick start</Text>
-          <Box flexDirection="column" marginTop={1}>
-            <Text dimColor>  /model     switch model</Text>
-            <Text dimColor>  /help      all commands</Text>
-            <Text dimColor>  /cost      session cost</Text>
-            <Text dimColor>  /clear     new conversation</Text>
-            <Text dimColor>  ctrl+c     exit</Text>
-          </Box>
+        <Box flexDirection="column">
+          <Text color="#3AC73A" bold>
+            Commands
+          </Text>
+          <Text dimColor> /model     switch model</Text>
+          <Text dimColor> /setup     add provider</Text>
+          <Text dimColor> /cost      session spend</Text>
+          <Text dimColor> /help      all commands</Text>
         </Box>
       </Box>
     </Box>
