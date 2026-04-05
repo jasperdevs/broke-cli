@@ -3,6 +3,7 @@ import { render } from "ink";
 import { loadConfig } from "./config/loader.js";
 import { detectProviders, buildProviders, findModel } from "./providers/registry.js";
 import { App } from "./ui/app.js";
+import type { Provider, ModelInfo } from "./providers/types.js";
 
 export interface CliOptions {
   broke?: boolean;
@@ -15,53 +16,35 @@ export interface CliOptions {
 export async function run(opts: CliOptions): Promise<void> {
   const config = await loadConfig(opts.config);
 
-  // Detect and build providers
+  // Detect and build providers — but don't fail if none found
   const detected = detectProviders(config.providers);
-
-  if (detected.length === 0) {
-    console.error("No providers configured.");
-    console.error("Set one of: ANTHROPIC_API_KEY, OPENAI_API_KEY");
-    console.error("Or add providers to ~/.brokecli/config.jsonc");
-    process.exit(1);
-  }
-
   const providers = buildProviders(detected);
 
-  if (providers.length === 0) {
-    console.error("Failed to initialize any providers.");
-    process.exit(1);
-  }
+  // Resolve model if providers exist
+  let initialProvider: Provider | undefined;
+  let initialModel: ModelInfo | undefined;
 
-  // Resolve model
-  const defaultModelSpec =
-    opts.model ?? config.routing.defaultModel ?? undefined;
+  if (providers.length > 0) {
+    const modelSpec = opts.model ?? config.routing.defaultModel ?? undefined;
 
-  let resolved: ReturnType<typeof findModel>;
-
-  if (defaultModelSpec) {
-    resolved = findModel(providers, defaultModelSpec);
-    if (!resolved) {
-      console.error(`Model not found: ${defaultModelSpec}`);
-      console.error("Available models:");
-      for (const p of providers) {
-        for (const m of p.listModels()) {
-          console.error(`  ${p.id}/${m.id} (${m.displayName})`);
-        }
+    if (modelSpec) {
+      const resolved = findModel(providers, modelSpec);
+      if (resolved) {
+        initialProvider = resolved.provider;
+        initialModel = resolved.model;
       }
-      process.exit(1);
+    } else {
+      initialProvider = providers[0];
+      initialModel = providers[0].listModels()[0];
     }
-  } else {
-    // Use first model of first provider
-    const provider = providers[0];
-    const model = provider.listModels()[0];
-    resolved = { provider, model };
   }
 
-  // Render the Ink app
+  // Always render the app — it handles the no-provider state
   const { waitUntilExit } = render(
     React.createElement(App, {
-      provider: resolved.provider,
-      model: resolved.model,
+      provider: initialProvider,
+      model: initialModel,
+      providers,
     }),
   );
 
