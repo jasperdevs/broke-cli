@@ -11,6 +11,7 @@ import { Welcome } from "./welcome.js";
 import { Setup } from "./setup.js";
 import { formatCost } from "../budget/cost.js";
 import { buildProviders } from "../providers/registry.js";
+import { loadCodexAuth, createCodexProvider } from "../providers/adapters/codex-auth.js";
 import { version } from "../../package.json";
 
 interface CompletedMessage {
@@ -47,20 +48,57 @@ export function App({
   const [providers, setProviders] = useState<Provider[]>(initialProviders);
   const [showSetup, setShowSetup] = useState(!initialProvider);
 
+  const nextMsgId = useCallback(() => {
+    let id = 0;
+    setMsgId((prev) => { id = prev; return prev + 1; });
+    return id;
+  }, []);
+
   const addSystemMessage = useCallback(
     (content: string) => {
       setCompletedMessages((prev) => [
         ...prev,
-        { role: "assistant", content, id: msgId },
+        { role: "assistant" as const, content, id: Date.now() },
       ]);
-      setMsgId((id) => id + 1);
     },
-    [msgId],
+    [],
   );
+
+  const handleSetupComplete = useCallback(
+    (providerId: string, apiKey: string) => {
+      const newProviders = buildProviders([
+        { id: providerId, name: providerId, isLocal: false, apiKey, availableModels: [] },
+      ]);
+      if (newProviders.length > 0) {
+        const p = newProviders[0];
+        const m = p.listModels()[0];
+        setActiveProvider(p);
+        setActiveModel(m);
+        setProviders((prev) => [...prev, p]);
+        setShowSetup(false);
+        addSystemMessage(`Connected to **${p.name}** — using ${m.displayName}. Start chatting!`);
+      }
+    },
+    [addSystemMessage],
+  );
+
+  const handleCodexLogin = useCallback(() => {
+    const auth = loadCodexAuth();
+    if (auth) {
+      const sdk = createCodexProvider(auth);
+      // Build an OpenAI provider from the codex auth
+      handleSetupComplete("openai", auth.access_token);
+    } else {
+      addSystemMessage(
+        "Codex not authenticated. Run `codex auth login` in another terminal, then try `/setup` again.",
+      );
+      setShowSetup(false);
+    }
+  }, [handleSetupComplete, addSystemMessage]);
 
   const handleSubmit = useCallback(
     async (input: string) => {
-      // Handle slash commands
+      // Slash commands
       if (input.startsWith("/")) {
         const [cmd, ...args] = input.slice(1).split(" ");
         const arg = args.join(" ");
@@ -83,7 +121,10 @@ export function App({
             return;
           case "model": {
             if (!arg) {
-              const lines = ["**Available models:**", ""];
+              const lines = ["**Available models:**"];
+              if (providers.length === 0) {
+                lines.push("  (no providers configured — run /setup)");
+              }
               for (const p of providers) {
                 for (const m of p.listModels()) {
                   const current =
@@ -91,7 +132,7 @@ export function App({
                       ? " **(active)**"
                       : "";
                   lines.push(
-                    `  \`${p.id}/${m.id}\` — ${m.displayName} (${formatCost(m.pricing.inputPerMTok)}/MTok in)${current}`,
+                    `  \`${p.id}/${m.id}\` ${m.displayName} (${formatCost(m.pricing.inputPerMTok)}/MTok)${current}`,
                   );
                 }
               }
@@ -109,46 +150,48 @@ export function App({
               );
             } else {
               addSystemMessage(
-                `Model not found: \`${arg}\`. Run \`/model\` to see available models.`,
+                `Model not found: \`${arg}\`. Run /model to see available models.`,
               );
             }
             return;
           }
           case "cost":
             addSystemMessage(
-              `Session cost: **${formatCost(sessionCost)}** | Tokens: **${tokenCount}**`,
+              `Session: **${formatCost(sessionCost)}** | Tokens: **${tokenCount}**`,
             );
             return;
           case "help":
             addSystemMessage(
               [
                 "**Commands:**",
-                "  `/model [id]` — list or switch models",
-                "  `/setup` — configure a provider",
-                "  `/cost` — show session cost",
-                "  `/clear` — clear conversation",
-                "  `/help` — show this help",
-                "  `/exit` — quit",
+                "  /model [id]  — list or switch models",
+                "  /setup       — add a provider",
+                "  /cost        — session spend",
+                "  /clear       — clear conversation",
+                "  /help        — this help",
+                "  /exit        — quit",
               ].join("\n"),
             );
+            return;
+          default:
+            addSystemMessage(`Unknown command: /${cmd}. Try /help`);
             return;
         }
       }
 
-      // Check if we have a provider
+      // No provider check
       if (!activeProvider || !activeModel) {
         addSystemMessage(
-          "No provider configured. Run `/setup` to add one, or set an API key env var and restart.",
+          "No provider configured. Run **/setup** to add one.",
         );
         return;
       }
 
-      // Send to LLM
+      // Add user message
       setCompletedMessages((prev) => [
         ...prev,
-        { role: "user", content: input, id: msgId },
+        { role: "user" as const, content: input, id: Date.now() },
       ]);
-      setMsgId((id) => id + 1);
       setIsStreaming(true);
       setStreamingText("");
       setTurnCost(0);
@@ -170,9 +213,8 @@ export function App({
             onFinish: (fullText) => {
               setCompletedMessages((prev) => [
                 ...prev,
-                { role: "assistant", content: fullText, id: msgId + 1 },
+                { role: "assistant" as const, content: fullText, id: Date.now() + 1 },
               ]);
-              setMsgId((id) => id + 2);
               setStreamingText("");
               setIsStreaming(false);
             },
@@ -184,57 +226,35 @@ export function App({
         setIsStreaming(false);
       }
     },
-    [history, activeProvider, activeModel, providers, msgId, exit, sessionCost, tokenCount, addSystemMessage],
+    [history, activeProvider, activeModel, providers, exit, sessionCost, tokenCount, addSystemMessage],
   );
 
-  // Setup mode
+  // Setup mode — completely separate render, no input conflicts
   if (showSetup) {
     return (
-      <Box flexDirection="column" height={process.stdout.rows}>
+      <Box flexDirection="column">
         <Setup
-          onComplete={(providerId, apiKey) => {
-            const newProviders = buildProviders([
-              {
-                id: providerId,
-                name: providerId,
-                isLocal: false,
-                apiKey,
-                availableModels: [],
-              },
-            ]);
-            if (newProviders.length > 0) {
-              const p = newProviders[0];
-              const m = p.listModels()[0];
-              setActiveProvider(p);
-              setActiveModel(m);
-              setProviders((prev) => [...prev, p]);
-              setShowSetup(false);
-              addSystemMessage(
-                `Connected to **${p.name}** — using ${m.displayName}. Start chatting!`,
-              );
-            }
-          }}
+          onComplete={handleSetupComplete}
+          onCodexLogin={handleCodexLogin}
           onSkip={() => setShowSetup(false)}
         />
       </Box>
     );
   }
 
-  const hasProvider = activeProvider && activeModel;
-
+  // Main chat view
   return (
-    <Box flexDirection="column" height={process.stdout.rows}>
+    <Box flexDirection="column">
       {/* Welcome header */}
       <Welcome
         version={version}
         detectedProviders={detectedProviders}
-        activeModel={hasProvider ? activeModel.displayName : undefined}
-        activeProvider={hasProvider ? activeProvider.id : undefined}
+        activeModel={activeModel?.displayName}
+        activeProvider={activeProvider?.id}
       />
 
       {/* Chat area */}
       <Box flexDirection="column" flexGrow={1}>
-        {/* Completed messages */}
         <Static items={completedMessages}>
           {(msg) => (
             <Box key={msg.id}>
@@ -243,10 +263,8 @@ export function App({
           )}
         </Static>
 
-        {/* Streaming */}
         {isStreaming && <StreamingMessage content={streamingText} />}
 
-        {/* Error */}
         {error && (
           <Box marginBottom={1}>
             <Text color="red">Error: {error}</Text>

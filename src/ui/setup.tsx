@@ -4,25 +4,59 @@ import { isCodexAvailable } from "../providers/adapters/codex-auth.js";
 
 interface SetupProps {
   onComplete: (provider: string, apiKey: string) => void;
+  onCodexLogin: () => void;
   onSkip: () => void;
 }
 
 type SetupStep = "choose-provider" | "enter-key";
 
-const PROVIDERS = [
-  { id: "openai", name: "OpenAI", hint: "sk-..." },
-  { id: "anthropic", name: "Anthropic", hint: "sk-ant-..." },
-  { id: "openrouter", name: "OpenRouter (many models, one key)", hint: "sk-or-..." },
+interface ProviderOption {
+  id: string;
+  name: string;
+  hint: string;
+  category: "cloud" | "aggregator" | "local" | "oauth";
+}
+
+const PROVIDERS: ProviderOption[] = [
+  // OAuth (free)
+  { id: "codex-oauth", name: "Codex OAuth (ChatGPT sub — free)", hint: "", category: "oauth" },
+  // Cloud providers
+  { id: "openai", name: "OpenAI", hint: "sk-...", category: "cloud" },
+  { id: "anthropic", name: "Anthropic", hint: "sk-ant-...", category: "cloud" },
+  { id: "google", name: "Google Gemini", hint: "AI...", category: "cloud" },
+  { id: "xai", name: "xAI (Grok)", hint: "xai-...", category: "cloud" },
+  { id: "deepseek", name: "DeepSeek", hint: "sk-...", category: "cloud" },
+  { id: "mistral", name: "Mistral", hint: "...", category: "cloud" },
+  { id: "groq", name: "Groq", hint: "gsk_...", category: "cloud" },
+  { id: "together", name: "Together AI", hint: "...", category: "cloud" },
+  { id: "fireworks", name: "Fireworks AI", hint: "...", category: "cloud" },
+  { id: "cerebras", name: "Cerebras", hint: "...", category: "cloud" },
+  { id: "perplexity", name: "Perplexity", hint: "pplx-...", category: "cloud" },
+  { id: "azure", name: "Azure OpenAI", hint: "...", category: "cloud" },
+  { id: "bedrock", name: "AWS Bedrock", hint: "...", category: "cloud" },
+  { id: "github-models", name: "GitHub Models", hint: "ghp_...", category: "cloud" },
+  // Aggregators
+  { id: "openrouter", name: "OpenRouter (many models, one key)", hint: "sk-or-...", category: "aggregator" },
+  // Local
+  { id: "ollama", name: "Ollama (local)", hint: "http://localhost:11434", category: "local" },
+  { id: "lmstudio", name: "LM Studio (local)", hint: "http://localhost:1234", category: "local" },
+  { id: "custom", name: "Custom OpenAI-compatible endpoint", hint: "http://...", category: "local" },
 ];
 
-export function Setup({ onComplete, onSkip }: SetupProps) {
+export function Setup({ onComplete, onCodexLogin, onSkip }: SetupProps) {
   const [step, setStep] = useState<SetupStep>("choose-provider");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [apiKey, setApiKey] = useState("");
-  const [selectedProvider, setSelectedProvider] = useState(PROVIDERS[0]);
+  const [baseUrl, setBaseUrl] = useState("");
+  const [inputField, setInputField] = useState<"key" | "url">("key");
+  const selectedProvider = PROVIDERS[selectedIndex];
 
-  // Check codex on render
   const codexReady = isCodexAvailable();
+
+  // Visible range for scrolling
+  const visibleCount = 12;
+  const scrollOffset = Math.max(0, Math.min(selectedIndex - Math.floor(visibleCount / 2), PROVIDERS.length - visibleCount));
+  const visibleProviders = PROVIDERS.slice(scrollOffset, scrollOffset + visibleCount);
 
   useInput((char, key) => {
     if (step === "choose-provider") {
@@ -32,24 +66,45 @@ export function Setup({ onComplete, onSkip }: SetupProps) {
         setSelectedIndex((i) => Math.min(PROVIDERS.length - 1, i + 1));
       } else if (key.return) {
         const provider = PROVIDERS[selectedIndex];
-        setSelectedProvider(provider);
-        setStep("enter-key");
+        if (provider.id === "codex-oauth") {
+          onCodexLogin();
+        } else if (provider.category === "local" || provider.id === "custom") {
+          setInputField("url");
+          setStep("enter-key");
+        } else {
+          setInputField("key");
+          setStep("enter-key");
+        }
       } else if (key.escape) {
         onSkip();
       }
     } else if (step === "enter-key") {
       if (key.return) {
-        const trimmed = apiKey.trim();
-        if (trimmed) {
-          onComplete(selectedProvider.id, trimmed);
+        if (inputField === "url") {
+          const url = baseUrl.trim() || selectedProvider.hint;
+          onComplete(selectedProvider.id, `url:${url}`);
+        } else {
+          const trimmed = apiKey.trim();
+          if (trimmed) {
+            onComplete(selectedProvider.id, trimmed);
+          }
         }
       } else if (key.escape) {
         setStep("choose-provider");
         setApiKey("");
+        setBaseUrl("");
       } else if (key.backspace || key.delete) {
-        setApiKey((prev) => prev.slice(0, -1));
+        if (inputField === "url") {
+          setBaseUrl((prev) => prev.slice(0, -1));
+        } else {
+          setApiKey((prev) => prev.slice(0, -1));
+        }
       } else if (char && !key.ctrl && !key.meta) {
-        setApiKey((prev) => prev + char);
+        if (inputField === "url") {
+          setBaseUrl((prev) => prev + char);
+        } else {
+          setApiKey((prev) => prev + char);
+        }
       }
     }
   });
@@ -59,44 +114,66 @@ export function Setup({ onComplete, onSkip }: SetupProps) {
       <Text color="#3AC73A" bold>
         brokecli setup
       </Text>
-      <Text dimColor>────────────────</Text>
+      <Text color="#3AC73A" dimColor>────────────────────</Text>
 
-      {codexReady && (
-        <Box marginTop={1} marginBottom={1}>
+      {codexReady && step === "choose-provider" && (
+        <Box marginTop={1}>
           <Text color="#3AC73A">
-            ● Codex OAuth detected — you can skip setup (Esc) and use your ChatGPT subscription for free.
+            ● Codex detected — press Esc to skip and use ChatGPT for free
           </Text>
         </Box>
       )}
 
       {step === "choose-provider" && (
         <Box flexDirection="column" marginTop={1}>
-          <Text>Select a provider:</Text>
-          <Text dimColor>↑↓ to move, Enter to select, Esc to skip</Text>
+          <Text>Select a provider <Text dimColor>(↑↓ Enter Esc)</Text></Text>
           <Box flexDirection="column" marginTop={1}>
-            {PROVIDERS.map((p, i) => (
-              <Box key={p.id}>
-                <Text color={i === selectedIndex ? "#3AC73A" : "gray"}>
-                  {i === selectedIndex ? "❯ " : "  "}
-                  {p.name}
-                </Text>
-              </Box>
-            ))}
+            {visibleProviders.map((p) => {
+              const globalIdx = PROVIDERS.indexOf(p);
+              const isSelected = globalIdx === selectedIndex;
+              return (
+                <Box key={p.id}>
+                  <Text color={isSelected ? "#3AC73A" : "gray"}>
+                    {isSelected ? "❯ " : "  "}
+                    {p.name}
+                  </Text>
+                </Box>
+              );
+            })}
+            {PROVIDERS.length > visibleCount && (
+              <Text dimColor>  ↕ {PROVIDERS.length - visibleCount} more...</Text>
+            )}
           </Box>
         </Box>
       )}
 
       {step === "enter-key" && (
         <Box flexDirection="column" marginTop={1}>
-          <Text>
-            Paste your <Text color="#3AC73A">{selectedProvider.name}</Text> API key:
-          </Text>
-          <Text dimColor>starts with {selectedProvider.hint}</Text>
-          <Box marginTop={1}>
-            <Text color="#3AC73A">❯ </Text>
-            <Text>{apiKey ? "•".repeat(Math.min(apiKey.length, 40)) : ""}</Text>
-            <Text color="gray">█</Text>
-          </Box>
+          {inputField === "url" ? (
+            <>
+              <Text>
+                Enter <Text color="#3AC73A">{selectedProvider.name}</Text> endpoint URL:
+              </Text>
+              <Text dimColor>default: {selectedProvider.hint}</Text>
+              <Box marginTop={1}>
+                <Text color="#3AC73A">❯ </Text>
+                <Text>{baseUrl || ""}</Text>
+                <Text color="gray">█</Text>
+              </Box>
+            </>
+          ) : (
+            <>
+              <Text>
+                Enter <Text color="#3AC73A">{selectedProvider.name}</Text> API key:
+              </Text>
+              <Text dimColor>starts with {selectedProvider.hint}</Text>
+              <Box marginTop={1}>
+                <Text color="#3AC73A">❯ </Text>
+                <Text>{apiKey ? "•".repeat(Math.min(apiKey.length, 40)) : ""}</Text>
+                <Text color="gray">█</Text>
+              </Box>
+            </>
+          )}
           <Text dimColor>Enter to confirm, Esc to go back</Text>
         </Box>
       )}
