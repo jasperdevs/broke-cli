@@ -1,0 +1,137 @@
+import type { Keypress } from "./keypress.js";
+
+/**
+ * Text input widget.
+ * Handles cursor movement, character insertion/deletion, history.
+ */
+export class InputWidget {
+  private text = "";
+  private cursor = 0;
+  private history: string[] = [];
+  private historyIndex = -1;
+
+  /** Get current input text */
+  getText(): string { return this.text; }
+
+  /** Get cursor position */
+  getCursor(): number { return this.cursor; }
+
+  /** Clear input */
+  clear(): void {
+    this.text = "";
+    this.cursor = 0;
+    this.historyIndex = -1;
+  }
+
+  /** Submit current input, add to history, clear */
+  submit(): string {
+    const value = this.text.trim();
+    if (value) {
+      this.history.push(value);
+    }
+    this.clear();
+    return value;
+  }
+
+  /** Insert pasted text */
+  paste(text: string): void {
+    this.text = this.text.slice(0, this.cursor) + text + this.text.slice(this.cursor);
+    this.cursor += text.length;
+  }
+
+  /** Handle a keypress */
+  handleKey(key: Keypress): "submit" | "interrupt" | "none" {
+    // Ctrl+C — interrupt
+    if (key.ctrl && key.name === "c") {
+      return "interrupt";
+    }
+
+    // Enter — submit
+    if (key.name === "return") {
+      return "submit";
+    }
+
+    // Ctrl+U — clear line
+    if (key.ctrl && key.name === "u") {
+      this.clear();
+      return "none";
+    }
+
+    // Backspace
+    if (key.name === "backspace") {
+      if (this.cursor > 0) {
+        this.text = this.text.slice(0, this.cursor - 1) + this.text.slice(this.cursor);
+        this.cursor--;
+      }
+      return "none";
+    }
+
+    // Delete
+    if (key.name === "delete") {
+      if (this.cursor < this.text.length) {
+        this.text = this.text.slice(0, this.cursor) + this.text.slice(this.cursor + 1);
+      }
+      return "none";
+    }
+
+    // Arrow keys
+    if (key.name === "left") {
+      if (this.cursor > 0) this.cursor--;
+      return "none";
+    }
+    if (key.name === "right") {
+      if (this.cursor < this.text.length) this.cursor++;
+      return "none";
+    }
+
+    // Home / Ctrl+A
+    if (key.name === "home" || (key.ctrl && key.name === "a")) {
+      this.cursor = 0;
+      return "none";
+    }
+
+    // End / Ctrl+E
+    if (key.name === "end" || (key.ctrl && key.name === "e")) {
+      this.cursor = this.text.length;
+      return "none";
+    }
+
+    // Up — history previous
+    if (key.name === "up") {
+      if (this.history.length > 0) {
+        if (this.historyIndex === -1) {
+          this.historyIndex = this.history.length - 1;
+        } else if (this.historyIndex > 0) {
+          this.historyIndex--;
+        }
+        this.text = this.history[this.historyIndex];
+        this.cursor = this.text.length;
+      }
+      return "none";
+    }
+
+    // Down — history next
+    if (key.name === "down") {
+      if (this.historyIndex >= 0) {
+        if (this.historyIndex < this.history.length - 1) {
+          this.historyIndex++;
+          this.text = this.history[this.historyIndex];
+        } else {
+          this.historyIndex = -1;
+          this.text = "";
+        }
+        this.cursor = this.text.length;
+      }
+      return "none";
+    }
+
+    // Regular character
+    if (key.char && !key.ctrl && !key.meta && key.char.length === 1) {
+      this.text = this.text.slice(0, this.cursor) + key.char + this.text.slice(this.cursor);
+      this.cursor++;
+      return "none";
+    }
+
+    return "none";
+  }
+}
