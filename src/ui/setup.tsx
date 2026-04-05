@@ -6,6 +6,7 @@ interface SetupProps {
   onComplete: (provider: string, apiKey: string) => void;
   onCodexLogin: () => void;
   onSkip: () => void;
+  isActive?: boolean;
 }
 
 type SetupStep = "choose-provider" | "enter-key";
@@ -43,7 +44,7 @@ const PROVIDERS: ProviderOption[] = [
   { id: "custom", name: "Custom OpenAI-compatible endpoint", hint: "http://...", category: "local" },
 ];
 
-export function Setup({ onComplete, onCodexLogin, onSkip }: SetupProps) {
+export function Setup({ onComplete, onCodexLogin, onSkip, isActive = true }: SetupProps) {
   const [step, setStep] = useState<SetupStep>("choose-provider");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [apiKey, setApiKey] = useState("");
@@ -107,7 +108,7 @@ export function Setup({ onComplete, onCodexLogin, onSkip }: SetupProps) {
         }
       }
     }
-  });
+  }, { isActive });
 
   return (
     <Box flexDirection="column" paddingX={2} paddingY={1}>

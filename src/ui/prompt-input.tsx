@@ -4,9 +4,10 @@ import { Box, Text, useInput, useApp } from "ink";
 interface PromptInputProps {
   onSubmit: (input: string) => void;
   isStreaming: boolean;
+  isActive?: boolean;
 }
 
-export function PromptInput({ onSubmit, isStreaming }: PromptInputProps) {
+export function PromptInput({ onSubmit, isStreaming, isActive = true }: PromptInputProps) {
   const [input, setInput] = useState("");
   const { exit } = useApp();
 
@@ -48,7 +49,7 @@ export function PromptInput({ onSubmit, isStreaming }: PromptInputProps) {
     if (char && !key.ctrl && !key.meta) {
       setInput((prev) => prev + char);
     }
-  });
+  }, { isActive });
 
   return (
     <Box marginTop={1}>
