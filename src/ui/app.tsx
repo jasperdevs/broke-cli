@@ -90,7 +90,7 @@ export function App({
   const handleCodexLogin = useCallback(() => {
     const auth = loadCodexAuth();
     if (auth) {
-      handleSetupComplete("openai", auth.access_token);
+      handleSetupComplete("openai", auth.accessToken);
     } else {
       addSystemMessage(
         "Codex not authenticated. Run `codex auth login` in another terminal, then /setup again.",

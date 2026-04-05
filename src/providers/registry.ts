@@ -102,7 +102,7 @@ export function detectProviders(
         id: "openai",
         name: "OpenAI (Codex OAuth)",
         isLocal: false,
-        apiKey: codexAuth.access_token,
+        apiKey: codexAuth.accessToken,
         availableModels: KNOWN_PROVIDERS.openai.defaultModels.map((m) => m.id),
       });
     }

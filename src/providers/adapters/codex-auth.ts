@@ -6,14 +6,27 @@ import type { LanguageModelV3 } from "@ai-sdk/provider";
 
 const CODEX_AUTH_FILE = join(homedir(), ".codex", "auth.json");
 
-interface CodexAuth {
-  access_token: string;
-  refresh_token?: string;
-  expires_at?: number;
+/** Actual structure of ~/.codex/auth.json */
+interface CodexAuthFile {
+  auth_mode: "chatgpt" | "api-key";
+  OPENAI_API_KEY: string | null;
+  tokens: {
+    id_token: string;
+    access_token: string;
+    refresh_token: string;
+    account_id: string;
+  };
+  last_refresh: string;
+}
+
+/** Simplified auth result */
+export interface CodexAuth {
+  accessToken: string;
+  mode: "chatgpt" | "api-key";
 }
 
 /**
- * Try to load existing Codex OAuth tokens from ~/.codex/auth.json.
+ * Load Codex OAuth tokens from ~/.codex/auth.json.
  * Returns null if Codex CLI is not installed or not authenticated.
  */
 export function loadCodexAuth(): CodexAuth | null {
@@ -21,17 +34,29 @@ export function loadCodexAuth(): CodexAuth | null {
 
   try {
     const content = readFileSync(CODEX_AUTH_FILE, "utf-8");
-    const auth = JSON.parse(content) as CodexAuth;
+    const file = JSON.parse(content) as CodexAuthFile;
 
-    if (!auth.access_token) return null;
-
-    // Check if expired (with 5min buffer)
-    if (auth.expires_at && Date.now() / 1000 > auth.expires_at - 300) {
-      // Token expired — user needs to run `codex auth login` again
-      return null;
+    // Check for API key mode first
+    if (file.OPENAI_API_KEY) {
+      return { accessToken: file.OPENAI_API_KEY, mode: "api-key" };
     }
 
-    return auth;
+    // Check for OAuth tokens
+    if (!file.tokens?.access_token) return null;
+
+    // Check JWT expiry (decode payload without verification)
+    try {
+      const payload = JSON.parse(
+        Buffer.from(file.tokens.access_token.split(".")[1], "base64").toString(),
+      );
+      if (payload.exp && Date.now() / 1000 > payload.exp - 300) {
+        return null; // expired
+      }
+    } catch {
+      // If we can't decode the JWT, still try to use it
+    }
+
+    return { accessToken: file.tokens.access_token, mode: file.auth_mode };
   } catch {
     return null;
   }
@@ -39,17 +64,11 @@ export function loadCodexAuth(): CodexAuth | null {
 
 /**
  * Create an AI SDK OpenAI provider using Codex OAuth tokens.
- * Routes through the subscription backend, not API credits.
  */
 export function createCodexProvider(auth: CodexAuth): {
   languageModel(modelId: string): LanguageModelV3;
 } {
-  const sdk = createOpenAI({
-    apiKey: auth.access_token,
-    // Codex OAuth uses the same OpenAI API endpoint
-    // but authenticates via subscription, not API credits
-  });
-
+  const sdk = createOpenAI({ apiKey: auth.accessToken });
   return {
     languageModel: (id: string) => sdk(id) as unknown as LanguageModelV3,
   };

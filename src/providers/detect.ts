@@ -76,7 +76,7 @@ export async function detectAllProviders(
         id: "openai",
         name: "OpenAI (Codex)",
         method: "oauth",
-        apiKey: codexAuth.access_token,
+        apiKey: codexAuth.accessToken,
       });
     }
   }
