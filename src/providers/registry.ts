@@ -2,6 +2,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import type { LanguageModelV3 } from "@ai-sdk/provider";
 import type { DetectedProvider, ModelInfo, ModelPricing, Provider } from "./types.js";
+import { loadCodexAuth, createCodexProvider } from "./adapters/codex-auth.js";
 
 /** Known providers and their env var + default models */
 const KNOWN_PROVIDERS: Record<
@@ -70,7 +71,7 @@ function createProvider(
   };
 }
 
-/** Detect available providers from env vars and config */
+/** Detect available providers from env vars, config, and local auth */
 export function detectProviders(
   configProviders: Record<string, { apiKey?: string; baseUrl?: string; enabled?: boolean }>,
 ): DetectedProvider[] {
@@ -89,6 +90,20 @@ export function detectProviders(
         apiKey,
         baseUrl: configEntry?.baseUrl,
         availableModels: known.defaultModels.map((m) => m.id),
+      });
+    }
+  }
+
+  // Auto-detect Codex OAuth (ChatGPT subscription — zero API cost)
+  if (!detected.some((d) => d.id === "openai")) {
+    const codexAuth = loadCodexAuth();
+    if (codexAuth) {
+      detected.push({
+        id: "openai",
+        name: "OpenAI (Codex OAuth)",
+        isLocal: false,
+        apiKey: codexAuth.access_token,
+        availableModels: KNOWN_PROVIDERS.openai.defaultModels.map((m) => m.id),
       });
     }
   }
