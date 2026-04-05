@@ -1,4 +1,8 @@
+import React from "react";
+import { render } from "ink";
 import { loadConfig } from "./config/loader.js";
+import { detectProviders, buildProviders, findModel } from "./providers/registry.js";
+import { App } from "./ui/app.js";
 
 export interface CliOptions {
   broke?: boolean;
@@ -11,44 +15,55 @@ export interface CliOptions {
 export async function run(opts: CliOptions): Promise<void> {
   const config = await loadConfig(opts.config);
 
-  // Phase 0: just print what we loaded
-  console.log("brokecli - AI coding CLI that doesn't waste your money.");
-  console.log("");
-  console.log("Detected providers:");
+  // Detect and build providers
+  const detected = detectProviders(config.providers);
 
-  const providers = detectProviders(config);
+  if (detected.length === 0) {
+    console.error("No providers configured.");
+    console.error("Set one of: ANTHROPIC_API_KEY, OPENAI_API_KEY");
+    console.error("Or add providers to ~/.brokecli/config.jsonc");
+    process.exit(1);
+  }
+
+  const providers = buildProviders(detected);
+
   if (providers.length === 0) {
-    console.log("  (none) - set ANTHROPIC_API_KEY, OPENAI_API_KEY, or GOOGLE_API_KEY");
-  } else {
-    for (const p of providers) {
-      console.log(`  - ${p}`);
-    }
+    console.error("Failed to initialize any providers.");
+    process.exit(1);
   }
 
-  console.log("");
-  console.log("Run brokecli --help for usage.");
-}
+  // Resolve model
+  const defaultModelSpec =
+    opts.model ?? config.routing.defaultModel ?? undefined;
 
-function detectProviders(config: Record<string, unknown>): string[] {
-  const providers: string[] = [];
-  const env = process.env;
+  let resolved: ReturnType<typeof findModel>;
 
-  if (env.ANTHROPIC_API_KEY) providers.push("anthropic");
-  if (env.OPENAI_API_KEY) providers.push("openai");
-  if (env.GOOGLE_API_KEY || env.GOOGLE_GENERATIVE_AI_API_KEY) providers.push("google");
-  if (env.OPENROUTER_API_KEY) providers.push("openrouter");
-  if (env.GROQ_API_KEY) providers.push("groq");
-
-  // Check config file providers
-  const configProviders = (config as { providers?: Record<string, unknown> }).providers;
-  if (configProviders) {
-    for (const [name, entry] of Object.entries(configProviders)) {
-      const p = entry as { apiKey?: string; enabled?: boolean };
-      if (p.enabled !== false && p.apiKey && !providers.includes(name)) {
-        providers.push(name);
+  if (defaultModelSpec) {
+    resolved = findModel(providers, defaultModelSpec);
+    if (!resolved) {
+      console.error(`Model not found: ${defaultModelSpec}`);
+      console.error("Available models:");
+      for (const p of providers) {
+        for (const m of p.listModels()) {
+          console.error(`  ${p.id}/${m.id} (${m.displayName})`);
+        }
       }
+      process.exit(1);
     }
+  } else {
+    // Use first model of first provider
+    const provider = providers[0];
+    const model = provider.listModels()[0];
+    resolved = { provider, model };
   }
 
-  return providers;
+  // Render the Ink app
+  const { waitUntilExit } = render(
+    React.createElement(App, {
+      provider: resolved.provider,
+      model: resolved.model,
+    }),
+  );
+
+  await waitUntilExit();
 }

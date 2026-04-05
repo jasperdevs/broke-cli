@@ -10,7 +10,12 @@ export default defineConfig({
   splitting: false,
   sourcemap: true,
   clean: true,
+  external: ["react-devtools-core"],
   banner: {
     js: "#!/usr/bin/env node",
+  },
+  esbuildOptions(options) {
+    options.jsx = "automatic";
+    options.jsxImportSource = "react";
   },
 });

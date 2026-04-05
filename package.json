@@ -41,13 +41,22 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.66",
+    "@ai-sdk/openai": "^3.0.50",
     "ai": "^6.0.146",
+    "cli-highlight": "^2.1.11",
     "commander": "^13.1.0",
+    "ink": "^6.8.0",
+    "js-tiktoken": "^1.0.21",
     "jsonc-parser": "^3.3.1",
+    "marked": "^15.0.12",
+    "marked-terminal": "^7.3.0",
+    "react": "^19.2.4",
     "zod": "^3.24.0"
   },
   "devDependencies": {
     "@types/node": "^22.15.2",
+    "@types/react": "^19.2.14",
     "tsup": "^8.4.0",
     "typescript": "^5.8.3",
     "vitest": "^3.1.1"
