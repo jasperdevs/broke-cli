@@ -68,6 +68,20 @@ export async function detectAllProviders(
     }
   }
 
+  // --- Codex CLI binary detection ---
+  if (!results.some((r) => r.id === "openai") && hasBinary("codex")) {
+    // Codex binary exists but no auth yet — hint to user
+    const codexAuth = loadCodexAuth();
+    if (!codexAuth) {
+      results.push({
+        id: "codex",
+        name: "Codex CLI (installed, run codex auth login)",
+        method: "oauth",
+        apiKey: undefined,
+      });
+    }
+  }
+
   // --- Codex OAuth (ChatGPT subscription) ---
   if (!results.some((r) => r.id === "openai")) {
     const codexAuth = loadCodexAuth();
@@ -83,17 +97,22 @@ export async function detectAllProviders(
 
   // --- Local model servers (probe in parallel) ---
   const localProbes = [
-    { id: "ollama", name: "Ollama", url: "http://localhost:11434/api/tags", baseUrl: "http://localhost:11434/v1" },
-    { id: "lmstudio", name: "LM Studio", url: "http://localhost:1234/v1/models", baseUrl: "http://localhost:1234/v1" },
-    { id: "llamacpp", name: "llama.cpp", url: "http://localhost:8080/v1/models", baseUrl: "http://localhost:8080/v1" },
-    { id: "jan", name: "Jan", url: "http://localhost:1337/v1/models", baseUrl: "http://localhost:1337/v1" },
+    { id: "ollama", name: "Ollama", url: "http://localhost:11434/api/tags", baseUrl: "http://localhost:11434/v1", binary: "ollama" },
+    { id: "lmstudio", name: "LM Studio", url: "http://localhost:1234/v1/models", baseUrl: "http://localhost:1234/v1", binary: null },
+    { id: "llamacpp", name: "llama.cpp", url: "http://localhost:8080/v1/models", baseUrl: "http://localhost:8080/v1", binary: null },
+    { id: "jan", name: "Jan", url: "http://localhost:1337/v1/models", baseUrl: "http://localhost:1337/v1", binary: null },
+    { id: "vllm", name: "vLLM", url: "http://localhost:8000/v1/models", baseUrl: "http://localhost:8000/v1", binary: null },
   ];
 
   const probeResults = await Promise.allSettled(
     localProbes.map(async (lp) => {
-      const available = await probeEndpoint(lp.url);
-      if (available) {
-        return { id: lp.id, name: lp.name, method: "local" as const, baseUrl: lp.baseUrl, apiKey: "local" };
+      const serverRunning = await probeEndpoint(lp.url);
+      if (serverRunning) {
+        return { id: lp.id, name: `${lp.name} (running)`, method: "local" as const, baseUrl: lp.baseUrl, apiKey: "local" };
+      }
+      // Even if server isn't running, check if binary is installed
+      if (lp.binary && hasBinary(lp.binary)) {
+        return { id: lp.id, name: `${lp.name} (installed, not running)`, method: "local" as const, baseUrl: lp.baseUrl, apiKey: undefined };
       }
       return null;
     }),

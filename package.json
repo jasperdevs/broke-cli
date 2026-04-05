@@ -47,6 +47,7 @@
     "cli-highlight": "^2.1.11",
     "commander": "^13.1.0",
     "ink": "^6.8.0",
+    "ink-text-input": "^6.0.0",
     "js-tiktoken": "^1.0.21",
     "jsonc-parser": "^3.3.1",
     "marked": "^15.0.12",

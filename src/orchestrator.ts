@@ -1,7 +1,7 @@
-import { streamText, type StreamTextResult, type ModelMessage } from "ai";
+import { streamText, type ModelMessage } from "ai";
 import type { Provider, ModelInfo, TokenUsage } from "./providers/types.js";
 import { buildContext } from "./context/builder.js";
-import { buildUsage, formatCost } from "./budget/cost.js";
+import { buildUsage } from "./budget/cost.js";
 
 export interface OrchestratorConfig {
   provider: Provider;
@@ -16,24 +16,18 @@ export interface StreamCallbacks {
   onFinish: (fullText: string, usage: TokenUsage) => void;
 }
 
-/**
- * Orchestrator: coordinates a single request lifecycle.
- * Phase 1: simple chat. Phase 2 adds tools + agent loop.
- */
 export async function handleUserInput(
   input: string,
   history: ModelMessage[],
   config: OrchestratorConfig,
   callbacks: StreamCallbacks,
 ): Promise<{ messages: ModelMessage[] }> {
-  // 1. Build context
   const ctx = buildContext({
     history,
     userInput: input,
     cwd: process.cwd(),
   });
 
-  // 2. Stream the response
   let fullText = "";
 
   try {
@@ -41,8 +35,6 @@ export async function handleUserInput(
       model: config.provider.getModel(config.model.id),
       system: ctx.systemPrompt,
       messages: ctx.messages,
-      // Phase 2: tools, stopWhen
-      // Phase 3: providerOptions for prompt caching
     });
 
     for await (const part of result.fullStream) {
@@ -64,7 +56,21 @@ export async function handleUserInput(
       }
     }
 
-    // 3. Get usage
+    // Get usage — handle case where stream produced text
+    if (!fullText) {
+      // Try to get any text from the result
+      try {
+        fullText = await result.text;
+      } catch {
+        // Stream may have errored
+      }
+    }
+
+    if (!fullText) {
+      callbacks.onError(new Error("No response received from the model. Check your API key and try again."));
+      return { messages: ctx.messages };
+    }
+
     const rawUsage = await result.usage;
     const usage = buildUsage(
       config.model.pricing,
@@ -77,7 +83,6 @@ export async function handleUserInput(
     callbacks.onUsage(usage);
     callbacks.onFinish(fullText, usage);
 
-    // 4. Return updated messages for session history
     const updatedMessages: ModelMessage[] = [
       ...ctx.messages,
       { role: "assistant" as const, content: fullText },
@@ -85,8 +90,21 @@ export async function handleUserInput(
 
     return { messages: updatedMessages };
   } catch (err) {
-    const error = err instanceof Error ? err : new Error(String(err));
-    callbacks.onError(error);
+    const raw = err instanceof Error ? err : new Error(String(err));
+    // Improve common error messages
+    let message = raw.message;
+    if (message.includes("401")) {
+      message = "Invalid API key. Check your key and try again.";
+    } else if (message.includes("429")) {
+      message = "Rate limited. Wait a moment and try again.";
+    } else if (message.includes("403")) {
+      message = "Access denied. Your API key may not have access to this model.";
+    } else if (message.includes("ECONNREFUSED")) {
+      message = "Cannot connect to the provider. Check your internet connection.";
+    } else if (message.includes("No output generated")) {
+      message = "No response from model. The model may be unavailable or your key may be invalid.";
+    }
+    callbacks.onError(new Error(message));
     return { messages: ctx.messages };
   }
 }

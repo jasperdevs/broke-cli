@@ -52,13 +52,22 @@ export async function run(opts: CliOptions): Promise<void> {
     }
   }
 
-  // Enter alternate screen buffer (fullscreen TUI)
+  // Guard: require interactive terminal for input to work.
+  // On Windows, stdin.isTTY can be undefined when spawned without a proper
+  // console, which causes Ink to skip setRawMode and useInput receives nothing.
+  if (!process.stdin.isTTY) {
+    console.error("brokecli requires an interactive terminal (TTY).");
+    process.exit(1);
+  }
+
+  // Enter alternate screen buffer (fullscreen TUI).
+  // This must happen AFTER the TTY guard but BEFORE render() so that Ink's
+  // initial output measurement happens inside the alternate buffer.
   process.stdout.write("\x1b[?1049h");
   process.stdout.write("\x1b[H\x1b[2J");
 
   const restore = () => {
     process.stdout.write("\x1b[?1049l");
-    // Show exit mascot (like OpenCode shows its logo on exit)
     for (const line of EXIT_LINES) {
       process.stdout.write(line + "\n");
     }
