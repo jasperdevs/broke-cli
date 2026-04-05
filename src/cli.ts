@@ -4,6 +4,7 @@ import { loadConfig } from "./config/loader.js";
 import { detectAllProviders, type DetectionResult } from "./providers/detect.js";
 import { buildProviders, findModel } from "./providers/registry.js";
 import { App } from "./ui/app.js";
+import { EXIT_LINES } from "./ui/mascot.js";
 import type { Provider, ModelInfo } from "./providers/types.js";
 
 export interface CliOptions {
@@ -51,12 +52,18 @@ export async function run(opts: CliOptions): Promise<void> {
     }
   }
 
-  // Enter alternate screen buffer (fullscreen TUI like OpenCode)
+  // Enter alternate screen buffer (fullscreen TUI)
   process.stdout.write("\x1b[?1049h");
-  process.stdout.write("\x1b[H\x1b[2J"); // clear
+  process.stdout.write("\x1b[H\x1b[2J");
 
-  // Ensure we restore on exit
-  const restore = () => process.stdout.write("\x1b[?1049l");
+  const restore = () => {
+    process.stdout.write("\x1b[?1049l");
+    // Show exit mascot (like OpenCode shows its logo on exit)
+    for (const line of EXIT_LINES) {
+      process.stdout.write(line + "\n");
+    }
+  };
+
   process.on("exit", restore);
   process.on("SIGINT", () => { restore(); process.exit(0); });
   process.on("SIGTERM", () => { restore(); process.exit(0); });
@@ -71,5 +78,4 @@ export async function run(opts: CliOptions): Promise<void> {
   );
 
   await waitUntilExit();
-  restore();
 }

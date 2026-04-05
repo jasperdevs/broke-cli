@@ -2,11 +2,12 @@ import React, { useMemo } from "react";
 import { Box, Text } from "ink";
 import type { DetectionResult } from "../providers/detect.js";
 import { formatDetection } from "../providers/detect.js";
+import { MASCOT } from "./mascot.js";
 
 const TIPS = [
   "Use --broke to auto-route to the cheapest model",
   "/model to switch models mid-conversation",
-  "Run codex auth login to use ChatGPT subscription for free",
+  "Run codex auth login to use your ChatGPT sub for free",
   "/cost to see how much you've spent this session",
   "Ollama models are auto-detected when running locally",
   "Set budget.daily in config to cap your daily spend",
@@ -30,29 +31,30 @@ export function Home({
   rows,
 }: HomeProps) {
   const tip = useMemo(() => TIPS[Math.floor(Math.random() * TIPS.length)], []);
-  const padTop = Math.max(1, Math.floor((rows - 16) / 3));
+  const padTop = Math.max(1, Math.floor((rows - 20) / 3));
 
   return (
     <Box flexDirection="column" flexGrow={1}>
       <Box height={padTop} />
 
-      {/* Branding — clean text like OpenCode */}
+      {/* Mascot centered */}
       <Box flexDirection="column" alignItems="center">
-        <Text color="#3AC73A" bold>
-          {"  █▄▄ █▀▄ █▀█ █▄▀ █▀▀ █▀▀ █   █"}
-        </Text>
-        <Text color="#3AC73A" bold>
-          {"  █▄█ █▀▄ █▄█ █ █ ██▄ █▄▄ █▄▄ █"}
-        </Text>
+        {MASCOT.map((line, i) => (
+          <Text key={i}>{line}</Text>
+        ))}
       </Box>
 
-      <Box justifyContent="center" marginTop={1}>
-        <Text dimColor>v{version} — AI coding that doesn't waste your money</Text>
+      {/* Name + version */}
+      <Box flexDirection="column" alignItems="center" marginTop={1}>
+        <Text color="#3AC73A" bold>
+          BrokeCLI
+        </Text>
+        <Text dimColor>v{version}</Text>
       </Box>
 
       {/* Detected providers */}
       {detectedProviders.length > 0 && (
-        <Box flexDirection="column" alignItems="center" marginTop={2}>
+        <Box flexDirection="column" alignItems="center" marginTop={1}>
           {detectedProviders.map((d) => (
             <Text key={d.id}>
               <Text color="#3AC73A">● </Text>
@@ -63,8 +65,8 @@ export function Home({
       )}
 
       {detectedProviders.length === 0 && (
-        <Box justifyContent="center" marginTop={2}>
-          <Text color="yellow">No providers detected — run /setup or set an API key env var</Text>
+        <Box justifyContent="center" marginTop={1}>
+          <Text color="yellow">No providers detected — /setup or set an API key</Text>
         </Box>
       )}
 
