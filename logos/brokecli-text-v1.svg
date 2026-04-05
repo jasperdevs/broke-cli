@@ -1,0 +1,4 @@
+<svg id="svg-text-v1" viewBox="0 0 500 80" width="250" height="40" xmlns="http://www.w3.org/2000/svg">
+      <style>@import url('https://fonts.googleapis.com/css2?family=Silkscreen:wght@700&amp;display=swap');</style>
+      <text x="250" y="60" font-family="Silkscreen, monospace" font-weight="700" font-size="70" fill="#ffffff" stroke="#0a0a0a" stroke-width="14" paint-order="stroke" stroke-linejoin="miter" text-anchor="middle">BrokeCLI</text>
+    </svg>
