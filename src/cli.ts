@@ -1,7 +1,8 @@
 import React from "react";
 import { render } from "ink";
 import { loadConfig } from "./config/loader.js";
-import { detectProviders, buildProviders, findModel } from "./providers/registry.js";
+import { detectAllProviders, type DetectionResult } from "./providers/detect.js";
+import { buildProviders, findModel } from "./providers/registry.js";
 import { App } from "./ui/app.js";
 import type { Provider, ModelInfo } from "./providers/types.js";
 
@@ -16,11 +17,22 @@ export interface CliOptions {
 export async function run(opts: CliOptions): Promise<void> {
   const config = await loadConfig(opts.config);
 
-  // Detect and build providers — but don't fail if none found
-  const detected = detectProviders(config.providers);
-  const providers = buildProviders(detected);
+  // Detect all available providers (env, config, oauth, local servers)
+  const detected = await detectAllProviders(config.providers);
+  const providers = buildProviders(
+    detected
+      .filter((d) => d.apiKey)
+      .map((d) => ({
+        id: d.id,
+        name: d.name,
+        isLocal: d.method === "local",
+        apiKey: d.apiKey,
+        baseUrl: d.baseUrl,
+        availableModels: [],
+      })),
+  );
 
-  // Resolve model if providers exist
+  // Resolve initial model if providers exist
   let initialProvider: Provider | undefined;
   let initialModel: ModelInfo | undefined;
 
@@ -39,14 +51,25 @@ export async function run(opts: CliOptions): Promise<void> {
     }
   }
 
-  // Always render the app — it handles the no-provider state
+  // Enter alternate screen buffer (fullscreen TUI like OpenCode)
+  process.stdout.write("\x1b[?1049h");
+  process.stdout.write("\x1b[H\x1b[2J"); // clear
+
+  // Ensure we restore on exit
+  const restore = () => process.stdout.write("\x1b[?1049l");
+  process.on("exit", restore);
+  process.on("SIGINT", () => { restore(); process.exit(0); });
+  process.on("SIGTERM", () => { restore(); process.exit(0); });
+
   const { waitUntilExit } = render(
     React.createElement(App, {
       provider: initialProvider,
       model: initialModel,
       providers,
+      detectedProviders: detected,
     }),
   );
 
   await waitUntilExit();
+  restore();
 }

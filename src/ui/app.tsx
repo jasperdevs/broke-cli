@@ -1,14 +1,17 @@
 import React, { useState, useCallback } from "react";
 import { Box, Static, Text, useApp } from "ink";
 import type { ModelMessage } from "ai";
-import type { Provider, ModelInfo, TokenUsage } from "../providers/types.js";
+import type { Provider, ModelInfo } from "../providers/types.js";
+import type { DetectionResult } from "../providers/detect.js";
 import { handleUserInput } from "../orchestrator.js";
 import { Message, StreamingMessage } from "./message-stream.js";
 import { PromptInput } from "./prompt-input.js";
 import { StatusBar } from "./status-bar.js";
+import { Welcome } from "./welcome.js";
 import { Setup } from "./setup.js";
 import { formatCost } from "../budget/cost.js";
 import { buildProviders } from "../providers/registry.js";
+import { version } from "../../package.json";
 
 interface CompletedMessage {
   role: "user" | "assistant";
@@ -20,9 +23,15 @@ interface AppProps {
   provider?: Provider;
   model?: ModelInfo;
   providers: Provider[];
+  detectedProviders: DetectionResult[];
 }
 
-export function App({ provider: initialProvider, model: initialModel, providers: initialProviders }: AppProps) {
+export function App({
+  provider: initialProvider,
+  model: initialModel,
+  providers: initialProviders,
+  detectedProviders,
+}: AppProps) {
   const { exit } = useApp();
   const [completedMessages, setCompletedMessages] = useState<CompletedMessage[]>([]);
   const [streamingText, setStreamingText] = useState("");
@@ -68,15 +77,18 @@ export function App({ provider: initialProvider, model: initialModel, providers:
           case "q":
             exit();
             return;
+          case "setup":
+          case "login":
+            setShowSetup(true);
+            return;
           case "model": {
             if (!arg) {
-              // List available models
               const lines = ["**Available models:**", ""];
               for (const p of providers) {
                 for (const m of p.listModels()) {
                   const current =
                     activeProvider?.id === p.id && activeModel?.id === m.id
-                      ? " ← current"
+                      ? " **(active)**"
                       : "";
                   lines.push(
                     `  \`${p.id}/${m.id}\` — ${m.displayName} (${formatCost(m.pricing.inputPerMTok)}/MTok in)${current}`,
@@ -87,7 +99,6 @@ export function App({ provider: initialProvider, model: initialModel, providers:
               addSystemMessage(lines.join("\n"));
               return;
             }
-            // Try to switch model
             const { findModel } = await import("../providers/registry.js");
             const resolved = findModel(providers, arg);
             if (resolved) {
@@ -103,21 +114,22 @@ export function App({ provider: initialProvider, model: initialModel, providers:
             }
             return;
           }
+          case "cost":
+            addSystemMessage(
+              `Session cost: **${formatCost(sessionCost)}** | Tokens: **${tokenCount}**`,
+            );
+            return;
           case "help":
             addSystemMessage(
               [
                 "**Commands:**",
                 "  `/model [id]` — list or switch models",
-                "  `/clear` — clear conversation",
+                "  `/setup` — configure a provider",
                 "  `/cost` — show session cost",
+                "  `/clear` — clear conversation",
                 "  `/help` — show this help",
                 "  `/exit` — quit",
               ].join("\n"),
-            );
-            return;
-          case "cost":
-            addSystemMessage(
-              `Session cost: **${formatCost(sessionCost)}** | Tokens: **${tokenCount}**`,
             );
             return;
         }
@@ -126,24 +138,12 @@ export function App({ provider: initialProvider, model: initialModel, providers:
       // Check if we have a provider
       if (!activeProvider || !activeModel) {
         addSystemMessage(
-          [
-            "**No provider configured.** Set up one of:",
-            "",
-            "  1. `export ANTHROPIC_API_KEY=sk-ant-...`",
-            "  2. `export OPENAI_API_KEY=sk-...`",
-            "  3. Run `codex auth login` (uses ChatGPT subscription — free)",
-            "  4. Add to `~/.brokecli/config.jsonc`:",
-            "     ```json",
-            '     { "providers": { "openai": { "apiKey": "sk-..." } } }',
-            "     ```",
-            "",
-            "Then restart brokecli.",
-          ].join("\n"),
+          "No provider configured. Run `/setup` to add one, or set an API key env var and restart.",
         );
         return;
       }
 
-      // Add user message to completed
+      // Send to LLM
       setCompletedMessages((prev) => [
         ...prev,
         { role: "user", content: input, id: msgId },
@@ -160,12 +160,8 @@ export function App({ provider: initialProvider, model: initialModel, providers:
           history,
           { provider: activeProvider, model: activeModel },
           {
-            onText: (text) => {
-              setStreamingText((prev) => prev + text);
-            },
-            onError: (err) => {
-              setError(err.message);
-            },
+            onText: (text) => setStreamingText((prev) => prev + text),
+            onError: (err) => setError(err.message),
             onUsage: (usage) => {
               setTurnCost(usage.cost);
               setSessionCost((prev) => prev + usage.cost);
@@ -182,7 +178,6 @@ export function App({ provider: initialProvider, model: initialModel, providers:
             },
           },
         );
-
         setHistory(result.messages);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
@@ -192,29 +187,21 @@ export function App({ provider: initialProvider, model: initialModel, providers:
     [history, activeProvider, activeModel, providers, msgId, exit, sessionCost, tokenCount, addSystemMessage],
   );
 
-  const hasProvider = activeProvider && activeModel;
-
-  return (
-    <Box flexDirection="column">
-      {/* Header */}
-      <Box marginBottom={1}>
-        <Text color="green" bold>
-          brokecli
-        </Text>
-        <Text dimColor> — AI coding that doesn't waste your money</Text>
-      </Box>
-
-      {/* Setup flow when no provider */}
-      {showSetup && (
+  // Setup mode
+  if (showSetup) {
+    return (
+      <Box flexDirection="column" height={process.stdout.rows}>
         <Setup
           onComplete={(providerId, apiKey) => {
-            const newProviders = buildProviders([{
-              id: providerId,
-              name: providerId,
-              isLocal: false,
-              apiKey,
-              availableModels: [],
-            }]);
+            const newProviders = buildProviders([
+              {
+                id: providerId,
+                name: providerId,
+                isLocal: false,
+                apiKey,
+                availableModels: [],
+              },
+            ]);
             if (newProviders.length > 0) {
               const p = newProviders[0];
               const m = p.listModels()[0];
@@ -222,31 +209,50 @@ export function App({ provider: initialProvider, model: initialModel, providers:
               setActiveModel(m);
               setProviders((prev) => [...prev, p]);
               setShowSetup(false);
-              addSystemMessage(`Connected to **${p.name}** — using ${m.displayName}. Start chatting!`);
+              addSystemMessage(
+                `Connected to **${p.name}** — using ${m.displayName}. Start chatting!`,
+              );
             }
           }}
           onSkip={() => setShowSetup(false)}
         />
-      )}
+      </Box>
+    );
+  }
 
-      {/* Completed messages */}
-      <Static items={completedMessages}>
-        {(msg) => (
-          <Box key={msg.id}>
-            <Message role={msg.role} content={msg.content} />
+  const hasProvider = activeProvider && activeModel;
+
+  return (
+    <Box flexDirection="column" height={process.stdout.rows}>
+      {/* Welcome header */}
+      <Welcome
+        version={version}
+        detectedProviders={detectedProviders}
+        activeModel={hasProvider ? activeModel.displayName : undefined}
+        activeProvider={hasProvider ? activeProvider.id : undefined}
+      />
+
+      {/* Chat area */}
+      <Box flexDirection="column" flexGrow={1}>
+        {/* Completed messages */}
+        <Static items={completedMessages}>
+          {(msg) => (
+            <Box key={msg.id}>
+              <Message role={msg.role} content={msg.content} />
+            </Box>
+          )}
+        </Static>
+
+        {/* Streaming */}
+        {isStreaming && <StreamingMessage content={streamingText} />}
+
+        {/* Error */}
+        {error && (
+          <Box marginBottom={1}>
+            <Text color="red">Error: {error}</Text>
           </Box>
         )}
-      </Static>
-
-      {/* Currently streaming */}
-      {isStreaming && <StreamingMessage content={streamingText} />}
-
-      {/* Error display */}
-      {error && (
-        <Box marginBottom={1}>
-          <Text color="red">Error: {error}</Text>
-        </Box>
-      )}
+      </Box>
 
       {/* Input */}
       <PromptInput onSubmit={handleSubmit} isStreaming={isStreaming} />
