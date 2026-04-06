@@ -3,7 +3,7 @@ import { writeFileSync } from "fs";
 import type { ModelHandle } from "../ai/providers.js";
 import type { ProviderRegistry } from "../ai/provider-registry.js";
 import { buildSystemPrompt, reloadContext } from "../core/context.js";
-import { buildBudgetReport } from "../core/budget-insights.js";
+import { buildBudgetReport, renderBudgetDashboard, type BudgetReport } from "../core/budget-insights.js";
 import { compactMessages, getTotalContextTokens } from "../core/compact.js";
 import { clearCredentials, hasStoredCredentials, listAuthenticated } from "../core/auth.js";
 import { getProviderCredential, getSettings, loadConfig, updateProviderConfig, updateSetting, type Settings, type Mode } from "../core/config.js";
@@ -55,7 +55,7 @@ interface SlashCommandApp {
   showQuestion(prompt: string, options?: string[]): Promise<string>;
   updateItemPickerItems?(items: PickerItem[], focusId?: string): void;
   setCompacting?(compacting: boolean, tokenCount?: number): void;
-  openBudgetView?(title: string, lines: string[]): void;
+  openBudgetView?(title: string, report: BudgetReport): void;
 }
 
 interface ExtensionHooks {
@@ -198,8 +198,8 @@ export async function handleSlashCommand(options: {
       return { handled: true };
     }
     case "budget":
-      if (app.openBudgetView) app.openBudgetView("Budget Inspector", buildBudgetReport(session).split("\n"));
-      else app.addMessage("system", buildBudgetReport(session));
+      if (app.openBudgetView) app.openBudgetView("Budget Inspector", buildBudgetReport(session));
+      else app.addMessage("system", renderBudgetDashboard({ report: buildBudgetReport(session), width: 100 }).join("\n"));
       return { handled: true };
     case "fork": {
       const forked = session.fork();

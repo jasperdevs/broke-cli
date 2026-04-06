@@ -1,6 +1,7 @@
 import stripAnsi from "strip-ansi";
 import { execSync } from "child_process";
 import { getSettings } from "../core/config.js";
+import { renderBudgetDashboard } from "../core/budget-insights.js";
 import { BOLD, DIM, RESET } from "../utils/ansi.js";
 import { truncateVisible, visibleWidth } from "../utils/terminal-width.js";
 import { getCommandMatches as findCommandMatches } from "./command-surface.js";
@@ -47,7 +48,6 @@ export function drawImmediate(app: AppState): void {
   const bottomLines: string[] = [];
   const bottomMenuClicks: Array<{ lineIndex: number; action: () => void }> = [];
 
-  appendQueuedMessagePreview(app, bottomLines, mainW);
   bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
   bottomLines.push(...inputLayout.lines);
 
@@ -76,52 +76,32 @@ export function drawImmediate(app: AppState): void {
   app.screen.setCursor(Math.min(height, mainTopHeight + 2 + inputLayout.row), Math.min(width, 1 + inputLayout.col));
 }
 
-function appendQueuedMessagePreview(app: AppState, bottomLines: string[], mainW: number): void {
-  if (app.pendingMessages.length === 0) return;
-  const sections: Array<{ title: string; items: Array<{ text: string }> }> = [];
-  const steering = app.pendingMessages.filter((entry: { delivery: string }) => entry.delivery === "steering");
-  const followups = app.pendingMessages.filter((entry: { delivery: string }) => entry.delivery === "followup");
-  if (steering.length > 0) sections.push({ title: "Queued steering messages", items: steering });
-  if (followups.length > 0) sections.push({ title: "Queued follow-up messages", items: followups });
-
-  for (let i = 0; i < sections.length; i++) {
-    const section = sections[i];
-    bottomLines.push(`• ${section.title}`);
-    for (const item of section.items) {
-      const preview = item.text.replace(/\s+/g, " ").trim();
-      for (const line of wordWrap(preview, Math.max(8, mainW - 4)).slice(0, 2)) {
-        bottomLines.push(`  ↳ ${line}`);
-      }
-    }
-    bottomLines.push("  alt + ↑ edit last queued message");
-    if (i < sections.length - 1) bottomLines.push("");
-  }
-}
-
 function drawBudgetView(app: AppState): void {
   const { width, height } = app.screen;
   const separatorColor = app.getModeAccent();
   const title = `${T()}${BOLD}${app.budgetView.title}${RESET}`;
-  const innerWidth = Math.max(20, width - 6);
-  const bodyHeight = Math.max(1, height - 6);
-  const allLines = app.budgetView.lines.flatMap((line: string) => {
-    if (!line) return [""];
-    return visibleWidth(line) <= innerWidth ? [line] : wordWrap(line, innerWidth);
+  const innerWidth = Math.max(20, width - 2);
+  const bodyHeight = Math.max(1, height - 4);
+  const allLines = renderBudgetDashboard({
+    report: app.budgetView.report,
+    width: innerWidth,
+    contextTokens: app.contextTokenCount,
+    contextLimit: app.contextLimitTokens,
   });
   const maxScroll = Math.max(0, allLines.length - bodyHeight);
   if (app.budgetView.scrollOffset > maxScroll) app.budgetView.scrollOffset = maxScroll;
   const visible = allLines.slice(app.budgetView.scrollOffset, app.budgetView.scrollOffset + bodyHeight);
 
   const frame: string[] = [];
-  frame.push(`${separatorColor}${"═".repeat(width)}${RESET}`);
-  frame.push(` ${title}`);
-  frame.push(` ${DIM}${"Budget inspector".padEnd(Math.max(0, width - 2))}${RESET}`);
+  const topRule = `${separatorColor}${"─".repeat(width)}${RESET}`;
+  frame.push(topRule);
+  frame.push(` ${title}${" ".repeat(Math.max(1, width - 12 - visibleWidth(app.budgetView.title)))}${DIM}esc back${RESET}`);
   for (let i = 0; i < bodyHeight; i++) {
     const line = visible[i] ?? "";
-    frame.push(` ${app.padLine(line, width - 2)}`);
+    frame.push(app.padLine(line, width));
   }
-  while (frame.length < height - 1) frame.push(" ");
-  frame.push(`${separatorColor}${"═".repeat(width)}${RESET}`);
+  while (frame.length < height - 1) frame.push("");
+  frame.push(`${DIM} ↑↓ scroll  pgup/pgdn  esc back${RESET}`);
   app.screen.render(frame.map((line) => app.decorateFrameLine(line, width)));
   app.screen.hideCursor();
 }

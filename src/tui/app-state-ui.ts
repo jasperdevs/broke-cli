@@ -1,4 +1,5 @@
 import { getSettings, updateSetting, type CavemanLevel, type Mode, type ThinkingLevel } from "../core/config.js";
+import type { BudgetReport } from "../core/budget-insights.js";
 import { HOME_TIPS } from "./app-shared.js";
 import type { MenuPromptKind, ModelOption, PendingDelivery, PendingImage, PendingMessage, PickerItem, SettingEntry, TodoItem } from "./app-types.js";
 
@@ -73,8 +74,8 @@ export function openItemPicker(
   app.drawNow();
 }
 
-export function openBudgetView(app: AppState, title: string, lines: string[]): void {
-  app.budgetView = { title, lines, scrollOffset: 0 };
+export function openBudgetView(app: AppState, title: string, report: BudgetReport): void {
+  app.budgetView = { title, report, scrollOffset: 0 };
   app.drawNow();
 }
 
@@ -378,7 +379,7 @@ export interface AppStateUiMethods {
   updateSettings(entries: SettingEntry[]): void;
   updateItemPickerItems(items: PickerItem[], focusId?: string): void;
   openItemPicker(title: string, items: PickerItem[], onSelect: (id: string) => void, options?: { initialCursor?: number; previewHint?: string; onPreview?: (id: string) => void; onCancel?: () => void; onSecondaryAction?: (id: string) => void; secondaryHint?: string; closeOnSelect?: boolean; kind?: MenuPromptKind }): void;
-  openBudgetView(title: string, lines: string[]): void;
+  openBudgetView(title: string, report: BudgetReport): void;
   closeBudgetView(): void;
   clearMessages(): void;
   addMessage(role: "user" | "assistant" | "system", content: string, images?: PendingImage[]): void;

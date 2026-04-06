@@ -14,7 +14,7 @@ function getEvictionThreshold(): number {
 
 function compressToolOutputs(content: string): string {
   const level = getSettings().cavemanLevel ?? "off";
-  const minLength = level === "ultra" ? 120 : 500;
+  const minLength = level === "ultra" ? 80 : 500;
   if (content.length < minLength) return content;
 
   let compressed = content;
@@ -27,7 +27,7 @@ function compressToolOutputs(content: string): string {
   const lines = compressed.split("\n");
   const headCount = level === "ultra" ? 1 : 3;
   const tailCount = level === "ultra" ? 1 : 2;
-  const maxLines = level === "ultra" ? 8 : 30;
+  const maxLines = level === "ultra" ? 6 : 30;
   if (lines.length > maxLines) {
     const head = lines.slice(0, headCount).join("\n");
     const tail = lines.slice(-tailCount).join("\n");
@@ -35,7 +35,7 @@ function compressToolOutputs(content: string): string {
     compressed = `${head}\n[... ${omitted} lines compressed ...]\n${tail}`;
   }
 
-  const maxChars = level === "ultra" ? 420 : 1500;
+  const maxChars = level === "ultra" ? 240 : 1500;
   if (compressed.length > maxChars) {
     compressed = compressed.slice(0, maxChars) + "\n[compressed]";
   }
@@ -56,7 +56,11 @@ function compressToolOutputs(content: string): string {
       .replace(/\bincluding\b/gi, "incl")
       .replace(/\bbecause\b/gi, "bc")
       .replace(/\bwithout\b/gi, "w/o")
-      .replace(/\bbetween\b/gi, "btwn");
+      .replace(/\bbetween\b/gi, "btwn")
+      .replace(/\bresult\b/gi, "res")
+      .replace(/\bwarning\b/gi, "warn")
+      .replace(/\bfailed\b/gi, "fail")
+      .replace(/\bsuccessfully\b/gi, "ok");
   }
 
   return compressed;

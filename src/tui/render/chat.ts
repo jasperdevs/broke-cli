@@ -15,6 +15,11 @@ export interface TodoRenderItem {
   status: "pending" | "in_progress" | "done";
 }
 
+export interface PendingRenderMessage {
+  text: string;
+  delivery: "steering" | "followup";
+}
+
 function ensureOverlayGap(lines: string[]): void {
   if (lines.length === 0) return;
   if (lines[lines.length - 1] !== "") lines.push("");
@@ -184,6 +189,7 @@ export function renderMessageOverlays(options: {
   isCompacting: boolean;
   compactStartTime: number;
   compactTokens: number;
+  pendingMessages: PendingRenderMessage[];
   fmtTokens: (value: number) => string;
   sparkleSpinner: (frame: number, color?: string) => string;
   shimmerText: (text: string, frame: number, color?: string) => string;
@@ -212,6 +218,7 @@ export function renderMessageOverlays(options: {
     isCompacting,
     compactStartTime,
     compactTokens,
+    pendingMessages,
     fmtTokens,
     sparkleSpinner,
     shimmerText,
@@ -294,6 +301,20 @@ export function renderMessageOverlays(options: {
     }
     const label = thinkingRequested ? "Thinking..." : "Composing...";
     lines.push(`  ${sparkleSpinner(spinnerFrame)} ${shimmerText(label, spinnerFrame)} ${colors.accent}(${statParts.join(" · ")})${colors.reset}`);
+    lines.push("");
+  }
+
+  if (pendingMessages.length > 0) {
+    ensureOverlayGap(lines);
+    lines.push(`  ${colors.dim}• Queued messages${colors.reset}`);
+    for (const item of pendingMessages.slice(-4)) {
+      const preview = item.text.replace(/\s+/g, " ").trim();
+      const marker = item.delivery === "followup" ? "↳" : "→";
+      for (const wrappedLine of wrapVisibleText(preview, Math.max(8, maxWidth - 8))) {
+        lines.push(`  ${colors.dim}${marker} ${wrappedLine}${colors.reset}`);
+      }
+    }
+    lines.push(`  ${colors.dim}alt + ↑ edit last queued${colors.reset}`);
     lines.push("");
   }
 

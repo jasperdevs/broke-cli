@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { getTurnPolicy } from "../src/core/turn-policy.js";
 import { Session } from "../src/core/session.js";
-import { buildBudgetReport, summarizeBudgetMetrics } from "../src/core/budget-insights.js";
+import { buildBudgetReport, renderBudgetDashboard, summarizeBudgetMetrics } from "../src/core/budget-insights.js";
 
 describe("turn policy", () => {
   it("keeps exploration turns on a read-only tool subset with a low step cap", () => {
@@ -37,7 +37,7 @@ describe("session budget metrics", () => {
     expect(session.getBudgetMetrics().totalTurns).toBe(1);
   });
 
-  it("formats a useful budget report and summary", () => {
+  it("formats a structured budget report and summary", () => {
     const session = new Session(`test-insights-${Date.now()}`);
     session.addUsage(200, 40, 0.001);
     session.recordTurn({ smallModel: true, toolsExposed: 6, toolsUsed: 2, plannerCacheHit: true });
@@ -45,12 +45,15 @@ describe("session budget metrics", () => {
     session.recordCompaction({ freshThreadCarryForward: true });
 
     const report = buildBudgetReport(session);
+    const dashboard = renderBudgetDashboard({ report, width: 110, contextTokens: 88, contextLimit: 128_000 }).join("\n");
     const summary = summarizeBudgetMetrics(session.getBudgetMetrics());
 
-    expect(report).toContain("Σ 240 total");
-    expect(report).toContain("unused tool exposure");
-    expect(report).toContain("carry-forwards    1");
-    expect(report).toContain("Biggest bleed right now");
+    expect(report.totalTokens).toBe(240);
+    expect(report.toolExposureWaste).toBe(4);
+    expect(report.freshThreadCarryForwards).toBe(1);
+    expect(dashboard).toContain("Session");
+    expect(dashboard).toContain("Bleed");
+    expect(dashboard).toContain("ctx 88/128k");
     expect(summary).toContain("cliffs 1");
     expect(summary).toContain("tool waste 4");
   });

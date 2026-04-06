@@ -275,6 +275,18 @@ describe("input editing", () => {
     expect(app.pendingMessages).toEqual([{ text: "steer", images: [], delivery: "steering" }]);
   });
 
+  it("shows queued messages in the active work block", () => {
+    const app = new App() as any;
+    app.messages = [{ role: "assistant", content: "working" }];
+    app.isStreaming = true;
+    app.streamStartTime = Date.now() - 1000;
+    app.addPendingMessage("next step", [], "followup");
+    const output = app.renderMessages(50).map((line: string) => stripAnsi(line)).join("\n");
+    expect(output).toContain("Composing...");
+    expect(output).toContain("Queued messages");
+    expect(output).toContain("next step");
+  });
+
   it("restores the last queued message with Alt+Up and removes it from the queue", () => {
     const app = new App() as any;
     app.addPendingMessage("first", [], "followup");
@@ -302,9 +314,26 @@ describe("budget inspector", () => {
     const app = new App() as any;
     let rendered: string[] = [];
     app.screen = { height: 12, width: 40, hasSidebar: true, mainWidth: 28, sidebarWidth: 11, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
-    app.openBudgetView("Budget Inspector", ["Token Budget", "", "Idle cache cliffs: 2", "Exposed but unused: 4"]);
+    app.openBudgetView("Budget Inspector", {
+      totalTokens: 240,
+      inputTokens: 200,
+      outputTokens: 40,
+      totalTurns: 3,
+      avgTokensPerTurn: 80,
+      toolsExposed: 6,
+      toolsUsed: 2,
+      toolExposureWaste: 4,
+      idleCacheCliffs: 1,
+      autoCompactions: 0,
+      freshThreadCarryForwards: 0,
+      smallModelTurns: 1,
+      plannerCacheHits: 1,
+      plannerCacheMisses: 0,
+      topBleed: { key: "tool waste", value: 4, pct: "67%" },
+    });
     app.drawImmediate();
     expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("Budget Inspector");
+    expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("esc back");
     app.handleKey({ name: "escape", char: "", ctrl: false, meta: false, shift: false } as Keypress);
     expect(rendered.map((line) => stripAnsi(line)).join("\n")).not.toContain("Budget Inspector");
   });

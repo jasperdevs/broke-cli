@@ -1,4 +1,5 @@
 import type { RgbColor } from "./render/mascot.js";
+import type { BudgetReport } from "../core/budget-insights.js";
 
 export interface ChatMessage {
   role: "user" | "assistant" | "system";
@@ -29,7 +30,7 @@ export interface PickerItem {
 
 export interface BudgetView {
   title: string;
-  lines: string[];
+  report: BudgetReport;
   scrollOffset: number;
 }
 

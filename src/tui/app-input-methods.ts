@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "fs";
 import stripAnsi from "strip-ansi";
 import { collectProjectFiles, filterFiles } from "./file-picker.js";
+import { renderBudgetDashboard } from "../core/budget-insights.js";
 import type { Keypress } from "./keypress.js";
 import { matchesBinding, loadKeybindings } from "../core/keybindings.js";
 import { getSettings } from "../core/config.js";
@@ -153,8 +154,6 @@ export function handleKey(app: AppState, key: Keypress): void {
 
   if (key.name === "escape" && !app.isStreaming && app.hasPendingMessages() && app.input.getText().trim().length === 0) {
     app.clearPendingMessages();
-    app.statusMessage = `${T()}Queued messages cleared${RESET}`;
-    setTimeout(() => { app.statusMessage = undefined; app.draw(); }, 1500);
     app.draw();
     return;
   }
@@ -263,8 +262,14 @@ export function handleKey(app: AppState, key: Keypress): void {
 }
 
 function handleBudgetViewKey(app: AppState, key: Keypress): void {
-  const page = Math.max(1, app.screen.height - 6);
-  const maxScroll = Math.max(0, app.budgetView.lines.length - Math.max(1, app.screen.height - 4));
+  const page = Math.max(1, app.screen.height - 5);
+  const lineCount = renderBudgetDashboard({
+    report: app.budgetView.report,
+    width: Math.max(20, app.screen.width - 2),
+    contextTokens: app.contextTokenCount,
+    contextLimit: app.contextLimitTokens,
+  }).length;
+  const maxScroll = Math.max(0, lineCount - Math.max(1, app.screen.height - 4));
   if (key.name === "escape" || key.name === "q" || (key.ctrl && key.name === "c")) {
     app.closeBudgetView();
     return;
@@ -393,9 +398,6 @@ function submitQueuedInput(app: AppState, delivery: "steering" | "followup"): vo
     return;
   }
   app.addPendingMessage(text, images, delivery);
-  const kind = delivery === "followup" ? "Queued follow-up" : "Queued steering";
-  app.statusMessage = `${T()}${kind}${RESET}`;
-  setTimeout(() => { app.statusMessage = undefined; app.draw(); }, 1500);
   app.draw();
 }
 
@@ -406,8 +408,6 @@ function queueCurrentInput(app: AppState, delivery: "steering" | "followup"): vo
 function restoreQueuedMessage(app: AppState): void {
   const queued = app.takeLastPendingMessage();
   if (!queued) {
-    app.statusMessage = `${DIM}No queued messages${RESET}`;
-    setTimeout(() => { app.statusMessage = undefined; app.draw(); }, 1200);
     app.draw();
     return;
   }
@@ -415,8 +415,6 @@ function restoreQueuedMessage(app: AppState): void {
     app.pendingImages = [...queued.images, ...app.pendingImages];
   }
   app.input.setText(queued.text);
-  app.statusMessage = `${T()}Editing queued ${queued.delivery === "followup" ? "follow-up" : "steering"}${RESET}`;
-  setTimeout(() => { app.statusMessage = undefined; app.draw(); }, 1500);
   app.drawNow();
 }
 

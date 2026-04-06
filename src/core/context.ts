@@ -150,6 +150,7 @@ const AUTO_CAVEMAN_ROUTINE_PATTERNS = [
   /\badd|update|change|implement|make|create|fix|patch\b/i,
   /\bflag|setting|option|command|stage|menu|picker|sidebar|input|export\b/i,
   /\brefactor|cleanup|polish|wrap|scroll|cursor|layout\b/i,
+  /\bhtml|css|copy|label|text|prompt|footer|header|spacing|theme\b/i,
 ];
 
 const AUTO_CAVEMAN_ULTRA_PATTERNS = [
@@ -172,12 +173,12 @@ export function resolveCavemanLevel(level: CavemanLevel, userMessage: string): C
 
   const msg = userMessage.trim();
   if (AUTO_CAVEMAN_DANGER_PATTERNS.some((pattern) => pattern.test(msg))) return "off";
-  if (msg.length > 450) return "off";
+  if (msg.length > 400) return "off";
   if (AUTO_CAVEMAN_SAFE_PATTERNS.some((pattern) => pattern.test(msg))) return "ultra";
   if (AUTO_CAVEMAN_ULTRA_PATTERNS.some((pattern) => pattern.test(msg))) return "ultra";
-  if (AUTO_CAVEMAN_ROUTINE_PATTERNS.some((pattern) => pattern.test(msg)) && msg.length < 180) return "ultra";
+  if (AUTO_CAVEMAN_ROUTINE_PATTERNS.some((pattern) => pattern.test(msg)) && msg.length < 240) return "ultra";
   if (AUTO_CAVEMAN_ROUTINE_PATTERNS.some((pattern) => pattern.test(msg))) return "lite";
-  if (/\bwhat|which|where|when|who\b/i.test(msg) && msg.length < 120) return "ultra";
+  if (/\bwhat|which|where|when|who\b/i.test(msg) && msg.length < 100) return "ultra";
 
   return "lite";
 }
@@ -216,6 +217,9 @@ MAXIMUM COMPRESSION MODE. Caveman ultra. Target: ~85% fewer output tokens.
 - One thought per line. Prefer bullets/fragments over paragraphs.
 - One word when one word enough. "Fixed." > "I fixed issue."
 - No action narration. No recap unless user asks.
+- Outside code/commands: max 4 short lines unless user explicitly asks depth.
+- Prefer noun/verb shards: "footer overlap fixed" not full sentence.
+- Prefer exact file/action/test triples: "app.ts align bottom. test added. build pass."
 - If user asks explanation: answer in shards, not essay.
 - Good pattern: [thing] [action] [reason]. [next step].
 - Strong preference: verdict first. Then file/bug/fix. Then tests.

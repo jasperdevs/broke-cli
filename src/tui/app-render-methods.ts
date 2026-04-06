@@ -76,6 +76,7 @@ export function renderMessages(app: AppState, maxWidth: number): string[] {
     isCompacting: app.isCompacting,
     compactStartTime: app.compactStartTime,
     compactTokens: app.compactTokens,
+    pendingMessages: app.pendingMessages,
     fmtTokens,
     sparkleSpinner: (frame, color) => app.sparkleSpinner(frame, color),
     shimmerText: (text, frame) => app.shimmerText(text, frame),
