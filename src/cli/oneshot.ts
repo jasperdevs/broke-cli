@@ -101,7 +101,7 @@ export async function runOneShotPrompt(options: {
     process.cwd(),
     providerId,
     mode,
-    resolveCavemanLevel(getSettings().cavemanLevel ?? "off", prompt),
+    resolveCavemanLevel(getSettings().cavemanLevel ?? "auto", prompt),
     policy.promptProfile,
   );
   const systemPromptBase = opts.systemPrompt

@@ -90,7 +90,7 @@ export function renderSidebarFooter(app: AppState): string[] {
   statusParts.push(modeLabel);
   const thinkLevel = settings.thinkingLevel || (settings.enableThinking ? "low" : "off");
   if (thinkLevel !== "off") statusParts.push(thinkLevel);
-  const caveLevel = settings.cavemanLevel ?? "off";
+  const caveLevel = settings.cavemanLevel ?? "auto";
   if (caveLevel !== "off") statusParts.push(`🪨 ${caveLevel}`);
   return buildSidebarFooter({
     width,

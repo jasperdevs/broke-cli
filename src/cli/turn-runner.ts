@@ -156,7 +156,7 @@ export async function runModelTurn(options: {
     session.addMessage("user", fullText, effectiveImages);
   }
 
-  const effectiveCavemanLevel = resolveCavemanLevel(getSettings().cavemanLevel ?? "off", text);
+  const effectiveCavemanLevel = resolveCavemanLevel(getSettings().cavemanLevel ?? "auto", text);
   const contextLimit = getModelContextLimitOverride(activeModel.provider.id, currentModelId)
     ?? getContextLimit(currentModelId, activeModel.provider.id)
     ?? 128000;

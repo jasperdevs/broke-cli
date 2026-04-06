@@ -41,7 +41,7 @@ export function openSettingsMenu(args: { app: AnyApp; activeModel: any; currentM
       { key: "notifyOnResponse", label: "Notify on response", value: String(s.notifyOnResponse), description: "Show a desktop notification when a response completes" },
       { key: "quietStartup", label: "Quiet startup", value: String(s.quietStartup), description: "Hide startup inventory details" },
       { key: "hideThinkingBlock", label: "Hide thinking block", value: String(s.hideThinkingBlock), description: "Hide streamed reasoning blocks in chat" },
-      { key: "cavemanLevel", label: "Caveman mode", value: s.cavemanLevel ?? "off", description: "off / lite / auto / ultra — save output tokens (ctrl+y)" },
+      { key: "cavemanLevel", label: "Caveman mode", value: s.cavemanLevel ?? "auto", description: "off / lite / auto / ultra — save output tokens (ctrl+y)" },
       { key: "doubleEscapeAction", label: "Double-escape", value: s.doubleEscapeAction, description: "fork / none" },
       { key: "editorPaddingX", label: "Editor padding", value: String(s.editorPaddingX), description: "Horizontal input padding (0-3)" },
       { key: "autocompleteMaxVisible", label: "Autocomplete size", value: String(s.autocompleteMaxVisible), description: "Visible command rows" },
@@ -70,7 +70,7 @@ export function openSettingsMenu(args: { app: AnyApp; activeModel: any; currentM
       updateSetting("maxSessionCost", next);
     } else if (key === "cavemanLevel") {
       const levels = ["off", "lite", "auto", "ultra"] as const;
-      const current = s.cavemanLevel ?? "off";
+      const current = s.cavemanLevel ?? "auto";
       const next = levels[(levels.indexOf(current as any) + 1) % levels.length];
       updateSetting("cavemanLevel", next);
       reloadContext();

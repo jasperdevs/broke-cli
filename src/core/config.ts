@@ -132,7 +132,7 @@ export const DEFAULT_SETTINGS: Settings = {
   favoriteThemes: [],
   lastModel: "",
   mode: "build",
-  cavemanLevel: "off",
+  cavemanLevel: "auto",
   theme: "brokecli-dark",
   autoLint: false,
   autoTest: false,

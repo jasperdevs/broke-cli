@@ -268,7 +268,7 @@ export async function handleSlashCommand(options: {
     case "caveman": {
       app.cycleCavemanMode();
       reloadContext();
-      const level = getSettings().cavemanLevel ?? "off";
+      const level = getSettings().cavemanLevel ?? "auto";
       onSystemPromptChange(buildSystemPrompt(process.cwd(), activeModel?.provider?.id, currentMode, level));
       return { handled: true };
     }

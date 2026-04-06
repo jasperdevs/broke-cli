@@ -248,7 +248,7 @@ function buildInfoBar(app: AppState, hasSidebar: boolean, mainW: number): string
   parts.push({ text: `${app.mode === "plan" ? P() : T()}${modeLabel}${RESET}`, plain: modeLabel });
   const thinkLevel = settings.thinkingLevel || (settings.enableThinking ? "low" : "off");
   if (thinkLevel !== "off") parts.push({ text: `${T()}${thinkLevel}${RESET}`, plain: thinkLevel });
-  const caveLevel = settings.cavemanLevel ?? "off";
+  const caveLevel = settings.cavemanLevel ?? "auto";
   if (caveLevel !== "off") parts.push({ text: `🪨 ${WARN()}${caveLevel}${RESET}`, plain: `rock ${caveLevel}` });
   if (app.getAgentRuns && app.getAgentRuns().length > 0) parts.push({ text: `${DIM}alt+a${RESET} ${DIM}agents${RESET}`, plain: "alt+a agents" });
 

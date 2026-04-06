@@ -350,7 +350,7 @@ export function onCavemanToggle(app: AppState, callback: (level: CavemanLevel) =
 export function cycleCavemanMode(app: AppState): void {
   const levels: CavemanLevel[] = ["off", "lite", "auto", "ultra"];
   const settings = getSettings();
-  const current = settings.cavemanLevel ?? "off";
+  const current = settings.cavemanLevel ?? "auto";
   const idx = levels.indexOf(current);
   const next = levels[(idx + 1) % levels.length];
   updateSetting("cavemanLevel", next);

@@ -7,27 +7,27 @@ function normalizePath(p: string): string {
 function getEvictionThreshold(): number {
   const level = getSettings().cavemanLevel ?? "off";
   if (level === "ultra") return 1;
-  if (level === "auto") return 2;
+  if (level === "auto") return 1;
   if (level === "lite") return 4;
   return 6;
 }
 
 function compressToolOutputs(content: string): string {
   const level = getSettings().cavemanLevel ?? "off";
-  const minLength = level === "ultra" ? 80 : 500;
+  const minLength = level === "ultra" ? 80 : level === "auto" ? 160 : 500;
   if (content.length < minLength) return content;
 
   let compressed = content;
-  if (level === "ultra") {
+  if (level === "ultra" || level === "auto") {
     compressed = compressed
       .replace(/\r/g, "")
       .replace(/[ \t]{2,}/g, " ")
       .replace(/\n{3,}/g, "\n\n");
   }
   const lines = compressed.split("\n");
-  const headCount = level === "ultra" ? 1 : 3;
-  const tailCount = level === "ultra" ? 1 : 2;
-  const maxLines = level === "ultra" ? 6 : 30;
+  const headCount = level === "ultra" ? 1 : level === "auto" ? 2 : 3;
+  const tailCount = level === "ultra" ? 1 : level === "auto" ? 1 : 2;
+  const maxLines = level === "ultra" ? 6 : level === "auto" ? 10 : 30;
   if (lines.length > maxLines) {
     const head = lines.slice(0, headCount).join("\n");
     const tail = lines.slice(-tailCount).join("\n");
@@ -35,12 +35,12 @@ function compressToolOutputs(content: string): string {
     compressed = `${head}\n[... ${omitted} lines compressed ...]\n${tail}`;
   }
 
-  const maxChars = level === "ultra" ? 240 : 1500;
+  const maxChars = level === "ultra" ? 180 : level === "auto" ? 420 : 1500;
   if (compressed.length > maxChars) {
     compressed = compressed.slice(0, maxChars) + "\n[compressed]";
   }
 
-  if (level === "ultra") {
+  if (level === "ultra" || level === "auto") {
     compressed = compressed
       .replace(/\b(directory|directories)\b/gi, "dir")
       .replace(/\b(configuration|configurations)\b/gi, "cfg")

@@ -72,7 +72,7 @@ function resolvePrompt(input: AgentInput): string {
 }
 
 export function buildAgentSystemPrompt(cwd: string, providerId?: string): string {
-  const base = buildSystemPrompt(cwd, providerId, "build", resolveCavemanLevel(getSettings().cavemanLevel ?? "off", ""));
+  const base = buildSystemPrompt(cwd, providerId, "build", resolveCavemanLevel(getSettings().cavemanLevel ?? "auto", ""));
   return [
     base,
     "You are a delegated agent running inside BrokeCLI.",

@@ -81,7 +81,7 @@ export async function bootstrapSession(options: {
           currentModelId: "",
           smallModel: null,
           smallModelId: "",
-          systemPrompt: buildSystemPrompt(process.cwd(), undefined, currentMode, getSettings().cavemanLevel ?? "off"),
+          systemPrompt: buildSystemPrompt(process.cwd(), undefined, currentMode, getSettings().cavemanLevel ?? "auto"),
         };
       }
       providerId = def.id;
@@ -91,7 +91,7 @@ export async function bootstrapSession(options: {
   try {
     const activeModel = providerRegistry.createModel(providerId!, modelId);
     const currentModelId = modelId ?? activeModel.provider.defaultModel;
-    const systemPrompt = buildSystemPrompt(process.cwd(), providerId!, currentMode, getSettings().cavemanLevel ?? "off");
+    const systemPrompt = buildSystemPrompt(process.cwd(), providerId!, currentMode, getSettings().cavemanLevel ?? "auto");
     app.setModel(activeModel.provider.name, currentModelId);
     app.setMode(currentMode);
     session.setProviderModel(activeModel.provider.name, currentModelId);
@@ -118,7 +118,7 @@ export async function bootstrapSession(options: {
       currentModelId: "",
       smallModel: null,
       smallModelId: "",
-      systemPrompt: buildSystemPrompt(process.cwd(), providerId, currentMode, getSettings().cavemanLevel ?? "off"),
+      systemPrompt: buildSystemPrompt(process.cwd(), providerId, currentMode, getSettings().cavemanLevel ?? "auto"),
     };
   }
 }

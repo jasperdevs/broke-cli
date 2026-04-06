@@ -163,7 +163,7 @@ export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts:
       process.cwd(),
       providerId,
       rpcMode,
-      resolveCavemanLevel(getSettings().cavemanLevel ?? "off", msg.content),
+      resolveCavemanLevel(getSettings().cavemanLevel ?? "auto", msg.content),
       policy.promptProfile,
     );
     const systemPromptSeed = opts.systemPrompt
