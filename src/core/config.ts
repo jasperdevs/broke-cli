@@ -19,6 +19,7 @@ export interface Settings {
   gitCheckpoints: boolean;
   notifyOnResponse: boolean;
   hideSidebar: boolean;
+  autoRoute: boolean;
   scopedModels: string[];
   lastModel: string;
   mode: Mode;
@@ -37,6 +38,7 @@ export const DEFAULT_SETTINGS: Settings = {
   gitCheckpoints: true,
   notifyOnResponse: false,
   hideSidebar: false,
+  autoRoute: true,
   scopedModels: [],
   lastModel: "",
   mode: "build",

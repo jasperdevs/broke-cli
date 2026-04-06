@@ -17,6 +17,8 @@ import { undoLastCheckpoint } from "../src/core/git.js";
 import { listTemplates, loadTemplate } from "../src/core/templates.js";
 import { loadExtensions } from "../src/core/extensions.js";
 import { RESET, DIM, RED, GREEN } from "../src/utils/ansi.js";
+import { routeMessage, getSmallModelId } from "../src/ai/router.js";
+import { optimizeMessages, nextTurn, resetOptimizer, trackFileRead, wasFileRead, buildDiffSummary } from "../src/core/context-optimizer.js";
 
 const program = new Command()
   .name("brokecli")
@@ -104,7 +106,10 @@ program.action(async (opts) => {
   // Detect providers + load pricing in background
   let providers: Awaited<ReturnType<typeof detectProviders>> = [];
   let activeModel: ReturnType<typeof createModel> | null = null;
+  let smallModel: ReturnType<typeof createModel> | null = null;
   let currentModelId = "";
+  let smallModelId = "";
+  let lastToolCalls: string[] = [];
 
   const initPromise = (async () => {
     [, providers] = await Promise.all([loadPricing(), detectProviders()]);
@@ -114,7 +119,14 @@ program.action(async (opts) => {
     let providerId: string | undefined;
     let modelId: string | undefined;
 
-    if (opts.model) {
+    if (opts.broke) {
+      // --broke flag: use the cheapest available model
+      const def = pickDefault(providers);
+      if (def) {
+        providerId = def.id;
+        modelId = getSmallModelId(def.id);
+      }
+    } else if (opts.model) {
       const parts = opts.model.split("/");
       if (parts.length === 2) {
         providerId = parts[0];
@@ -154,6 +166,14 @@ program.action(async (opts) => {
       session.setProviderModel(activeModel.provider.name, currentModelId);
       // Save as last used model
       updateSetting("lastModel", `${activeModel.provider.id}/${currentModelId}`);
+      // Auto-create small model for cost routing
+      const cheapId = getSmallModelId(activeModel.provider.id);
+      if (cheapId && cheapId !== currentModelId) {
+        try {
+          smallModel = createModel(activeModel.provider.id, cheapId);
+          smallModelId = cheapId;
+        } catch { /* no small model available */ }
+      }
       app.clearStatus();
     } catch (err) {
       app.addMessage("system", `Failed to init ${providerId}: ${(err as Error).message}`);
@@ -194,6 +214,7 @@ program.action(async (opts) => {
           session.clear();
           app.clearMessages();
           app.resetCost();
+          resetOptimizer();
           return;
         case "cost":
           app.addMessage("system", `$${session.getTotalCost().toFixed(4)} | ${session.getTotalTokens()} tokens`);
@@ -268,6 +289,7 @@ program.action(async (opts) => {
               { key: "gitCheckpoints", label: "Git checkpoints", value: String(s.gitCheckpoints), description: "Auto-commit before file modifications" },
               { key: "thinkingLevel", label: "Thinking mode", value: s.thinkingLevel || (s.enableThinking ? "low" : "off"), description: "off / low / medium / high (ctrl+t to cycle)" },
               { key: "hideSidebar", label: "Hide sidebar", value: String(s.hideSidebar), description: "Hide the right sidebar panel" },
+              { key: "autoRoute", label: "Auto-route", value: String(s.autoRoute), description: "Route simple tasks to cheaper model automatically" },
               { key: "showTokens", label: "Show tokens", value: String(s.showTokens), description: "Display token count in status bar" },
               { key: "showCost", label: "Show cost", value: String(s.showCost), description: "Display cost in status bar" },
               { key: "maxSessionCost", label: "Max session cost", value: s.maxSessionCost === 0 ? "unlimited" : `$${s.maxSessionCost}`, description: "Maximum cost per session (0 = unlimited)" },
@@ -611,6 +633,18 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
 
     app.setStreaming(true);
     let streamCharCount = 0;
+    nextTurn();
+
+    // Smart model routing — pick cheap model for simple tasks
+    const route = smallModel && getSettings().autoRoute
+      ? routeMessage(text, session.getChatMessages().length, lastToolCalls)
+      : "main" as const;
+    const useModel = route === "small" && smallModel ? smallModel : activeModel;
+    const useModelId = route === "small" && smallModel ? smallModelId : currentModelId;
+    lastToolCalls = [];
+
+    // Optimize context — evict old tool results, compress history
+    const optimizedMessages = optimizeMessages(session.getChatMessages());
 
     abortController = new AbortController();
     app.onAbortRequest(() => {
@@ -622,14 +656,14 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
 
     await startStream(
       {
-        model: activeModel.model,
-        modelId: currentModelId,
-        providerId: activeModel.provider.id,
+        model: useModel.model,
+        modelId: useModelId,
+        providerId: useModel.provider.id,
         system: systemPrompt,
-        messages: session.getChatMessages(),
+        messages: optimizedMessages,
         tools,
         abortSignal: abortController.signal,
-        enableThinking: getSettings().enableThinking,
+        enableThinking: route === "main" ? getSettings().enableThinking : false,
         thinkingLevel: getSettings().thinkingLevel || "low",
       },
       {
@@ -697,6 +731,7 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
         },
         onToolCall: (name, args) => {
           hooks.emit("on_tool_call", { name, args });
+          lastToolCalls.push(name);
           let preview = "";
           if (name === "writeFile" || name === "editFile") {
             preview = (args as any)?.path ?? "?";
@@ -719,6 +754,9 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
           } else if (_name === "readFile" && r.content) {
             const lineCount = r.content.split("\n").length;
             detail = `${lineCount} lines`;
+            // Track for dedup and diff-only optimization
+            const readPath = (result as any)?.path ?? "";
+            if (readPath) trackFileRead(readPath, lineCount);
           } else if (_name === "grep" && r.matches) {
             detail = `${(r.matches as unknown[]).length} matches`;
           } else if (_name === "listFiles" && r.files) {
