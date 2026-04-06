@@ -46,6 +46,7 @@ export function drawImmediate(app: AppState): void {
   const bottomLines: string[] = [];
   const bottomMenuClicks: Array<{ lineIndex: number; action: () => void }> = [];
 
+  appendQueuedMessagePreview(app, bottomLines, mainW);
   bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
   bottomLines.push(...inputLayout.lines);
 
@@ -72,6 +73,28 @@ export function drawImmediate(app: AppState): void {
   }
   const mainTopHeight = Math.max(0, height - bottomLines.length);
   app.screen.setCursor(Math.min(height, mainTopHeight + 2 + inputLayout.row), Math.min(width, 1 + inputLayout.col));
+}
+
+function appendQueuedMessagePreview(app: AppState, bottomLines: string[], mainW: number): void {
+  if (app.pendingMessages.length === 0) return;
+  const sections: Array<{ title: string; items: Array<{ text: string }> }> = [];
+  const steering = app.pendingMessages.filter((entry: { delivery: string }) => entry.delivery === "steering");
+  const followups = app.pendingMessages.filter((entry: { delivery: string }) => entry.delivery === "followup");
+  if (steering.length > 0) sections.push({ title: "Queued steering messages", items: steering });
+  if (followups.length > 0) sections.push({ title: "Queued follow-up messages", items: followups });
+
+  for (let i = 0; i < sections.length; i++) {
+    const section = sections[i];
+    bottomLines.push(`• ${section.title}`);
+    for (const item of section.items) {
+      const preview = item.text.replace(/\s+/g, " ").trim();
+      for (const line of wordWrap(preview, Math.max(8, mainW - 4)).slice(0, 2)) {
+        bottomLines.push(`  ↳ ${line}`);
+      }
+    }
+    bottomLines.push("  alt + ↑ edit last queued message");
+    if (i < sections.length - 1) bottomLines.push("");
+  }
 }
 
 function drawBudgetView(app: AppState): void {
@@ -159,9 +182,6 @@ function buildInfoBar(app: AppState, hasSidebar: boolean, mainW: number): string
   const settings = getSettings();
   const modeLabel = app.mode === "plan" ? "plan" : "build";
   parts.push({ text: `${app.mode === "plan" ? P() : T()}${modeLabel}${RESET}`, plain: modeLabel });
-  if (!hasSidebar && app.pendingMessages.length > 0) {
-    parts.push({ text: `${P()}${app.pendingMessages.length} queued${RESET}`, plain: `${app.pendingMessages.length} queued` });
-  }
   const thinkLevel = settings.thinkingLevel || (settings.enableThinking ? "low" : "off");
   if (thinkLevel !== "off") parts.push({ text: `${T()}${thinkLevel}${RESET}`, plain: thinkLevel });
   const caveLevel = settings.cavemanLevel ?? "off";

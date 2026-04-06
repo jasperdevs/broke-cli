@@ -146,6 +146,19 @@ export function handleKey(app: AppState, key: Keypress): void {
     return;
   }
 
+  if (key.meta && key.name === "up") {
+    restoreQueuedMessage(app);
+    return;
+  }
+
+  if (key.name === "escape" && !app.isStreaming && app.hasPendingMessages() && app.input.getText().trim().length === 0) {
+    app.clearPendingMessages();
+    app.statusMessage = `${T()}Queued messages cleared${RESET}`;
+    setTimeout(() => { app.statusMessage = undefined; app.draw(); }, 1500);
+    app.draw();
+    return;
+  }
+
   if (key.name === "escape" && app.isStreaming && app.onAbort) {
     if (app.escPrimed) {
       app.clearInterruptPrompt();
@@ -196,6 +209,17 @@ export function handleKey(app: AppState, key: Keypress): void {
   if (key.ctrl && key.name === "y") {
     app.cycleCavemanMode();
     return;
+  }
+
+  if (app.isStreaming && app.input.getText().trim().length > 0) {
+    if (key.name === "tab") {
+      queueCurrentInput(app, "followup");
+      return;
+    }
+    if ((key.name === "return" || key.name === "enter") && !key.shift && !key.meta && !key.ctrl) {
+      queueCurrentInput(app, "steering");
+      return;
+    }
   }
 
   const inputText = app.input.getText();
@@ -356,20 +380,44 @@ function handleFilePickerKey(app: AppState, key: Keypress): void {
 }
 
 function submitInput(app: AppState): void {
+  submitQueuedInput(app, "steering");
+}
+
+function submitQueuedInput(app: AppState, delivery: "steering" | "followup"): void {
   const text = app.input.submit();
   const images = app.takePendingImages();
   if (!text || !app.onSubmit) return;
-  const settings = getSettings();
-  const followUpMode = settings.followUpMode;
-  if (!app.isStreaming || followUpMode === "immediate") {
+  if (!app.isStreaming) {
     if (images.length > 0) (app.onSubmit as (text: string, images?: Array<{ mimeType: string; data: string }>) => void)(text, images);
     else app.onSubmit(text);
     return;
   }
-  app.addPendingMessage(text, images);
-  app.statusMessage = `${T()}✓ Queued (${app.pendingMessages.length} pending)${RESET}`;
+  app.addPendingMessage(text, images, delivery);
+  const kind = delivery === "followup" ? "Queued follow-up" : "Queued steering";
+  app.statusMessage = `${T()}${kind}${RESET}`;
   setTimeout(() => { app.statusMessage = undefined; app.draw(); }, 1500);
   app.draw();
+}
+
+function queueCurrentInput(app: AppState, delivery: "steering" | "followup"): void {
+  submitQueuedInput(app, delivery);
+}
+
+function restoreQueuedMessage(app: AppState): void {
+  const queued = app.takeLastPendingMessage();
+  if (!queued) {
+    app.statusMessage = `${DIM}No queued messages${RESET}`;
+    setTimeout(() => { app.statusMessage = undefined; app.draw(); }, 1200);
+    app.draw();
+    return;
+  }
+  if (queued.images && queued.images.length > 0) {
+    app.pendingImages = [...queued.images, ...app.pendingImages];
+  }
+  app.input.setText(queued.text);
+  app.statusMessage = `${T()}Editing queued ${queued.delivery === "followup" ? "follow-up" : "steering"}${RESET}`;
+  setTimeout(() => { app.statusMessage = undefined; app.draw(); }, 1500);
+  app.drawNow();
 }
 
 export function handlePaste(app: AppState, text: string): void {

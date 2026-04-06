@@ -33,6 +33,8 @@ export interface BudgetView {
   scrollOffset: number;
 }
 
+export type PendingDelivery = "steering" | "followup";
+
 export type MenuPromptKind =
   | "model"
   | "settings"
@@ -50,7 +52,7 @@ export interface MenuEntry {
 }
 
 export type PendingImage = { mimeType: string; data: string };
-export type PendingMessage = { text: string; images?: PendingImage[] };
+export type PendingMessage = { text: string; images?: PendingImage[]; delivery: PendingDelivery };
 export type TodoItem = { id: string; text: string; status: "pending" | "in_progress" | "done" };
 export type QuestionPrompt = { question: string; options?: string[]; cursor: number; textInput: string; resolve: (answer: string) => void };
 export type MascotGrid = Array<Array<RgbColor | null>>;

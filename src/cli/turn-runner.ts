@@ -50,6 +50,8 @@ async function compactForModel(
   return messages.slice(-6);
 }
 
+type PendingDelivery = "steering" | "followup";
+
 interface TurnRunnerApp {
   addMessage(role: "user" | "assistant" | "system", content: string, images?: Array<{ mimeType: string; data: string }>): void;
   appendToLastMessage(delta: string): void;
@@ -66,8 +68,8 @@ interface TurnRunnerApp {
   updateToolCallArgs(name: string, preview: string, args?: unknown): void;
   addToolResult(name: string, result: string, error?: boolean, detail?: string): void;
   onAbortRequest(callback: () => void): void;
-  hasPendingMessages(): boolean;
-  flushPendingMessages(): void;
+  hasPendingMessages(delivery?: PendingDelivery): boolean;
+  flushPendingMessages(delivery: PendingDelivery): void;
   getFileContexts?: () => Map<string, string>;
 }
 
@@ -179,6 +181,7 @@ export async function runModelTurn(options: {
   const nextToolCalls: string[] = [];
   const optimizedMessages = getContextOptimizer().optimizeMessages(session.getChatMessages());
   let abortController: AbortController | null = new AbortController();
+  let steeringInterruptRequested = false;
   let turnMetricsRecorded = false;
   const exposedToolCount = canUseSdkTools(executionModel) ? policy.allowedTools.length : 0;
   const recordTurnMetrics = () => {
@@ -257,6 +260,7 @@ export async function runModelTurn(options: {
       abortController = null;
       nextActivityTime = Date.now();
       if (getSettings().notifyOnResponse) sendResponseNotification();
+      if (app.hasPendingMessages("steering")) app.flushPendingMessages("steering");
     },
     onError: (err: Error) => {
       flushStreamTokenUpdate();
@@ -279,9 +283,7 @@ export async function runModelTurn(options: {
       app.addMessage("system", msg);
       abortController = null;
     },
-    onAfterResponse: () => {
-      if (getSettings().followUpMode === "after_response" && app.hasPendingMessages()) app.flushPendingMessages();
-    },
+    onAfterResponse: () => {},
   };
 
   if (executionModel.runtime === "native-cli") {
@@ -343,9 +345,20 @@ export async function runModelTurn(options: {
         else app.addToolResult(_name, "ok", false, detail);
       },
       onAfterToolCall: () => {
-        if (getSettings().followUpMode === "after_tool" && app.hasPendingMessages()) app.flushPendingMessages();
+        if (!app.hasPendingMessages("steering")) return;
+        if (!abortController) return;
+        steeringInterruptRequested = true;
+        abortController.abort();
       },
     });
+  }
+
+  if (steeringInterruptRequested) {
+    app.setThinkingRequested(false);
+    app.setStreaming(false);
+    abortController = null;
+    app.flushPendingMessages("steering");
+    return { lastToolCalls: nextToolCalls, lastActivityTime: Date.now() };
   }
 
   const validation = runValidationSuite(nextToolCalls.some((name) => name === "writeFile" || name === "editFile"));
@@ -372,6 +385,8 @@ export async function runModelTurn(options: {
       });
     }
   }
+
+  if (app.hasPendingMessages("followup")) app.flushPendingMessages("followup");
 
   return { lastToolCalls: nextToolCalls, lastActivityTime: nextActivityTime };
 }

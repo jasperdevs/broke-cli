@@ -238,6 +238,45 @@ describe("input editing", () => {
     app.input.handleKey({ name: "tab", char: "\t", ctrl: false, meta: false, shift: false });
     expect(app.input.getText()).toBe("hello");
   });
+
+  it("queues a follow-up with Tab while streaming", () => {
+    const app = new App() as any;
+    app.isStreaming = true;
+    app.onSubmit = () => {};
+    app.input.paste("hey");
+    app.handleKey({ name: "tab", char: "\t", ctrl: false, meta: false, shift: false });
+    expect(app.pendingMessages).toEqual([{ text: "hey", images: [], delivery: "followup" }]);
+  });
+
+  it("queues steering with Enter while streaming", () => {
+    const app = new App() as any;
+    app.isStreaming = true;
+    app.onSubmit = () => {};
+    app.input.paste("steer");
+    app.handleKey({ name: "return", char: "", ctrl: false, meta: false, shift: false });
+    expect(app.pendingMessages).toEqual([{ text: "steer", images: [], delivery: "steering" }]);
+  });
+
+  it("restores the last queued message with Alt+Up and removes it from the queue", () => {
+    const app = new App() as any;
+    app.addPendingMessage("first", [], "followup");
+    app.addPendingMessage("second", [], "steering");
+    app.handleKey({ name: "up", char: "", ctrl: false, meta: true, shift: false });
+    expect(app.input.getText()).toBe("second");
+    expect(app.pendingMessages).toEqual([{ text: "first", images: [], delivery: "followup" }]);
+    app.input.setText("");
+    app.handleKey({ name: "up", char: "", ctrl: false, meta: true, shift: false });
+    expect(app.input.getText()).toBe("first");
+    expect(app.pendingMessages).toEqual([]);
+  });
+
+  it("clears queued messages with Escape when idle and the editor is empty", () => {
+    const app = new App() as any;
+    app.addPendingMessage("first", [], "followup");
+    app.addPendingMessage("second", [], "steering");
+    app.handleKey({ name: "escape", char: "", ctrl: false, meta: false, shift: false });
+    expect(app.pendingMessages).toEqual([]);
+  });
 });
 
 describe("budget inspector", () => {

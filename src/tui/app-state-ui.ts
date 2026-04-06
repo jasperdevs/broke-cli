@@ -1,6 +1,6 @@
 import { getSettings, updateSetting, type CavemanLevel, type Mode, type ThinkingLevel } from "../core/config.js";
 import { HOME_TIPS } from "./app-shared.js";
-import type { MenuPromptKind, ModelOption, PendingImage, PickerItem, SettingEntry, TodoItem } from "./app-types.js";
+import type { MenuPromptKind, ModelOption, PendingDelivery, PendingImage, PendingMessage, PickerItem, SettingEntry, TodoItem } from "./app-types.js";
 
 type AppState = any;
 
@@ -307,7 +307,7 @@ export function onInput(app: AppState, handler: (text: string, images?: PendingI
   app.onSubmit = handler as (text: string) => void;
 }
 
-export function onPendingMessagesReadyHandler(app: AppState, handler: () => void): void {
+export function onPendingMessagesReadyHandler(app: AppState, handler: (delivery: PendingDelivery) => void): void {
   app.onPendingMessagesReady = handler;
 }
 
@@ -317,22 +317,43 @@ export function takePendingImages(app: AppState): PendingImage[] {
   return images;
 }
 
-export function addPendingMessage(app: AppState, text: string, images?: PendingImage[]): void {
-  app.pendingMessages.push({ text, images });
+export function addPendingMessage(app: AppState, text: string, images?: PendingImage[], delivery: PendingDelivery = "followup"): void {
+  app.pendingMessages.push({ text, images, delivery });
   app.draw();
 }
 
-export function takePendingMessages(app: AppState): Array<{ text: string; images?: PendingImage[] }> {
-  const messages = app.pendingMessages;
-  app.pendingMessages = [];
+export function takePendingMessages(app: AppState, delivery?: PendingDelivery): PendingMessage[] {
+  if (!delivery) {
+    const messages = app.pendingMessages;
+    app.pendingMessages = [];
+    return messages;
+  }
+  const messages = app.pendingMessages.filter((entry: PendingMessage) => entry.delivery === delivery);
+  app.pendingMessages = app.pendingMessages.filter((entry: PendingMessage) => entry.delivery !== delivery);
   return messages;
 }
 
-export function hasPendingMessages(app: AppState): boolean { return app.pendingMessages.length > 0; }
-export function getPendingMessagesCount(app: AppState): number { return app.pendingMessages.length; }
+export function takeLastPendingMessage(app: AppState): PendingMessage | undefined {
+  if (app.pendingMessages.length === 0) return undefined;
+  return app.pendingMessages.pop();
+}
 
-export function flushPendingMessages(app: AppState): void {
-  if (app.onPendingMessagesReady) app.onPendingMessagesReady();
+export function clearPendingMessages(app: AppState, delivery?: PendingDelivery): void {
+  if (!delivery) app.pendingMessages = [];
+  else app.pendingMessages = app.pendingMessages.filter((entry: PendingMessage) => entry.delivery !== delivery);
+  app.draw();
+}
+
+export function hasPendingMessages(app: AppState, delivery?: PendingDelivery): boolean {
+  return delivery ? app.pendingMessages.some((entry: PendingMessage) => entry.delivery === delivery) : app.pendingMessages.length > 0;
+}
+
+export function getPendingMessagesCount(app: AppState, delivery?: PendingDelivery): number {
+  return delivery ? app.pendingMessages.filter((entry: PendingMessage) => entry.delivery === delivery).length : app.pendingMessages.length;
+}
+
+export function flushPendingMessages(app: AppState, delivery: PendingDelivery): void {
+  if (app.onPendingMessagesReady) app.onPendingMessagesReady(delivery);
 }
 
 export function showQuestion(app: AppState, question: string, options?: string[]): Promise<string> {
@@ -384,13 +405,15 @@ export interface AppStateUiMethods {
   onCavemanToggle(callback: (level: CavemanLevel) => void): void;
   cycleCavemanMode(): void;
   onInput(handler: (text: string, images?: PendingImage[]) => void): void;
-  onPendingMessagesReadyHandler(handler: () => void): void;
+  onPendingMessagesReadyHandler(handler: (delivery: PendingDelivery) => void): void;
   takePendingImages(): PendingImage[];
-  addPendingMessage(text: string, images?: PendingImage[]): void;
-  takePendingMessages(): Array<{ text: string; images?: PendingImage[] }>;
-  hasPendingMessages(): boolean;
-  getPendingMessagesCount(): number;
-  flushPendingMessages(): void;
+  addPendingMessage(text: string, images?: PendingImage[], delivery?: PendingDelivery): void;
+  takePendingMessages(delivery?: PendingDelivery): PendingMessage[];
+  takeLastPendingMessage(): PendingMessage | undefined;
+  clearPendingMessages(delivery?: PendingDelivery): void;
+  hasPendingMessages(delivery?: PendingDelivery): boolean;
+  getPendingMessagesCount(delivery?: PendingDelivery): number;
+  flushPendingMessages(delivery: PendingDelivery): void;
   showQuestion(question: string, options?: string[]): Promise<string>;
   onAbortRequest(handler: () => void): void;
   onScopedModelCycle(handler: () => void): void;
@@ -431,11 +454,13 @@ export const appStateUiMethods: AppStateUiMethods = {
   onInput(this: AppState, handler) { return onInput(this, handler); },
   onPendingMessagesReadyHandler(this: AppState, handler) { return onPendingMessagesReadyHandler(this, handler); },
   takePendingImages(this: AppState) { return takePendingImages(this); },
-  addPendingMessage(this: AppState, text, images) { return addPendingMessage(this, text, images); },
-  takePendingMessages(this: AppState) { return takePendingMessages(this); },
-  hasPendingMessages(this: AppState) { return hasPendingMessages(this); },
-  getPendingMessagesCount(this: AppState) { return getPendingMessagesCount(this); },
-  flushPendingMessages(this: AppState) { return flushPendingMessages(this); },
+  addPendingMessage(this: AppState, text, images, delivery) { return addPendingMessage(this, text, images, delivery); },
+  takePendingMessages(this: AppState, delivery) { return takePendingMessages(this, delivery); },
+  takeLastPendingMessage(this: AppState) { return takeLastPendingMessage(this); },
+  clearPendingMessages(this: AppState, delivery) { return clearPendingMessages(this, delivery); },
+  hasPendingMessages(this: AppState, delivery) { return hasPendingMessages(this, delivery); },
+  getPendingMessagesCount(this: AppState, delivery) { return getPendingMessagesCount(this, delivery); },
+  flushPendingMessages(this: AppState, delivery) { return flushPendingMessages(this, delivery); },
   showQuestion(this: AppState, question, options) { return showQuestion(this, question, options); },
   onAbortRequest(this: AppState, handler) { return onAbortRequest(this, handler); },
   onScopedModelCycle(this: AppState, handler) { return onScopedModelCycle(this, handler); },

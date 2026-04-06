@@ -25,7 +25,6 @@ export function openSettingsMenu(args: { app: AnyApp; activeModel: any; currentM
   const { app, activeModel, currentMode, onSystemPromptChange } = args;
   function buildEntries() {
     const s = getSettings();
-    const followUpLabels: Record<string, string> = { immediate: "send now", after_tool: "after tool", after_response: "after response" };
     return [
       { key: "yoloMode", label: "Yolo mode", value: String(s.yoloMode), description: "Run commands without safety checks" },
       { key: "autoCompact", label: "Auto-compact", value: String(s.autoCompact), description: "Automatically compress context when it gets too large" },
@@ -37,7 +36,6 @@ export function openSettingsMenu(args: { app: AnyApp; activeModel: any; currentM
       { key: "showTokens", label: "Show tokens", value: String(s.showTokens), description: "Display token count in status bar" },
       { key: "showCost", label: "Show cost", value: String(s.showCost), description: "Display cost in status bar" },
       { key: "maxSessionCost", label: "Max session cost", value: s.maxSessionCost === 0 ? "unlimited" : `$${s.maxSessionCost}`, description: "Maximum cost per session (0 = unlimited)" },
-      { key: "followUpMode", label: "Follow-up mode", value: followUpLabels[s.followUpMode] ?? s.followUpMode, description: "When to send queued messages while AI is working" },
       { key: "notifyOnResponse", label: "Notify on response", value: String(s.notifyOnResponse), description: "Show a desktop notification when a response completes" },
       { key: "cavemanLevel", label: "Caveman mode", value: s.cavemanLevel ?? "off", description: "off / lite / auto / ultra — save output tokens (ctrl+y)" },
       { key: "autoLint", label: "Auto lint", value: String(s.autoLint), description: `Run ${s.lintCommand || "lint"} after model edits` },
@@ -60,9 +58,6 @@ export function openSettingsMenu(args: { app: AnyApp; activeModel: any; currentM
     } else if (key === "maxSessionCost") {
       const next = s.maxSessionCost === 0 ? 1 : s.maxSessionCost === 1 ? 5 : s.maxSessionCost === 5 ? 10 : 0;
       updateSetting("maxSessionCost", next);
-    } else if (key === "followUpMode") {
-      const modes: Array<"immediate" | "after_tool" | "after_response"> = ["immediate", "after_tool", "after_response"];
-      updateSetting("followUpMode", modes[(modes.indexOf(s.followUpMode) + 1) % modes.length]);
     } else if (key === "cavemanLevel") {
       const levels = ["off", "lite", "auto", "ultra"] as const;
       const current = s.cavemanLevel ?? "off";

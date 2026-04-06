@@ -201,6 +201,7 @@ describe("slash command handling", () => {
     expect(capturedEntries.some((entry) => entry.key === "theme")).toBe(false);
     expect(capturedEntries.some((entry) => entry.key === "editorModel")).toBe(false);
     expect(capturedEntries.some((entry) => entry.key === "architectMode")).toBe(false);
+    expect(capturedEntries.some((entry) => entry.key === "followUpMode")).toBe(false);
   });
 
   it("writes a standalone html share for /share", async () => {

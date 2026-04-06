@@ -4,7 +4,6 @@ import { homedir } from "os";
 import { parse as parseJsonc } from "jsonc-parser";
 
 export type Mode = "build" | "plan";
-export type FollowUpMode = "immediate" | "after_tool" | "after_response";
 export type ThinkingLevel = "off" | "low" | "medium" | "high";
 export type CavemanLevel = "off" | "lite" | "auto" | "ultra";
 
@@ -25,7 +24,6 @@ export interface Settings {
   favoriteThemes: string[];
   lastModel: string;
   mode: Mode;
-  followUpMode: FollowUpMode;
   cavemanLevel: CavemanLevel;
   theme: string;
   autoLint: boolean;
@@ -54,7 +52,6 @@ export const DEFAULT_SETTINGS: Settings = {
   favoriteThemes: [],
   lastModel: "",
   mode: "build",
-  followUpMode: "after_response",
   cavemanLevel: "off",
   theme: "brokecli-dark",
   autoLint: false,

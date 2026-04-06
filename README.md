@@ -46,7 +46,7 @@ The settings surface is in `/settings`. The most important toggles are:
 - `auto-fix validation`: send one automatic repair turn if validation fails
 - `auto-route`: route cheap/simple requests to a smaller model
 - `caveman mode`: reduce output-token waste
-- `follow-up mode`: decide when queued prompts flush while the model is busy
+- queued steering/follow-up: `Enter` while busy steers after the next tool boundary, `Tab` queues a follow-up after the turn finishes
 
 Config lives under `~/.brokecli/config.json`.
 

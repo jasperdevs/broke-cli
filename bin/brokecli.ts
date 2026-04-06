@@ -208,12 +208,36 @@ program.action(async (opts) => {
     app.updateTodo(items);
   });
 
-  // Handle pending messages when they become ready
-  app.onPendingMessagesReadyHandler(() => {
-    const pending = app.takePendingMessages();
-    for (const msg of pending) {
-      // Process each pending message
-      processUserMessage(msg.text, msg.images);
+  let drainingPending = false;
+  const pendingFlushes = new Set<"steering" | "followup">();
+  app.onPendingMessagesReadyHandler(async (delivery) => {
+    pendingFlushes.add(delivery);
+    if (drainingPending) return;
+    drainingPending = true;
+    try {
+      while (true) {
+        let batch: ReturnType<typeof app.takePendingMessages> = [];
+        if (pendingFlushes.delete("steering")) {
+          batch = app.takePendingMessages("steering");
+        } else if (pendingFlushes.delete("followup")) {
+          const steering = app.takePendingMessages("steering");
+          batch = steering.length > 0 ? steering : app.takePendingMessages("followup");
+        } else {
+          break;
+        }
+        if (batch.length === 0) break;
+
+        const combinedText = batch
+          .map((entry) => entry.text.trim())
+          .filter(Boolean)
+          .join("\n\n");
+        const combinedImages = batch.flatMap((entry) => entry.images ?? []);
+        if (!combinedText && combinedImages.length === 0) continue;
+
+        await processUserMessage(combinedText, combinedImages.length > 0 ? combinedImages : undefined);
+      }
+    } finally {
+      drainingPending = false;
     }
   });
 
