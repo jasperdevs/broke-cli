@@ -2226,14 +2226,19 @@ export class App {
       ? "Pick one with /model"
       : `${this.providerName}/${this.modelName}`;
     const versionText = `v${this.appVersion}`;
-    const headerText = mainW < 60 ? "Welcome" : "Welcome to BrokeCLI";
-    const showVersionInline = mainW >= 52;
-    const locationText = showVersionInline
-      ? `${this.formatShortCwd(Math.max(10, mainW - 14))}  ${versionText}`
-      : this.formatShortCwd(Math.max(10, mainW - 4));
+    const innerWidth = Math.max(1, mainW - 2);
+    const mascotWidth = stripAnsi(mascotInline).length;
+    const headerPrefix = mascotInline ? `${mascotInline} ` : "";
+    const headerCandidates = ["Welcome to BrokeCLI", "Welcome"];
+    const headerText = headerCandidates.find((candidate) =>
+      mascotWidth + (mascotInline ? 1 : 0) + candidate.length <= innerWidth,
+    ) ?? headerCandidates[headerCandidates.length - 1];
+    const locationBase = this.formatShortCwd(Math.max(10, innerWidth - 1));
+    const locationWithVersion = `${locationBase}  ${versionText}`;
+    const locationText = locationWithVersion.length <= innerWidth ? locationWithVersion : locationBase;
 
     const body = [
-      `${mascotInline ? `${mascotInline} ` : ""}${T()}${BOLD}${headerText}${RESET}`,
+      `${headerPrefix}${T()}${BOLD}${headerText}${RESET}`,
       `${MUTED()} ${locationText}${RESET}`,
       "",
       ...this.wrapHomeDetail("Model", modelLabel, Math.max(18, mainW - 4)),

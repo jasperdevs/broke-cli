@@ -148,15 +148,15 @@ describe("startup home view", () => {
     expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("Files");
   });
 
-  it("uses a compact home header on medium widths", () => {
+  it("falls back to a shorter home header only when needed", () => {
     const app = new App() as any;
     let rendered: string[] = [];
 
     app.screen = {
       height: 18,
-      width: 48,
+      width: 20,
       hasSidebar: false,
-      mainWidth: 48,
+      mainWidth: 20,
       sidebarWidth: 0,
       render: (lines: string[]) => { rendered = lines; },
       setCursor: () => {},
