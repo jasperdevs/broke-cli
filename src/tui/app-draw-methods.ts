@@ -2,6 +2,7 @@ import stripAnsi from "strip-ansi";
 import { execSync } from "child_process";
 import { getSettings } from "../core/config.js";
 import { BOLD, DIM, RESET } from "../utils/ansi.js";
+import { truncateVisible, visibleWidth } from "../utils/terminal-width.js";
 import { getCommandMatches as findCommandMatches } from "./command-surface.js";
 import { fmtCost, fmtTokens, wordWrap } from "./render/formatting.js";
 import { APP_BG, ERR, MUTED, P, T, TXT, WARN } from "./app-shared.js";
@@ -105,7 +106,7 @@ function drawBudgetView(app: AppState): void {
   const bodyHeight = Math.max(1, height - 6);
   const allLines = app.budgetView.lines.flatMap((line: string) => {
     if (!line) return [""];
-    return stripAnsi(line).length <= innerWidth ? [line] : wordWrap(line, innerWidth);
+    return visibleWidth(line) <= innerWidth ? [line] : wordWrap(line, innerWidth);
   });
   const maxScroll = Math.max(0, allLines.length - bodyHeight);
   if (app.budgetView.scrollOffset > maxScroll) app.budgetView.scrollOffset = maxScroll;
@@ -304,26 +305,12 @@ export function appendModelPicker(app: AppState, lines: string[], _maxTotal: num
 }
 
 export function decorateFrameLine(_app: AppState, line: string, targetWidth: number): string {
-  const visible = stripAnsi(line).length;
+  const visible = visibleWidth(line);
   const content = visible > targetWidth ? truncateVisible(line, targetWidth) : line;
   const padded = Math.max(0, targetWidth - Math.min(visible, targetWidth));
   const bg = APP_BG();
   if (!bg) return `${content}${" ".repeat(padded)}`;
   return `${bg}${content.replaceAll(RESET, `${RESET}${bg}`)}${bg}${" ".repeat(padded)}${RESET}`;
-}
-
-function truncateVisible(line: string, targetWidth: number): string {
-  let count = 0;
-  let i = 0;
-  while (i < line.length && count < targetWidth) {
-    if (line[i] === "\x1b") {
-      const end = line.indexOf("m", i);
-      if (end !== -1) { i = end + 1; continue; }
-    }
-    count++;
-    i++;
-  }
-  return line.slice(0, i) + RESET;
 }
 
 export function appendFilePicker(app: AppState, lines: string[], maxTotal: number, clickTargets: Array<{ lineIndex: number; action: () => void }>): void {

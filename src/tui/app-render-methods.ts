@@ -1,5 +1,5 @@
-import stripAnsi from "strip-ansi";
 import { BOX, BOLD, DIM, RESET } from "../utils/ansi.js";
+import { padVisible, visibleWidth } from "../utils/terminal-width.js";
 import { currentTheme } from "../core/themes.js";
 import { getSettings } from "../core/config.js";
 import { renderAnsiColorGrid, parseMascotSvgGrid, resolveMascotPath, type RgbColor } from "./render/mascot.js";
@@ -185,7 +185,7 @@ export function wrapHomeText(_app: AppState, prefix: string, prefixPlain: string
 }
 
 export function centerVisibleLine(_app: AppState, line: string, width: number): string {
-  const visible = stripAnsi(line).length;
+  const visible = visibleWidth(line);
   if (visible >= width) return line;
   const left = Math.floor((width - visible) / 2);
   return `${" ".repeat(left)}${line}`;
@@ -262,20 +262,6 @@ export function renderSidebar(app: AppState, visibleHeight: number): string[] {
 }
 
 export function padLine(_app: AppState, line: string, targetWidth: number): string {
-  const visible = stripAnsi(line).length;
-  if (visible > targetWidth) {
-    let count = 0;
-    let i = 0;
-    while (i < line.length && count < targetWidth) {
-      if (line[i] === "\x1b") {
-        const end = line.indexOf("m", i);
-        if (end !== -1) { i = end + 1; continue; }
-      }
-      count++;
-      i++;
-    }
-    return line.slice(0, i) + RESET;
-  }
-  if (visible < targetWidth) return line + " ".repeat(targetWidth - visible);
-  return line;
+  const padded = padVisible(line, targetWidth);
+  return padded === line ? line : `${padded}${RESET}`;
 }

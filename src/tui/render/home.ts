@@ -1,4 +1,4 @@
-import stripAnsi from "strip-ansi";
+import { visibleWidth } from "../../utils/terminal-width.js";
 
 export function renderHomeBox(options: {
   width: number;
@@ -12,7 +12,7 @@ export function renderHomeBox(options: {
   const { width, title, body, box, frameColor, reset, padLine } = options;
   const innerWidth = Math.max(1, width - 2);
   const titleText = title ? ` ${title} ` : "";
-  const titleFill = Math.max(0, innerWidth - stripAnsi(titleText).length);
+  const titleFill = Math.max(0, innerWidth - visibleWidth(titleText));
   const lines = [`${frameColor}${box.tl}${titleText}${box.h.repeat(titleFill)}${box.tr}${reset}`];
   for (const row of body) {
     lines.push(`${frameColor}${box.v}${reset}${padLine(row, innerWidth)}${frameColor}${box.v}${reset}`);
@@ -44,10 +44,10 @@ export function renderHomeView(options: {
   const boxWidth = Math.max(12, mainW);
   const innerWidth = Math.max(1, boxWidth - 2);
   const contentWidth = Math.max(8, innerWidth - 4);
-  const fullMascotWidth = stripAnsi(fullMascot[0] ?? "").length;
+  const fullMascotWidth = visibleWidth(fullMascot[0] ?? "");
   const canShowMascot = fullMascot.length > 0 && contentWidth >= fullMascotWidth + 24 && topHeight >= 8;
   const mascotInline = canShowMascot ? fullMascot : [];
-  const mascotWidth = stripAnsi(mascotInline[0] ?? "").length;
+  const mascotWidth = visibleWidth(mascotInline[0] ?? "");
   const gap = mascotWidth > 0 ? 2 : 0;
   const headerCandidates = ["Welcome to BrokeCLI", "Welcome"];
   const headerText = headerCandidates.find((candidate) => mascotWidth + gap + candidate.length <= contentWidth) ?? headerCandidates[headerCandidates.length - 1];

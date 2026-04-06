@@ -4,6 +4,7 @@ import { App } from "../src/tui/app.js";
 import { renderStaticMessages } from "../src/tui/render/messages.js";
 import { wordWrap } from "../src/tui/render/formatting.js";
 import { MOUSE_OFF, MOUSE_ON } from "../src/utils/ansi.js";
+import { visibleWidth } from "../src/utils/terminal-width.js";
 import { currentTheme, setPreviewTheme } from "../src/core/themes.js";
 import { getSettings, updateSetting } from "../src/core/config.js";
 import stripAnsi from "strip-ansi";
@@ -119,6 +120,17 @@ describe("sidebar token summary", () => {
       updateSetting("enableThinking", original.enableThinking);
       updateSetting("cavemanLevel", original.cavemanLevel ?? "off");
     }
+  });
+});
+
+describe("terminal cell width", () => {
+  it("pads and decorates frame lines to the exact terminal width even with emoji and ANSI", () => {
+    const app = new App() as any;
+    const raw = ` ${currentTheme().warning}🪨 ultra${"\x1b[0m"} | ${currentTheme().textMuted}Σ 210 session${"\x1b[0m"}`;
+    const padded = app.padLine(raw, 18);
+    const framed = app.decorateFrameLine(`${padded} ${app.getSidebarBorder()} ${app.padLine("Directory", 10)}`, 31);
+    expect(visibleWidth(framed)).toBe(31);
+    expect(visibleWidth(app.decorateFrameLine(raw, 18))).toBe(18);
   });
 });
 
