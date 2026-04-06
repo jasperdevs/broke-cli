@@ -63,6 +63,7 @@ class AnimCounter {
     }
   }
   set(val: number): void { this.target = val; }
+  sync(): void { this.display = this.target; }
   reset(): void { this.target = 0; this.display = 0; }
   get(): number { return this.display; }
   getInt(): number { return Math.round(this.display); }
@@ -183,6 +184,8 @@ export class App {
   private thinkingDuration = 0;
   private todoItems: Array<{ id: string; text: string; status: "pending" | "in_progress" | "done" }> = [];
   private sessionCost = 0;
+  private sessionInputTokens = 0;
+  private sessionOutputTokens = 0;
   private sessionTokens = 0;
   private contextUsed = 0;
   private modelName = "none";
@@ -239,6 +242,8 @@ export class App {
 
   // Animated counters
   private animTokens = new AnimCounter();
+  private animInputTokens = new AnimCounter();
+  private animOutputTokens = new AnimCounter();
   private animCost = new AnimCounter();
   private animStreamTokens = new AnimCounter();
   private animContext = new AnimCounter();
@@ -282,28 +287,77 @@ export class App {
     this.draw();
   }
 
-  updateCost(cost: number, tokens: number): void {
+  updateUsage(cost: number, inputTokens: number, outputTokens: number): void {
     this.sessionCost = cost;
-    this.sessionTokens = tokens;
+    this.sessionInputTokens = inputTokens;
+    this.sessionOutputTokens = outputTokens;
+    this.sessionTokens = inputTokens + outputTokens;
     this.animCost.set(cost);
-    this.animTokens.set(tokens);
+    this.animInputTokens.set(inputTokens);
+    this.animOutputTokens.set(outputTokens);
+    this.animTokens.set(this.sessionTokens);
+    if (!this.isStreaming) {
+      this.animCost.sync();
+      this.animInputTokens.sync();
+      this.animOutputTokens.sync();
+      this.animTokens.sync();
+    }
     this.draw();
   }
 
   resetCost(): void {
     this.sessionCost = 0;
+    this.sessionInputTokens = 0;
+    this.sessionOutputTokens = 0;
     this.sessionTokens = 0;
     this.contextUsed = 0;
     this.animCost.reset();
+    this.animInputTokens.reset();
+    this.animOutputTokens.reset();
     this.animTokens.reset();
     this.animStreamTokens.reset();
     this.animContext.reset();
     this.draw();
   }
 
+  private getLiveInputTokens(): number {
+    return this.animInputTokens.getInt();
+  }
+
+  private getLiveOutputTokens(): number {
+    return this.animOutputTokens.getInt() + this.animStreamTokens.getInt();
+  }
+
+  private getLiveTotalTokens(): number {
+    return this.getLiveInputTokens() + this.getLiveOutputTokens();
+  }
+
+  private renderTokenSummaryParts(): string[] {
+    const parts = [`↑ ${fmtTokens(this.getLiveInputTokens())}`, `↓ ${fmtTokens(this.getLiveOutputTokens())}`];
+    const total = this.getLiveTotalTokens();
+    if (total > 0) parts.push(`Σ ${fmtTokens(total)}`);
+    return parts;
+  }
+
+  private renderSidebarFooter(): string[] {
+    const settings = getSettings();
+    if (!settings.showTokens) return [];
+    const lines: string[] = [];
+    const headerParts = ["Tokens"];
+    if (settings.showCost && this.sessionCost > 0) {
+      headerParts.push(fmtCost(this.animCost.get()));
+    }
+    lines.push(`${WHITE}${headerParts.join(` ${DIM}·${RESET} `)}${RESET}`);
+    for (const part of this.renderTokenSummaryParts()) {
+      lines.push(`  ${DIM}${part}${RESET}`);
+    }
+    return lines;
+  }
+
   setContextUsed(pct: number): void {
     this.contextUsed = pct;
     this.animContext.set(pct);
+    if (!this.isStreaming) this.animContext.sync();
     this.draw();
   }
 
@@ -515,6 +569,7 @@ export class App {
   setStreamTokens(tokens: number): void {
     this.streamTokens = tokens;
     this.animStreamTokens.set(tokens);
+    if (!this.isStreaming) this.animStreamTokens.sync();
   }
 
   setCompacting(compacting: boolean, tokenCount?: number): void {
@@ -1691,34 +1746,33 @@ export class App {
     // Info bar below input — contextual status + hints
     {
       const parts: Array<{ text: string; plain: string; priority: number }> = [];
-      const modeColor = this.mode === "plan" ? P() : T();
       const modeLabel = this.mode === "plan" ? "plan" : "build";
       if (this.isStreaming) {
         parts.push({ text: `${DIM}esc${RESET} ${DIM}stop${RESET}`, plain: "esc stop", priority: 0 });
       }
-      parts.push({ text: `${modeColor}${modeLabel}${RESET} ${DIM}(shift+tab)${RESET}`, plain: `${modeLabel} (shift+tab)`, priority: 1 });
+      parts.push({ text: `${this.mode === "plan" ? P() : T()}${modeLabel}${RESET}`, plain: modeLabel, priority: 1 });
       if (this.pendingMessages.length > 0) {
         parts.push({ text: `${P()}${this.pendingMessages.length} queued${RESET}`, plain: `${this.pendingMessages.length} queued`, priority: 2 });
       }
       const settings = getSettings();
       const thinkLevel = settings.thinkingLevel || (settings.enableThinking ? "low" : "off");
       if (thinkLevel !== "off") {
-        parts.push({ text: `${T()}${thinkLevel}${RESET} ${DIM}(ctrl+t)${RESET}`, plain: `${thinkLevel} (ctrl+t)`, priority: 3 });
+        parts.push({ text: `${T()}think ${thinkLevel}${RESET}`, plain: `think ${thinkLevel}`, priority: 3 });
       } else {
-        parts.push({ text: `${DIM}off${RESET} ${DIM}(ctrl+t)${RESET}`, plain: "off (ctrl+t)", priority: 3 });
+        parts.push({ text: `${DIM}think off${RESET}`, plain: "think off", priority: 3 });
       }
       const caveLevel = settings.cavemanLevel ?? "off";
       if (caveLevel !== "off") {
-        parts.push({ text: `\u{1FAA8}:${YELLOW}${caveLevel}${RESET} ${DIM}(ctrl+y)${RESET}`, plain: `\u{1FAA8}:${caveLevel} (ctrl+y)`, priority: 3 });
+        parts.push({ text: `\u{1FAA8} ${YELLOW}${caveLevel}${RESET}`, plain: `cave ${caveLevel}`, priority: 3 });
       }
-      // Cost/tokens/context in bottom bar — animated values
-      const liveTokens = this.animTokens.getInt() + this.animStreamTokens.getInt();
+      // Cost/tokens/context in bottom bar — compact when there's no sidebar
+      const liveTokens = this.getLiveTotalTokens();
       const showCost = settings.showCost && this.sessionCost > 0;
-      const showTokens = settings.showTokens && liveTokens > 0;
+      const showTokens = settings.showTokens && !hasSidebar && liveTokens > 0;
       if (showCost || showTokens) {
         const costPart = showCost ? fmtCost(this.animCost.get()) : "";
-        const tokPart = showTokens ? `${fmtTokens(liveTokens)} tok` : "";
-        const statStr = [costPart, tokPart].filter(Boolean).join(" ");
+        const tokenPart = showTokens ? this.renderTokenSummaryParts().join(" ") : "";
+        const statStr = [costPart, tokenPart].filter(Boolean).join(" · ");
         parts.push({ text: `${DIM}${statStr}${RESET}`, plain: statStr, priority: 4 });
       }
       const animCtx = this.animContext.getInt();
@@ -1786,9 +1840,12 @@ export class App {
     if (hasSidebar) {
       const border = `${DIM}\u2502${RESET}`;
       const sideW = this.screen.sidebarWidth;
-      for (const l of bottomLines) {
-        const padded = this.padLine(l, mainW);
-        frameLines.push(`${padded} ${border}${" ".repeat(sideW + 1)}`);
+      const footerLines = this.renderSidebarFooter();
+      const footerStart = Math.max(0, bottomLines.length - footerLines.length);
+      for (let i = 0; i < bottomLines.length; i++) {
+        const padded = this.padLine(bottomLines[i] ?? "", mainW);
+        const sidebarLine = i >= footerStart ? footerLines[i - footerStart] ?? "" : "";
+        frameLines.push(`${padded} ${border} ${this.padLine(sidebarLine, sideW)}`);
       }
     } else {
       for (const l of bottomLines) frameLines.push(l);

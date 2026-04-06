@@ -72,6 +72,14 @@ export class Session {
     return this.totalInputTokens + this.totalOutputTokens;
   }
 
+  getTotalInputTokens(): number {
+    return this.totalInputTokens;
+  }
+
+  getTotalOutputTokens(): number {
+    return this.totalOutputTokens;
+  }
+
   getTotalCost(): number {
     return this.totalCost;
   }

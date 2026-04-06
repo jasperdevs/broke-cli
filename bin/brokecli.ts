@@ -520,7 +520,7 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
               for (const msg of loaded.getMessages()) {
                 app.addMessage(msg.role, msg.content);
               }
-              app.updateCost(session.getTotalCost(), session.getTotalTokens());
+              app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
               app.addMessage("system", "Session resumed.");
             }
           });
@@ -732,7 +732,7 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
             app.addMessage("system", `${DIM}No response from model. Try again or switch models with /model.${RESET}`);
           }
           session.addUsage(usage.inputTokens, usage.outputTokens, usage.cost);
-          app.updateCost(session.getTotalCost(), session.getTotalTokens());
+          app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
           app.setStreaming(false);
           abortController = null;
           lastActivityTime = Date.now();
@@ -741,7 +741,7 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
             try {
               const { exec: execAsync } = require("child_process");
               if (process.platform === "win32") {
-                execAsync(`powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; $n = New-Object System.Windows.Forms.NotifyIcon; $n.Icon = [System.Drawing.SystemIcons]::Information; $n.BalloonTipTitle = 'BrokeCLI'; $n.BalloonTipText = 'Response complete'; $n.Visible = $true; $n.ShowBalloonTip(3000)"`, { stdio: "ignore", timeout: 8000 });
+                execAsync(`powershell -NoProfile -WindowStyle Hidden -Command "Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $n = New-Object System.Windows.Forms.NotifyIcon; $n.Icon = [System.Drawing.SystemIcons]::Information; $n.BalloonTipTitle = 'BrokeCLI'; $n.BalloonTipText = 'Response complete'; $n.Visible = $true; $n.ShowBalloonTip(3000); Start-Sleep -Milliseconds 3100; $n.Dispose()"`, { stdio: "ignore", timeout: 8000 });
               } else if (process.platform === "darwin") {
                 execAsync(`osascript -e 'display notification "Response complete" with title "BrokeCLI"'`, { stdio: "ignore", timeout: 5000 });
               } else {
