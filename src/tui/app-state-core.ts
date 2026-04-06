@@ -1,7 +1,7 @@
 import { currentTheme } from "../core/themes.js";
 import { getSettings, type CavemanLevel, type Mode, type ThinkingLevel } from "../core/config.js";
 import { buildSidebarFooter } from "./render/sidebar-view.js";
-import { fmtCost, fmtTokens } from "./render/formatting.js";
+import { fmtTokens } from "./render/formatting.js";
 import { DIM, RESET } from "../utils/ansi.js";
 import { MUTED, OK, P, T, TXT } from "./app-shared.js";
 import type { ModelOption } from "./app-types.js";
@@ -69,12 +69,12 @@ export function getLiveTotalTokens(app: AppState): number {
 }
 
 export function renderTokenSummaryParts(app: AppState): string[] {
+  const total = app.getLiveTotalTokens();
   const parts = [
+    `Σ ${fmtTokens(total)} session`,
     `↑ ${fmtTokens(app.getLiveInputTokens())} in`,
     `↓ ${fmtTokens(app.getLiveOutputTokens())} out`,
   ];
-  const total = app.getLiveTotalTokens();
-  if (total > 0) parts.push(`Σ ${fmtTokens(total)} session`);
   return parts;
 }
 
@@ -96,7 +96,6 @@ export function renderSidebarFooter(app: AppState): string[] {
     width,
     showTokens: settings.showTokens,
     statusParts,
-    cost: settings.showCost && app.sessionCost > 0 ? fmtCost(app.animCost.get()) : undefined,
     tokenParts: app.renderTokenSummaryParts(),
     contextUsed: app.contextLimitTokens > 0 ? app.contextUsed : undefined,
     contextUsage: app.contextLimitTokens > 0 ? `${fmtTokens(app.contextTokenCount)}/${fmtTokens(app.contextLimitTokens)}` : undefined,

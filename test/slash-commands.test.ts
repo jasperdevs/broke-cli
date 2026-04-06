@@ -233,6 +233,41 @@ describe("slash command handling", () => {
     expect(app.messages.some((entry) => entry.content.includes("Shared to"))).toBe(true);
   });
 
+  it("shows a compact budget report for /budget", async () => {
+    const app = createAppStub();
+    const session = new Session(`test-budget-${Date.now()}`);
+    session.addUsage(120, 45, 0.0012);
+    session.recordTurn({ smallModel: true, toolsExposed: 5, toolsUsed: 2, plannerCacheHit: false });
+    session.recordIdleCacheCliff();
+    session.recordCompaction({ freshThreadCarryForward: true });
+
+    const result = await handleSlashCommand({
+      text: "/budget",
+      app,
+      session,
+      activeModel: null,
+      currentModelId: "",
+      currentMode: "build",
+      systemPrompt: "sys",
+      providerRegistry: {} as any,
+      buildVisibleModelOptions: () => [],
+      refreshProviderState: async () => [],
+      isSkippedPromptAnswer: () => false,
+      isValidHttpBaseUrl: () => true,
+      getContextOptimizer: () => ({ reset() {} }) as any,
+      onSessionReplace: () => {},
+      onModelChange: () => {},
+      onSystemPromptChange: () => {},
+      hooks: { emit() {} },
+      onProjectChange: () => {},
+    });
+
+    expect(result.handled).toBe(true);
+    expect(app.messages.at(-1)?.content).toContain("Budget Insights");
+    expect(app.messages.at(-1)?.content).toContain("Idle cache cliffs: 1");
+    expect(app.messages.at(-1)?.content).toContain("Fresh carry-forwards: 1");
+  });
+
   it("reloads extensions immediately when toggled with enter", async () => {
     mkdirSync(extDir, { recursive: true });
     writeFileSync(extPath, "exports.register = () => {};", "utf-8");

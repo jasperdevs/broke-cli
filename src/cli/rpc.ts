@@ -7,10 +7,12 @@ import { Session } from "../core/session.js";
 import { getTools } from "../tools/registry.js";
 import { createSubagentTool } from "../tools/subagent.js";
 import { getSettings, type Mode } from "../core/config.js";
+import { getTurnPolicy } from "../core/turn-policy.js";
 import { loadPricing } from "../ai/cost.js";
 import { ProviderRegistry } from "../ai/provider-registry.js";
 import type { ModelHandle } from "../ai/providers.js";
 import { loadExtensions } from "../core/extensions.js";
+import type { ToolName } from "../tools/registry.js";
 
 function canUseSdkTools(model: ModelHandle): boolean {
   return model.runtime === "sdk"
@@ -94,7 +96,9 @@ export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts:
 
     abortController = new AbortController();
     let assistantText = "";
+    const policy = getTurnPolicy(msg.content);
     const tools = getTools({
+      include: policy.allowedTools as readonly ToolName[],
       extraTools: {
         subagent: createSubagentTool({
           cwd: () => process.cwd(),
@@ -114,12 +118,20 @@ export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts:
       onFinish: (usage: { inputTokens: number; outputTokens: number; cost: number }) => {
         session.addMessage("assistant", assistantText || "[empty response]");
         session.addUsage(usage.inputTokens, usage.outputTokens, usage.cost);
+        session.recordTurn({
+          toolsExposed: canUseSdkTools(activeModel) ? policy.allowedTools.length : 0,
+          plannerCacheHit: policy.plannerCacheHit,
+        });
         writeLine({ type: "done", usage: { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, cost: usage.cost } });
         abortController = null;
       },
       onError: (err: Error) => {
         writeLine({ type: "error", message: err.message.slice(0, 200) });
         session.addMessage("assistant", "[error]");
+        session.recordTurn({
+          toolsExposed: canUseSdkTools(activeModel) ? policy.allowedTools.length : 0,
+          plannerCacheHit: policy.plannerCacheHit,
+        });
         abortController = null;
       },
     };
@@ -129,7 +141,7 @@ export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts:
       providerId,
       rpcMode,
       resolveCavemanLevel(getSettings().cavemanLevel ?? "off", msg.content),
-    );
+    ) + `\n\nExecution scaffold (${policy.archetype}): ${policy.scaffold}`;
 
     if (activeModel.runtime === "native-cli") {
       await startNativeStream(
@@ -155,6 +167,7 @@ export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts:
           messages: session.getChatMessages(),
           tools: canUseSdkTools(activeModel) ? tools : undefined,
           abortSignal: abortController.signal,
+          maxToolSteps: policy.maxToolSteps,
         },
         {
           ...rpcCallbacks,

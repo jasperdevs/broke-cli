@@ -3,6 +3,7 @@ import { writeFileSync } from "fs";
 import type { ModelHandle } from "../ai/providers.js";
 import type { ProviderRegistry } from "../ai/provider-registry.js";
 import { buildSystemPrompt, reloadContext } from "../core/context.js";
+import { buildBudgetReport } from "../core/budget-insights.js";
 import { compactMessages, getTotalContextTokens } from "../core/compact.js";
 import { clearCredentials, hasStoredCredentials, listAuthenticated } from "../core/auth.js";
 import { getProviderCredential, getSettings, loadConfig, updateProviderConfig, updateSetting, type Settings, type Mode } from "../core/config.js";
@@ -184,8 +185,8 @@ export async function handleSlashCommand(options: {
         const compacted = activeModel.runtime === "sdk" && activeModel.model
           ? await compactMessages(chatMsgs, activeModel.model)
           : chatMsgs.slice(-6);
-        session.clear();
-        for (const m of compacted) session.addMessage(m.role, m.content);
+        session.replaceConversation(compacted);
+        session.recordCompaction();
         app.setCompacting?.(false);
         app.clearMessages();
         app.addMessage("system", `Context compacted: ${chatMsgs.length} messages -> ${compacted.length}`);
@@ -195,6 +196,9 @@ export async function handleSlashCommand(options: {
       }
       return { handled: true };
     }
+    case "budget":
+      app.addMessage("system", buildBudgetReport(session));
+      return { handled: true };
     case "fork": {
       const forked = session.fork();
       if (activeModel) forked.setProviderModel(activeModel.provider.name, currentModelId);

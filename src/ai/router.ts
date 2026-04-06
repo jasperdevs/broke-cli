@@ -10,6 +10,7 @@
 
 import type { LanguageModel } from "ai";
 import { getProviderSmallModelId } from "./model-catalog.js";
+import { classifyTurnArchetype } from "../core/turn-policy.js";
 
 export interface RouterConfig {
   mainModel: LanguageModel;
@@ -31,9 +32,13 @@ export function routeMessage(
   lastToolCalls: string[],
 ): RouteDecision {
   const msg = userMessage.toLowerCase().trim();
+  const archetype = classifyTurnArchetype(userMessage, lastToolCalls);
 
   // First message always goes to main model (needs full context understanding)
   if (messageCount <= 1) return "main";
+
+  if (archetype === "explore" || archetype === "shell" || archetype === "question") return "small";
+  if (archetype === "research" || archetype === "review" || archetype === "planning" || archetype === "bugfix" || archetype === "edit") return "main";
 
   // Explicit complexity signals → main model
   const complexPatterns = [

@@ -7,7 +7,7 @@ import { getSmallModelId } from "../src/ai/router.js";
 import { buildSystemPrompt, reloadContext } from "../src/core/context.js";
 import { Session } from "../src/core/session.js";
 import { touchProject } from "../src/core/projects.js";
-import { getTools } from "../src/tools/registry.js";
+import { getTools, type ToolName } from "../src/tools/registry.js";
 import { createAskUserTool } from "../src/tools/ask.js";
 import { createSubagentTool } from "../src/tools/subagent.js";
 import { setBashOutputCallback } from "../src/tools/bash.js";
@@ -183,8 +183,9 @@ program.action(async (opts) => {
     systemPrompt = boot.systemPrompt;
   })();
 
-  const buildTools = () => ({
+  const buildTools = (allowedTools: readonly ToolName[]) => ({
     ...getTools({
+      include: allowedTools,
       extraTools: {
         subagent: createSubagentTool({
           cwd: () => process.cwd(),
@@ -333,7 +334,7 @@ program.action(async (opts) => {
       smallModelId,
       currentMode,
       systemPrompt,
-      tools: buildTools(),
+      buildTools,
       hooks,
       lastToolCalls,
       lastActivityTime,

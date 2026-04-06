@@ -16,7 +16,7 @@ npm install -g @jasperdevs/brokecli
 - Native CLI passthrough for Claude Code / Codex when local auth is available
 - TUI with sidebar, file tree, compact mode, home screen, theme picker, keybindings, and desktop notifications
 - Session persistence with current-project `/resume`, `/fork`, transcript export, and per-project recall
-- Cost-aware routing, caveman compression, auto-compaction, and token/cost telemetry
+- Cost-aware routing, lazy tool loading, caveman compression, idle-cliff carry-forward, and token/budget telemetry
 - Auto lint/test validation after edits, with optional one-pass auto-fix
 - Tool permission blocking and extension enable/disable controls
 - JSON RPC mode for non-interactive usage
@@ -30,6 +30,7 @@ npm install -g @jasperdevs/brokecli
 - `/resume` search and resume recent sessions in the current project
 - `/projects` search and switch among recently used projects
 - `/share` publish a secret GitHub gist when a share token is present, otherwise create a local shareable HTML transcript
+- `/budget` inspect cache cliffs, auto-routing, tool waste, and other budget metrics
 - `/permissions` allow/block model tools
 - `/extensions` enable/disable loaded extensions
 - `/theme` switch themes

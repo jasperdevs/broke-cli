@@ -50,20 +50,24 @@ describe("sidebar token summary", () => {
     const app = new App() as any;
     app.setContextUsage(132, 344_000);
     app.updateUsage(0.0016, 150, 60);
-    expect(app.renderTokenSummaryParts()).toEqual(["↑ 150 in", "↓ 60 out", "Σ 210 session"]);
+    expect(app.renderTokenSummaryParts()).toEqual(["Σ 210 session", "↑ 150 in", "↓ 60 out"]);
   });
 
-  it("shows the lifetime total line in the sidebar footer", () => {
+  it("shows only lifetime totals plus current context usage in the sidebar footer", () => {
     const app = new App() as any;
     app.setContextUsage(132, 344_000);
     app.updateUsage(0.0016, 150, 60);
     const footer = app.renderSidebarFooter().map((line: string) => stripAnsi(line)).join("\n");
+    expect(footer).not.toContain("Session");
+    expect(footer).not.toContain("Next request");
+    expect(footer).toContain("Σ 210 session");
     expect(footer).toContain("↑ 150 in");
     expect(footer).toContain("↓ 60 out");
-    expect(footer).toContain("Σ 210 session");
+    expect(footer).toContain("132/344k");
+    expect(footer).toContain("<1% of limit");
   });
 
-  it("uses the rock indicator and wraps cost/context details instead of clipping", () => {
+  it("uses the rock indicator and keeps the token region to totals plus context", () => {
     const app = new App() as any;
     app.screen = { sidebarWidth: 12, width: 80, height: 24, hasSidebar: true, mainWidth: 61, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
     updateSetting("cavemanLevel", "ultra");
@@ -72,10 +76,7 @@ describe("sidebar token summary", () => {
     const footer = app.renderSidebarFooter().map((line: string) => stripAnsi(line));
     expect(footer.some((line: string) => line.includes("🪨 ultra"))).toBe(true);
     expect(footer[0]).toBe("");
-    expect(footer.some((line: string) => line.includes("Session"))).toBe(true);
-    expect(footer.some((line: string) => line.trim() === "$0.0016")).toBe(true);
     expect(footer.some((line: string) => line.trim() === "Σ 210 session")).toBe(true);
-    expect(footer.some((line: string) => line.includes("Next request"))).toBe(true);
     expect(footer.some((line: string) => line.trim() === "132k/344k")).toBe(true);
     expect(footer.some((line: string) => line.trim() === "38% of limit")).toBe(true);
     updateSetting("cavemanLevel", "off");

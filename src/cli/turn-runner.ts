@@ -9,10 +9,12 @@ import { buildSystemPrompt, resolveCavemanLevel } from "../core/context.js";
 import { compactMessages, getTotalContextTokens } from "../core/compact.js";
 import { checkBudget } from "../core/budget.js";
 import { getModelContextLimitOverride, getSettings, type Mode } from "../core/config.js";
+import { getTurnPolicy } from "../core/turn-policy.js";
 import { clearTodo } from "../tools/todo.js";
 import type { Session } from "../core/session.js";
 import { sendResponseNotification } from "./notify.js";
 import { runValidationSuite } from "./auto-validate.js";
+import type { ToolName } from "../tools/registry.js";
 
 const SDK_TOOL_PROVIDER_IDS = new Set([
   "anthropic", "openai", "codex", "google", "mistral", "groq", "xai",
@@ -84,20 +86,33 @@ export async function runModelTurn(options: {
   smallModelId: string;
   currentMode: Mode;
   systemPrompt: string;
-  tools: Record<string, unknown>;
+  buildTools: (allowedTools: readonly ToolName[]) => Record<string, unknown>;
   hooks: ExtensionHooks;
   lastToolCalls: string[];
   lastActivityTime: number;
   alreadyAddedUserMessage?: boolean;
   repairDepth?: number;
 }): Promise<{ lastToolCalls: string[]; lastActivityTime: number }> {
-  const { app, session, text, images, activeModel, currentModelId, smallModel, smallModelId, currentMode, systemPrompt, tools, hooks, lastToolCalls, lastActivityTime, alreadyAddedUserMessage, repairDepth = 0 } = options;
+  const { app, session, text, images, activeModel, currentModelId, smallModel, smallModelId, currentMode, systemPrompt, buildTools, hooks, lastToolCalls, lastActivityTime, alreadyAddedUserMessage, repairDepth = 0 } = options;
   const getContextOptimizer = (): ReturnType<Session["getContextOptimizer"]> => session.getContextOptimizer();
+  const settings = getSettings();
+  const policy = getTurnPolicy(text, lastToolCalls);
 
   const idleMs = Date.now() - lastActivityTime;
   if (idleMs > 5 * 60 * 1000 && session.getChatMessages().length > 4) {
     const idleMins = Math.floor(idleMs / 60000);
+    session.recordIdleCacheCliff();
     app.setStatus(`idle ${idleMins}m - context cache likely expired, consider /compact`);
+    if (settings.autoCompact && session.getChatMessages().length > 8) {
+      try {
+        const carryForward = await compactForModel(session.getChatMessages(), activeModel);
+        session.replaceConversation(carryForward);
+        session.recordCompaction({ freshThreadCarryForward: true });
+        app.addMessage("system", `Fresh carry-forward after ${idleMins}m idle to avoid cache waste.`);
+      } catch {
+        // keep current transcript if carry-forward compaction fails
+      }
+    }
   }
   let nextActivityTime = Date.now();
 
@@ -116,12 +131,12 @@ export async function runModelTurn(options: {
   const ctxPct = contextLimit > 0 ? Math.min(100, Math.round((ctxTokens / contextLimit) * 100)) : 0;
   app.setContextUsage(ctxTokens, contextLimit);
 
-  if (ctxPct > 80 && chatMsgs.length > 8) {
+  if (settings.autoCompact && ctxPct > 80 && chatMsgs.length > 8) {
     try {
       app.setCompacting(true, ctxTokens);
       const compacted = await compactForModel(chatMsgs, activeModel);
-      session.clear();
-      for (const m of compacted) session.addMessage(m.role, m.content);
+      session.replaceConversation(compacted);
+      session.recordCompaction();
       app.setCompacting(false);
       app.addMessage("system", `Auto-compacted: ${chatMsgs.length} -> ${compacted.length} messages`);
     } catch {
@@ -149,7 +164,7 @@ export async function runModelTurn(options: {
   getContextOptimizer().nextTurn();
 
   const canAutoRoute = !!smallModel
-    && getSettings().autoRoute
+    && settings.autoRoute
     && !(activeModel.provider.id === "codex" && activeModel.runtime === "native-cli");
   const route = canAutoRoute
     ? routeMessage(text, session.getChatMessages().length, lastToolCalls)
@@ -164,6 +179,18 @@ export async function runModelTurn(options: {
   const nextToolCalls: string[] = [];
   const optimizedMessages = getContextOptimizer().optimizeMessages(session.getChatMessages());
   let abortController: AbortController | null = new AbortController();
+  let turnMetricsRecorded = false;
+  const exposedToolCount = canUseSdkTools(executionModel) ? policy.allowedTools.length : 0;
+  const recordTurnMetrics = () => {
+    if (turnMetricsRecorded) return;
+    turnMetricsRecorded = true;
+    session.recordTurn({
+      smallModel: route === "small",
+      toolsExposed: exposedToolCount,
+      toolsUsed: new Set(nextToolCalls).size,
+      plannerCacheHit: policy.plannerCacheHit,
+    });
+  };
 
   app.onAbortRequest(() => {
     abortController?.abort();
@@ -175,6 +202,7 @@ export async function runModelTurn(options: {
 
   const effectiveCavemanLevel = resolveCavemanLevel(getSettings().cavemanLevel ?? "off", text);
   let turnSystemPrompt = buildSystemPrompt(process.cwd(), executionModel.provider.id, currentMode, effectiveCavemanLevel);
+  turnSystemPrompt += `\n\nExecution scaffold (${policy.archetype}): ${policy.scaffold}`;
   if (shouldRequestThinkTags(executionModel, thinkingRequested)) {
     turnSystemPrompt += "\n\nIf this model exposes reasoning in text, place that reasoning inside <think>...</think> before the final answer. Keep it plain text, concise, and specific to this request. If the model does not support that format, ignore this instruction and answer normally.";
   }
@@ -223,6 +251,7 @@ export async function runModelTurn(options: {
         app.addMessage("system", "No response from model. Try again or switch models with /model.");
       }
       session.addUsage(usage.inputTokens, usage.outputTokens, usage.cost);
+      recordTurnMetrics();
       app.setStreaming(false);
       app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
       abortController = null;
@@ -245,6 +274,7 @@ export async function runModelTurn(options: {
       else if (msg.includes("overloaded") || msg.includes("503") || msg.includes("529")) msg = `${activeModel.provider.name} is overloaded right now. Try again in a moment.`;
       if (msg.length > 300) msg = `${msg.slice(0, 297)}...`;
       session.addMessage("assistant", `[error: ${msg}]`);
+      recordTurnMetrics();
       app.setStreaming(false);
       app.addMessage("system", msg);
       abortController = null;
@@ -273,10 +303,11 @@ export async function runModelTurn(options: {
       providerId: executionModel.provider.id,
       system: turnSystemPrompt,
       messages: optimizedMessages,
-      tools: canUseSdkTools(executionModel) ? tools as any : undefined,
+      tools: canUseSdkTools(executionModel) ? buildTools(policy.allowedTools) as any : undefined,
       abortSignal: abortController.signal,
       enableThinking: thinkingRequested,
       thinkingLevel: getSettings().thinkingLevel || "low",
+      maxToolSteps: policy.maxToolSteps,
     }, {
       ...streamCallbacks,
       onToolCallStart: (name) => {
@@ -332,7 +363,7 @@ export async function runModelTurn(options: {
         smallModelId,
         currentMode,
         systemPrompt,
-        tools,
+        buildTools,
         hooks,
         lastToolCalls: nextToolCalls,
         lastActivityTime: nextActivityTime,

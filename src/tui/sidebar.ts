@@ -84,13 +84,12 @@ export function loadSidebarFileTree(cwd: string): SidebarTreeItem[] {
 export function buildSidebarFooterLines(options: {
   width: number;
   statusParts: string[];
-  cost?: string;
   tokenParts: string[];
   contextUsed?: number;
   contextUsage?: string;
   colors: SidebarFooterColors;
 }): string[] {
-  const { width, statusParts, cost, tokenParts, contextUsed, contextUsage, colors } = options;
+  const { width, statusParts, tokenParts, contextUsed, contextUsage, colors } = options;
   const lines: string[] = [];
 
   if (statusParts.length > 0) {
@@ -111,24 +110,14 @@ export function buildSidebarFooterLines(options: {
     }
   }
 
-  if (cost && `${"Session"} · ${cost}`.length > width) {
-    lines.push(`${colors.text}Session${RESET}`);
-    lines.push(`  ${colors.muted}${cost}${RESET}`);
-  } else {
-    const headerParts = ["Session"];
-    if (cost) headerParts.push(cost);
-    lines.push(`${colors.text}${headerParts.join(` ${colors.muted}·${RESET} `)}${RESET}`);
-  }
-
   for (const part of tokenParts) {
-    lines.push(`  ${colors.muted}${part}${RESET}`);
+    lines.push(`${colors.muted}${part}${RESET}`);
   }
 
   if (contextUsed !== undefined && contextUsage) {
     const contextColor = contextUsed > 90 ? colors.error : contextUsed > 70 ? colors.warning : colors.muted;
-    lines.push(`${colors.text}Next request${RESET}`);
-    lines.push(`  ${contextColor}${contextUsage}${RESET}`);
-    lines.push(`  ${contextColor}${formatContextPercent(contextUsed)}${RESET}`);
+    lines.push(`${contextColor}${contextUsage}${RESET}`);
+    lines.push(`${contextColor}${formatContextPercent(contextUsed)}${RESET}`);
   }
 
   return lines;

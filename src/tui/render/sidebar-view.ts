@@ -5,7 +5,6 @@ export function buildSidebarFooter(options: {
   width: number;
   showTokens: boolean;
   statusParts: string[];
-  cost?: string;
   tokenParts: string[];
   contextUsed?: number;
   contextUsage?: string;
@@ -17,12 +16,11 @@ export function buildSidebarFooter(options: {
     error: string;
   };
 }): string[] {
-  const { showTokens, width, statusParts, cost, tokenParts, contextUsed, contextUsage, colors } = options;
+  const { showTokens, width, statusParts, tokenParts, contextUsed, contextUsage, colors } = options;
   if (!showTokens) return [];
   const footer = buildSidebarFooterLines({
     width,
     statusParts,
-    cost,
     tokenParts,
     contextUsed,
     contextUsage,

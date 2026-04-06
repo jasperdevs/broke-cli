@@ -22,8 +22,21 @@ interface SessionData {
   totalInputTokens: number;
   totalOutputTokens: number;
   totalCost: number;
+  budgetMetrics?: SessionBudgetMetrics;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface SessionBudgetMetrics {
+  totalTurns: number;
+  smallModelTurns: number;
+  idleCacheCliffs: number;
+  autoCompactions: number;
+  freshThreadCarryForwards: number;
+  toolsExposed: number;
+  toolsUsed: number;
+  plannerCacheHits: number;
+  plannerCacheMisses: number;
 }
 
 export class Session {
@@ -32,6 +45,17 @@ export class Session {
   private totalInputTokens = 0;
   private totalOutputTokens = 0;
   private totalCost = 0;
+  private budgetMetrics: SessionBudgetMetrics = {
+    totalTurns: 0,
+    smallModelTurns: 0,
+    idleCacheCliffs: 0,
+    autoCompactions: 0,
+    freshThreadCarryForwards: 0,
+    toolsExposed: 0,
+    toolsUsed: 0,
+    plannerCacheHits: 0,
+    plannerCacheMisses: 0,
+  };
   private cwd = process.cwd();
   private provider = "";
   private model = "";
@@ -91,11 +115,58 @@ export class Session {
     return this.totalCost;
   }
 
+  replaceConversation(messages: Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }>): void {
+    this.messages = messages.map((message) => ({
+      role: message.role,
+      content: message.content,
+      images: message.images,
+      timestamp: Date.now(),
+    }));
+    this.contextOptimizer.reset();
+    this.save();
+  }
+
+  getBudgetMetrics(): SessionBudgetMetrics {
+    return { ...this.budgetMetrics };
+  }
+
+  recordTurn(options: { smallModel?: boolean; toolsExposed?: number; toolsUsed?: number; plannerCacheHit?: boolean }): void {
+    this.budgetMetrics.totalTurns += 1;
+    if (options.smallModel) this.budgetMetrics.smallModelTurns += 1;
+    if (options.toolsExposed) this.budgetMetrics.toolsExposed += options.toolsExposed;
+    if (options.toolsUsed) this.budgetMetrics.toolsUsed += options.toolsUsed;
+    if (options.plannerCacheHit === true) this.budgetMetrics.plannerCacheHits += 1;
+    if (options.plannerCacheHit === false) this.budgetMetrics.plannerCacheMisses += 1;
+    this.save();
+  }
+
+  recordIdleCacheCliff(): void {
+    this.budgetMetrics.idleCacheCliffs += 1;
+    this.save();
+  }
+
+  recordCompaction(options?: { freshThreadCarryForward?: boolean }): void {
+    this.budgetMetrics.autoCompactions += 1;
+    if (options?.freshThreadCarryForward) this.budgetMetrics.freshThreadCarryForwards += 1;
+    this.save();
+  }
+
   clear(): void {
     this.messages = [];
     this.totalInputTokens = 0;
     this.totalOutputTokens = 0;
     this.totalCost = 0;
+    this.budgetMetrics = {
+      totalTurns: 0,
+      smallModelTurns: 0,
+      idleCacheCliffs: 0,
+      autoCompactions: 0,
+      freshThreadCarryForwards: 0,
+      toolsExposed: 0,
+      toolsUsed: 0,
+      plannerCacheHits: 0,
+      plannerCacheMisses: 0,
+    };
     this.contextOptimizer.reset();
     this.save();
   }
@@ -113,6 +184,7 @@ export class Session {
         totalInputTokens: this.totalInputTokens,
         totalOutputTokens: this.totalOutputTokens,
         totalCost: this.totalCost,
+        budgetMetrics: this.budgetMetrics,
         createdAt: this.createdAt,
         updatedAt: Date.now(),
       };
@@ -132,6 +204,10 @@ export class Session {
       session.totalInputTokens = data.totalInputTokens;
       session.totalOutputTokens = data.totalOutputTokens;
       session.totalCost = data.totalCost;
+      session.budgetMetrics = {
+        ...session.budgetMetrics,
+        ...(data.budgetMetrics ?? {}),
+      };
       session.cwd = data.cwd;
       session.provider = data.provider;
       session.model = data.model;
