@@ -550,8 +550,8 @@ program.action(async (opts) => {
         modelId: currentModelId,
         system: systemPrompt,
         messages: session.getChatMessages(),
-        // Only pass tools for providers known to support function calling
-        tools: ["anthropic", "openai", "codex", "google", "mistral", "groq", "xai", "openrouter"].includes(activeModel.provider.id) ? tools : undefined,
+        // Pass tools to all models - some local models support function calling
+        tools,
         abortSignal: abortController.signal,
       },
       {

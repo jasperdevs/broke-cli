@@ -60,9 +60,9 @@ ${tree}
   // Tool capabilities
   parts.push(`
 <tools>
-- read: Read file contents
-- write: Create or overwrite files
-- edit: Find and replace in files
+- readFile: Read file contents
+- writeFile: Create or overwrite files  
+- editFile: Find and replace in files
 - bash: Execute shell commands
 - listFiles: List directory contents
 - grep: Search file contents
