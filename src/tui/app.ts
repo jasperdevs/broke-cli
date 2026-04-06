@@ -2236,7 +2236,8 @@ export class App {
       ? "Pick one with /model"
       : `${this.providerName}/${this.modelName}`;
     const versionText = `v${this.appVersion}`;
-    const innerWidth = Math.max(1, mainW - 2);
+    const boxWidth = Math.max(12, mainW - 4);
+    const innerWidth = Math.max(1, boxWidth - 2);
     const contentWidth = Math.max(8, innerWidth - 2);
     const mascotWidth = stripAnsi(mascotInline).length;
     const headerPrefix = mascotInline ? `${mascotInline} ` : "";
@@ -2259,7 +2260,8 @@ export class App {
 
     const boxBodyHeight = Math.max(8, topHeight - 2);
     const clippedBody = body.slice(0, boxBodyHeight);
-    const box = this.renderHomeBox(Math.max(12, mainW), "", clippedBody);
+    const box = this.renderHomeBox(boxWidth, "", clippedBody)
+      .map((line) => this.centerVisibleLine(line, mainW));
     const lines = box.slice(0, topHeight);
     while (lines.length < topHeight) lines.push("");
     return lines;
