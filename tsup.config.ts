@@ -13,4 +13,7 @@ export default defineConfig({
   banner: {
     js: "#!/usr/bin/env node",
   },
+  // Keep marked/marked-terminal external so lazy require() can load them
+  // after FORCE_COLOR is set (chalk inside marked-terminal needs this)
+  external: ["marked", "marked-terminal"],
 });
