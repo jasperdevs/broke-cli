@@ -13,18 +13,20 @@ export interface Settings {
   autoSaveSessions: boolean;
   enableThinking: boolean;
   gitCheckpoints: boolean;
+  scopedModels: string[];
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   yoloMode: true,
   autoCompact: true,
   maxSessionCost: 0,
-  theme: "default",
+  theme: "dark",
   showTokens: true,
   showCost: true,
   autoSaveSessions: true,
   enableThinking: false,
   gitCheckpoints: true,
+  scopedModels: [],
 };
 
 export interface BrokeConfig {

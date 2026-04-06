@@ -1,7 +1,10 @@
 import { Screen } from "./screen.js";
 import { KeypressHandler, type Keypress } from "./keypress.js";
 import { InputWidget } from "./input.js";
-import { GREEN, GRAY, RESET, BOLD, DIM, RED, WHITE, moveTo } from "../utils/ansi.js";
+import { GRAY, RESET, BOLD, DIM, RED, WHITE, moveTo } from "../utils/ansi.js";
+import { currentTheme } from "../core/themes.js";
+import { execSync } from "child_process";
+import { matchesBinding, loadKeybindings } from "../core/keybindings.js";
 import stripAnsi from "strip-ansi";
 import { renderMarkdown } from "../utils/markdown.js";
 import { collectProjectFiles, filterFiles, readFileForContext } from "./file-picker.js";
@@ -25,9 +28,13 @@ export interface SettingEntry {
   description: string;
 }
 
+/** Shorthand for theme primary color — called per-render so theme switches take effect. */
+function T(): string { return currentTheme().primary; }
+
 const COMMANDS = [
   { name: "model", desc: "switch model" },
   { name: "settings", desc: "configure options" },
+  { name: "theme", desc: "switch theme" },
   { name: "compact", desc: "compress context" },
   { name: "sessions", desc: "recent sessions" },
   { name: "new", desc: "new session" },
@@ -67,12 +74,17 @@ export class App {
   private cwd = process.cwd();
   private modelPicker: { options: ModelOption[]; cursor: number } | null = null;
   private onModelSelect: ((providerId: string, modelId: string) => void) | null = null;
+  private onModelPin: ((providerId: string, modelId: string, pinned: boolean) => void) | null = null;
   private settingsPicker: { entries: SettingEntry[]; cursor: number } | null = null;
   private onSettingToggle: ((key: string) => void) | null = null;
   private filePicker: { files: string[]; filtered: string[]; query: string; cursor: number } | null = null;
   private projectFiles: string[] | null = null;
   private fileContexts: Map<string, string> = new Map();
   private cmdSuggestionCursor = 0;
+  private toolOutputCollapsed = false;
+  private gitBranch = "";
+  private gitDirty = false;
+  private onCycleScopedModel: (() => void) | null = null;
 
   constructor() {
     this.screen = new Screen();
@@ -130,10 +142,11 @@ export class App {
     this.detectedProviders = providers;
   }
 
-  openModelPicker(options: ModelOption[], onSelect: (providerId: string, modelId: string) => void): void {
+  openModelPicker(options: ModelOption[], onSelect: (providerId: string, modelId: string) => void, onPin?: (providerId: string, modelId: string, pinned: boolean) => void): void {
     const activeIdx = options.findIndex((o) => o.active);
     this.modelPicker = { options, cursor: activeIdx >= 0 ? activeIdx : 0 };
     this.onModelSelect = onSelect;
+    this.onModelPin = onPin ?? null;
     this.draw();
   }
 
@@ -246,6 +259,7 @@ export class App {
         const opt = this.modelPicker.options[this.modelPicker.cursor];
         if (opt) {
           opt.active = !opt.active;
+          if (this.onModelPin) this.onModelPin(opt.providerId, opt.modelId, opt.active);
           // Re-sort: starred models go to top
           this.modelPicker.options.sort((a, b) => {
             if (a.active && !b.active) return -1;
@@ -340,9 +354,23 @@ export class App {
     }
     this.ctrlCCount = 0;
 
-    // Ctrl+L — open model picker
-    if (key.ctrl && key.name === "l") {
+    // Keybinding: model picker (default Ctrl+L)
+    const bindings = loadKeybindings();
+    if (matchesBinding(bindings.modelPicker, key)) {
       if (this.onSubmit) this.onSubmit("/model");
+      return;
+    }
+
+    // Keybinding: cycle scoped models (default Ctrl+P)
+    if (matchesBinding(bindings.cycleScopedModel, key)) {
+      if (this.onCycleScopedModel) this.onCycleScopedModel();
+      return;
+    }
+
+    // Ctrl+O — toggle tool output collapse
+    if (key.ctrl && key.name === "o") {
+      this.toolOutputCollapsed = !this.toolOutputCollapsed;
+      this.draw();
       return;
     }
 
@@ -411,10 +439,17 @@ export class App {
     this.draw();
   }
 
+  /** Check if a system message looks like tool output */
+  private isToolOutput(content: string): boolean {
+    return content.startsWith("> ") || content.startsWith("  ");
+  }
+
   /** Render messages as terminal lines */
   private renderMessages(maxWidth: number): string[] {
     const lines: string[] = [];
-    for (const msg of this.messages) {
+    let idx = 0;
+    while (idx < this.messages.length) {
+      const msg = this.messages[idx];
       if (msg.role === "user") {
         lines.push(`${BOLD}${WHITE}  > ${msg.content}${RESET}`);
       } else if (msg.role === "assistant") {
@@ -430,10 +465,19 @@ export class App {
             lines.push(`    ${cl}`);
           }
         }
+      } else if (this.toolOutputCollapsed && this.isToolOutput(msg.content)) {
+        // Skip consecutive tool output system messages
+        while (idx + 1 < this.messages.length
+          && this.messages[idx + 1].role === "system"
+          && this.isToolOutput(this.messages[idx + 1].content)) {
+          idx++;
+        }
+        lines.push(`${DIM}  [tool output hidden]${RESET}`);
       } else {
         lines.push(`${DIM}  ${msg.content}${RESET}`);
       }
       lines.push("");
+      idx++;
     }
     // Thinking block (shown during streaming if model sends reasoning)
     if (this.thinkingBuffer) {
@@ -447,21 +491,23 @@ export class App {
     if (this.isStreaming && !this.thinkingBuffer) {
       const frames = ["\u280B", "\u2819", "\u2839", "\u2838", "\u283C", "\u2834", "\u2826", "\u2827", "\u2807", "\u280F"];
       const frame = frames[this.spinnerFrame % frames.length];
-      lines.push(`${GREEN}  ${frame} ${RESET}${DIM}Working...${RESET}`);
+      lines.push(`${T()}  ${frame} ${RESET}${DIM}Working...${RESET}`);
       lines.push("");
     }
     return lines;
   }
 
   private renderCompactHeader(): string {
-    const model = `${GREEN}${this.providerName}/${this.modelName}${RESET}`;
-    const cost = `${GREEN}$${this.sessionCost.toFixed(4)}${RESET}`;
+    const model = `${T()}${this.providerName}/${this.modelName}${RESET}`;
+    const cost = `${T()}$${this.sessionCost.toFixed(4)}${RESET}`;
     const tokens = `${DIM}${this.sessionTokens} tok${RESET}`;
     const sep = `${DIM} | ${RESET}`;
     const ctxColor = this.contextUsed > 90 ? RED : this.contextUsed > 70 ? "\x1b[33m" : DIM;
     const ctx = this.contextUsed > 0 ? `${sep}${ctxColor}${this.contextUsed}%${RESET}` : "";
-    const streaming = this.isStreaming ? `${sep}${GREEN}working${RESET}` : "";
-    return ` ${model}${sep}${cost}${sep}${tokens}${ctx}${streaming}`;
+    const streaming = this.isStreaming ? `${sep}${T()}working${RESET}` : "";
+    const dirty = this.gitDirty ? " *" : "";
+    const git = this.gitBranch ? `${sep}${DIM}${this.gitBranch}${dirty}${RESET}` : "";
+    return ` ${model}${sep}${cost}${sep}${tokens}${ctx}${streaming}${git}`;
   }
 
   /** Render the sidebar content */
@@ -470,11 +516,11 @@ export class App {
     const lines: string[] = [];
 
     // Model
-    lines.push(`${GREEN}${BOLD} ${this.providerName}/${this.modelName}${RESET}`);
+    lines.push(`${T()}${BOLD} ${this.providerName}/${this.modelName}${RESET}`);
     lines.push("");
 
     // Cost + tokens
-    lines.push(`${GREEN} $${this.sessionCost.toFixed(4)}${RESET} ${DIM}${this.sessionTokens} tok${RESET}`);
+    lines.push(`${T()} $${this.sessionCost.toFixed(4)}${RESET} ${DIM}${this.sessionTokens} tok${RESET}`);
     if (this.contextUsed > 0) {
       const color = this.contextUsed > 90 ? RED : this.contextUsed > 70 ? "\x1b[33m" : DIM;
       lines.push(`${color} ${this.contextUsed}% context${RESET}`);
@@ -485,7 +531,7 @@ export class App {
     if (this.detectedProviders.length > 0) {
       lines.push(`${DIM} providers${RESET}`);
       for (const p of this.detectedProviders) {
-        lines.push(`${GREEN}  + ${RESET}${p}`);
+        lines.push(`${T()}  + ${RESET}${p}`);
       }
       lines.push("");
     }
@@ -495,6 +541,12 @@ export class App {
       ? "..." + this.cwd.slice(-(w - 6))
       : this.cwd;
     lines.push(`${DIM} ${shortCwd}${RESET}`);
+
+    // Git branch
+    if (this.gitBranch) {
+      const dirty = this.gitDirty ? " *" : "";
+      lines.push(`${DIM}  ${this.gitBranch}${dirty}${RESET}`);
+    }
 
     // Fill remaining height
     const remaining = this.screen.height - 2 - lines.length;
@@ -526,9 +578,9 @@ export class App {
 
     // Input line
     if (inputText) {
-      bottomLines.push(`${GREEN} > ${RESET}${inputText}`);
+      bottomLines.push(`${T()} > ${RESET}${inputText}`);
     } else {
-      bottomLines.push(`${GREEN} > ${RESET}`);
+      bottomLines.push(`${T()} > ${RESET}`);
     }
 
     // Suggestions/picker appear BELOW input (like Pi)
@@ -560,7 +612,7 @@ export class App {
 
     if (isHome) {
       frameLines.push("");
-      frameLines.push(`${GREEN}${BOLD}  BrokeCLI${RESET}`);
+      frameLines.push(`${T()}${BOLD}  BrokeCLI${RESET}`);
       frameLines.push(`${DIM}  AI coding on a budget${RESET}`);
       frameLines.push("");
       const used = frameLines.length;
@@ -576,7 +628,7 @@ export class App {
 
       if (hasSidebar) {
         const sidebarLines = this.renderSidebar();
-        const border = `${GREEN}|${RESET}`;
+        const border = `${T()}|${RESET}`;
         for (let i = 0; i < chatH; i++) {
           const chatLine = this.padLine(visible[i] ?? "", mainW);
           const sidebarLine = sidebarLines[i] ?? "";
@@ -612,8 +664,8 @@ export class App {
       const opt = picker.options[i];
       const isCursor = i === picker.cursor;
       const isActive = opt.active;
-      const arrow = isCursor ? `${GREEN}> ${RESET}` : "  ";
-      const check = isActive ? ` ${GREEN}*${RESET}` : "";
+      const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
+      const check = isActive ? ` ${T()}*${RESET}` : "";
       const nameCol = isCursor ? `${WHITE}${BOLD}` : "";
       const provCol = `${DIM}${opt.providerName}${RESET}`;
       lines.push(` ${arrow}${nameCol}${opt.modelId}${RESET}${check}  ${provCol}`);
@@ -627,7 +679,7 @@ export class App {
     for (let i = 0; i < maxItems; i++) {
       const f = picker.filtered[i];
       const isCursor = i === picker.cursor;
-      const arrow = isCursor ? `${GREEN}> ${RESET}` : "  ";
+      const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
       const color = isCursor ? `${WHITE}${BOLD}` : DIM;
       lines.push(` ${arrow}${color}${f}${RESET}`);
     }
@@ -647,10 +699,10 @@ export class App {
     for (let i = start; i < end; i++) {
       const e = picker.entries[i];
       const isCursor = i === picker.cursor;
-      const arrow = isCursor ? `${GREEN}> ${RESET}` : "  ";
-      const nameCol = isCursor ? `${WHITE}${BOLD}` : GREEN;
+      const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
+      const nameCol = isCursor ? `${WHITE}${BOLD}` : T();
       const pad = " ".repeat(Math.max(1, 22 - e.label.length));
-      const valColor = e.value === "true" ? GREEN : DIM;
+      const valColor = e.value === "true" ? T() : DIM;
       lines.push(` ${arrow}${nameCol}${e.label}${RESET}${pad}${valColor}${e.value}${RESET}`);
     }
     lines.push(` ${DIM}(${picker.cursor + 1}/${picker.entries.length})${RESET}`);
@@ -685,8 +737,8 @@ export class App {
     const lines: string[] = [];
     for (let i = start; i < end; i++) {
       const c = matches[i];
-      const arrow = i === cursor ? `${GREEN}> ${RESET}` : "  ";
-      const nameColor = i === cursor ? `${WHITE}${BOLD}` : GREEN;
+      const arrow = i === cursor ? `${T()}> ${RESET}` : "  ";
+      const nameColor = i === cursor ? `${WHITE}${BOLD}` : T();
       const pad = " ".repeat(Math.max(1, 16 - c.name.length));
       lines.push(` ${arrow}${nameColor}${c.name}${RESET}${pad}${DIM}${c.desc}${RESET}`);
     }
@@ -702,8 +754,22 @@ export class App {
     this.onAbort = handler;
   }
 
+  onScopedModelCycle(handler: () => void): void {
+    this.onCycleScopedModel = handler;
+  }
+
   start(): void {
     this.running = true;
+
+    // Detect git branch and dirty state
+    try {
+      this.gitBranch = execSync("git branch --show-current", { encoding: "utf-8", timeout: 3000 }).trim();
+    } catch { /* not a git repo */ }
+    try {
+      const status = execSync("git status --porcelain", { encoding: "utf-8", timeout: 3000 }).trim();
+      this.gitDirty = status.length > 0;
+    } catch { /* not a git repo */ }
+
     this.screen.enter();
     this.keypress.start();
     this.draw();
@@ -722,7 +788,7 @@ export class App {
     this.screen.exit();
 
     console.log("");
-    console.log(`${GREEN}${BOLD} BrokeCLI${RESET} ${DIM}session ended${RESET}`);
+    console.log(`${T()}${BOLD} BrokeCLI${RESET} ${DIM}session ended${RESET}`);
     console.log(`${DIM} $${this.sessionCost.toFixed(4)} | ${this.sessionTokens} tokens${RESET}`);
     console.log("");
     process.exit(0);

@@ -14,7 +14,10 @@ import { renderMarkdown } from "../src/utils/markdown.js";
 import { checkBudget } from "../src/core/budget.js";
 import { getSettings, updateSetting, type Settings } from "../src/core/config.js";
 import { compactMessages, getTotalContextTokens } from "../src/core/compact.js";
+import { listThemes, getTheme } from "../src/core/themes.js";
 import { undoLastCheckpoint } from "../src/core/git.js";
+import { listTemplates, loadTemplate } from "../src/core/templates.js";
+import { loadExtensions } from "../src/core/extensions.js";
 
 const program = new Command()
   .name("brokecli")
@@ -23,9 +26,19 @@ const program = new Command()
   .option("--broke", "Route to cheapest capable model")
   .option("-m, --model <model>", "Model to use (provider/model-id)")
   .option("-c, --continue", "Continue last session")
-  .option("-p, --print", "Single-shot mode: print response and exit");
+  .option("-p, --print", "Single-shot mode: print response and exit")
+  .option("--rpc", "Non-interactive JSON RPC mode");
 
 program.action(async (opts) => {
+  // Load extension hooks
+  const hooks = loadExtensions();
+
+  // RPC mode � non-interactive JSON I/O
+  if (opts.rpc) {
+    await runRpcMode(hooks, opts);
+    return;
+  }
+
   const app = new App();
   let systemPrompt = buildSystemPrompt(process.cwd());
   let abortController: AbortController | null = null;
@@ -51,6 +64,33 @@ program.action(async (opts) => {
   }
 
   app.start();
+  hooks.emit("on_session_start", { cwd: process.cwd() });
+
+  // Scoped model index for Ctrl+P cycling
+  let scopedModelIndex = -1;
+
+  app.onScopedModelCycle(() => {
+    const scoped = getSettings().scopedModels;
+    if (scoped.length === 0) {
+      app.setStatus("No pinned models. Use /model and press space to pin.");
+      setTimeout(() => app.clearStatus(), 2000);
+      return;
+    }
+    scopedModelIndex = (scopedModelIndex + 1) % scoped.length;
+    const entry = scoped[scopedModelIndex];
+    const parts = entry.split("/");
+    if (parts.length === 2) {
+      try {
+        activeModel = createModel(parts[0], parts[1]);
+        currentModelId = parts[1];
+        systemPrompt = buildSystemPrompt(process.cwd(), parts[0]);
+        app.setModel(activeModel.provider.name, currentModelId);
+        session.setProviderModel(activeModel.provider.name, currentModelId);
+      } catch (err) {
+        app.addMessage("system", `Failed to switch: ${(err as Error).message}`);
+      }
+    }
+  });
 
   // Detect providers + load pricing in background
   let providers: Awaited<ReturnType<typeof detectProviders>> = [];
@@ -102,6 +142,7 @@ program.action(async (opts) => {
     await initPromise;
 
     // Slash commands
+    let templateLoaded = false;
     if (text.startsWith("/")) {
       const [cmd] = text.slice(1).split(" ");
       switch (cmd) {
@@ -143,6 +184,14 @@ program.action(async (opts) => {
             } catch (err) {
               app.addMessage("system", `Failed: ${(err as Error).message}`);
             }
+          }, (provId, modId, pinned) => {
+            const key = `${provId}/${modId}`;
+            const scoped = getSettings().scopedModels;
+            if (pinned && !scoped.includes(key)) {
+              updateSetting("scopedModels", [...scoped, key]);
+            } else if (!pinned) {
+              updateSetting("scopedModels", scoped.filter((s: string) => s !== key));
+            }
           });
           return;
         }
@@ -173,13 +222,30 @@ program.action(async (opts) => {
           });
           return;
         }
+        case "theme": {
+          const themes = listThemes();
+          const current = getSettings().theme;
+          const options = themes.map((t) => ({
+            providerId: t,
+            providerName: "",
+            modelId: t,
+            active: t === current,
+          }));
+          app.openModelPicker(options, (themeId) => {
+            getTheme(themeId); // validate it exists
+            updateSetting("theme", themeId);
+            app.addMessage("system", `Theme set to: ${themeId}`);
+          });
+          return;
+        }
         case "compact": {
           if (!activeModel) {
             app.addMessage("system", "No model available for compaction.");
             return;
           }
           app.addMessage("system", "Compacting context...");
-          app.setStreaming(true);
+          hooks.emit("on_message", { role: "user", content: text });
+    app.setStreaming(true);
           try {
             const chatMsgs = session.getChatMessages();
             const compacted = await compactMessages(chatMsgs, activeModel.model);
@@ -299,46 +365,86 @@ program.action(async (opts) => {
           app.addMessage("system", result.message);
           return;
         }
+        case "templates": {
+          const templates = listTemplates();
+          if (templates.length === 0) {
+            app.addMessage("system", "No templates found. Add .md files to ~/.brokecli/prompts/ or .brokecli/prompts/");
+            return;
+          }
+          const lines = templates.map((t) => `  /${t.name}${t.description ? ` -- ${t.description}` : ""}`);
+          app.addMessage("system", `Templates:\n${lines.join("\n")}`);
+          return;
+        }
+        case "login":
+          app.addMessage("system", "OAuth login not yet implemented. Set API keys via environment variables: ANTHROPIC_API_KEY, OPENAI_API_KEY, etc.");
+          return;
+        case "logout":
+          app.addMessage("system", "OAuth login not yet implemented. Set API keys via environment variables: ANTHROPIC_API_KEY, OPENAI_API_KEY, etc.");
+          return;
         case "exit":
           app.stop();
           return;
-        default:
+        default: {
+          // Check if it matches a prompt template
+          const tpl = loadTemplate(cmd);
+          if (tpl) {
+            // Replace {{file}} placeholders with @file contexts
+            let content = tpl;
+            const fileContexts = app.getFileContexts();
+            if (fileContexts.size > 0) {
+              const contextBlock = [...fileContexts.entries()]
+                .map(([path, fc]) => `--- @${path} ---\n${fc}`)
+                .join("\n\n");
+              content = content.replace(/\{\{file\}\}/g, contextBlock);
+            }
+            // Treat remaining args as appended text
+            const rest = text.slice(1 + cmd.length).trim();
+            if (rest) content = `${content}\n\n${rest}`;
+            // Feed as a regular message, then continue to LLM
+            app.addMessage("user", `/${cmd}${rest ? ` ${rest}` : ""}`);
+            session.addMessage("user", content);
+            templateLoaded = true;
+            break;
+          }
           app.addMessage("system", `Unknown: /${cmd}`);
           return;
+        }
       }
     }
 
-    // !bash shortcuts
-    if (text.startsWith("!!")) {
-      const cmd = text.slice(2).trim();
-      if (cmd) {
-        try {
-          const { execSync } = await import("child_process");
-          execSync(cmd, { encoding: "utf-8", timeout: 30000, cwd: process.cwd(), stdio: "ignore" });
-          app.addMessage("system", `ran: ${cmd}`);
-        } catch (err) {
-          app.addMessage("system", `failed: ${(err as Error).message.slice(0, 100)}`);
-        }
-      }
-      return;
-    }
-    if (text.startsWith("!")) {
-      const cmd = text.slice(1).trim();
-      if (cmd) {
-        try {
-          const { execSync } = await import("child_process");
-          const output = execSync(cmd, { encoding: "utf-8", timeout: 30000, maxBuffer: 1024 * 1024, cwd: process.cwd() });
-          app.addMessage("system", `$ ${cmd}\n${output.trim()}`);
-          // Send output to LLM as context
-          if (activeModel) {
-            session.addMessage("user", `I ran \`${cmd}\` and got:\n\`\`\`\n${output.trim().slice(0, 2000)}\n\`\`\``);
+    if (!templateLoaded) {
+      // !bash shortcuts
+      if (text.startsWith("!!")) {
+        const cmd = text.slice(2).trim();
+        if (cmd) {
+          try {
+            const { execSync } = await import("child_process");
+            execSync(cmd, { encoding: "utf-8", timeout: 30000, cwd: process.cwd(), stdio: "ignore" });
+            app.addMessage("system", `ran: ${cmd}`);
+          } catch (err) {
+            app.addMessage("system", `failed: ${(err as Error).message.slice(0, 100)}`);
           }
-        } catch (err) {
-          const e = err as { stdout?: string; stderr?: string; message: string };
-          app.addMessage("system", `$ ${cmd}\n${e.stderr?.trim() || e.message}`);
         }
+        return;
       }
-      return;
+      if (text.startsWith("!")) {
+        const cmd = text.slice(1).trim();
+        if (cmd) {
+          try {
+            const { execSync } = await import("child_process");
+            const output = execSync(cmd, { encoding: "utf-8", timeout: 30000, maxBuffer: 1024 * 1024, cwd: process.cwd() });
+            app.addMessage("system", `$ ${cmd}\n${output.trim()}`);
+            // Send output to LLM as context
+            if (activeModel) {
+              session.addMessage("user", `I ran \`${cmd}\` and got:\n\`\`\`\n${output.trim().slice(0, 2000)}\n\`\`\``);
+            }
+          } catch (err) {
+            const e = err as { stdout?: string; stderr?: string; message: string };
+            app.addMessage("system", `$ ${cmd}\n${e.stderr?.trim() || e.message}`);
+          }
+        }
+        return;
+      }
     }
 
     if (!activeModel) {
@@ -374,18 +480,21 @@ program.action(async (opts) => {
       }
     }
 
-    // Inject @file contexts into the message
-    const fileContexts = app.getFileContexts();
-    let fullText = text;
-    if (fileContexts.size > 0) {
-      const contextBlock = [...fileContexts.entries()]
-        .map(([path, content]) => `--- @${path} ---\n${content}`)
-        .join("\n\n");
-      fullText = `${text}\n\n${contextBlock}`;
+    if (!templateLoaded) {
+      // Inject @file contexts into the message
+      const fileContexts = app.getFileContexts();
+      let fullText = text;
+      if (fileContexts.size > 0) {
+        const contextBlock = [...fileContexts.entries()]
+          .map(([path, content]) => `--- @${path} ---\n${content}`)
+          .join("\n\n");
+        fullText = `${text}\n\n${contextBlock}`;
+      }
+
+      app.addMessage("user", text);
+      session.addMessage("user", fullText);
     }
 
-    app.addMessage("user", text);
-    session.addMessage("user", fullText);
     app.setStreaming(true);
 
     abortController = new AbortController();
@@ -440,12 +549,14 @@ program.action(async (opts) => {
           abortController = null;
         },
         onToolCall: (name, args) => {
+          hooks.emit("on_tool_call", { name, args });
           const preview = typeof args === "object" && args !== null
             ? JSON.stringify(args).slice(0, 80)
             : String(args).slice(0, 80);
           app.addMessage("system", `> ${name} ${preview}`);
         },
         onToolResult: (_name, result) => {
+          hooks.emit("on_tool_result", { name: _name, result });
           const r = result as { success?: boolean; output?: string; error?: string };
           if (r.success === false && r.error) {
             app.addMessage("system", `  error: ${r.error.slice(0, 100)}`);
@@ -461,5 +572,123 @@ program.action(async (opts) => {
     );
   });
 });
+
+async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts: any): Promise<void> {
+  let systemPrompt = buildSystemPrompt(process.cwd());
+  let abortController: AbortController | null = null;
+
+  const [, providers] = await Promise.all([loadPricing(), detectProviders()]);
+  await refreshLocalModels(providers.map((p) => p.id));
+
+  let providerId: string;
+  let modelId: string | undefined;
+
+  if (opts.model) {
+    const parts = opts.model.split("/");
+    if (parts.length === 2) {
+      providerId = parts[0];
+      modelId = parts[1];
+    } else {
+      const def = pickDefault(providers);
+      providerId = def?.id ?? "openai";
+      modelId = opts.model;
+    }
+  } else {
+    const def = pickDefault(providers);
+    if (!def) {
+      process.stdout.write(JSON.stringify({ type: "error", message: "No providers found" }) + "\n");
+      process.exit(1);
+      return;
+    }
+    providerId = def.id;
+  }
+
+  let activeModel: ReturnType<typeof createModel>;
+  try {
+    activeModel = createModel(providerId, modelId);
+  } catch (err) {
+    process.stdout.write(JSON.stringify({ type: "error", message: (err as Error).message }) + "\n");
+    process.exit(1);
+    return;
+  }
+
+  const currentModelId = modelId ?? activeModel.provider.defaultModel;
+  systemPrompt = buildSystemPrompt(process.cwd(), providerId);
+  const tools = getTools();
+  const session = new Session();
+
+  await hooks.emit("on_session_start", { cwd: process.cwd(), rpc: true });
+
+  const readline = await import("readline");
+  const rl = readline.createInterface({ input: process.stdin });
+
+  function writeLine(obj: object): void {
+    process.stdout.write(JSON.stringify(obj) + "\n");
+  }
+
+  for await (const line of rl) {
+    let msg: { type: string; content?: string };
+    try {
+      msg = JSON.parse(line);
+    } catch {
+      writeLine({ type: "error", message: "Invalid JSON" });
+      continue;
+    }
+
+    if (msg.type === "abort") {
+      abortController?.abort();
+      abortController = null;
+      continue;
+    }
+
+    if (msg.type !== "message" || !msg.content) {
+      writeLine({ type: "error", message: 'Expected {"type":"message", "content":"..."}' });
+      continue;
+    }
+
+    session.addMessage("user", msg.content);
+    await hooks.emit("on_message", { role: "user", content: msg.content });
+
+    abortController = new AbortController();
+
+    await startStream(
+      {
+        model: activeModel.model,
+        modelId: currentModelId,
+        system: systemPrompt,
+        messages: session.getChatMessages(),
+        tools: ["anthropic", "openai", "codex", "google", "mistral", "groq", "xai", "openrouter"].includes(activeModel.provider.id) ? tools : undefined,
+        abortSignal: abortController.signal,
+      },
+      {
+        onText: (delta) => {
+          writeLine({ type: "text", content: delta });
+        },
+        onReasoning: () => {},
+        onFinish: (usage) => {
+          session.addMessage("assistant", ""); // placeholder
+          session.addUsage(usage.inputTokens, usage.outputTokens, usage.cost);
+          writeLine({ type: "done", usage: { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, cost: usage.cost } });
+          abortController = null;
+        },
+        onError: (err) => {
+          writeLine({ type: "error", message: err.message.slice(0, 200) });
+          session.addMessage("assistant", "[error]");
+          abortController = null;
+        },
+        onToolCall: (name, args) => {
+          hooks.emit("on_tool_call", { name, args });
+          writeLine({ type: "tool_call", name, args });
+        },
+        onToolResult: (_name, result) => {
+          hooks.emit("on_tool_result", { name: _name, result });
+          writeLine({ type: "tool_result", name: _name, result });
+        },
+      },
+    );
+  }
+
+  await hooks.emit("on_session_end", { cost: session.getTotalCost(), tokens: session.getTotalTokens() });
+}
 
 program.parse();
