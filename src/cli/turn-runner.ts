@@ -9,7 +9,7 @@ import { buildSystemPrompt, resolveCavemanLevel } from "../core/context.js";
 import { compactMessages, getTotalContextTokens } from "../core/compact.js";
 import { checkBudget } from "../core/budget.js";
 import { getModelContextLimitOverride, getSettings, type Mode } from "../core/config.js";
-import { getTurnPolicy } from "../core/turn-policy.js";
+import { resolveTurnPolicy, shouldPreferSmallExecutor } from "../core/turn-policy.js";
 import { clearTodo } from "../tools/todo.js";
 import type { Session } from "../core/session.js";
 import { sendResponseNotification } from "./notify.js";
@@ -111,7 +111,19 @@ export async function runModelTurn(options: {
   const getContextOptimizer = (): ReturnType<Session["getContextOptimizer"]> => session.getContextOptimizer();
   const settings = getSettings();
   const effectiveImages = settings.images.blockImages ? undefined : images;
-  const policy = getTurnPolicy(text, lastToolCalls);
+  const budget = checkBudget(session.getTotalCost());
+  if (!budget.allowed) {
+    app.addMessage("system", budget.warning!);
+    return { lastToolCalls, lastActivityTime: Date.now() };
+  }
+  if (budget.warning) app.setStatus(budget.warning);
+  const policy = await resolveTurnPolicy(text, lastToolCalls, activeModel.runtime === "sdk" && activeModel.model
+    ? { model: activeModel.model, modelId: currentModelId, providerId: activeModel.provider.id }
+    : null);
+  if (policy.plannerUsage) {
+    session.addUsage(policy.plannerUsage.inputTokens, policy.plannerUsage.outputTokens, policy.plannerUsage.cost);
+    app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
+  }
 
   const idleMs = Date.now() - lastActivityTime;
   if (idleMs > 5 * 60 * 1000 && session.getChatMessages().length > 4) {
@@ -130,13 +142,6 @@ export async function runModelTurn(options: {
     }
   }
   let nextActivityTime = Date.now();
-
-  const budget = checkBudget(session.getTotalCost());
-  if (!budget.allowed) {
-    app.addMessage("system", budget.warning!);
-    return { lastToolCalls, lastActivityTime: nextActivityTime };
-  }
-  if (budget.warning) app.setStatus(budget.warning);
 
   if (!alreadyAddedUserMessage) {
     let fullText = text;
@@ -196,14 +201,18 @@ export async function runModelTurn(options: {
   const canAutoRoute = !!smallModel
     && settings.autoRoute
     && !(activeModel.provider.id === "codex" && activeModel.runtime === "native-cli");
-  const route = canAutoRoute
+  const requestedRoute = canAutoRoute
     ? routeMessage(text, session.getChatMessages().length, lastToolCalls)
     : "main" as const;
-  const useModel = route === "small" && smallModel ? smallModel : activeModel;
-  const useModelId = route === "small" && smallModel ? smallModelId : currentModelId;
+  const forceSmallExecutor = canAutoRoute
+    && !!smallModel
+    && shouldPreferSmallExecutor(policy, session.getChatMessages().length, !!effectiveImages?.length);
+  const resolvedRoute = forceSmallExecutor ? "small" : requestedRoute;
+  const useModel = resolvedRoute === "small" && smallModel ? smallModel : activeModel;
+  const useModelId = resolvedRoute === "small" && smallModel ? smallModelId : currentModelId;
   const executionModel = useModel;
   const executionModelId = useModelId;
-  const thinkingRequested = route === "main"
+  const thinkingRequested = resolvedRoute === "main"
     ? getSettings().enableThinking && supportsThinking(executionModel)
     : false;
   const nextToolCalls: string[] = [];
@@ -212,15 +221,8 @@ export async function runModelTurn(options: {
   let steeringInterruptRequested = false;
   let turnMetricsRecorded = false;
   const exposedToolCount = canUseSdkTools(executionModel) ? policy.allowedTools.length : 0;
-  const recordTurnMetrics = () => {
-    if (turnMetricsRecorded) return;
+  const markTurnMetricsRecorded = () => {
     turnMetricsRecorded = true;
-    session.recordTurn({
-      smallModel: route === "small",
-      toolsExposed: exposedToolCount,
-      toolsUsed: new Set(nextToolCalls).size,
-      plannerCacheHit: policy.plannerCacheHit,
-    });
   };
 
   app.onAbortRequest(() => {
@@ -283,7 +285,7 @@ export async function runModelTurn(options: {
       app.setThinkingRequested(false);
       const content = app.getLastAssistantContent();
       if (content) {
-        session.addMessage("assistant", content);
+      session.addMessage("assistant", content);
       } else if (looksLikeRawToolPayload(streamedText)) {
         session.addMessage("assistant", "[raw tool payload hidden]");
         app.addMessage("system", "Model emitted raw tool syntax. Hidden from chat.");
@@ -292,7 +294,17 @@ export async function runModelTurn(options: {
         app.addMessage("system", "No response from model. Try again or switch models with /model.");
       }
       session.addUsage(usage.inputTokens, usage.outputTokens, usage.cost);
-      recordTurnMetrics();
+      session.recordTurn({
+        smallModel: resolvedRoute === "small",
+        toolsExposed: exposedToolCount,
+        toolsUsed: new Set(nextToolCalls).size,
+        plannerCacheHit: policy.plannerCacheHit,
+        plannerInputTokens: policy.plannerUsage?.inputTokens,
+        plannerOutputTokens: policy.plannerUsage?.outputTokens,
+        executorInputTokens: usage.inputTokens,
+        executorOutputTokens: usage.outputTokens,
+      });
+      markTurnMetricsRecorded();
       app.setStreaming(false);
       app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
       abortController = null;
@@ -316,7 +328,15 @@ export async function runModelTurn(options: {
       else if (msg.includes("overloaded") || msg.includes("503") || msg.includes("529")) msg = `${activeModel.provider.name} is overloaded right now. Try again in a moment.`;
       if (msg.length > 300) msg = `${msg.slice(0, 297)}...`;
       session.addMessage("assistant", `[error: ${msg}]`);
-      recordTurnMetrics();
+      session.recordTurn({
+        smallModel: resolvedRoute === "small",
+        toolsExposed: exposedToolCount,
+        toolsUsed: new Set(nextToolCalls).size,
+        plannerCacheHit: policy.plannerCacheHit,
+        plannerInputTokens: policy.plannerUsage?.inputTokens,
+        plannerOutputTokens: policy.plannerUsage?.outputTokens,
+      });
+      markTurnMetricsRecorded();
       app.setStreaming(false);
       app.addMessage("system", msg);
       abortController = null;
@@ -331,7 +351,7 @@ export async function runModelTurn(options: {
       system: turnSystemPrompt,
       messages: optimizedMessages,
       abortSignal: abortController.signal,
-      enableThinking: route === "main" ? getSettings().enableThinking : false,
+      enableThinking: resolvedRoute === "main" ? getSettings().enableThinking : false,
       thinkingLevel: getSettings().thinkingLevel || "low",
       yoloMode: getSettings().yoloMode,
       cwd: process.cwd(),

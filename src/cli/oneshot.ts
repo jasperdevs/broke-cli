@@ -7,7 +7,7 @@ import { Session } from "../core/session.js";
 import { getTools, type ToolName } from "../tools/registry.js";
 import { createAgentTool } from "../tools/subagent.js";
 import { getSettings, type Mode } from "../core/config.js";
-import { getTurnPolicy } from "../core/turn-policy.js";
+import { resolveTurnPolicy } from "../core/turn-policy.js";
 import type { ProviderRegistry } from "../ai/provider-registry.js";
 import type { ModelHandle } from "../ai/providers.js";
 
@@ -74,7 +74,16 @@ export async function runOneShotPrompt(options: {
   session.setProviderModel(activeModel.provider.name, modelId);
   session.addMessage("user", prompt);
 
-  const policy = getTurnPolicy(prompt);
+  const policy = await resolveTurnPolicy(
+    prompt,
+    [],
+    activeModel.runtime === "sdk" && activeModel.model
+      ? { model: activeModel.model, modelId, providerId }
+      : null,
+  );
+  if (policy.plannerUsage) {
+    session.addUsage(policy.plannerUsage.inputTokens, policy.plannerUsage.outputTokens, policy.plannerUsage.cost);
+  }
   const tools = policy.allowedTools.length > 0
     ? getTools({
         include: policy.allowedTools as readonly ToolName[],
@@ -167,6 +176,10 @@ export async function runOneShotPrompt(options: {
     toolsExposed: canUseSdkTools(activeModel) ? policy.allowedTools.length : 0,
     toolsUsed: toolCalls.length,
     plannerCacheHit: policy.plannerCacheHit,
+    plannerInputTokens: policy.plannerUsage?.inputTokens,
+    plannerOutputTokens: policy.plannerUsage?.outputTokens,
+    executorInputTokens: usage.inputTokens,
+    executorOutputTokens: usage.outputTokens,
   });
 
   const result = { providerId, modelId, content, usage, session, toolCalls };

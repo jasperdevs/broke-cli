@@ -7,7 +7,7 @@ import { Session } from "../core/session.js";
 import { getTools } from "../tools/registry.js";
 import { createAgentTool } from "../tools/subagent.js";
 import { getSettings, setRuntimeProviderApiKey, type Mode } from "../core/config.js";
-import { getTurnPolicy } from "../core/turn-policy.js";
+import { resolveTurnPolicy } from "../core/turn-policy.js";
 import { loadPricing } from "../ai/cost.js";
 import { ProviderRegistry } from "../ai/provider-registry.js";
 import type { ModelHandle } from "../ai/providers.js";
@@ -102,7 +102,16 @@ export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts:
 
     abortController = new AbortController();
     let assistantText = "";
-    const policy = getTurnPolicy(msg.content);
+    const policy = await resolveTurnPolicy(
+      msg.content,
+      [],
+      activeModel.runtime === "sdk" && activeModel.model
+        ? { model: activeModel.model, modelId: currentModelId, providerId: activeModel.provider.id }
+        : null,
+    );
+    if (policy.plannerUsage) {
+      session.addUsage(policy.plannerUsage.inputTokens, policy.plannerUsage.outputTokens, policy.plannerUsage.cost);
+    }
     const tools = policy.allowedTools.length > 0
       ? getTools({
           include: policy.allowedTools as readonly ToolName[],
@@ -129,6 +138,10 @@ export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts:
         session.recordTurn({
           toolsExposed: canUseSdkTools(activeModel) ? policy.allowedTools.length : 0,
           plannerCacheHit: policy.plannerCacheHit,
+          plannerInputTokens: policy.plannerUsage?.inputTokens,
+          plannerOutputTokens: policy.plannerUsage?.outputTokens,
+          executorInputTokens: usage.inputTokens,
+          executorOutputTokens: usage.outputTokens,
         });
         writeLine({ type: "done", usage: { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, cost: usage.cost } });
         abortController = null;
@@ -139,6 +152,8 @@ export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts:
         session.recordTurn({
           toolsExposed: canUseSdkTools(activeModel) ? policy.allowedTools.length : 0,
           plannerCacheHit: policy.plannerCacheHit,
+          plannerInputTokens: policy.plannerUsage?.inputTokens,
+          plannerOutputTokens: policy.plannerUsage?.outputTokens,
         });
         abortController = null;
       },

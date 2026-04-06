@@ -5,6 +5,12 @@ export interface BudgetReport {
   totalTokens: number;
   inputTokens: number;
   outputTokens: number;
+  plannerTokens: number;
+  plannerInputTokens: number;
+  plannerOutputTokens: number;
+  executorTokens: number;
+  executorInputTokens: number;
+  executorOutputTokens: number;
   totalTurns: number;
   avgTokensPerTurn: number;
   toolsExposed: number;
@@ -53,6 +59,10 @@ function emptyMetrics(): SessionBudgetMetrics {
     toolsUsed: 0,
     plannerCacheHits: 0,
     plannerCacheMisses: 0,
+    plannerInputTokens: 0,
+    plannerOutputTokens: 0,
+    executorInputTokens: 0,
+    executorOutputTokens: 0,
   };
 }
 
@@ -68,6 +78,10 @@ function mergeBudgetMetrics(metricsList: SessionBudgetMetrics[]): SessionBudgetM
     merged.toolsUsed += metrics.toolsUsed;
     merged.plannerCacheHits += metrics.plannerCacheHits;
     merged.plannerCacheMisses += metrics.plannerCacheMisses;
+    merged.plannerInputTokens += metrics.plannerInputTokens;
+    merged.plannerOutputTokens += metrics.plannerOutputTokens;
+    merged.executorInputTokens += metrics.executorInputTokens;
+    merged.executorOutputTokens += metrics.executorOutputTokens;
   }
   return merged;
 }
@@ -84,6 +98,8 @@ function buildBudgetReportFromParts(parts: {
   const toolExposureWaste = Math.max(0, metrics.toolsExposed - metrics.toolsUsed);
   const totalTokenBase = Math.max(parts.totalTokens, 1);
   const avgTokensPerTurn = metrics.totalTurns > 0 ? Math.round(parts.totalTokens / metrics.totalTurns) : 0;
+  const plannerTokens = metrics.plannerInputTokens + metrics.plannerOutputTokens;
+  const executorTokens = metrics.executorInputTokens + metrics.executorOutputTokens;
   const bleedCandidates = [
     { key: "tool waste", value: toolExposureWaste, den: Math.max(metrics.toolsExposed, 1) },
     { key: "planner miss", value: metrics.plannerCacheMisses, den: Math.max(metrics.plannerCacheHits + metrics.plannerCacheMisses, 1) },
@@ -96,6 +112,12 @@ function buildBudgetReportFromParts(parts: {
     totalTokens: parts.totalTokens,
     inputTokens: parts.inputTokens,
     outputTokens: parts.outputTokens,
+    plannerTokens,
+    plannerInputTokens: metrics.plannerInputTokens,
+    plannerOutputTokens: metrics.plannerOutputTokens,
+    executorTokens,
+    executorInputTokens: metrics.executorInputTokens,
+    executorOutputTokens: metrics.executorOutputTokens,
     totalTurns: metrics.totalTurns,
     avgTokensPerTurn,
     toolsExposed: metrics.toolsExposed,
@@ -159,6 +181,12 @@ export function renderBudgetDashboard(options: {
     metric("↓ output", `${report.outputTokens.toLocaleString()}  ${pct(report.outputTokens, totalTokenBase)}`),
     metric("input bar", bar(report.inputTokens, totalTokenBase, chartWidth)),
     metric("output bar", bar(report.outputTokens, totalTokenBase, chartWidth)),
+    "",
+    "SCAFFOLDS",
+    metric("planner", `${report.plannerTokens.toLocaleString()}  ${pct(report.plannerTokens, totalTokenBase)}`),
+    metric("executor", `${report.executorTokens.toLocaleString()}  ${pct(report.executorTokens, totalTokenBase)}`),
+    metric("planner bar", bar(report.plannerTokens, totalTokenBase, chartWidth)),
+    metric("exec bar", bar(report.executorTokens, totalTokenBase, chartWidth)),
   ];
 
   if (showContext) {
@@ -186,6 +214,7 @@ export function renderBudgetDashboard(options: {
     "",
     "ROUTING",
     metric("small turns", `${report.smallModelTurns}  ${pct(report.smallModelTurns, totalTurns)}`),
+    metric("reuse", pct(report.plannerCacheHits, Math.max(report.plannerCacheHits + report.plannerCacheMisses, 1))),
     metric("plan hits", String(report.plannerCacheHits)),
     metric("plan misses", String(report.plannerCacheMisses)),
     metric("top bleed", `${report.topBleed.key}  ${report.topBleed.value}  ${report.topBleed.pct}`),
@@ -197,5 +226,7 @@ export function renderBudgetDashboard(options: {
 
 export function summarizeBudgetMetrics(metrics: SessionBudgetMetrics): string {
   const totalTurns = Math.max(metrics.totalTurns, 1);
-  return `small ${pct(metrics.smallModelTurns, totalTurns)} · cliffs ${metrics.idleCacheCliffs} · tool waste ${Math.max(0, metrics.toolsExposed - metrics.toolsUsed)} · plan hits ${metrics.plannerCacheHits}`;
+  const plannerTokens = metrics.plannerInputTokens + metrics.plannerOutputTokens;
+  const executorTokens = metrics.executorInputTokens + metrics.executorOutputTokens;
+  return `small ${pct(metrics.smallModelTurns, totalTurns)} · cliffs ${metrics.idleCacheCliffs} · tool waste ${Math.max(0, metrics.toolsExposed - metrics.toolsUsed)} · planner ${plannerTokens} · executor ${executorTokens} · plan hits ${metrics.plannerCacheHits}`;
 }

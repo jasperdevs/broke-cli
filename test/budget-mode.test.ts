@@ -52,16 +52,22 @@ describe("session budget metrics", () => {
     session.recordTurn({ smallModel: true, toolsExposed: 6, toolsUsed: 2, plannerCacheHit: true });
     session.recordIdleCacheCliff();
     session.recordCompaction({ freshThreadCarryForward: true });
+    session.recordTurn({ plannerInputTokens: 120, plannerOutputTokens: 30, executorInputTokens: 200, executorOutputTokens: 40 });
 
     const report = buildBudgetReport(session);
     const dashboard = renderBudgetDashboard({ report, width: 110, scopeLabel: "current session", contextTokens: 88, contextLimit: 128_000, showContext: true }).join("\n");
     const summary = summarizeBudgetMetrics(session.getBudgetMetrics());
 
     expect(report.totalTokens).toBe(240);
+    expect(report.plannerTokens).toBe(150);
+    expect(report.executorTokens).toBe(240);
     expect(report.sessionCount).toBe(1);
     expect(report.toolExposureWaste).toBe(4);
     expect(report.freshThreadCarryForwards).toBe(1);
     expect(dashboard).toContain("TOKENS");
+    expect(dashboard).toContain("SCAFFOLDS");
+    expect(dashboard).toContain("planner");
+    expect(dashboard).toContain("executor");
     expect(dashboard).toContain("BLEED");
     expect(dashboard).toContain("scope");
     expect(dashboard).toContain("current session");
@@ -69,6 +75,7 @@ describe("session budget metrics", () => {
     expect(dashboard).toContain("88");
     expect(summary).toContain("cliffs 1");
     expect(summary).toContain("tool waste 4");
+    expect(summary).toContain("planner 150");
   });
 
   it("aggregates budget metrics across sessions", () => {

@@ -52,6 +52,10 @@ export interface SessionBudgetMetrics {
   toolsUsed: number;
   plannerCacheHits: number;
   plannerCacheMisses: number;
+  plannerInputTokens: number;
+  plannerOutputTokens: number;
+  executorInputTokens: number;
+  executorOutputTokens: number;
 }
 
 function resolveSessionsDir(): string {
@@ -147,6 +151,10 @@ export class Session {
     toolsUsed: 0,
     plannerCacheHits: 0,
     plannerCacheMisses: 0,
+    plannerInputTokens: 0,
+    plannerOutputTokens: 0,
+    executorInputTokens: 0,
+    executorOutputTokens: 0,
   };
   private cwd = process.cwd();
   private provider = "";
@@ -318,13 +326,26 @@ export class Session {
     return { ...this.budgetMetrics };
   }
 
-  recordTurn(options: { smallModel?: boolean; toolsExposed?: number; toolsUsed?: number; plannerCacheHit?: boolean }): void {
+  recordTurn(options: {
+    smallModel?: boolean;
+    toolsExposed?: number;
+    toolsUsed?: number;
+    plannerCacheHit?: boolean;
+    plannerInputTokens?: number;
+    plannerOutputTokens?: number;
+    executorInputTokens?: number;
+    executorOutputTokens?: number;
+  }): void {
     this.budgetMetrics.totalTurns += 1;
     if (options.smallModel) this.budgetMetrics.smallModelTurns += 1;
     if (options.toolsExposed) this.budgetMetrics.toolsExposed += options.toolsExposed;
     if (options.toolsUsed) this.budgetMetrics.toolsUsed += options.toolsUsed;
     if (options.plannerCacheHit === true) this.budgetMetrics.plannerCacheHits += 1;
     if (options.plannerCacheHit === false) this.budgetMetrics.plannerCacheMisses += 1;
+    if (options.plannerInputTokens) this.budgetMetrics.plannerInputTokens += options.plannerInputTokens;
+    if (options.plannerOutputTokens) this.budgetMetrics.plannerOutputTokens += options.plannerOutputTokens;
+    if (options.executorInputTokens) this.budgetMetrics.executorInputTokens += options.executorInputTokens;
+    if (options.executorOutputTokens) this.budgetMetrics.executorOutputTokens += options.executorOutputTokens;
     this.save();
   }
 
@@ -355,6 +376,10 @@ export class Session {
       toolsUsed: 0,
       plannerCacheHits: 0,
       plannerCacheMisses: 0,
+      plannerInputTokens: 0,
+      plannerOutputTokens: 0,
+      executorInputTokens: 0,
+      executorOutputTokens: 0,
     };
     this.contextOptimizer.reset();
     this.save();
