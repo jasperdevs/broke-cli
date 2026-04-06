@@ -13,6 +13,8 @@ export interface Theme {
   success: string;
   text: string;
   border: string;
+  /** Color used in plan mode (defaults to warning if not set) */
+  plan?: string;
 }
 
 const dark: Theme = {
@@ -24,6 +26,7 @@ const dark: Theme = {
   success: fg(58, 199, 58),
   text: fg(255, 255, 255),
   border: fg(58, 199, 58),
+  plan: fg(255, 200, 50),       // yellow for plan mode
 };
 
 const light: Theme = {
@@ -35,6 +38,7 @@ const light: Theme = {
   success: fg(30, 160, 60),
   text: fg(40, 40, 40),
   border: fg(30, 120, 220),
+  plan: fg(200, 150, 20),      // amber for plan mode
 };
 
 const dracula: Theme = {
@@ -46,6 +50,7 @@ const dracula: Theme = {
   success: fg(80, 250, 123),
   text: fg(248, 248, 242),
   border: fg(189, 147, 249),
+  plan: fg(255, 184, 108),      // orange for plan mode
 };
 
 const monokai: Theme = {
@@ -57,6 +62,7 @@ const monokai: Theme = {
   success: fg(166, 226, 46),
   text: fg(248, 248, 242),
   border: fg(166, 226, 46),
+  plan: fg(230, 219, 116),      // yellow for plan mode
 };
 
 const BUILTIN_THEMES: Record<string, Theme> = { dark, light, dracula, monokai };
@@ -72,7 +78,7 @@ function hexToFg(hex: string): string {
 }
 
 const THEME_KEYS: (keyof Theme)[] = [
-  "primary", "secondary", "dim", "error", "warning", "success", "text", "border",
+  "primary", "secondary", "dim", "error", "warning", "success", "text", "border", "plan",
 ];
 
 function loadCustomThemes(): Record<string, Theme> {
@@ -113,4 +119,9 @@ export function listThemes(): string[] {
 export function currentTheme(): Theme {
   const settings = getSettings();
   return getTheme(settings.theme);
+}
+
+export function getPlanColor(): string {
+  const theme = currentTheme();
+  return theme.plan ?? theme.warning;
 }

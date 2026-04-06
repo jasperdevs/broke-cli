@@ -2,6 +2,7 @@ import { readFileSync, existsSync, readdirSync } from "fs";
 import { join, dirname } from "path";
 import { homedir } from "os";
 import { execSync } from "child_process";
+import type { Mode } from "./config.js";
 
 const CONVENTION_FILES = [
   "CONVENTIONS.md",
@@ -15,8 +16,8 @@ const GLOBAL_CONTEXT_DIR = join(homedir(), ".brokecli");
 
 let cachedPrompts = new Map<string, string>();
 
-export function buildSystemPrompt(cwd: string, providerId?: string): string {
-  const cacheKey = `${providerId ?? "default"}:${cwd}`;
+export function buildSystemPrompt(cwd: string, providerId?: string, mode?: Mode): string {
+  const cacheKey = `${providerId ?? "default"}:${mode ?? "build"}:${cwd}`;
   const cached = cachedPrompts.get(cacheKey);
   if (cached) return cached;
 
@@ -100,6 +101,39 @@ Do not just describe what to do - actually do it using the tools.
       }
     }
     dir = dirname(dir);
+  }
+
+  // Mode-specific instructions
+  if (mode === "plan") {
+    parts.push(`
+--- MODE: PLAN ---
+You are in PLAN MODE. Your job is to ANALYZE and PLAN before making changes.
+
+RULES:
+1. READ files first to understand the codebase using readFile, glob, grep
+2. CREATE a detailed plan with clear steps before any implementation
+3. ASK for confirmation before executing write/edit operations
+4. EXPLAIN your reasoning and potential impacts
+5. NEVER make direct file changes without user approval
+
+When the user asks you to do something:
+- First explore and understand the relevant code
+- Then present a clear plan with numbered steps
+- Wait for user approval before making changes
+- Use phrases like "I'll need to..." "The plan is..." "Should I proceed?"
+`);
+  } else {
+    parts.push(`
+--- MODE: BUILD ---
+You are in BUILD MODE. Execute changes directly.
+
+RULES:
+1. MAKE changes directly using writeFile, editFile, and bash tools
+2. DON'T ask for permission before each action
+3. BE decisive and implement solutions
+4. RUN tests/lint after making changes when appropriate
+5. CLEAN up any issues you create
+`);
   }
 
   const prompt = parts.join("\n");

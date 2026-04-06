@@ -2,9 +2,11 @@ import { Screen } from "./screen.js";
 import { KeypressHandler, type Keypress } from "./keypress.js";
 import { InputWidget } from "./input.js";
 import { GRAY, RESET, BOLD, DIM, RED, WHITE, moveTo } from "../utils/ansi.js";
-import { currentTheme } from "../core/themes.js";
+import { currentTheme, getPlanColor } from "../core/themes.js";
 import { execSync } from "child_process";
 import { matchesBinding, loadKeybindings } from "../core/keybindings.js";
+import { getSettings } from "../core/config.js";
+import type { Mode } from "../core/config.js";
 import stripAnsi from "strip-ansi";
 import { renderMarkdown } from "../utils/markdown.js";
 import { collectProjectFiles, filterFiles, readFileForContext } from "./file-picker.js";
@@ -30,6 +32,9 @@ export interface SettingEntry {
 
 /** Shorthand for theme primary color — called per-render so theme switches take effect. */
 function T(): string { return currentTheme().primary; }
+
+/** Shorthand for plan mode color (yellow/amber). */
+function P(): string { return getPlanColor(); }
 
 const COMMANDS = [
   { name: "model", desc: "switch model" },
@@ -85,6 +90,8 @@ export class App {
   private gitBranch = "";
   private gitDirty = false;
   private onCycleScopedModel: (() => void) | null = null;
+  private mode: Mode = "build";
+  private onModeChange: ((mode: Mode) => void) | null = null;
 
   constructor() {
     this.screen = new Screen();
@@ -214,6 +221,19 @@ export class App {
   clearStatus(): void {
     this.statusMessage = undefined;
     this.draw();
+  }
+
+  getMode(): Mode {
+    return this.mode;
+  }
+
+  setMode(mode: Mode): void {
+    this.mode = mode;
+    this.draw();
+  }
+
+  onModeToggle(callback: (mode: Mode) => void): void {
+    this.onModeChange = callback;
   }
 
   private scrollToBottom(): void {
@@ -374,6 +394,16 @@ export class App {
       return;
     }
 
+    // Tab — toggle between build and plan mode (when input is empty)
+    if (key.name === "tab" && this.input.getText().trim() === "") {
+      this.mode = this.mode === "build" ? "plan" : "build";
+      if (this.onModeChange) this.onModeChange(this.mode);
+      this.statusMessage = this.mode === "build" ? `${T()}Build mode${RESET}` : `${P()}Plan mode${RESET}`;
+      this.draw();
+      setTimeout(() => { this.statusMessage = undefined; this.draw(); }, 1500);
+      return;
+    }
+
     if (key.name === "pageup") { this.scrollOffset = Math.max(0, this.scrollOffset - 5); this.draw(); return; }
     if (key.name === "pagedown") { this.scrollToBottom(); this.draw(); return; }
 
@@ -498,16 +528,19 @@ export class App {
   }
 
   private renderCompactHeader(): string {
-    const model = `${T()}${this.providerName}/${this.modelName}${RESET}`;
-    const cost = `${T()}$${this.sessionCost.toFixed(4)}${RESET}`;
+    const modeColor = this.mode === "plan" ? P() : T();
+    const modeLabel = this.mode === "plan" ? "PLAN" : "BUILD";
+    const model = `${modeColor}${this.providerName}/${this.modelName}${RESET}`;
+    const cost = `${modeColor}$${this.sessionCost.toFixed(4)}${RESET}`;
     const tokens = `${DIM}${this.sessionTokens} tok${RESET}`;
     const sep = `${DIM} | ${RESET}`;
     const ctxColor = this.contextUsed > 90 ? RED : this.contextUsed > 70 ? "\x1b[33m" : DIM;
     const ctx = this.contextUsed > 0 ? `${sep}${ctxColor}${this.contextUsed}%${RESET}` : "";
-    const streaming = this.isStreaming ? `${sep}${T()}working${RESET}` : "";
+    const modeStr = `${modeColor}[${modeLabel}]${RESET}`;
+    const streaming = this.isStreaming ? `${sep}${modeColor}working${RESET}` : "";
     const dirty = this.gitDirty ? " *" : "";
     const git = this.gitBranch ? `${sep}${DIM}${this.gitBranch}${dirty}${RESET}` : "";
-    return ` ${model}${sep}${cost}${sep}${tokens}${ctx}${streaming}${git}`;
+    return ` ${modeStr}${sep}${model}${sep}${cost}${sep}${tokens}${ctx}${streaming}${git}`;
   }
 
   /** Render the sidebar content */
@@ -515,8 +548,10 @@ export class App {
     const w = this.screen.sidebarWidth;
     const lines: string[] = [];
 
-    // Model
-    lines.push(`${T()}${BOLD} ${this.providerName}/${this.modelName}${RESET}`);
+    // Mode indicator
+    const modeColor = this.mode === "plan" ? P() : T();
+    const modeLabel = this.mode === "plan" ? "PLAN" : "BUILD";
+    lines.push(`${modeColor}${BOLD} [${modeLabel}]${RESET} ${T()}${this.providerName}/${this.modelName}${RESET}`);
     lines.push("");
 
     // Cost + tokens

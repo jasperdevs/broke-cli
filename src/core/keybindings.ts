@@ -11,6 +11,7 @@ export interface Keybindings {
   deleteNextWord: string;
   toggleThinking: string;
   cycleScopedModel: string;
+  toggleMode: string;
 }
 
 export const DEFAULT_KEYBINDINGS: Keybindings = {
@@ -22,6 +23,7 @@ export const DEFAULT_KEYBINDINGS: Keybindings = {
   deleteNextWord: "ctrl+d",
   toggleThinking: "ctrl+t",
   cycleScopedModel: "ctrl+p",
+  toggleMode: "tab",
 };
 
 let cached: Keybindings | null = null;

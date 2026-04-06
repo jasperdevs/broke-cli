@@ -3,6 +3,8 @@ import { join } from "path";
 import { homedir } from "os";
 import { parse as parseJsonc } from "jsonc-parser";
 
+export type Mode = "build" | "plan";
+
 export interface Settings {
   yoloMode: boolean;
   autoCompact: boolean;
@@ -14,6 +16,7 @@ export interface Settings {
   enableThinking: boolean;
   gitCheckpoints: boolean;
   scopedModels: string[];
+  mode: Mode;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -27,6 +30,7 @@ export const DEFAULT_SETTINGS: Settings = {
   enableThinking: false,
   gitCheckpoints: true,
   scopedModels: [],
+  mode: "build",
 };
 
 export interface BrokeConfig {

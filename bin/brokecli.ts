@@ -12,7 +12,7 @@ import { Session } from "../src/core/session.js";
 import { getTools } from "../src/tools/registry.js";
 import { renderMarkdown } from "../src/utils/markdown.js";
 import { checkBudget } from "../src/core/budget.js";
-import { getSettings, updateSetting, type Settings } from "../src/core/config.js";
+import { getSettings, updateSetting, type Settings, type Mode } from "../src/core/config.js";
 import { compactMessages, getTotalContextTokens } from "../src/core/compact.js";
 import { listThemes, getTheme } from "../src/core/themes.js";
 import { undoLastCheckpoint } from "../src/core/git.js";
@@ -40,7 +40,8 @@ program.action(async (opts) => {
   }
 
   const app = new App();
-  let systemPrompt = buildSystemPrompt(process.cwd());
+  let currentMode: Mode = getSettings().mode;
+  let systemPrompt = buildSystemPrompt(process.cwd(), undefined, currentMode);
   let abortController: AbortController | null = null;
 
   // Resume or new session
@@ -69,6 +70,13 @@ program.action(async (opts) => {
   // Scoped model index for Ctrl+P cycling
   let scopedModelIndex = -1;
 
+  // Mode toggle callback
+  app.onModeToggle((newMode) => {
+    currentMode = newMode;
+    const activeProvider = activeModel?.provider?.id;
+    systemPrompt = buildSystemPrompt(process.cwd(), activeProvider, currentMode);
+  });
+
   app.onScopedModelCycle(() => {
     const scoped = getSettings().scopedModels;
     if (scoped.length === 0) {
@@ -83,7 +91,7 @@ program.action(async (opts) => {
       try {
         activeModel = createModel(parts[0], parts[1]);
         currentModelId = parts[1];
-        systemPrompt = buildSystemPrompt(process.cwd(), parts[0]);
+        systemPrompt = buildSystemPrompt(process.cwd(), parts[0], currentMode);
         app.setModel(activeModel.provider.name, currentModelId);
         session.setProviderModel(activeModel.provider.name, currentModelId);
       } catch (err) {
@@ -127,8 +135,9 @@ program.action(async (opts) => {
     try {
       activeModel = createModel(providerId, modelId);
       currentModelId = modelId ?? activeModel.provider.defaultModel;
-      systemPrompt = buildSystemPrompt(process.cwd(), providerId);
+      systemPrompt = buildSystemPrompt(process.cwd(), providerId, currentMode);
       app.setModel(activeModel.provider.name, currentModelId);
+      app.setMode(currentMode);
       session.setProviderModel(activeModel.provider.name, currentModelId);
       app.clearStatus();
     } catch (err) {
@@ -178,7 +187,7 @@ program.action(async (opts) => {
             try {
               activeModel = createModel(provId, modId);
               currentModelId = modId;
-              systemPrompt = buildSystemPrompt(process.cwd(), provId);
+              systemPrompt = buildSystemPrompt(process.cwd(), provId, currentMode);
               app.setModel(activeModel.provider.name, currentModelId);
               session.setProviderModel(activeModel.provider.name, currentModelId);
             } catch (err) {
@@ -574,7 +583,8 @@ program.action(async (opts) => {
 });
 
 async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts: any): Promise<void> {
-  let systemPrompt = buildSystemPrompt(process.cwd());
+  const rpcMode = getSettings().mode;
+  let systemPrompt = buildSystemPrompt(process.cwd(), undefined, rpcMode);
   let abortController: AbortController | null = null;
 
   const [, providers] = await Promise.all([loadPricing(), detectProviders()]);
@@ -613,7 +623,7 @@ async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts: any): 
   }
 
   const currentModelId = modelId ?? activeModel.provider.defaultModel;
-  systemPrompt = buildSystemPrompt(process.cwd(), providerId);
+  systemPrompt = buildSystemPrompt(process.cwd(), providerId, rpcMode);
   const tools = getTools();
   const session = new Session();
 
