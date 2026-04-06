@@ -2285,9 +2285,9 @@ export class App {
       ? "Pick one with /model"
       : `${this.providerName}/${this.modelName}`;
     const versionText = `v${this.appVersion}`;
-    const boxWidth = Math.max(12, mainW - 4);
+    const boxWidth = Math.max(12, mainW);
     const innerWidth = Math.max(1, boxWidth - 2);
-    const contentWidth = Math.max(8, innerWidth - 2);
+    const contentWidth = Math.max(8, innerWidth - 4);
     const mascotWidth = stripAnsi(mascotInline[0] ?? "").length;
     const textOffset = mascotWidth > 0 ? `${" ".repeat(mascotWidth)} ` : "";
     const headerCandidates = ["Welcome to BrokeCLI", "Welcome"];
@@ -2307,17 +2307,19 @@ export class App {
       return text ? `${sprite} ${text}` : sprite;
     });
 
-    const body = [
+    const paddedBody = [
+      "",
       ...heroLines,
       "",
       ...this.wrapHomeDetail("Model", modelLabel, Math.max(18, contentWidth)),
       ...this.wrapHomeDetail("Tip", this.homeTip, Math.max(18, contentWidth)),
+      "",
     ];
+    const body = paddedBody.map((line) => `  ${line}`);
 
     const boxBodyHeight = Math.max(8, topHeight - 2);
     const clippedBody = body.slice(0, boxBodyHeight);
-    const box = this.renderHomeBox(boxWidth, "", clippedBody)
-      .map((line) => this.centerVisibleLine(line, mainW));
+    const box = this.renderHomeBox(boxWidth, "", clippedBody);
     const lines = box.slice(0, topHeight);
     while (lines.length < topHeight) lines.push("");
     return lines;
