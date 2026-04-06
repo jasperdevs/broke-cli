@@ -22,6 +22,7 @@ interface ModelOption {
   providerName: string;
   modelId: string;
   active: boolean;
+  isHeader?: boolean;
 }
 
 export interface SettingEntry {
@@ -761,23 +762,53 @@ export class App {
     this.screen.setCursor(inputRow, inputCol);
   }
 
-  private appendModelPicker(lines: string[], _maxTotal: number): void {
+private appendModelPicker(lines: string[], _maxTotal: number): void {
     const picker = this.modelPicker!;
-    const maxVisible = 5;
-    let start = Math.max(0, picker.cursor - Math.floor(maxVisible / 2));
-    if (start + maxVisible > picker.options.length) start = Math.max(0, picker.options.length - maxVisible);
-    const end = Math.min(start + maxVisible, picker.options.length);
+    lines.push(` ${T()}${BOLD}Select model${RESET}`);
+    lines.push("");
+
+    // Group options by provider
+    const byProvider = new Map<string, ModelOption[]>();
+    for (const opt of picker.options) {
+      if (!byProvider.has(opt.providerName)) {
+        byProvider.set(opt.providerName, []);
+      }
+      byProvider.get(opt.providerName)!.push(opt);
+    }
+
+    // Build flat list with headers
+    let currentIdx = 0;
+    const flatList: Array<{ type: 'header' | 'model'; provider: string; option?: ModelOption; index: number }> = [];
+    
+    for (const [provider, opts] of byProvider) {
+      flatList.push({ type: 'header', provider, index: -1 });
+      for (const opt of opts) {
+        flatList.push({ type: 'model', provider, option: opt, index: currentIdx++ });
+      }
+    }
+
+    // Find cursor position in flat list
+    const cursorFlatIdx = flatList.findIndex(item => item.index === picker.cursor);
+    const maxVisible = 12;
+    let start = Math.max(0, cursorFlatIdx - Math.floor(maxVisible / 2));
+    if (start + maxVisible > flatList.length) start = Math.max(0, flatList.length - maxVisible);
+    const end = Math.min(start + maxVisible, flatList.length);
 
     for (let i = start; i < end; i++) {
-      const opt = picker.options[i];
-      const isCursor = i === picker.cursor;
-      const isActive = opt.active;
-      const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
-      const check = isActive ? ` ${T()}*${RESET}` : "";
-      const nameCol = isCursor ? `${WHITE}${BOLD}` : "";
-      const provCol = `${DIM}${opt.providerName}${RESET}`;
-      lines.push(` ${arrow}${nameCol}${opt.modelId}${RESET}${check}  ${provCol}`);
+      const item = flatList[i];
+      if (item.type === 'header') {
+        lines.push(` ${T()}${BOLD}${item.provider}${RESET}`);
+      } else {
+        const opt = item.option!;
+        const isCursor = item.index === picker.cursor;
+        const isActive = opt.active;
+        const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
+        const check = isActive ? ` ${T()}*${RESET}` : "";
+        const nameCol = isCursor ? `${WHITE}${BOLD}` : T();
+        lines.push(`  ${arrow}${nameCol}${opt.modelId}${RESET}${check}`);
+      }
     }
+    lines.push("");
     lines.push(` ${DIM}(${picker.cursor + 1}/${picker.options.length}) space to pin, enter to select${RESET}`);
   }
 
