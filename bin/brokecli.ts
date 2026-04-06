@@ -1,33 +1,28 @@
 import { Command } from "commander";
-import { execSync, spawn } from "child_process";
-import { existsSync, writeFileSync } from "fs";
-import { dirname, join } from "path";
-import { fileURLToPath } from "url";
+import { execSync } from "child_process";
+import { writeFileSync } from "fs";
 import { App } from "../src/tui/app.js";
-import { detectProviders, pickDefault } from "../src/ai/detect.js";
+import type { DetectedProvider } from "../src/ai/detect.js";
 import type { ModelHandle } from "../src/ai/providers.js";
-import { startNativeStream } from "../src/ai/native-stream.js";
-import { startStream } from "../src/ai/stream.js";
-import { getContextLimit, loadPricing } from "../src/ai/cost.js";
-import { buildSystemPrompt, reloadContext, resolveCavemanLevel } from "../src/core/context.js";
+import { buildSystemPrompt, reloadContext } from "../src/core/context.js";
 import { Session } from "../src/core/session.js";
 import { getTools } from "../src/tools/registry.js";
 import { createAskUserTool } from "../src/tools/ask.js";
 import { setBashOutputCallback } from "../src/tools/bash.js";
-import { setTodoChangeCallback, clearTodo } from "../src/tools/todo.js";
-import { marked } from "marked";
-import { checkBudget } from "../src/core/budget.js";
-import { getApiKey, getModelContextLimitOverride, getProviderCredential, getSettings, updateProviderConfig, updateSetting, type Settings, type Mode } from "../src/core/config.js";
+import { setTodoChangeCallback } from "../src/tools/todo.js";
+import { getApiKey, getSettings, updateSetting, type Settings, type Mode } from "../src/core/config.js";
 import { compactMessages, getTotalContextTokens } from "../src/core/compact.js";
 import { undoLastCheckpoint } from "../src/core/git.js";
 import { listTemplates, loadTemplate } from "../src/core/templates.js";
 import { loadExtensions } from "../src/core/extensions.js";
-import { RESET, DIM, RED, GREEN } from "../src/utils/ansi.js";
-import { routeMessage, getSmallModelId } from "../src/ai/router.js";
-import { estimateTextTokens } from "../src/ai/tokens.js";
+import { RESET, DIM, GREEN } from "../src/utils/ansi.js";
 import { listThemes, setPreviewTheme } from "../src/core/themes.js";
-import { ProviderRegistry, LOCAL_PROVIDER_DEFAULTS } from "../src/ai/provider-registry.js";
+import { ProviderRegistry } from "../src/ai/provider-registry.js";
 import { runRpcMode } from "../src/cli/rpc.js";
+import { buildHtmlExport, buildMarkdownExport, formatRelativeMinutes } from "../src/cli/exports.js";
+import { runConnectFlow } from "../src/cli/connect-flow.js";
+import { bootstrapSession } from "../src/cli/session-bootstrap.js";
+import { runModelTurn } from "../src/cli/turn-runner.js";
 
 const program = new Command()
   .name("brokecli")
@@ -38,16 +33,6 @@ const program = new Command()
   .option("-c, --continue", "Continue last session")
   .option("-p, --print", "Single-shot mode: print response and exit")
   .option("--rpc", "Non-interactive JSON RPC mode");
-
-const RUNTIME_DIR = dirname(fileURLToPath(import.meta.url));
-
-function getNotificationIconPath(): string | null {
-  const candidates = [
-    join(process.cwd(), "logos", "brokecli-square-1024.png"),
-    join(RUNTIME_DIR, "..", "logos", "brokecli-square-1024.png"),
-  ];
-  return candidates.find((candidate) => existsSync(candidate)) ?? null;
-}
 
 function isSkippedPromptAnswer(value: string | undefined | null): boolean {
   const normalized = (value ?? "").trim().toLowerCase();
@@ -63,351 +48,6 @@ function isValidHttpBaseUrl(value: string): boolean {
   }
 }
 
-function resolveWindowsPowerShell(): string {
-  const systemRoot = process.env.SystemRoot || "C:\\Windows";
-  const candidates = [
-    `${systemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`,
-    "powershell.exe",
-    "pwsh.exe",
-  ];
-  return candidates.find((candidate) => candidate.includes("\\") ? existsSync(candidate) : true) ?? "powershell.exe";
-}
-
-function escapePowerShellSingleQuoted(value: string): string {
-  return value.replace(/'/g, "''");
-}
-
-function sendResponseNotification(message = "Response complete"): void {
-  try {
-    const iconPath = getNotificationIconPath();
-    if (process.platform === "win32") {
-      const escapedMessage = escapePowerShellSingleQuoted(message);
-      const escapedIconPath = escapePowerShellSingleQuoted(iconPath ?? "");
-      const script = `
-$shown = $false
-try {
-  [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null
-  [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] > $null
-  $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
-  $template = @"
-<toast>
-  <visual>
-    <binding template="ToastGeneric">
-      <text>BrokeCLI</text>
-      <text>${escapedMessage}</text>
-    </binding>
-  </visual>
-</toast>
-"@
-  $xml.LoadXml($template)
-  $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
-  [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('Microsoft.Windows.PowerShell').Show($toast)
-  $shown = $true
-} catch {}
-if (-not $shown) {
-  try {
-    $wshell = New-Object -ComObject WScript.Shell
-    $null = $wshell.Popup('${escapedMessage}', 4, 'BrokeCLI', 0x40)
-    $shown = $true
-  } catch {}
-}
-if (-not $shown) {
-  try {
-    Add-Type -AssemblyName System.Windows.Forms
-    Add-Type -AssemblyName System.Drawing
-    $icon = New-Object System.Windows.Forms.NotifyIcon
-    $iconObj = $null
-    if ('${escapedIconPath}') {
-      try {
-        $bitmap = New-Object System.Drawing.Bitmap '${escapedIconPath}'
-        $iconObj = [System.Drawing.Icon]::FromHandle($bitmap.GetHicon())
-      } catch {}
-    }
-    if ($iconObj -eq $null) {
-      $iconObj = [System.Drawing.SystemIcons]::Information
-    }
-    $icon.Icon = $iconObj
-    $icon.BalloonTipIcon = [System.Windows.Forms.ToolTipIcon]::Info
-    $icon.BalloonTipTitle = 'BrokeCLI'
-    $icon.BalloonTipText = '${escapedMessage}'
-    $icon.Visible = $true
-    $icon.ShowBalloonTip(4000)
-    Start-Sleep -Milliseconds 4500
-    $icon.Dispose()
-    $shown = $true
-  } catch {}
-}
-try { [System.Media.SystemSounds]::Exclamation.Play() } catch {}
-try { [console]::write([char]7) } catch {}
-`;
-      const child = spawn(resolveWindowsPowerShell(), [
-        "-NoProfile",
-        "-Sta",
-        "-ExecutionPolicy", "Bypass",
-        "-WindowStyle", "Hidden",
-        "-Command", script,
-      ], {
-        detached: true,
-        stdio: "ignore",
-        windowsHide: true,
-      });
-      child.unref();
-      return;
-  }
-
-    if (process.platform === "darwin") {
-      const script = `display notification "${message.replace(/"/g, '\\"')}" with title "BrokeCLI"`;
-      const child = spawn("osascript", [
-        "-e",
-        script,
-      ], { detached: true, stdio: "ignore" });
-      child.unref();
-      return;
-    }
-
-    const notifyArgs = iconPath
-      ? ["--icon", iconPath, "BrokeCLI", message]
-      : ["BrokeCLI", message];
-    const child = spawn("notify-send", notifyArgs, {
-      detached: true,
-      stdio: "ignore",
-    });
-    child.unref();
-  } catch {
-    // ignore notification failures
-  }
-}
-
-const CONNECT_PROVIDER_ORDER = [
-  "codex",
-  "anthropic",
-  "openai",
-  "google",
-  "groq",
-  "mistral",
-  "xai",
-  "openrouter",
-  "ollama",
-  "lmstudio",
-  "llamacpp",
-  "jan",
-  "vllm",
-] as const;
-
-function getNativeCliLabel(providerId: string): string {
-  if (providerId === "anthropic") return "Claude Code";
-  if (providerId === "codex") return "Codex";
-  return "native provider";
-}
-
-const SDK_TOOL_PROVIDER_IDS = new Set([
-  "anthropic",
-  "openai",
-  "codex",
-  "google",
-  "mistral",
-  "groq",
-  "xai",
-  "openrouter",
-  "ollama",
-  "lmstudio",
-  "llamacpp",
-  "jan",
-  "vllm",
-]);
-
-function canUseSdkTools(model: ModelHandle): boolean {
-  return model.runtime === "sdk"
-    && !!model.model
-    && SDK_TOOL_PROVIDER_IDS.has(model.provider.id);
-}
-
-function looksLikeRawToolPayload(nextText: string): boolean {
-  const normalized = nextText.trimStart();
-  return /^<tool_call>/i.test(normalized)
-    || /^call:(writeFile|editFile|readFile|listFiles|grep|bash)\s*\{/i.test(normalized)
-    || /^(writeFile|editFile|readFile|listFiles|grep|bash)\s*\(/i.test(normalized);
-}
-
-async function compactForModel(
-  messages: Array<{ role: "user" | "assistant"; content: string }>,
-  model: ModelHandle,
-): Promise<Array<{ role: "user" | "assistant"; content: string }>> {
-  if (model.runtime === "sdk" && model.model) {
-    return compactMessages(messages, model.model);
-  }
-  return messages.slice(-6);
-}
-
-function formatRelativeMinutes(updatedAt: number): string {
-  const ago = Math.max(0, Math.floor((Date.now() - updatedAt) / 60000));
-  if (ago < 1) return "now";
-  if (ago < 60) return `${ago}m ago`;
-  if (ago < 1440) return `${Math.floor(ago / 60)}h ago`;
-  return `${Math.floor(ago / 1440)}d ago`;
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
-function formatTimestamp(timestamp: number): string {
-  return new Intl.DateTimeFormat(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(timestamp));
-}
-
-function buildMarkdownExport(msgs: ReturnType<Session["getMessages"]>, providerName: string, modelName: string, cwd: string): string {
-  const header = [
-    "# BrokeCLI Transcript",
-    "",
-    `- Exported: ${formatTimestamp(Date.now())}`,
-    `- Model: ${providerName}/${modelName}`,
-    `- Directory: \`${cwd}\``,
-    "",
-  ];
-  const body = msgs.map((m) => {
-    const title = m.role.charAt(0).toUpperCase() + m.role.slice(1);
-    return `## ${title}\n\n_Time: ${formatTimestamp(m.timestamp)}_\n\n${m.content}\n`;
-  });
-  return [...header, ...body].join("\n");
-}
-
-function buildHtmlExport(msgs: ReturnType<Session["getMessages"]>, providerName: string, modelName: string, cwd: string): string {
-  const cards = msgs.map((m) => {
-    const rendered = m.role === "assistant"
-      ? marked.parse(m.content) as string
-      : `<pre>${escapeHtml(m.content)}</pre>`;
-    return `<article class="message ${m.role}">
-<header>
-  <span class="role">${escapeHtml(m.role)}</span>
-  <time>${escapeHtml(formatTimestamp(m.timestamp))}</time>
-</header>
-<div class="content">${rendered}</div>
-</article>`;
-  }).join("\n");
-
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BrokeCLI Transcript</title>
-<style>
-:root {
-  --bg: #0b0b0b;
-  --panel: #121212;
-  --panel-soft: #1e1e1e;
-  --border: #2a2a2a;
-  --text: #f3f3f3;
-  --muted: #8a8a8a;
-  --green: #3ac73a;
-  --green-soft: #183118;
-  --gray-bubble: #2a2a32;
-  --shadow: 0 20px 80px rgba(0,0,0,.35);
-}
-* { box-sizing: border-box; }
-html, body { margin: 0; background: var(--bg); color: var(--text); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-body { padding: 32px 20px 64px; }
-.shell {
-  max-width: 980px;
-  margin: 0 auto;
-  border: 1px solid var(--border);
-  background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,0)) , var(--panel);
-  box-shadow: var(--shadow);
-}
-.meta {
-  padding: 18px 22px;
-  border-bottom: 1px solid var(--border);
-  display: grid;
-  gap: 6px;
-}
-.meta h1 { margin: 0; font-size: 15px; color: var(--green); }
-.meta-row { color: var(--muted); font-size: 12px; }
-.transcript { padding: 18px; display: grid; gap: 14px; }
-.message {
-  border: 1px solid var(--border);
-  background: var(--panel-soft);
-}
-.message header {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border);
-  color: var(--muted);
-  text-transform: uppercase;
-  font-size: 11px;
-  letter-spacing: .08em;
-}
-.message.user {
-  background: var(--gray-bubble);
-}
-.message.assistant {
-  border-color: #214121;
-}
-.message.assistant .role {
-  color: var(--green);
-}
-.message.system {
-  background: #151515;
-}
-.content {
-  padding: 16px 18px;
-  line-height: 1.6;
-  white-space: normal;
-}
-.content pre {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  overflow-wrap: anywhere;
-}
-.content code {
-  background: #171717;
-  border: 1px solid #2b2b2b;
-  padding: .12rem .35rem;
-}
-.content pre code {
-  display: block;
-  padding: 14px;
-  overflow-x: auto;
-}
-.content p:first-child { margin-top: 0; }
-.content p:last-child { margin-bottom: 0; }
-.content a { color: #8fd48f; }
-.content blockquote {
-  margin: 0;
-  padding-left: 12px;
-  border-left: 2px solid #2c5d2c;
-  color: #b9d8b9;
-}
-</style>
-</head>
-<body>
-<main class="shell">
-  <section class="meta">
-    <h1>BrokeCLI Transcript</h1>
-    <div class="meta-row">Model: ${escapeHtml(providerName)}/${escapeHtml(modelName)}</div>
-    <div class="meta-row">Directory: ${escapeHtml(cwd)}</div>
-    <div class="meta-row">Exported: ${escapeHtml(formatTimestamp(Date.now()))}</div>
-  </section>
-  <section class="transcript">
-    ${cards}
-  </section>
-</main>
-</body>
-</html>`;
-}
 
 program.action(async (opts) => {
   // Load extension hooks
@@ -424,7 +64,6 @@ program.action(async (opts) => {
   let currentMode: Mode = "build";
   let systemPrompt = buildSystemPrompt(process.cwd(), undefined, currentMode, getSettings().cavemanLevel ?? "off");
   let lastActivityTime = Date.now(); // Track for cache expiry warning
-  let abortController: AbortController | null = null;
 
   // Resume or new session
   let session: Session;
@@ -496,185 +135,38 @@ program.action(async (opts) => {
   });
 
   // Detect providers + load pricing in background
-  let providers: Awaited<ReturnType<typeof detectProviders>> = [];
+  let providers: DetectedProvider[] = [];
   let activeModel: ModelHandle | null = null;
   let smallModel: ModelHandle | null = null;
   let currentModelId = "";
   let smallModelId = "";
   let lastToolCalls: string[] = [];
 
-  async function refreshProviderState(force = false): Promise<void> {
+  async function refreshProviderState(force = false): Promise<DetectedProvider[]> {
     providers = await providerRegistry.refresh(force);
     app.setDetectedProviders(providers.map((p) => p.name));
+    return providers;
   }
 
   function buildVisibleModelOptions(): Array<{ providerId: string; providerName: string; modelId: string; active: boolean }> {
     return providerRegistry.buildVisibleModelOptions(activeModel, currentModelId, getSettings().scopedModels);
   }
 
-  async function runConnectFlow(providerId?: string): Promise<void> {
-    const selectedProviderId = providerId ?? await new Promise<string>((resolve) => {
-      const items = CONNECT_PROVIDER_ORDER
-        .map((id) => providerRegistry.getProviderInfo(id))
-        .filter((info): info is NonNullable<typeof info> => !!info)
-        .map((info) => ({
-          id: info.id,
-          label: info.name,
-          detail: providerRegistry.getConnectStatus(info.id),
-        }));
-      app.openItemPicker("Connect Provider", items, resolve);
-    });
-
-    const info = providerRegistry.getProviderInfo(selectedProviderId);
-    if (!info) {
-      app.addMessage("system", `Unknown provider: ${selectedProviderId}`);
-      return;
-    }
-
-    const discoveredCredential = getProviderCredential(selectedProviderId);
-
-    if (discoveredCredential.kind === "native_oauth") {
-      updateProviderConfig(selectedProviderId, { disabled: false });
-      await refreshProviderState(true);
-      if (providers.some((p) => p.id === selectedProviderId)) {
-        app.addMessage("system", `Connected ${getNativeCliLabel(selectedProviderId)} using existing native login${discoveredCredential.source ? ` from ${discoveredCredential.source}` : ""}.`);
-      } else {
-        app.addMessage("system", `Found ${getNativeCliLabel(selectedProviderId)} login, but the native CLI is not available on PATH yet.`);
-      }
-      return;
-    }
-
-    if (selectedProviderId in LOCAL_PROVIDER_DEFAULTS) {
-      const defaultBaseUrl = LOCAL_PROVIDER_DEFAULTS[selectedProviderId];
-      const savedBaseUrl = providerRegistry.getSavedBaseUrl(selectedProviderId);
-      const baseUrlOptions = savedBaseUrl && savedBaseUrl !== defaultBaseUrl
-        ? ["use default", "use saved", "custom"]
-        : ["use default", "custom"];
-      const entered = (await app.showQuestion(`Base URL for ${info.name}`, baseUrlOptions))?.trim() ?? "";
-      let baseUrl = defaultBaseUrl;
-      if (isSkippedPromptAnswer(entered)) {
-        app.addMessage("system", "Connect cancelled.");
-        return;
-      }
-      if (entered === "use default") {
-        baseUrl = defaultBaseUrl;
-      } else if (entered === "use saved" && savedBaseUrl) {
-        baseUrl = savedBaseUrl;
-      } else if (entered === "custom") {
-        const custom = (await app.showQuestion(`Enter ${info.name} base URL`, undefined)).trim();
-        if (isSkippedPromptAnswer(custom)) {
-          app.addMessage("system", "Connect cancelled.");
-          return;
-        }
-        if (!isValidHttpBaseUrl(custom)) {
-          app.addMessage("system", `Invalid base URL: ${custom}`);
-          return;
-        }
-        baseUrl = custom;
-      } else if (entered && entered !== defaultBaseUrl) {
-        if (!isValidHttpBaseUrl(entered)) {
-          app.addMessage("system", `Invalid base URL: ${entered}`);
-          return;
-        }
-        baseUrl = entered;
-      }
-      updateProviderConfig(selectedProviderId, { baseUrl, disabled: false });
-      await refreshProviderState(true);
-      if (providers.some((p) => p.id === selectedProviderId)) {
-        app.addMessage("system", `Connected ${info.name} at ${baseUrl}.`);
-      } else {
-        app.addMessage("system", `${info.name} saved at ${baseUrl}, but it is not responding yet.`);
-      }
-      return;
-    }
-
-    if (discoveredCredential.kind === "api_key") {
-      updateProviderConfig(selectedProviderId, { disabled: false });
-      await refreshProviderState(true);
-      app.addMessage("system", `Connected ${info.name} using existing credentials${discoveredCredential.source ? ` from ${discoveredCredential.source}` : ""}.`);
-      return;
-    }
-
-    const apiKey = (await app.showQuestion(`Paste ${info.name} API key`, undefined)).trim();
-    if (isSkippedPromptAnswer(apiKey)) {
-      app.addMessage("system", "Connect cancelled.");
-      return;
-    }
-    updateProviderConfig(selectedProviderId, { apiKey, disabled: false });
-    await refreshProviderState(true);
-    if (providers.some((p) => p.id === selectedProviderId)) {
-      app.addMessage("system", `Connected ${info.name}.`);
-    } else {
-      app.addMessage("system", `${info.name} credentials saved, but detection has not confirmed access yet.`);
-    }
-  }
-
   const initPromise = (async () => {
-    await loadPricing();
-    await refreshProviderState(true);
-
-    let providerId: string | undefined;
-    let modelId: string | undefined;
-
-    if (opts.broke) {
-      // --broke flag: use the cheapest available model
-      const def = pickDefault(providers);
-      if (def) {
-        providerId = def.id;
-        modelId = getSmallModelId(def.id);
-      }
-    } else if (opts.model) {
-      const slashIdx = opts.model.indexOf("/");
-      if (slashIdx > 0) {
-        providerId = opts.model.slice(0, slashIdx);
-        modelId = opts.model.slice(slashIdx + 1);
-      } else {
-        const def = pickDefault(providers);
-        providerId = def?.id ?? "openai";
-        modelId = opts.model;
-      }
-    } else {
-      // Try to use last used model from settings — trust it even if provider
-      // wasn't detected (local server may be slow to start, key may still work)
-      const lastModel = getSettings().lastModel;
-      if (lastModel) {
-        const slashIdx = lastModel.indexOf("/");
-        if (slashIdx > 0) {
-          providerId = lastModel.slice(0, slashIdx);
-          modelId = lastModel.slice(slashIdx + 1);
-        }
-      }
-      if (!providerId) {
-        const def = pickDefault(providers);
-        if (!def) {
-          app.addMessage("system", "No providers found. Run /connect, set an API key, or start a local model server.");
-          return;
-        }
-        providerId = def.id;
-      }
-    }
-
-    try {
-      activeModel = providerRegistry.createModel(providerId!, modelId);
-      currentModelId = modelId ?? activeModel.provider.defaultModel;
-      systemPrompt = buildSystemPrompt(process.cwd(), providerId!, currentMode, getSettings().cavemanLevel ?? "off");
-      app.setModel(activeModel.provider.name, currentModelId);
-      app.setMode(currentMode);
-      session.setProviderModel(activeModel.provider.name, currentModelId);
-      // Save as last used model
-      updateSetting("lastModel", `${activeModel.provider.id}/${currentModelId}`);
-      // Auto-create small model for cost routing
-      const cheapId = getSmallModelId(activeModel.provider.id);
-      if (cheapId && cheapId !== currentModelId) {
-        try {
-          smallModel = providerRegistry.createModel(activeModel.provider.id, cheapId);
-          smallModelId = cheapId;
-        } catch { /* no small model available */ }
-      }
-      app.clearStatus();
-    } catch (err) {
-      app.addMessage("system", `Failed to init ${providerId}: ${(err as Error).message}`);
-    }
+    const boot = await bootstrapSession({
+      opts,
+      app,
+      session,
+      providerRegistry,
+      currentMode,
+      refreshProviderState,
+    });
+    providers = boot.providers;
+    activeModel = boot.activeModel;
+    currentModelId = boot.currentModelId;
+    smallModel = boot.smallModel;
+    smallModelId = boot.smallModelId;
+    systemPrompt = boot.systemPrompt;
   })();
 
   const tools = {
@@ -726,7 +218,13 @@ program.action(async (opts) => {
           return;
         case "connect":
         case "login":
-          await runConnectFlow();
+          await runConnectFlow({
+            app,
+            providerRegistry,
+            refreshProviderState,
+            isSkippedPromptAnswer,
+            isValidHttpBaseUrl,
+          });
           return;
         case "model": {
           const allOptions = buildVisibleModelOptions();
@@ -876,7 +374,9 @@ program.action(async (opts) => {
             const chatMsgs = session.getChatMessages();
             const ctxTokens = getTotalContextTokens(chatMsgs, systemPrompt, currentModelId);
             app.setCompacting(true, ctxTokens);
-            const compacted = await compactForModel(chatMsgs, activeModel);
+            const compacted = activeModel.runtime === "sdk" && activeModel.model
+              ? await compactMessages(chatMsgs, activeModel.model)
+              : chatMsgs.slice(-6);
             session.clear();
             for (const m of compacted) session.addMessage(m.role, m.content);
             app.setCompacting(false);
@@ -1088,260 +588,25 @@ program.action(async (opts) => {
       app.addMessage("system", "No provider configured. Run /connect.");
       return;
     }
-
-    // Cache expiry warning — 5 min idle = full price on API
-    const idleMs = Date.now() - lastActivityTime;
-    if (idleMs > 5 * 60 * 1000 && session.getChatMessages().length > 4) {
-      const idleMins = Math.floor(idleMs / 60000);
-      app.setStatus(`${DIM}idle ${idleMins}m — context cache likely expired, consider /compact${RESET}`);
-    }
-    lastActivityTime = Date.now();
-
-    // Budget check
-    const budget = checkBudget(session.getTotalCost());
-    if (!budget.allowed) {
-      app.addMessage("system", budget.warning!);
-      return;
-    }
-    if (budget.warning) {
-      app.setStatus(budget.warning);
-    }
-
-    // Context size tracking
-    const chatMsgs = session.getChatMessages();
-    const ctxTokens = getTotalContextTokens(chatMsgs, systemPrompt, currentModelId);
-    const contextLimit = getModelContextLimitOverride(activeModel.provider.id, currentModelId)
-      ?? getContextLimit(currentModelId, activeModel?.provider.id)
-      ?? 128000;
-    const ctxPct = contextLimit > 0 ? Math.min(100, Math.round((ctxTokens / contextLimit) * 100)) : 0;
-    app.setContextUsage(ctxTokens, contextLimit);
-
-    // Auto-compact if context > 80%
-    if (ctxPct > 80 && chatMsgs.length > 8) {
-      try {
-        app.setCompacting(true, ctxTokens);
-        const compacted = await compactForModel(chatMsgs, activeModel);
-        session.clear();
-        for (const m of compacted) session.addMessage(m.role, m.content);
-        app.setCompacting(false);
-        app.addMessage("system", `Auto-compacted: ${chatMsgs.length} -> ${compacted.length} messages`);
-      } catch {
-        app.setCompacting(false);
-        // Continue with full context if compact fails
-      }
-    }
-
-    if (!templateLoaded) {
-      // Inject @file contexts into the message
-      const fileContexts = app.getFileContexts();
-      let fullText = text;
-      if (fileContexts.size > 0) {
-        const contextBlock = [...fileContexts.entries()]
-          .map(([path, content]) => `--- @${path} ---\n${content}`)
-          .join("\n\n");
-        fullText = `${text}\n\n${contextBlock}`;
-      }
-
-      app.addMessage("user", text, images);
-      session.addMessage("user", fullText, images);
-    }
-
-    app.setStreaming(true);
-    clearTodo();
-    let streamedText = "";
-    let streamedReasoning = "";
-    getContextOptimizer().nextTurn();
-
-    // Smart model routing — pick cheap model for simple tasks
-    const route = smallModel && getSettings().autoRoute
-      ? routeMessage(text, session.getChatMessages().length, lastToolCalls)
-      : "main" as const;
-    const useModel = route === "small" && smallModel ? smallModel : activeModel;
-    const useModelId = route === "small" && smallModel ? smallModelId : currentModelId;
-    lastToolCalls = [];
-
-    // Optimize context — evict old tool results, compress history
-    const optimizedMessages = getContextOptimizer().optimizeMessages(session.getChatMessages());
-
-    abortController = new AbortController();
-    app.onAbortRequest(() => {
-      abortController?.abort();
-      app.setStreaming(false);
-      app.addMessage("system", "Cancelled.");
-      abortController = null;
+    const turnResult = await runModelTurn({
+      app,
+      session,
+      text,
+      images,
+      activeModel,
+      currentModelId,
+      smallModel,
+      smallModelId,
+      currentMode,
+      systemPrompt,
+      tools,
+      hooks,
+      lastToolCalls,
+      lastActivityTime,
+      alreadyAddedUserMessage: templateLoaded,
     });
-
-    const configuredCavemanLevel = getSettings().cavemanLevel ?? "off";
-    const effectiveCavemanLevel = resolveCavemanLevel(configuredCavemanLevel, text);
-    const turnSystemPrompt = buildSystemPrompt(process.cwd(), useModel.provider.id, currentMode, effectiveCavemanLevel);
-    let streamTokenFlushTimer: ReturnType<typeof setTimeout> | null = null;
-    const scheduleStreamTokenUpdate = (): void => {
-      if (streamTokenFlushTimer) return;
-      streamTokenFlushTimer = setTimeout(() => {
-        streamTokenFlushTimer = null;
-        app.setStreamTokens(estimateTextTokens(streamedText + streamedReasoning, useModelId));
-      }, 80);
-    };
-    const flushStreamTokenUpdate = (): void => {
-      if (streamTokenFlushTimer) {
-        clearTimeout(streamTokenFlushTimer);
-        streamTokenFlushTimer = null;
-      }
-      app.setStreamTokens(estimateTextTokens(streamedText + streamedReasoning, useModelId));
-    };
-
-    const streamCallbacks = {
-      onText: (delta: string) => {
-        const nextText = streamedText + delta;
-        if (looksLikeRawToolPayload(nextText)) {
-          streamedText = nextText;
-          return;
-        }
-        app.appendToLastMessage(delta);
-        streamedText = nextText;
-        scheduleStreamTokenUpdate();
-      },
-      onReasoning: (delta: string) => {
-        app.appendThinking(delta);
-        streamedReasoning += delta;
-        scheduleStreamTokenUpdate();
-      },
-      onFinish: (usage: { inputTokens: number; outputTokens: number; cost: number }) => {
-        flushStreamTokenUpdate();
-        const content = app.getLastAssistantContent();
-        if (content) {
-          session.addMessage("assistant", content);
-        } else if (looksLikeRawToolPayload(streamedText)) {
-          session.addMessage("assistant", "[raw tool payload hidden]");
-          app.addMessage("system", `${DIM}Model emitted raw tool syntax. Hidden from chat.${RESET}`);
-        } else {
-          session.addMessage("assistant", "[empty response]");
-          app.addMessage("system", `${DIM}No response from model. Try again or switch models with /model.${RESET}`);
-        }
-        session.addUsage(usage.inputTokens, usage.outputTokens, usage.cost);
-        app.setStreaming(false);
-        app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
-        abortController = null;
-        lastActivityTime = Date.now();
-        if (getSettings().notifyOnResponse) {
-          sendResponseNotification();
-        }
-      },
-      onError: (err: Error) => {
-        flushStreamTokenUpdate();
-        let msg = err.message;
-        const data = (err as any).data;
-        if (data?.error?.message) msg = data.error.message;
-        if (msg.includes("insufficient permissions") || msg.includes("Missing scopes")) {
-          msg = `Your API key doesn't have access to this model. Try a different model with /model.`;
-        } else if (msg.includes("invalid_api_key") || msg.includes("Incorrect API key") || msg.includes("401")) {
-          msg = `Invalid API key for ${activeModel?.provider.name ?? "this provider"}. Check your key and try again.`;
-        } else if (msg.includes("Could not resolve") || msg.includes("ECONNREFUSED") || msg.includes("fetch failed")) {
-          msg = `Can't reach ${activeModel?.provider.name ?? "the provider"}. Check your connection or if the server is running.`;
-        } else if (msg.includes("429") || msg.includes("rate_limit") || msg.includes("hit your limit")) {
-          msg = `Rate limited. Wait a moment and try again.`;
-        } else if (msg.includes("model_not_found") || msg.includes("does not exist") || msg.includes("not found")) {
-          msg = `Model "${currentModelId}" not available. Try /model to pick a different one.`;
-        } else if (msg.includes("overloaded") || msg.includes("503") || msg.includes("529")) {
-          msg = `${activeModel?.provider.name ?? "Provider"} is overloaded right now. Try again in a moment.`;
-        }
-        if (msg.length > 300) msg = msg.slice(0, 297) + "...";
-        session.addMessage("assistant", `[error: ${msg}]`);
-        app.setStreaming(false);
-        app.addMessage("system", `${RED}${msg}${RESET}`);
-        abortController = null;
-      },
-      onAfterResponse: () => {
-        const settings = getSettings();
-        if (settings.followUpMode === "after_response" && app.hasPendingMessages()) {
-          app.flushPendingMessages();
-        }
-      },
-    };
-
-    if (useModel.runtime === "native-cli") {
-      await startNativeStream(
-        {
-          providerId: useModel.provider.id as "anthropic" | "codex",
-          modelId: useModelId,
-          system: turnSystemPrompt,
-          messages: optimizedMessages,
-          abortSignal: abortController.signal,
-          enableThinking: route === "main" ? getSettings().enableThinking : false,
-          thinkingLevel: getSettings().thinkingLevel || "low",
-          yoloMode: getSettings().yoloMode,
-          cwd: process.cwd(),
-        },
-        streamCallbacks,
-      );
-    } else {
-      await startStream(
-        {
-          model: useModel.model!,
-          modelId: useModelId,
-          providerId: useModel.provider.id,
-          system: turnSystemPrompt,
-          messages: optimizedMessages,
-          tools: canUseSdkTools(useModel) ? tools : undefined,
-          abortSignal: abortController.signal,
-          enableThinking: route === "main" ? getSettings().enableThinking : false,
-          thinkingLevel: getSettings().thinkingLevel || "low",
-        },
-        {
-          ...streamCallbacks,
-          onToolCallStart: (name) => {
-            if (name === "todoWrite") return;
-            app.addToolCall(name, "...");
-          },
-          onToolCall: (name, args) => {
-            hooks.emit("on_tool_call", { name, args });
-            lastToolCalls.push(name);
-            if (name === "todoWrite") return;
-            let preview = "";
-            if (name === "writeFile" || name === "editFile") {
-              preview = (args as any)?.path ?? "?";
-            } else if (name === "readFile" || name === "listFiles" || name === "grep") {
-              preview = (args as any)?.path ?? (args as any)?.pattern ?? "?";
-            } else if (name === "bash") {
-              const cmd = (args as any)?.command ?? "?";
-              preview = cmd.length > 60 ? cmd.slice(0, 57) + "..." : cmd;
-            } else {
-              preview = typeof args === "object" ? JSON.stringify(args).slice(0, 50) : String(args).slice(0, 50);
-            }
-            app.updateToolCallArgs(name, preview, args);
-          },
-          onToolResult: (_name, result) => {
-            hooks.emit("on_tool_result", { name: _name, result });
-            if (_name === "todoWrite") return;
-            const r = result as { success?: boolean; output?: string; error?: string; content?: string; matches?: unknown[]; files?: string[] };
-            let detail: string | undefined;
-            if (_name === "bash" && r.output) {
-              detail = r.output.slice(0, 200);
-            } else if (_name === "readFile" && r.content) {
-              const lineCount = r.content.split("\n").length;
-              detail = `${lineCount} lines`;
-              const readPath = (result as any)?.path ?? "";
-              if (readPath) getContextOptimizer().trackFileRead(readPath, lineCount);
-            } else if (_name === "grep" && r.matches) {
-              detail = `${(r.matches as unknown[]).length} matches`;
-            } else if (_name === "listFiles" && r.files) {
-              detail = `${(r.files as string[]).length} files`;
-            }
-            if (r.success === false && r.error) {
-              app.addToolResult(_name, r.error.slice(0, 80), true);
-            } else {
-              app.addToolResult(_name, "ok", false, detail);
-            }
-          },
-          onAfterToolCall: () => {
-            const settings = getSettings();
-            if (settings.followUpMode === "after_tool" && app.hasPendingMessages()) {
-              app.flushPendingMessages();
-            }
-          },
-        },
-      );
-    }
+    lastToolCalls = turnResult.lastToolCalls;
+    lastActivityTime = turnResult.lastActivityTime;
   }
 
 // Close the program.action callback

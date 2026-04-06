@@ -10,10 +10,12 @@ import { getSettings, updateSetting } from "../core/config.js";
 import type { Mode, ThinkingLevel, CavemanLevel } from "../core/config.js";
 import { dirname, join } from "path";
 import stripAnsi from "strip-ansi";
-import { renderMarkdown } from "../utils/markdown.js";
 import { collectProjectFiles, filterFiles, readFileForContext } from "./file-picker.js";
 import { buildSidebarFooterLines, loadSidebarFileTree, type SidebarTreeItem } from "./sidebar.js";
 import { fileURLToPath } from "url";
+import { renderAnsiColorGrid, parseMascotSvgGrid, resolveMascotPath, type RgbColor } from "./render/mascot.js";
+import { renderHomeBox as buildRenderHomeBox, renderHomeView as buildRenderHomeView } from "./render/home.js";
+import { renderStaticMessages as buildStaticMessages } from "./render/messages.js";
 
 interface ChatMessage {
   role: "user" | "assistant" | "system";
@@ -53,13 +55,6 @@ interface CommandEntry {
 interface MenuEntry {
   text: string;
   selectIndex?: number;
-}
-
-interface RgbColor {
-  r: number;
-  g: number;
-  b: number;
-  a?: number;
 }
 
 /** Shorthand for theme primary color — called per-render so theme switches take effect. */
@@ -1746,87 +1741,23 @@ export class App {
     if (this.msgCacheLines && this.msgCacheWidth === maxWidth && this.msgCacheLen === this.messages.length) {
       return this.msgCacheLines;
     }
-    const lines: string[] = [];
-    let idx = 0;
-    while (idx < this.messages.length) {
-      const msg = this.messages[idx];
-      if (msg.role === "user") {
-        let content = msg.content;
-        if (msg.images && msg.images.length > 0) {
-          for (let i = 0; i < msg.images.length; i++) {
-            const tag = `${currentTheme().imageTagBg}${BOLD}${TXT()}[IMAGE ${i + 1}]${RESET}`;
-            content += ` ${tag}`;
-          }
-        }
-        const availW = Math.max(1, maxWidth - 4);
-        const contentLines = content.split("\n");
-        lines.push(`${USER_BG()}${" ".repeat(maxWidth)}${RESET}`);
-        for (let li = 0; li < contentLines.length; li++) {
-          const wrapped = wordWrap(contentLines[li], availW);
-          for (let wi = 0; wi < wrapped.length; wi++) {
-            const text = wrapped[wi];
-            const padW = Math.max(0, maxWidth - text.length - 4);
-            lines.push(`${USER_BG()}${USER_TXT()}  ${text}${" ".repeat(padW)}  ${RESET}`);
-          }
-        }
-        lines.push(`${USER_BG()}${" ".repeat(maxWidth)}${RESET}`);
-        lines.push("");
-      } else if (msg.role === "assistant") {
-        const rendered = renderMarkdown(msg.content);
-        const wrapW = maxWidth - 4; // 2 indent + 2 margin
-        for (const cl of rendered.split("\n")) {
-          const plain = stripAnsi(cl);
-          if (plain.length <= wrapW) {
-            lines.push(`  ${cl}`);
-          } else {
-            // Word-aware soft wrap
-            for (const wl of wordWrap(plain, wrapW)) {
-              lines.push(`  ${wl}`);
-            }
-          }
-        }
-        if (idx + 1 < this.messages.length && this.messages[idx + 1].role === "user") {
-          lines.push("");
-          lines.push(`${BORDER()}  ${"─".repeat(Math.max(1, maxWidth - 4))}${RESET}`);
-        }
-      } else if (this.toolOutputCollapsed && this.isToolOutput(msg.content)) {
-        while (idx + 1 < this.messages.length
-          && this.messages[idx + 1].role === "system"
-          && this.isToolOutput(this.messages[idx + 1].content)) {
-          idx++;
-        }
-        lines.push(`${DIM}  [tool output hidden]${RESET}`);
-      } else if (msg.content.includes("\x1b[")) {
-        // Pre-formatted content (tool blocks with ANSI) — render lines as-is, wrap to width
-        const wrapW = maxWidth - 4;
-        for (const cl of msg.content.split("\n")) {
-          const visLen = stripAnsi(cl).length;
-          if (visLen <= wrapW) {
-            lines.push(`  ${cl}`);
-          } else {
-            const plain = stripAnsi(cl);
-            // Preserve color prefix from original line
-            const colorPrefix = cl.slice(0, cl.indexOf(plain[0]));
-            for (let i = 0; i < plain.length; i += wrapW) {
-              lines.push(`  ${i === 0 ? colorPrefix : ""}${plain.slice(i, i + wrapW)}${RESET}`);
-            }
-          }
-        }
-      } else {
-        // Plain system message — wrap to fit
-        const wrapW = maxWidth - 4;
-        const plain = msg.content;
-        if (plain.length <= wrapW) {
-          lines.push(`${MUTED()}  ${plain}${RESET}`);
-        } else {
-          for (let i = 0; i < plain.length; i += wrapW) {
-            lines.push(`${MUTED()}  ${plain.slice(i, i + wrapW)}${RESET}`);
-          }
-        }
-      }
-      lines.push("");
-      idx++;
-    }
+    const lines = buildStaticMessages({
+      messages: this.messages,
+      maxWidth,
+      toolOutputCollapsed: this.toolOutputCollapsed,
+      isToolOutput: (content) => this.isToolOutput(content),
+      wordWrap,
+      colors: {
+        imageTagBg: currentTheme().imageTagBg,
+        userBg: USER_BG(),
+        userText: USER_TXT(),
+        border: BORDER(),
+        muted: MUTED(),
+        text: TXT(),
+      },
+      reset: RESET,
+      bold: BOLD,
+    });
     this.msgCacheLines = lines;
     this.msgCacheWidth = maxWidth;
     this.msgCacheLen = this.messages.length;
@@ -2094,94 +2025,16 @@ export class App {
     if (this.mascotPathCache !== undefined) {
       return this.mascotPathCache;
     }
-    const svgCandidates = [
-      join(process.cwd(), "logos", "brokecli-face.svg"),
-      join(APP_DIR, "..", "..", "logos", "brokecli-face.svg"),
-      join(process.cwd(), "logos", "brokecli-square.svg"),
-      join(APP_DIR, "..", "..", "logos", "brokecli-square.svg"),
-    ];
-    this.mascotPathCache = svgCandidates.find((candidate) => existsSync(candidate)) ?? null;
+    this.mascotPathCache = resolveMascotPath(process.cwd(), APP_DIR);
     return this.mascotPathCache;
-  }
-
-  private parseSvgColor(fill: string | undefined, opacity: string | undefined): RgbColor | null {
-    if (!fill || fill === "none") return null;
-    const match = fill.match(/^#([0-9a-f]{6})$/i);
-    if (!match) return null;
-    const alpha = opacity ? Math.max(0, Math.min(1, Number(opacity))) : 1;
-    if (alpha <= 0) return null;
-    return {
-      r: parseInt(match[1].slice(0, 2), 16),
-      g: parseInt(match[1].slice(2, 4), 16),
-      b: parseInt(match[1].slice(4, 6), 16),
-      a: alpha,
-    };
-  }
-
-  private renderAnsiColorGrid(grid: Array<Array<RgbColor | null>>): string[] {
-    const lines: string[] = [];
-    const fg = (color: RgbColor): string => `\x1b[38;2;${color.r};${color.g};${color.b}m`;
-    const bg = (color: RgbColor): string => `\x1b[48;2;${color.r};${color.g};${color.b}m`;
-    for (let row = 0; row < grid.length; row += 2) {
-      let line = "";
-      for (let col = 0; col < (grid[row]?.length ?? 0); col++) {
-        const top = grid[row][col];
-        const bottom = grid[row + 1]?.[col] ?? null;
-        if (top && bottom) {
-          if (top.r === bottom.r && top.g === bottom.g && top.b === bottom.b) {
-            line += `${bg(top)} ${RESET}`;
-          } else {
-            line += `${fg(top)}${bg(bottom)}▀${RESET}`;
-          }
-        } else if (top) {
-          line += `${fg(top)}▀${RESET}`;
-        } else if (bottom) {
-          line += `${fg(bottom)}▄${RESET}`;
-        } else {
-          line += " ";
-        }
-      }
-      lines.push(line);
-    }
-    return lines;
   }
 
   private parseMascotSvgGrid(path: string): Array<Array<RgbColor | null>> {
     const cached = this.mascotGridCache.get(path);
     if (cached) return cached;
-    try {
-      const svg = readFileSync(path, "utf-8");
-      const viewBoxMatch = svg.match(/viewBox="0 0 (\d+(?:\.\d+)?) (\d+(?:\.\d+)?)"/i);
-      const widthAttrMatch = svg.match(/\bwidth="(\d+(?:\.\d+)?)"/i);
-      const heightAttrMatch = svg.match(/\bheight="(\d+(?:\.\d+)?)"/i);
-      const spriteWidth = Math.max(1, Math.round(Number(viewBoxMatch?.[1] ?? widthAttrMatch?.[1] ?? "20")));
-      const spriteHeight = Math.max(1, Math.round(Number(viewBoxMatch?.[2] ?? heightAttrMatch?.[1] ?? "20")));
-      const cells: Array<Array<RgbColor | null>> = Array.from(
-        { length: spriteHeight },
-        () => Array.from({ length: spriteWidth }, () => null),
-      );
-      const rects = [...svg.matchAll(/<rect\s+([^>]+?)\s*\/?>/g)];
-      for (const rect of rects) {
-        const attrs = Object.fromEntries(
-          [...rect[1].matchAll(/(\w+)="([^"]*)"/g)].map(([, key, value]) => [key, value]),
-        ) as Record<string, string>;
-        const color = this.parseSvgColor(attrs.fill, attrs.opacity);
-        if (!color) continue;
-        const x = Number(attrs.x ?? "0");
-        const y = Number(attrs.y ?? "0");
-        const width = Number(attrs.width ?? "0");
-        const height = Number(attrs.height ?? "0");
-        for (let row = y; row < y + height; row++) {
-          for (let col = x; col < x + width; col++) {
-            if (row >= 0 && row < spriteHeight && col >= 0 && col < spriteWidth) cells[row][col] = color;
-          }
-        }
-      }
-      this.mascotGridCache.set(path, cells);
-      return cells;
-    } catch {
-      return [];
-    }
+    const cells = parseMascotSvgGrid(path);
+    this.mascotGridCache.set(path, cells);
+    return cells;
   }
 
   private scaleColorGrid(
@@ -2247,7 +2100,7 @@ export class App {
     if (!path) return [];
     const cached = this.mascotAnsiCache.get(path);
     if (cached) return cached;
-    const rendered = this.renderAnsiColorGrid(this.parseMascotSvgGrid(path));
+    const rendered = renderAnsiColorGrid(this.parseMascotSvgGrid(path), RESET);
     this.mascotAnsiCache.set(path, rendered);
     return rendered;
   }
@@ -2282,72 +2135,33 @@ export class App {
   }
 
   private renderHomeBox(width: number, title: string, body: string[]): string[] {
-    const innerWidth = Math.max(1, width - 2);
-    const titleText = title ? ` ${title} ` : "";
-    const titleFill = Math.max(0, innerWidth - stripAnsi(titleText).length);
-    const frameColor = MUTED();
-    const lines = [`${frameColor}${BOX.tl}${titleText}${BOX.h.repeat(titleFill)}${BOX.tr}${RESET}`];
-    for (const row of body) {
-      lines.push(`${frameColor}${BOX.v}${RESET}${this.padLine(row, innerWidth)}${frameColor}${BOX.v}${RESET}`);
-    }
-    lines.push(`${frameColor}${BOX.bl}${BOX.h.repeat(innerWidth)}${BOX.br}${RESET}`);
-    return lines;
+    return buildRenderHomeBox({
+      width,
+      title,
+      body,
+      box: BOX,
+      frameColor: MUTED(),
+      reset: RESET,
+      padLine: (line, innerWidth) => this.padLine(line, innerWidth),
+    });
   }
 
   private renderHomeView(mainW: number, topHeight: number): string[] {
-    if (topHeight < 8 || mainW < 24) {
-      return Array.from({ length: Math.max(0, topHeight) }, () => "");
-    }
-    const fullMascot = this.renderMascotInline();
-    const modelLabel = this.modelName === "none"
-      ? "Pick one with /model"
-      : `${this.providerName}/${this.modelName}`;
-    const versionText = `v${this.appVersion}`;
-    const boxWidth = Math.max(12, mainW);
-    const innerWidth = Math.max(1, boxWidth - 2);
-    const contentWidth = Math.max(8, innerWidth - 4);
-    const fullMascotWidth = stripAnsi(fullMascot[0] ?? "").length;
-    const canShowMascot = fullMascot.length > 0 && contentWidth >= fullMascotWidth + 24 && topHeight >= 8;
-    const mascotInline = canShowMascot ? fullMascot : [];
-    const mascotWidth = stripAnsi(mascotInline[0] ?? "").length;
-    const gap = mascotWidth > 0 ? 2 : 0;
-    const headerCandidates = ["Welcome to BrokeCLI", "Welcome"];
-    const headerText = headerCandidates.find((candidate) =>
-      mascotWidth + gap + candidate.length <= contentWidth,
-    ) ?? headerCandidates[headerCandidates.length - 1];
-    const rightWidth = mascotWidth > 0
-      ? Math.max(18, contentWidth - mascotWidth - gap)
-      : contentWidth;
-    const locationBase = this.formatShortCwd(Math.max(10, rightWidth - 1));
-    const titleWithVersion = `${headerText}  ${versionText}`;
-    const titleText = titleWithVersion.length <= rightWidth ? titleWithVersion : headerText;
-    const locationText = titleWithVersion.length <= rightWidth ? locationBase : `${locationBase}  ${versionText}`;
-    const heroText = [
-      `${T()}${BOLD}${titleText}${RESET}`,
-      `${TXT()}${locationText}${RESET}`,
-      "",
-      ...this.wrapHomeDetail("Model", modelLabel, rightWidth),
-      ...this.wrapHomeDetail("Tip", this.homeTip, rightWidth),
-    ];
-    const heroHeight = Math.max(mascotInline.length, heroText.length);
-    const heroLines = Array.from({ length: heroHeight }, (_, index) => {
-      const sprite = mascotInline[index] ?? " ".repeat(mascotWidth);
-      const text = heroText[index] ?? "";
-      return text ? `${sprite}${" ".repeat(gap)}${text}` : sprite;
+    return buildRenderHomeView({
+      mainW,
+      topHeight,
+      fullMascot: this.renderMascotInline(),
+      modelLabel: this.modelName === "none" ? "Pick one with /model" : `${this.providerName}/${this.modelName}`,
+      appVersion: this.appVersion,
+      homeTip: this.homeTip,
+      formatShortCwd: (maxWidth) => this.formatShortCwd(maxWidth),
+      wrapHomeDetail: (label, value, width) => this.wrapHomeDetail(label, value, width),
+      renderHomeBox: (width, title, body) => this.renderHomeBox(width, title, body),
+      titleColor: T(),
+      textColor: TXT(),
+      bold: BOLD,
+      reset: RESET,
     });
-
-    const paddedBody = [
-      " ",
-      ...heroLines,
-    ];
-    const body = paddedBody.map((line) => `  ${line}`);
-
-    const boxBodyHeight = Math.max(7, topHeight - 2);
-    const clippedBody = body.slice(0, boxBodyHeight);
-    const box = this.renderHomeBox(boxWidth, "", clippedBody);
-    const lines: string[] = [...box.slice(0, topHeight)];
-    while (lines.length < topHeight) lines.push("");
-    return lines;
   }
 
   /** Build the full sidebar content before viewport slicing */
