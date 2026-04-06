@@ -86,7 +86,7 @@ export function renderMessages(app: AppState, maxWidth: number): string[] {
     pendingMessages: app.pendingMessages,
     fmtTokens,
     sparkleSpinner: (frame, color) => app.sparkleSpinner(frame, color),
-    shimmerText: (text, frame) => app.shimmerText(text, frame),
+    shimmerText: (text, frame, color) => app.shimmerText(text, frame, color),
     colors: {
       accent: T(),
       ok: OK(),
