@@ -96,11 +96,11 @@ export function buildSidebarFooterLines(options: {
     }
   }
 
-  if (cost && `${"Tokens"} · ${cost}`.length > width) {
-    lines.push(`${colors.text}Tokens${RESET}`);
+  if (cost && `${"Session"} · ${cost}`.length > width) {
+    lines.push(`${colors.text}Session${RESET}`);
     lines.push(`  ${colors.muted}${cost}${RESET}`);
   } else {
-    const headerParts = ["Tokens"];
+    const headerParts = ["Session"];
     if (cost) headerParts.push(cost);
     lines.push(`${colors.text}${headerParts.join(` ${colors.muted}·${RESET} `)}${RESET}`);
   }
@@ -110,13 +110,13 @@ export function buildSidebarFooterLines(options: {
   }
 
   if (contextUsed !== undefined && contextUsage) {
-    const contextLabel = `${contextUsed}% ctx`;
+    const contextLabel = `${contextUsed}% prompt`;
     const contextColor = contextUsed > 90 ? colors.error : contextUsed > 70 ? colors.warning : colors.muted;
     if (`  ${contextLabel} · ${contextUsage}`.length > width) {
       lines.push(`  ${contextColor}${contextLabel}${RESET}`);
       lines.push(`  ${colors.muted}${contextUsage}${RESET}`);
     } else {
-      lines.push(`  ${contextColor}${contextLabel}${RESET} ${colors.muted}· ${contextUsage}${RESET}`);
+      lines.push(`  ${contextColor}${contextLabel}${RESET} ${colors.muted}· now ${contextUsage}${RESET}`);
     }
   }
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Session } from "../src/core/session.js";
 import { App } from "../src/tui/app.js";
 import { MOUSE_OFF, MOUSE_ON } from "../src/utils/ansi.js";
-import { currentTheme, listThemes, setPreviewTheme } from "../src/core/themes.js";
+import { currentTheme, getPlanColor, listThemes, setPreviewTheme } from "../src/core/themes.js";
 import { getSettings, updateSetting } from "../src/core/config.js";
 import stripAnsi from "strip-ansi";
 import type { Keypress } from "../src/tui/keypress.js";
@@ -69,8 +69,11 @@ describe("sidebar token summary", () => {
 
     const footer = app.renderSidebarFooter().map((line: string) => stripAnsi(line));
     expect(footer.some((line: string) => line.includes("🪨 ultra"))).toBe(true);
+    expect(footer[0]).toBe("");
+    expect(footer.some((line: string) => line.includes("Session"))).toBe(true);
     expect(footer.some((line: string) => line.trim() === "$0.0016")).toBe(true);
     expect(footer.some((line: string) => line.includes("132k/344k"))).toBe(true);
+    expect(footer.some((line: string) => line.includes("prompt"))).toBe(true);
 
     updateSetting("cavemanLevel", "off");
   });
@@ -219,6 +222,15 @@ describe("input editing", () => {
 
     expect(app.input.getText()).toBe("hello brave ");
   });
+
+  it("ignores plain tab so the input never gets a raw tab character", () => {
+    const app = new App() as any;
+    app.input.paste("hello");
+
+    app.input.handleKey({ name: "tab", char: "\t", ctrl: false, meta: false, shift: false });
+
+    expect(app.input.getText()).toBe("hello");
+  });
 });
 
 describe("command aliases", () => {
@@ -363,13 +375,24 @@ describe("sidebar scrolling", () => {
     expect(lines).toContain("  ▾ src/");
   });
 
-  it("does not mouse-wheel scroll chat history when no menu is active", () => {
+  it("mouse-wheel scrolls chat history when no menu is active", () => {
     const app = new App() as any;
     app.messages = Array.from({ length: 30 }, (_, i) => ({ role: "user", content: `msg ${i}` }));
     app.scrollOffset = 6;
+    app.screen = {
+      height: 16,
+      width: 80,
+      hasSidebar: false,
+      mainWidth: 80,
+      sidebarWidth: 20,
+      render: () => {},
+      setCursor: () => {},
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
 
     app.handleKey({ name: "scrolldown", char: "", ctrl: false, meta: false, shift: false });
-    expect(app.scrollOffset).toBe(6);
+    expect(app.scrollOffset).toBe(9);
 
     app.handleKey({ name: "scrollup", char: "", ctrl: false, meta: false, shift: false });
     expect(app.scrollOffset).toBe(6);
@@ -425,6 +448,27 @@ describe("sidebar scrolling", () => {
 
     expect(app.sidebarScrollOffset).toBeGreaterThan(0);
     expect(app.itemPicker.cursor).toBe(0);
+  });
+
+  it("uses the plan accent for footer status when shift+tab toggles plan mode", () => {
+    const app = new App() as any;
+    app.screen = {
+      sidebarWidth: 24,
+      width: 100,
+      height: 24,
+      hasSidebar: true,
+      mainWidth: 73,
+      render: () => {},
+      setCursor: () => {},
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+
+    app.handleKey({ name: "tab", char: "", ctrl: false, meta: false, shift: true });
+    const footer = app.renderSidebarFooter();
+
+    expect(stripAnsi(footer[1] ?? "")).toContain("plan");
+    expect(footer[1]).toContain(getPlanColor());
   });
 });
 

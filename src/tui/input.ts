@@ -73,6 +73,11 @@ export class InputWidget {
       return "submit";
     }
 
+    // Plain Tab should never insert a raw tab character into the prompt.
+    if (key.name === "tab") {
+      return "none";
+    }
+
     // Ctrl+U — clear line
     if (key.ctrl && key.name === "u") {
       this.clear();

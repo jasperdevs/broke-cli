@@ -420,6 +420,10 @@ export class App {
     return parts;
   }
 
+  private getModeAccent(): string {
+    return this.mode === "plan" ? P() : T();
+  }
+
   private renderSidebarFooter(): string[] {
     const settings = getSettings();
     if (!settings.showTokens) return [];
@@ -431,7 +435,7 @@ export class App {
     if (thinkLevel !== "off") statusParts.push(thinkLevel);
     const caveLevel = settings.cavemanLevel ?? "off";
     if (caveLevel !== "off") statusParts.push(`🪨 ${caveLevel}`);
-    return buildSidebarFooterLines({
+    const footer = buildSidebarFooterLines({
       width,
       statusParts,
       cost: settings.showCost && this.sessionCost > 0 ? fmtCost(this.animCost.get()) : undefined,
@@ -439,13 +443,14 @@ export class App {
       contextUsed: this.contextLimitTokens > 0 ? this.contextUsed : undefined,
       contextUsage: this.contextLimitTokens > 0 ? `${fmtTokens(this.contextTokenCount)}/${fmtTokens(this.contextLimitTokens)}` : undefined,
       colors: {
-        accent: T(),
+        accent: this.getModeAccent(),
         muted: MUTED(),
         text: TXT(),
         warning: currentTheme().warning,
         error: currentTheme().error,
       },
     });
+    return footer.length > 0 ? ["", ...footer] : footer;
   }
 
   private clearInterruptPrompt(): void {
@@ -1249,6 +1254,17 @@ export class App {
     return `${currentTheme().sidebarBorder}│${RESET}`;
   }
 
+  private scrollTranscript(delta: number): boolean {
+    const chatHeight = this.getChatHeight();
+    const messageLines = this.renderMessages(this.screen.mainWidth - 2);
+    const maxScroll = Math.max(0, messageLines.length - chatHeight);
+    const next = Math.max(0, Math.min(maxScroll, this.scrollOffset + delta));
+    if (next === this.scrollOffset) return false;
+    this.scrollOffset = next;
+    this.invalidateMsgCache();
+    return true;
+  }
+
   private shouldEnableMenuMouse(): boolean {
     return Boolean(
       this.shouldShowSidebar() ||
@@ -1315,13 +1331,15 @@ export class App {
       return;
     }
 
-    // Mouse wheel: menus/sidebar only, never transcript history
+    // Mouse wheel: sidebar first, then menus, then transcript history
     if (key.name === "scrollup") {
       this.hideCursorBriefly();
       if (this.sidebarFocused && this.screen.hasSidebar && !getSettings().hideSidebar) {
         this.scrollSidebar(-3, this.getChatHeight());
         this.draw();
       } else if (this.scrollActiveMenu(-1)) {
+        this.draw();
+      } else if (this.scrollTranscript(-3)) {
         this.draw();
       }
       return;
@@ -1332,6 +1350,8 @@ export class App {
         this.scrollSidebar(3, this.getChatHeight());
         this.draw();
       } else if (this.scrollActiveMenu(1)) {
+        this.draw();
+      } else if (this.scrollTranscript(3)) {
         this.draw();
       }
       return;
@@ -2484,12 +2504,14 @@ export class App {
     const inputLayout = this.getInputCursorLayout(inputText, cursor, mainW);
     const isHome = this.messages.length === 0;
 
+    const separatorColor = this.getModeAccent();
+
     // Build bottom section first to know how much space it takes
     const bottomLines: string[] = [];
     const bottomMenuClicks: Array<{ lineIndex: number; action: () => void }> = [];
 
     // Separator above input
-    bottomLines.push(`${DIM}${"─".repeat(mainW)}${RESET}`);
+    bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
 
     // Input line(s) — explicit multi-line and soft-wrapped long lines
     for (let i = 0; i < inputLayout.lines.length; i++) {
@@ -2499,7 +2521,7 @@ export class App {
     // Question prompt from model
     if (this.questionPrompt) {
       const qp = this.questionPrompt;
-      bottomLines.push(`${BORDER()}${"─".repeat(mainW)}${RESET}`);
+      bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
       bottomLines.push(` ${T()}?${RESET} ${TXT()}${BOLD}${qp.question}${RESET}`);
       if (qp.options) {
         for (const entry of this.buildMenuView(this.getQuestionOptionEntries(), qp.cursor, 8)) {
@@ -2519,21 +2541,21 @@ export class App {
 
     // Pickers appear below input
     if (this.filePicker) {
-      bottomLines.push(`${BORDER()}${"─".repeat(mainW)}${RESET}`);
+      bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
       this.appendFilePicker(bottomLines, height, bottomMenuClicks);
     } else if (this.itemPicker) {
-      bottomLines.push(`${BORDER()}${"─".repeat(mainW)}${RESET}`);
+      bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
       this.appendItemPicker(bottomLines, height, bottomMenuClicks);
     } else if (this.settingsPicker) {
-      bottomLines.push(`${BORDER()}${"─".repeat(mainW)}${RESET}`);
+      bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
       this.appendSettingsPicker(bottomLines, height, bottomMenuClicks);
     } else if (this.modelPicker) {
-      bottomLines.push(`${BORDER()}${"─".repeat(mainW)}${RESET}`);
+      bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
       this.appendModelPicker(bottomLines, height, bottomMenuClicks);
     } else {
       const suggestions = this.buildMenuView(this.getCommandSuggestionEntries(), this.cmdSuggestionCursor, 5);
       if (suggestions.length > 0) {
-        bottomLines.push(`${BORDER()}${"─".repeat(mainW)}${RESET}`);
+        bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
       }
       for (const entry of suggestions) {
         if (entry.selectIndex !== undefined) {
@@ -2547,7 +2569,7 @@ export class App {
     }
 
     // Separator below input/pickers
-    bottomLines.push(`${DIM}${"─".repeat(mainW)}${RESET}`);
+    bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
 
     // Info bar below input — contextual status + hints
     {
