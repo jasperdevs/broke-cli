@@ -423,7 +423,7 @@ export function appendItemPicker(app: AppState, lines: string[], _maxTotal: numb
 }
 
 export function getCommandMatches(app: AppState) {
-  return findCommandMatches(app.input.getText());
+  return findCommandMatches(app.input.getText(), { hasAgentRuns: (app.getAgentRuns?.().length ?? 0) > 0 });
 }
 
 export function start(app: AppState): void {

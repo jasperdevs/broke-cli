@@ -4,6 +4,7 @@ export interface CommandEntry {
   aliases?: string[];
   hotkey?: string;
   sortPriority?: number;
+  isVisible?: (context: { hasAgentRuns: boolean }) => boolean;
 }
 
 export const COMMANDS: CommandEntry[] = [
@@ -21,7 +22,7 @@ export const COMMANDS: CommandEntry[] = [
   { name: "skills", desc: "list loaded skills" },
   { name: "projects", desc: "switch or search recent projects" },
   { name: "resume", desc: "resume session (sessions)", aliases: ["sessions"] },
-  { name: "agents", desc: "inspect delegated agent tasks", hotkey: "alt+a" },
+  { name: "agents", desc: "inspect delegated agent tasks", hotkey: "alt+a", isVisible: (context) => context.hasAgentRuns },
   { name: "share", desc: "create shareable transcript html" },
   { name: "session", desc: "show active session info" },
   { name: "hotkeys", desc: "show keyboard shortcuts" },
@@ -37,10 +38,11 @@ export const COMMANDS: CommandEntry[] = [
   { name: "exit", desc: "quit", aliases: ["quit"] },
 ];
 
-export function getCommandMatches(inputText: string): CommandEntry[] {
+export function getCommandMatches(inputText: string, context: { hasAgentRuns?: boolean } = {}): CommandEntry[] {
   if (!inputText.startsWith("/")) return [];
   const query = inputText.slice(1).toLowerCase();
-  const matches = (!query && inputText === "/") ? [...COMMANDS] : COMMANDS.filter((c) => {
+  const visibleCommands = COMMANDS.filter((command) => command.isVisible?.({ hasAgentRuns: !!context.hasAgentRuns }) ?? true);
+  const matches = (!query && inputText === "/") ? [...visibleCommands] : visibleCommands.filter((c) => {
     const matchesName = c.name.startsWith(query) && c.name !== query;
     const matchesAlias = c.aliases?.some((alias) => alias.startsWith(query)) ?? false;
     return matchesName || matchesAlias;
@@ -48,6 +50,6 @@ export function getCommandMatches(inputText: string): CommandEntry[] {
   return matches.sort((a, b) => {
     const priorityDelta = (a.sortPriority ?? 0) - (b.sortPriority ?? 0);
     if (priorityDelta !== 0) return priorityDelta;
-    return COMMANDS.indexOf(a) - COMMANDS.indexOf(b);
+    return visibleCommands.indexOf(a) - visibleCommands.indexOf(b);
   });
 }
