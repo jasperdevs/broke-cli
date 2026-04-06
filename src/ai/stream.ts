@@ -94,11 +94,58 @@ export async function startStream(
     });
 
     // Use fullStream for reasoning + text + tool events
+    // Local models embed thinking in <think>...</think> tags in text stream
+    let inThinkTag = false;
+    let thinkBuffer = "";
     let streamFailed = false;
     try {
       for await (const part of result.fullStream) {
         if (part.type === "text-delta") {
-          callbacks.onText((part as any).text ?? (part as any).delta ?? "");
+          let text: string = (part as any).text ?? (part as any).delta ?? "";
+
+          // Parse <think> tags from local model output
+          while (text.length > 0) {
+            if (inThinkTag) {
+              const closeIdx = text.indexOf("</think>");
+              if (closeIdx >= 0) {
+                // End of think block
+                callbacks.onReasoning(text.slice(0, closeIdx));
+                text = text.slice(closeIdx + 8); // skip "</think>"
+                inThinkTag = false;
+                thinkBuffer = "";
+              } else {
+                // Still inside think block
+                callbacks.onReasoning(text);
+                text = "";
+              }
+            } else {
+              const openIdx = text.indexOf("<think>");
+              if (openIdx >= 0) {
+                // Start of think block — emit text before it
+                if (openIdx > 0) {
+                  callbacks.onText(text.slice(0, openIdx));
+                }
+                text = text.slice(openIdx + 7); // skip "<think>"
+                inThinkTag = true;
+              } else {
+                // Check for partial <think tag at end of chunk
+                const partialMatch = text.match(/<(?:t(?:h(?:i(?:n(?:k)?)?)?)?)?$/);
+                if (partialMatch) {
+                  callbacks.onText(text.slice(0, partialMatch.index));
+                  thinkBuffer = partialMatch[0];
+                  text = "";
+                } else {
+                  // Flush any buffered partial tag that turned out to not be <think>
+                  if (thinkBuffer) {
+                    callbacks.onText(thinkBuffer);
+                    thinkBuffer = "";
+                  }
+                  callbacks.onText(text);
+                  text = "";
+                }
+              }
+            }
+          }
         } else if (part.type === "reasoning-delta") {
           callbacks.onReasoning((part as any).delta ?? (part as any).text ?? "");
         }

@@ -223,13 +223,32 @@ async function fetchLocalModels(id: string, baseURL: string): Promise<string[]> 
     }
   }
 
-  // For llama.cpp, also check the /models endpoint (non-/v1)
+  // For llama.cpp, also check /models and /slots endpoints
   if (id === "llamacpp") {
-    const modelsData = await fetchUrl(`${baseURL.replace("/v1", "")}/models`) as { models?: Array<{ name: string; model: string }> } | null;
+    const host = baseURL.replace("/v1", "");
+    const modelsData = await fetchUrl(`${host}/models`) as { models?: Array<{ name: string; model: string }> } | null;
     if (modelsData?.models) {
       for (const m of modelsData.models) {
         const name = m.model || m.name;
         if (name && !models.includes(name)) models.push(name);
+      }
+    }
+    // /slots shows currently loaded model slots
+    const slotsData = await fetchUrl(`${host}/slots`) as Array<{ model: string }> | null;
+    if (Array.isArray(slotsData)) {
+      for (const s of slotsData) {
+        if (s.model && !models.includes(s.model)) models.push(s.model);
+      }
+    }
+  }
+
+  // For LM Studio, also check /lmstudio/models endpoint
+  if (id === "lmstudio") {
+    const host = baseURL.replace("/v1", "");
+    const lmsData = await fetchUrl(`${host}/lmstudio/models`) as { data?: Array<{ id: string }> } | null;
+    if (lmsData?.data) {
+      for (const m of lmsData.data) {
+        if (m.id && !models.includes(m.id)) models.push(m.id);
       }
     }
   }
