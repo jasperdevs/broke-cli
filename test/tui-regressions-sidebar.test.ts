@@ -114,6 +114,8 @@ describe("sidebar scrolling", () => {
     const footerText = footer.map((line: string) => stripAnsi(line)).join("\n");
     expect(footerText).toContain("Σ 8.8k session");
     expect(footerText).toContain("live 120k");
+    expect(footerText).toContain("94%");
+    expect(footerText).toContain("▕");
     expect(footerText).not.toContain("plan");
     updateSetting("showTokens", originalShowTokens);
   });

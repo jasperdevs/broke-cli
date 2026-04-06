@@ -18,10 +18,22 @@ export interface SidebarFooterColors {
   error: string;
 }
 
-function formatContextPercent(contextUsed: number): string {
-  if (contextUsed <= 0) return "0% of limit";
-  if (contextUsed < 1) return "<1% of limit";
-  return `${Math.round(contextUsed)}% of limit`;
+function formatContextPercentLabel(contextUsed: number): string {
+  if (contextUsed <= 0) return "0%";
+  if (contextUsed < 1) return "<1%";
+  return `${Math.round(contextUsed)}%`;
+}
+
+function buildContextMeter(width: number, contextUsed: number, colors: SidebarFooterColors): string {
+  const percent = formatContextPercentLabel(contextUsed);
+  const available = Math.max(6, width - percent.length - 2);
+  const fillWidth = Math.max(1, Math.min(14, available));
+  const filled = Math.max(0, Math.min(fillWidth, Math.round((Math.max(0, contextUsed) / 100) * fillWidth)));
+  const empty = Math.max(0, fillWidth - filled);
+  const fillColor = contextUsed > 90 ? colors.error : contextUsed > 70 ? colors.warning : colors.accent;
+  const fill = filled > 0 ? `${fillColor}${"█".repeat(filled)}${RESET}` : "";
+  const rest = empty > 0 ? `${colors.muted}${"░".repeat(empty)}${RESET}` : "";
+  return `${colors.muted}▕${RESET}${fill}${rest}${colors.muted}▏${RESET} ${fillColor}${percent}${RESET}`;
 }
 
 const fileTreeCache = new Map<string, { at: number; items: SidebarTreeItem[] }>();
@@ -89,7 +101,7 @@ export function buildSidebarFooterLines(options: {
   contextTokens?: string;
   colors: SidebarFooterColors;
 }): string[] {
-  const { tokenParts, contextUsed, contextTokens, colors } = options;
+  const { width, tokenParts, contextUsed, contextTokens, colors } = options;
   const lines: string[] = [];
 
   for (const part of tokenParts) {
@@ -99,7 +111,7 @@ export function buildSidebarFooterLines(options: {
   if (contextUsed !== undefined && contextTokens) {
     const contextColor = contextUsed > 90 ? colors.error : contextUsed > 70 ? colors.warning : colors.muted;
     lines.push(`${contextColor}live ${contextTokens}${RESET}`);
-    lines.push(`${contextColor}${formatContextPercent(contextUsed)}${RESET}`);
+    lines.push(buildContextMeter(width, contextUsed, colors));
   }
 
   return lines;

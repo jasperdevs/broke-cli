@@ -73,7 +73,8 @@ describe("sidebar token summary", () => {
     expect(footer).toContain("↑ 150 in");
     expect(footer).toContain("↓ 60 out");
     expect(footer).toContain("live 132");
-    expect(footer).toContain("<1% of limit");
+    expect(footer).toContain("<1%");
+    expect(footer).toContain("▕");
     updateSetting("showTokens", originalShowTokens);
   });
 
@@ -90,7 +91,8 @@ describe("sidebar token summary", () => {
     expect(footer.some((line: string) => line.trim() === "↑ 150 in")).toBe(true);
     expect(footer.some((line: string) => line.trim() === "↓ 60 out")).toBe(true);
     expect(footer.some((line: string) => line.trim() === "live 132k")).toBe(true);
-    expect(footer.some((line: string) => line.trim() === "38% of limit")).toBe(true);
+    expect(footer.some((line: string) => line.includes("38%"))).toBe(true);
+    expect(footer.some((line: string) => line.includes("▕"))).toBe(true);
     updateSetting("cavemanLevel", "off");
     updateSetting("showTokens", originalShowTokens);
   });
@@ -103,7 +105,8 @@ describe("sidebar token summary", () => {
     app.updateUsage(0.0016, 150, 60);
     const footer = app.renderSidebarFooter().map((line: string) => stripAnsi(line)).join("\n");
     expect(footer).toContain("live 822");
-    expect(footer).toContain("<1% of limit");
+    expect(footer).toContain("<1%");
+    expect(footer).toContain("▕");
     updateSetting("showTokens", originalShowTokens);
   });
 
