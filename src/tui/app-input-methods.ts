@@ -122,19 +122,6 @@ export function handleKey(app: AppState, key: Keypress): void {
     return;
   }
 
-  if (key.name === "escape" && !app.isStreaming && !app.hasPendingMessages() && app.input.getText().trim().length === 0) {
-    const action = getSettings().doubleEscapeAction;
-    if (action !== "none") {
-      if (app.escPrimed) {
-        app.clearInterruptPrompt();
-        if (app.onSubmit && action === "fork") app.onSubmit("/fork");
-      } else {
-        app.primeEscapeAbort();
-      }
-      return;
-    }
-  }
-
   if (key.name === "escape" && !app.isStreaming && app.hasPendingMessages() && app.input.getText().trim().length === 0) {
     app.clearPendingMessages();
     app.draw();

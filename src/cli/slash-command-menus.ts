@@ -42,7 +42,6 @@ export function openSettingsMenu(args: { app: AnyApp; activeModel: any; currentM
       { key: "quietStartup", label: "Quiet startup", value: String(s.quietStartup), description: "Hide startup inventory details" },
       { key: "hideThinkingBlock", label: "Hide thinking block", value: String(s.hideThinkingBlock), description: "Hide streamed reasoning blocks in chat" },
       { key: "cavemanLevel", label: "Caveman mode", value: s.cavemanLevel ?? "auto", description: "off / lite / auto / ultra — save output tokens (ctrl+y)" },
-      { key: "doubleEscapeAction", label: "Double-escape", value: s.doubleEscapeAction, description: "fork / none" },
       { key: "editorPaddingX", label: "Editor padding", value: String(s.editorPaddingX), description: "Horizontal input padding (0-3)" },
       { key: "autocompleteMaxVisible", label: "Autocomplete size", value: String(s.autocompleteMaxVisible), description: "Visible command rows" },
       { key: "showHardwareCursor", label: "Hardware cursor", value: String(s.showHardwareCursor), description: "Keep the terminal cursor visible while idle" },
@@ -75,10 +74,6 @@ export function openSettingsMenu(args: { app: AnyApp; activeModel: any; currentM
       updateSetting("cavemanLevel", next);
       reloadContext();
       onSystemPromptChange(buildSystemPrompt(process.cwd(), activeModel?.provider?.id, currentMode, next));
-    } else if (key === "doubleEscapeAction") {
-      const levels: Array<Settings["doubleEscapeAction"]> = ["fork", "none"];
-      const next = levels[(levels.indexOf(s.doubleEscapeAction) + 1) % levels.length];
-      updateSetting("doubleEscapeAction", next);
     } else if (key === "editorPaddingX") {
       updateSetting("editorPaddingX", (s.editorPaddingX + 1) % 4);
     } else if (key === "autocompleteMaxVisible") {
