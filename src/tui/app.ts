@@ -398,9 +398,7 @@ export class App {
     if (key.name === "tab" && this.input.getText().trim() === "") {
       this.mode = this.mode === "build" ? "plan" : "build";
       if (this.onModeChange) this.onModeChange(this.mode);
-      this.statusMessage = this.mode === "build" ? `${T()}Build mode${RESET}` : `${P()}Plan mode${RESET}`;
       this.draw();
-      setTimeout(() => { this.statusMessage = undefined; this.draw(); }, 1500);
       return;
     }
 
