@@ -290,10 +290,11 @@ export class App {
         const secs = Math.floor(elapsed / 1000);
         const mins = Math.floor(secs / 60);
         const timeStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
-        const parts = [timeStr];
-        if (this.streamTokens > 0) parts.push(`${fmtTokens(this.streamTokens)} tokens`);
-        if (this.thinkingDuration > 0) parts.push(`thought for ${this.thinkingDuration}s`);
-        this.messages.push({ role: "system", content: `${DIM}\u2726 \u2500 ${parts.join(" \u00B7 ")}${RESET}` });
+        const extras: string[] = [];
+        if (this.streamTokens > 0) extras.push(`${fmtTokens(this.streamTokens)} tokens`);
+        if (this.thinkingDuration > 0) extras.push(`thought for ${this.thinkingDuration}s`);
+        const extraStr = extras.length > 0 ? ` \u00B7 ${extras.join(" \u00B7 ")}` : "";
+        this.messages.push({ role: "system", content: `${DIM}\u2726 Churned for ${timeStr}${extraStr}${RESET}` });
         this.invalidateMsgCache();
         this.streamStartTime = 0;
       }
