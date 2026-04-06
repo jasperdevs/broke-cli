@@ -1580,6 +1580,12 @@ export class App {
 
     this.screen.render(frameLines);
 
+    // Hide cursor during streaming/pickers/compacting — no input focus
+    if (this.isStreaming || this.isCompacting || this.modelPicker || this.settingsPicker || this.itemPicker || this.commandPicker || this.questionState) {
+      this.screen.hideCursor();
+      return;
+    }
+
     // Cursor on input line — account for multi-line input
     const textBeforeCursor = inputText.slice(0, cursor);
     const cursorLineIdx = (textBeforeCursor.match(/\n/g) || []).length;
