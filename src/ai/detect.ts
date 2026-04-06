@@ -10,18 +10,6 @@ export interface DetectedProvider {
   reason: string;
 }
 
-/** All known providers */
-const ALL_PROVIDERS = [
-  { id: "anthropic", name: "Anthropic", envKey: "ANTHROPIC_API_KEY" },
-  { id: "openai", name: "OpenAI", envKey: "OPENAI_API_KEY" },
-  { id: "codex", name: "Codex (OpenAI)", envKey: "" },
-  { id: "google", name: "Google", envKey: "GOOGLE_API_KEY" },
-  { id: "groq", name: "Groq", envKey: "GROQ_API_KEY" },
-  { id: "mistral", name: "Mistral", envKey: "MISTRAL_API_KEY" },
-  { id: "xai", name: "xAI", envKey: "XAI_API_KEY" },
-  { id: "openrouter", name: "OpenRouter", envKey: "OPENROUTER_API_KEY" },
-];
-
 /** Probe a local HTTP server with a short timeout */
 async function probeLocal(port: number, path = "/"): Promise<boolean> {
   try {
@@ -40,15 +28,30 @@ async function probeLocal(port: number, path = "/"): Promise<boolean> {
 export async function detectProviders(): Promise<DetectedProvider[]> {
   const results: DetectedProvider[] = [];
 
-  // Add all known cloud providers (available if they have credentials)
-  for (const p of ALL_PROVIDERS) {
-    const key = getApiKey(p.id);
-    if (key) {
-      results.push({ id: p.id, name: p.name, available: true, reason: p.envKey || "auth" });
-    } else {
-      // Show unavailable providers too so user can select and authenticate
-      results.push({ id: p.id, name: p.name, available: false, reason: `Set ${p.envKey || "credentials"}` });
-    }
+  // Cloud providers - only show if API key exists
+  if (getApiKey("anthropic")) {
+    results.push({ id: "anthropic", name: "Anthropic", available: true, reason: "API key" });
+  }
+  if (getApiKey("openai")) {
+    results.push({ id: "openai", name: "OpenAI", available: true, reason: "API key" });
+  }
+  if (getApiKey("codex")) {
+    results.push({ id: "codex", name: "Codex", available: true, reason: "OAuth" });
+  }
+  if (getApiKey("google")) {
+    results.push({ id: "google", name: "Google", available: true, reason: "API key" });
+  }
+  if (getApiKey("groq")) {
+    results.push({ id: "groq", name: "Groq", available: true, reason: "API key" });
+  }
+  if (getApiKey("mistral")) {
+    results.push({ id: "mistral", name: "Mistral", available: true, reason: "API key" });
+  }
+  if (getApiKey("xai")) {
+    results.push({ id: "xai", name: "xAI", available: true, reason: "API key" });
+  }
+  if (getApiKey("openrouter")) {
+    results.push({ id: "openrouter", name: "OpenRouter", available: true, reason: "API key" });
   }
 
   // Local providers — probe in parallel
@@ -60,20 +63,11 @@ export async function detectProviders(): Promise<DetectedProvider[]> {
     probeLocal(8000, "/v1/models"),
   ]);
 
-  if (ollama) results.push({ id: "ollama", name: "Ollama", available: true, reason: "localhost:11434" });
-  else results.push({ id: "ollama", name: "Ollama", available: false, reason: "Start Ollama" });
-  
-  if (lmStudio) results.push({ id: "lmstudio", name: "LM Studio", available: true, reason: "localhost:1234" });
-  else results.push({ id: "lmstudio", name: "LM Studio", available: false, reason: "Start LM Studio" });
-  
-  if (llamaCpp) results.push({ id: "llamacpp", name: "llama.cpp", available: true, reason: "localhost:8080" });
-  else results.push({ id: "llamacpp", name: "llama.cpp", available: false, reason: "Start llama.cpp" });
-  
-  if (jan) results.push({ id: "jan", name: "Jan", available: true, reason: "localhost:1337" });
-  else results.push({ id: "jan", name: "Jan", available: false, reason: "Start Jan" });
-  
-  if (vllm) results.push({ id: "vllm", name: "vLLM", available: true, reason: "localhost:8000" });
-  else results.push({ id: "vllm", name: "vLLM", available: false, reason: "Start vLLM" });
+  if (ollama) results.push({ id: "ollama", name: "Ollama", available: true, reason: "running" });
+  if (lmStudio) results.push({ id: "lmstudio", name: "LM Studio", available: true, reason: "running" });
+  if (llamaCpp) results.push({ id: "llamacpp", name: "llama.cpp", available: true, reason: "running" });
+  if (jan) results.push({ id: "jan", name: "Jan", available: true, reason: "running" });
+  if (vllm) results.push({ id: "vllm", name: "vLLM", available: true, reason: "running" });
 
   return results;
 }
@@ -86,6 +80,5 @@ export function pickDefault(providers: DetectedProvider[]): DetectedProvider | u
     const p = providers.find((x) => x.id === id && x.available);
     if (p) return p;
   }
-  // If nothing available, return first provider (user can authenticate)
-  return providers[0];
+  return undefined;
 }

@@ -30,6 +30,12 @@ export interface SettingEntry {
   description: string;
 }
 
+export interface PickerItem {
+  id: string;
+  label: string;
+  detail?: string;
+}
+
 /** Shorthand for theme primary color — called per-render so theme switches take effect. */
 function T(): string { return currentTheme().primary; }
 
