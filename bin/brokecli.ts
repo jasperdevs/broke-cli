@@ -200,10 +200,33 @@ function getNativeCliLabel(providerId: string): string {
   return "native provider";
 }
 
+const SDK_TOOL_PROVIDER_IDS = new Set([
+  "anthropic",
+  "openai",
+  "codex",
+  "google",
+  "mistral",
+  "groq",
+  "xai",
+  "openrouter",
+  "ollama",
+  "lmstudio",
+  "llamacpp",
+  "jan",
+  "vllm",
+]);
+
 function canUseSdkTools(model: ModelHandle): boolean {
   return model.runtime === "sdk"
     && !!model.model
-    && ["anthropic", "openai", "codex", "google", "mistral", "groq", "xai", "openrouter"].includes(model.provider.id);
+    && SDK_TOOL_PROVIDER_IDS.has(model.provider.id);
+}
+
+function looksLikeRawToolPayload(nextText: string): boolean {
+  const normalized = nextText.trimStart();
+  return /^<tool_call>/i.test(normalized)
+    || /^call:(writeFile|editFile|readFile|listFiles|grep|bash)\s*\{/i.test(normalized)
+    || /^(writeFile|editFile|readFile|listFiles|grep|bash)\s*\(/i.test(normalized);
 }
 
 async function compactForModel(
@@ -1154,8 +1177,13 @@ program.action(async (opts) => {
 
     const streamCallbacks = {
       onText: (delta: string) => {
+        const nextText = streamedText + delta;
+        if (looksLikeRawToolPayload(nextText)) {
+          streamedText = nextText;
+          return;
+        }
         app.appendToLastMessage(delta);
-        streamedText += delta;
+        streamedText = nextText;
         app.setStreamTokens(estimateTextTokens(streamedText + streamedReasoning, useModelId));
       },
       onReasoning: (delta: string) => {
@@ -1167,6 +1195,9 @@ program.action(async (opts) => {
         const content = app.getLastAssistantContent();
         if (content) {
           session.addMessage("assistant", content);
+        } else if (looksLikeRawToolPayload(streamedText)) {
+          session.addMessage("assistant", "[raw tool payload hidden]");
+          app.addMessage("system", `${DIM}Model emitted raw tool syntax. Hidden from chat.${RESET}`);
         } else {
           session.addMessage("assistant", "[empty response]");
           app.addMessage("system", `${DIM}No response from model. Try again or switch models with /model.${RESET}`);

@@ -820,6 +820,7 @@ export class App {
 
   setMode(mode: Mode): void {
     this.mode = mode;
+    updateSetting("mode", mode);
     this.draw();
   }
 
@@ -1600,6 +1601,7 @@ export class App {
     // Shift+Tab — toggle between build and plan mode
     if (key.shift && key.name === "tab") {
       this.mode = this.mode === "build" ? "plan" : "build";
+      updateSetting("mode", this.mode);
       if (this.onModeChange) this.onModeChange(this.mode);
       this.draw();
       return;
@@ -2623,11 +2625,10 @@ export class App {
     // Build the full frame — MUST have exactly `height` lines
     const frameLines: string[] = [];
     const reservedBottom = hasSidebar ? Math.max(bottomLines.length, footerLines.length) : bottomLines.length;
-    const bottomPad = reservedBottom - bottomLines.length;
     const footerPad = reservedBottom - footerLines.length;
     const topHeight = Math.max(0, height - reservedBottom);
     this.activeMenuClickTargets = new Map(
-      bottomMenuClicks.map(({ lineIndex, action }) => [topHeight + bottomPad + lineIndex + 1, action]),
+      bottomMenuClicks.map(({ lineIndex, action }) => [topHeight + lineIndex + 1, action]),
     );
 
     // Compact header when no sidebar
@@ -2679,7 +2680,7 @@ export class App {
       const border = this.getSidebarBorder();
       const sideW = this.screen.sidebarWidth;
       for (let i = 0; i < reservedBottom; i++) {
-        const mainLine = i >= bottomPad ? bottomLines[i - bottomPad] ?? "" : "";
+        const mainLine = bottomLines[i] ?? "";
         const footerLine = i >= footerPad ? footerLines[i - footerPad] ?? "" : "";
         const padded = this.padLine(mainLine, mainW);
         frameLines.push(`${padded} ${border} ${this.padLine(footerLine, sideW)}`);
@@ -2705,7 +2706,7 @@ export class App {
     }
 
     // Cursor on input line — account for multi-line input
-    const inputRow = Math.min(height, topHeight + bottomPad + 2 + inputLayout.row); // +1 separator, +1 for 1-based
+    const inputRow = Math.min(height, topHeight + 2 + inputLayout.row); // +1 separator, +1 for 1-based
     const inputCol = Math.min(width, 1 + inputLayout.col);
     this.screen.setCursor(inputRow, inputCol);
   }
@@ -2725,21 +2726,22 @@ export class App {
     const tr = rgbMatch ? parseInt(rgbMatch[1]) : 58;
     const tg = rgbMatch ? parseInt(rgbMatch[2]) : 199;
     const tb = rgbMatch ? parseInt(rgbMatch[3]) : 58;
-    // Dim version: 40% brightness
-    const dr = Math.round(tr * 0.35);
-    const dg = Math.round(tg * 0.35);
-    const db = Math.round(tb * 0.35);
+    // Stronger contrast so the shimmer is visible in terminal themes.
+    const dr = Math.round(tr * 0.18);
+    const dg = Math.round(tg * 0.18);
+    const db = Math.round(tb * 0.18);
 
-    const period = text.length + 8;
-    const pos = (frame * 0.25) % period;
+    const period = text.length + 6;
+    const pos = (frame * 1.15) % period;
     let result = "";
     for (let i = 0; i < text.length; i++) {
       const dist = Math.abs(i - pos);
-      const t = Math.max(0, 1 - dist / 4);
+      const t = Math.max(0, 1 - dist / 5);
       const r = Math.round(dr + t * (tr - dr));
       const g = Math.round(dg + t * (tg - dg));
       const b = Math.round(db + t * (tb - db));
-      result += `\x1b[38;2;${r};${g};${b}m${text[i]}`;
+      const weight = t > 0.75 ? "\x1b[1m" : "";
+      result += `${weight}\x1b[38;2;${r};${g};${b}m${text[i]}`;
     }
     return result + RESET;
   }

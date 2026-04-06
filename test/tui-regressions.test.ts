@@ -207,6 +207,22 @@ describe("startup home view", () => {
 });
 
 describe("input editing", () => {
+  it("persists plan/build mode when Shift+Tab toggles it", () => {
+    const originalMode = getSettings().mode;
+    const app = new App() as any;
+
+    try {
+      updateSetting("mode", "build");
+      app.handleKey({ name: "tab", char: "", ctrl: false, meta: false, shift: true });
+      expect(getSettings().mode).toBe("plan");
+
+      app.handleKey({ name: "tab", char: "", ctrl: false, meta: false, shift: true });
+      expect(getSettings().mode).toBe("build");
+    } finally {
+      updateSetting("mode", originalMode);
+    }
+  });
+
   it("deletes the previous word with Ctrl+Backspace", () => {
     const app = new App() as any;
     app.input.paste("hello brave world");
