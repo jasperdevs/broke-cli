@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { filterModelIdsForDisplay } from "../src/ai/providers.js";
+import { ProviderRegistry } from "../src/ai/provider-registry.js";
 
 describe("provider model filtering", () => {
   it("removes image and embedding models while preserving useful coding/chat models", () => {
@@ -50,5 +51,20 @@ describe("provider model filtering", () => {
     expect(visible).toHaveLength(12);
     expect(visible).toContain("tinyllama");
     expect(visible).toContain("mixtral");
+  });
+
+  it("keeps local providers visible in the model picker even if only cloud providers were detected", () => {
+    const registry = new ProviderRegistry() as any;
+    registry.providers = [
+      { id: "anthropic", name: "Anthropic", available: true, reason: "API key" },
+      { id: "codex", name: "Codex", available: true, reason: "native login" },
+    ];
+
+    const options = registry.buildVisibleModelOptions(null, "", []);
+    const providerIds = new Set(options.map((option: any) => option.providerId));
+
+    expect(providerIds.has("ollama")).toBe(true);
+    expect(providerIds.has("lmstudio")).toBe(true);
+    expect(providerIds.has("llamacpp")).toBe(true);
   });
 });

@@ -376,6 +376,31 @@ describe("budget inspector", () => {
     expect(alternateStates.at(-1)).toBe(false);
     expect(rendered.map((line) => stripAnsi(line)).join("\n")).not.toContain("Budget Inspector");
   });
+
+  it("uses the alternate screen for model picker overlays", () => {
+    const app = new App() as any;
+    const alternateStates: boolean[] = [];
+    app.screen = {
+      height: 14,
+      width: 60,
+      hasSidebar: true,
+      mainWidth: 38,
+      sidebarWidth: 19,
+      render: () => {},
+      setCursor: () => {},
+      hideCursor: () => {},
+      forceRedraw: () => {},
+      setAlternateScreen: (enabled: boolean) => { alternateStates.push(enabled); },
+    };
+    app.openModelPicker([
+      { providerId: "anthropic", providerName: "Anthropic", modelId: "claude-sonnet-4-6", active: false },
+      { providerId: "ollama", providerName: "Ollama", modelId: "gemma3:4b", active: false },
+    ], () => {});
+    app.drawImmediate();
+    expect(alternateStates.at(-1)).toBe(true);
+    app.handleKey({ name: "escape", char: "", ctrl: false, meta: false, shift: false } as Keypress);
+    expect(alternateStates.at(-1)).toBe(false);
+  });
 });
 
 describe("agent task inspector", () => {

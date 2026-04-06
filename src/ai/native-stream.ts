@@ -160,12 +160,6 @@ function needsWindowsShell(command: string): boolean {
   return process.platform === "win32" && /\.(cmd|bat)$/i.test(command);
 }
 
-function quoteWindowsCmdArg(arg: string): string {
-  if (arg.length === 0) return '""';
-  if (!/[\s"&<>|^()%!]/.test(arg)) return arg;
-  return `"${arg.replace(/"/g, '""')}"`;
-}
-
 export function resolveNativeSpawnCommand(
   command: string,
   args: string[],
@@ -174,10 +168,9 @@ export function resolveNativeSpawnCommand(
     return { command, args };
   }
   const comspec = process.env.ComSpec || "cmd.exe";
-  const commandLine = [`"${command.replace(/"/g, '""')}"`, ...args.map(quoteWindowsCmdArg)].join(" ");
   return {
     command: comspec,
-    args: ["/d", "/s", "/c", commandLine],
+    args: ["/d", "/s", "/c", command, ...args],
   };
 }
 

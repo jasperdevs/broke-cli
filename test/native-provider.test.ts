@@ -113,8 +113,9 @@ describe("native provider runtime selection", () => {
       );
       expect(resolved.command.toLowerCase()).toContain("cmd.exe");
       expect(resolved.args.slice(0, 3)).toEqual(["/d", "/s", "/c"]);
-      expect(resolved.args[3]).toContain('"C:\\Users\\bunny\\AppData\\Roaming\\npm\\codex.cmd"');
-      expect(resolved.args[3]).toContain("-m gpt-5.4-mini");
+      expect(resolved.args[3]).toBe("C:\\Users\\bunny\\AppData\\Roaming\\npm\\codex.cmd");
+      expect(resolved.args).toContain("-m");
+      expect(resolved.args).toContain("gpt-5.4-mini");
     } finally {
       if (platform) Object.defineProperty(process, "platform", platform);
     }
