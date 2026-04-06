@@ -411,11 +411,7 @@ export class App {
     ];
     const total = this.getLiveTotalTokens();
     if (total > 0) {
-      if (this.contextLimitTokens > 0) {
-        parts.push(`Σ ${fmtTokens(total)}/${fmtTokens(this.contextLimitTokens)} total`);
-      } else {
-        parts.push(`Σ ${fmtTokens(total)} total`);
-      }
+      parts.push(`Σ ${fmtTokens(total)} session`);
     }
     return parts;
   }

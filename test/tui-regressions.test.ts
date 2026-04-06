@@ -35,7 +35,7 @@ describe("sidebar token summary", () => {
     expect(app.renderTokenSummaryParts()).toEqual([
       "↑ 150 in",
       "↓ 60 out",
-      "Σ 210/344k total",
+      "Σ 210 session",
     ]);
   });
 
@@ -47,7 +47,7 @@ describe("sidebar token summary", () => {
     const footer = app.renderSidebarFooter().map((line: string) => stripAnsi(line)).join("\n");
     expect(footer).toContain("↑ 150 in");
     expect(footer).toContain("↓ 60 out");
-    expect(footer).not.toContain("Σ 210/344k total");
+    expect(footer).not.toContain("Σ 210 session");
   });
 
   it("uses the rock indicator and wraps cost/context details instead of clipping", () => {
@@ -72,8 +72,12 @@ describe("sidebar token summary", () => {
     expect(footer[0]).toBe("");
     expect(footer.some((line: string) => line.includes("Session"))).toBe(true);
     expect(footer.some((line: string) => line.trim() === "$0.0016")).toBe(true);
+    expect(footer.some((line: string) => line.trim() === "132k/344k")).toBe(true);
     expect(footer.some((line: string) => line.includes("132k/344k"))).toBe(true);
-    expect(footer.some((line: string) => line.includes("prompt"))).toBe(true);
+    expect(footer.some((line: string) => line.trim().includes("prompt"))).toBe(true);
+    expect(footer.findIndex((line: string) => line.includes("prompt"))).toBeLessThan(
+      footer.findIndex((line: string) => line.includes("132k/344k")),
+    );
 
     updateSetting("cavemanLevel", "off");
   });
