@@ -5,15 +5,44 @@ import { tool } from "ai";
 import { assessFileWrite } from "../core/safety.js";
 import { createCheckpoint } from "../core/git.js";
 
+/** Max chars to return from file reads (~2000 tokens) */
+const MAX_READ_CHARS = 8000;
+/** Max lines from grep matches */
+const MAX_GREP_MATCHES = 30;
+
 export const readFileTool = tool({
-  description: "Read the contents of a file",
+  description: "Read the contents of a file. Returns first ~2000 tokens. Use offset/limit for large files.",
   inputSchema: z.object({
     path: z.string().describe("Path to the file to read"),
+    offset: z.number().optional().describe("Start line (0-based)"),
+    limit: z.number().optional().describe("Max lines to read"),
   }),
-  execute: async ({ path }) => {
+  execute: async ({ path, offset, limit }) => {
     try {
-      const content = readFileSync(path, "utf-8");
-      return { success: true as const, content };
+      const raw = readFileSync(path, "utf-8");
+      let content = raw;
+
+      // Apply line offset/limit if specified
+      if (offset !== undefined || limit !== undefined) {
+        const lines = raw.split("\n");
+        const start = offset ?? 0;
+        const end = limit ? start + limit : lines.length;
+        content = lines.slice(start, end).join("\n");
+      }
+
+      // Truncate to save context tokens
+      const totalLines = raw.split("\n").length;
+      if (content.length > MAX_READ_CHARS) {
+        content = content.slice(0, MAX_READ_CHARS);
+        return {
+          success: true as const,
+          content,
+          totalLines,
+          truncated: true,
+          note: `File truncated at ~2000 tokens. Use offset/limit to read specific sections.`,
+        };
+      }
+      return { success: true as const, content, totalLines };
     } catch (err: unknown) {
       return { success: false as const, error: (err as Error).message };
     }
@@ -34,7 +63,7 @@ export const writeFileTool = tool({
     createCheckpoint();
     try {
       writeFileSync(path, content, "utf-8");
-      return { success: true as const };
+      return { success: true as const, bytesWritten: content.length };
     } catch (err: unknown) {
       return { success: false as const, error: (err as Error).message };
     }
@@ -65,7 +94,7 @@ export const editFileTool = tool({
 });
 
 export const listFilesTool = tool({
-  description: "List files in a directory, optionally with a glob pattern",
+  description: "List files in a directory",
   inputSchema: z.object({
     path: z.string().describe("Directory path to list").default("."),
     maxDepth: z.number().optional().describe("Max recursion depth (default 3)"),
@@ -125,9 +154,9 @@ export const grepTool = tool({
                   matches.push({
                     file: relative(process.cwd(), full),
                     line: i + 1,
-                    text: lines[i].trim().slice(0, 200),
+                    text: lines[i].trim().slice(0, 150),
                   });
-                  if (matches.length >= 50) return;
+                  if (matches.length >= MAX_GREP_MATCHES) return;
                 }
               }
             } catch { /* skip binary files */ }
@@ -137,6 +166,6 @@ export const grepTool = tool({
     }
 
     search(dir);
-    return { matches };
+    return { matches, totalMatches: matches.length, capped: matches.length >= MAX_GREP_MATCHES };
   },
 });

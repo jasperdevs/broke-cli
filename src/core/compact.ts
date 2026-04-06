@@ -1,10 +1,22 @@
 import type { LanguageModel } from "ai";
 import { generateText } from "ai";
 
-const COMPACT_PROMPT = `Summarize this conversation into a concise context block.
-Keep: key decisions, file paths mentioned, code changes made, current task state.
-Drop: pleasantries, repeated explanations, verbose tool outputs.
-Output a single paragraph that another AI can use to continue the conversation.`;
+const COMPACT_PROMPT = `Compress this conversation into a minimal context block for another AI to continue.
+
+KEEP (exact values):
+- File paths modified/read and what changed
+- Current task state and next steps
+- Key decisions made and constraints
+- Error messages encountered
+- Code patterns established
+
+DROP:
+- Greetings, acknowledgments, explanations of what tools do
+- Verbose tool outputs (just note "read file X, 200 lines")
+- Repeated attempts at the same thing (just note final outcome)
+- Full file contents (just note path + summary)
+
+Format: dense bullet points. No prose. Every line should be actionable context.`;
 
 export async function compactMessages(
   messages: Array<{ role: "user" | "assistant"; content: string }>,
@@ -16,8 +28,9 @@ export async function compactMessages(
   const toSummarize = messages.slice(0, -4);
   const toKeep = messages.slice(-4);
 
+  // Truncate each message to avoid blowing up the compaction request itself
   const conversationText = toSummarize
-    .map((m) => `${m.role}: ${m.content.slice(0, 500)}`)
+    .map((m) => `${m.role}: ${m.content.slice(0, 400)}`)
     .join("\n\n");
 
   try {
@@ -25,11 +38,11 @@ export async function compactMessages(
       model,
       system: COMPACT_PROMPT,
       prompt: conversationText,
-      maxOutputTokens: 500,
+      maxOutputTokens: 600,
     });
 
     return [
-      { role: "user" as const, content: `[Context from earlier conversation]\n${result.text}` },
+      { role: "user" as const, content: `[Compacted context]\n${result.text}` },
       ...toKeep,
     ];
   } catch {
@@ -39,7 +52,7 @@ export async function compactMessages(
 }
 
 export function estimateTokens(text: string): number {
-  // Rough estimate: ~4 chars per token for English
+  // ~4 chars per token for English
   return Math.ceil(text.length / 4);
 }
 

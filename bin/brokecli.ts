@@ -41,6 +41,7 @@ program.action(async (opts) => {
   const app = new App();
   let currentMode: Mode = getSettings().mode;
   let systemPrompt = buildSystemPrompt(process.cwd(), undefined, currentMode);
+  let lastActivityTime = Date.now(); // Track for cache expiry warning
   let abortController: AbortController | null = null;
 
   // Resume or new session
@@ -554,6 +555,14 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
       return;
     }
 
+    // Cache expiry warning — 5 min idle = full price on API
+    const idleMs = Date.now() - lastActivityTime;
+    if (idleMs > 5 * 60 * 1000 && session.getChatMessages().length > 4) {
+      const idleMins = Math.floor(idleMs / 60000);
+      app.setStatus(`${DIM}idle ${idleMins}m — context cache likely expired, consider /compact${RESET}`);
+    }
+    lastActivityTime = Date.now();
+
     // Budget check
     const budget = checkBudget(session.getTotalCost());
     if (!budget.allowed) {
@@ -646,6 +655,7 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
           app.updateCost(session.getTotalCost(), session.getTotalTokens());
           app.setStreaming(false);
           abortController = null;
+          lastActivityTime = Date.now();
           // Desktop notification if enabled
           if (getSettings().notifyOnResponse) {
             try {

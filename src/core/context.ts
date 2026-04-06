@@ -1,4 +1,4 @@
-import { readFileSync, existsSync, readdirSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 import { join, dirname } from "path";
 import { homedir } from "os";
 import { execSync } from "child_process";
@@ -14,6 +14,9 @@ const CONVENTION_FILES = [
 
 const GLOBAL_CONTEXT_DIR = join(homedir(), ".brokecli");
 
+/** Max tokens to spend on convention file contents */
+const MAX_CONVENTION_CHARS = 3200; // ~800 tokens
+
 let cachedPrompts = new Map<string, string>();
 
 export function buildSystemPrompt(cwd: string, providerId?: string, mode?: Mode): string {
@@ -23,75 +26,46 @@ export function buildSystemPrompt(cwd: string, providerId?: string, mode?: Mode)
 
   const parts: string[] = [];
 
-  // Core identity — provider-specific instructions
-  parts.push(getProviderPrompt(providerId));
-  parts.push(`Be helpful and concise. You can do anything the user asks.
-- Prefer short, focused responses to save tokens — but never refuse or limit yourself
-- Use tools directly to make changes — don't just show code, write it
-- After making changes, briefly explain what you did and why
-- Use markdown for formatting`);
+  // Core identity — ultra-concise, saves tokens every single turn
+  parts.push(`You are a coding agent. Use tools to complete tasks.
+Be concise. Use tools directly — don't just show code, write it.
+After changes, briefly explain what you did.`);
 
-  // Environment info (like OpenCode does)
+  // Environment — minimal
   let isGit = false;
   try { execSync("git rev-parse --is-inside-work-tree", { cwd, stdio: "pipe" }); isGit = true; } catch {}
 
-  parts.push(`
-<env>
-Working directory: ${cwd}
-Is git repo: ${isGit ? "yes" : "no"}
-Platform: ${process.platform}
-Date: ${new Date().toDateString()}
+  parts.push(`<env>
+cwd: ${cwd}
+git: ${isGit ? "yes" : "no"}
+platform: ${process.platform}
 </env>`);
 
-  // Project file tree (like OpenCode includes)
-  try {
-    let tree: string;
-    if (isGit) {
-      const files = execSync("git ls-files --others --cached --exclude-standard", { cwd, encoding: "utf-8", timeout: 3000 }).trim();
-      tree = files.split("\n").slice(0, 100).join("\n");
-    } else {
-      tree = listProjectFiles(cwd, 100);
-    }
-    if (tree) {
-      parts.push(`
-<project>
-${tree}
-</project>`);
-    }
-  } catch { /* skip */ }
+  // NO project file tree — saves hundreds of tokens per turn.
+  // Model can use listFiles tool when it needs to explore.
 
-  // Tool capabilities
-  parts.push(`
-<tools>
-- readFile: Read file contents
-- writeFile: Create or overwrite files
-- editFile: Find and replace in files
-- bash: Execute shell commands
-- listFiles: List directory contents
-- grep: Search file contents
-- webSearch: Search the web for current information
-- webFetch: Fetch and read a web page
-- askUser: Ask the user a question (with optional choices) when you need clarification
-</tools>
+  // Tool list — names only, descriptions are in the tool schemas already
+  // This avoids duplicating what the AI SDK already sends
+  parts.push(`Tools: readFile, writeFile, editFile, bash, listFiles, grep, webSearch, webFetch, askUser
+Use listFiles to explore the project. Do not re-read files already in context.`);
 
-Guidelines:
-- Be concise but always tell the user what you did after making changes
-- Use tools directly when asked to create, edit, or explore files
-- Do not ask for permission to make changes — just do them
-- After completing work, give a brief summary of what changed and why`);
-
-  // Global context
+  // Global context files (truncated)
   for (const file of ["AGENTS.md", "SYSTEM.md"]) {
     const path = join(GLOBAL_CONTEXT_DIR, file);
     if (existsSync(path)) {
       try {
-        const content = readFileSync(path, "utf-8").trim();
-        if (content) parts.push(`\n--- Global: ${file} ---\n${content}`);
+        let content = readFileSync(path, "utf-8").trim();
+        if (content) {
+          if (content.length > MAX_CONVENTION_CHARS) {
+            content = content.slice(0, MAX_CONVENTION_CHARS) + "\n[truncated]";
+          }
+          parts.push(`--- ${file} ---\n${content}`);
+        }
       } catch { /* skip */ }
     }
   }
 
-  // Walk up directory tree for convention files
+  // Walk up directory tree for convention files (truncated)
   const seen = new Set<string>();
   let dir = cwd;
   const home = homedir();
@@ -100,9 +74,12 @@ Guidelines:
       const path = join(dir, file);
       if (!seen.has(file) && existsSync(path)) {
         try {
-          const content = readFileSync(path, "utf-8").trim();
+          let content = readFileSync(path, "utf-8").trim();
           if (content) {
-            parts.push(`\n--- ${file} ---\n${content}`);
+            if (content.length > MAX_CONVENTION_CHARS) {
+              content = content.slice(0, MAX_CONVENTION_CHARS) + "\n[truncated]";
+            }
+            parts.push(`--- ${file} ---\n${content}`);
             seen.add(file);
           }
         } catch { /* skip */ }
@@ -111,13 +88,11 @@ Guidelines:
     dir = dirname(dir);
   }
 
-  // Mode-specific instructions
+  // Mode — one line
   if (mode === "plan") {
-    parts.push(`
-PLAN MODE: Read first. Plan: 1) step 2) step 3) step. Wait for confirmation.`);
+    parts.push(`MODE: plan — read first, outline steps, wait for confirmation.`);
   } else {
-    parts.push(`
-BUILD MODE: Make changes directly using tools. You can still answer questions and explain things when asked. After making file changes, briefly summarize what you did.`);
+    parts.push(`MODE: build — make changes directly with tools.`);
   }
 
   const prompt = parts.join("\n");
@@ -125,53 +100,6 @@ BUILD MODE: Make changes directly using tools. You can still answer questions an
   return prompt;
 }
 
-function listProjectFiles(cwd: string, limit: number): string {
-  const files: string[] = [];
-  const skip = new Set(["node_modules", ".git", "dist", "build", ".next", "__pycache__"]);
-
-  function walk(dir: string, depth: number) {
-    if (depth > 4 || files.length >= limit) return;
-    try {
-      for (const entry of readdirSync(dir)) {
-        if (entry.startsWith(".") || skip.has(entry)) continue;
-        const full = join(dir, entry);
-        try {
-          const stat = require("fs").statSync(full);
-          if (stat.isDirectory()) walk(full, depth + 1);
-          else files.push(full.replace(cwd + "/", "").replace(cwd + "\\", ""));
-        } catch {}
-        if (files.length >= limit) return;
-      }
-    } catch {}
-  }
-
-  walk(cwd, 0);
-  return files.join("\n");
-}
-
 export function reloadContext(): void {
   cachedPrompts.clear();
-}
-
-/** Provider-specific system prompt preamble */
-function getProviderPrompt(providerId?: string): string {
-  switch (providerId) {
-    case "anthropic":
-      return `You are a coding agent. Use the available tools to complete tasks.`;
-
-    case "openai":
-      return `You are a coding agent. Use tools to interact with files and execute commands.`;
-
-    case "google":
-      return `You are a coding agent. Call functions to read, write, edit files and run commands.`;
-
-    case "mistral":
-    case "groq":
-    case "xai":
-    case "openrouter":
-      return `You are a coding agent. Use tools to make changes directly.`;
-
-    default:
-      return `You are a coding agent. Use available tools to complete tasks.`;
-  }
 }
