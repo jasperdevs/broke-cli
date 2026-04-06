@@ -19,15 +19,15 @@ describe("caveman mode resolution", () => {
     expect(resolveCavemanLevel("auto", "fix css padding and wording on settings menu")).toBe("ultra");
   });
 
-  it("uses lite for routine implementation in auto mode", () => {
-    expect(resolveCavemanLevel("auto", "implement small config flag")).toBe("lite");
-    expect(resolveCavemanLevel("auto", "make sidebar scroll smoother")).toBe("lite");
+  it("uses ultra for short routine implementation in auto mode", () => {
+    expect(resolveCavemanLevel("auto", "implement small config flag")).toBe("ultra");
+    expect(resolveCavemanLevel("auto", "make sidebar scroll smoother")).toBe("ultra");
   });
 
   it("makes ultra prompt much harsher", () => {
     const prompt = buildSystemPrompt(process.cwd(), "openai", "build", "ultra");
 
-    expect(prompt).toContain("Target: ~75% fewer output tokens.");
+    expect(prompt).toContain("Target: ~85% fewer output tokens.");
     expect(prompt).toContain("Caveman ultra.");
     expect(prompt).toContain("Use arrows for causality");
   });
@@ -45,6 +45,7 @@ describe("caveman mode resolution", () => {
 
     expect(optimized[0].content).toContain("compressed");
     expect(optimized[0].content).toContain("dir");
+    expect(optimized[0].content).toContain("cfg");
     expect(optimized[0].content.length).toBeLessThan(messages[0].content.length);
 
     updateSetting("cavemanLevel", "off");

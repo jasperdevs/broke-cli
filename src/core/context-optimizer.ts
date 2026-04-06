@@ -7,21 +7,27 @@ function normalizePath(p: string): string {
 function getEvictionThreshold(): number {
   const level = getSettings().cavemanLevel ?? "off";
   if (level === "ultra") return 1;
-  if (level === "auto") return 3;
+  if (level === "auto") return 2;
   if (level === "lite") return 4;
   return 6;
 }
 
 function compressToolOutputs(content: string): string {
   const level = getSettings().cavemanLevel ?? "off";
-  const minLength = level === "ultra" ? 220 : 500;
+  const minLength = level === "ultra" ? 120 : 500;
   if (content.length < minLength) return content;
 
   let compressed = content;
+  if (level === "ultra") {
+    compressed = compressed
+      .replace(/\r/g, "")
+      .replace(/[ \t]{2,}/g, " ")
+      .replace(/\n{3,}/g, "\n\n");
+  }
   const lines = compressed.split("\n");
-  const headCount = level === "ultra" ? 2 : 3;
+  const headCount = level === "ultra" ? 1 : 3;
   const tailCount = level === "ultra" ? 1 : 2;
-  const maxLines = level === "ultra" ? 12 : 30;
+  const maxLines = level === "ultra" ? 8 : 30;
   if (lines.length > maxLines) {
     const head = lines.slice(0, headCount).join("\n");
     const tail = lines.slice(-tailCount).join("\n");
@@ -29,7 +35,7 @@ function compressToolOutputs(content: string): string {
     compressed = `${head}\n[... ${omitted} lines compressed ...]\n${tail}`;
   }
 
-  const maxChars = level === "ultra" ? 700 : 1500;
+  const maxChars = level === "ultra" ? 420 : 1500;
   if (compressed.length > maxChars) {
     compressed = compressed.slice(0, maxChars) + "\n[compressed]";
   }
@@ -39,10 +45,18 @@ function compressToolOutputs(content: string): string {
       .replace(/\b(directory|directories)\b/gi, "dir")
       .replace(/\b(configuration|configurations)\b/gi, "cfg")
       .replace(/\bimplementation\b/gi, "impl")
+      .replace(/\bapplication\b/gi, "app")
+      .replace(/\bproject\b/gi, "proj")
+      .replace(/\bprovider\b/gi, "prov")
+      .replace(/\bcontext\b/gi, "ctx")
       .replace(/\bresponse\b/gi, "res")
       .replace(/\brequest\b/gi, "req")
       .replace(/\bfunction\b/gi, "fn")
-      .replace(/\bmessage\b/gi, "msg");
+      .replace(/\bmessage\b/gi, "msg")
+      .replace(/\bincluding\b/gi, "incl")
+      .replace(/\bbecause\b/gi, "bc")
+      .replace(/\bwithout\b/gi, "w/o")
+      .replace(/\bbetween\b/gi, "btwn");
   }
 
   return compressed;

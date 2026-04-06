@@ -3,6 +3,7 @@ import { startStream } from "../ai/stream.js";
 import { estimateTextTokens } from "../ai/tokens.js";
 import { getContextLimit } from "../ai/cost.js";
 import { routeMessage } from "../ai/router.js";
+import { modelSupportsReasoning } from "../ai/model-catalog.js";
 import type { ModelHandle } from "../ai/providers.js";
 import { buildSystemPrompt, resolveCavemanLevel } from "../core/context.js";
 import { compactMessages, getTotalContextTokens } from "../core/compact.js";
@@ -18,10 +19,12 @@ const SDK_TOOL_PROVIDER_IDS = new Set([
   "openrouter", "ollama", "lmstudio", "llamacpp", "jan", "vllm",
 ]);
 
-const THINK_TAG_PROVIDER_IDS = new Set(["ollama", "lmstudio", "llamacpp", "jan", "vllm"]);
+function supportsThinking(model: ModelHandle): boolean {
+  return modelSupportsReasoning(model.modelId, model.provider.id);
+}
 
 function shouldRequestThinkTags(model: ModelHandle, thinkingRequested: boolean): boolean {
-  return thinkingRequested && model.runtime === "sdk" && THINK_TAG_PROVIDER_IDS.has(model.provider.id);
+  return thinkingRequested && supportsThinking(model) && model.runtime === "sdk";
 }
 
 function canUseSdkTools(model: ModelHandle): boolean {
@@ -155,7 +158,9 @@ export async function runModelTurn(options: {
   const useModelId = route === "small" && smallModel ? smallModelId : currentModelId;
   const executionModel = useModel;
   const executionModelId = useModelId;
-  const thinkingRequested = route === "main" ? getSettings().enableThinking : false;
+  const thinkingRequested = route === "main"
+    ? getSettings().enableThinking && supportsThinking(executionModel)
+    : false;
   const nextToolCalls: string[] = [];
   const optimizedMessages = getContextOptimizer().optimizeMessages(session.getChatMessages());
   let abortController: AbortController | null = new AbortController();
@@ -171,7 +176,7 @@ export async function runModelTurn(options: {
   const effectiveCavemanLevel = resolveCavemanLevel(getSettings().cavemanLevel ?? "off", text);
   let turnSystemPrompt = buildSystemPrompt(process.cwd(), executionModel.provider.id, currentMode, effectiveCavemanLevel);
   if (shouldRequestThinkTags(executionModel, thinkingRequested)) {
-    turnSystemPrompt += "\n\nFor local reasoning-capable models: emit a short plain-text reasoning summary inside <think>...</think> before the final answer. Keep it visible, concise, and directly about the current request. If you do not support that format, ignore this instruction and answer normally.";
+    turnSystemPrompt += "\n\nIf this model exposes reasoning in text, place that reasoning inside <think>...</think> before the final answer. Keep it plain text, concise, and specific to this request. If the model does not support that format, ignore this instruction and answer normally.";
   }
   let streamTokenFlushTimer: ReturnType<typeof setTimeout> | null = null;
   const scheduleStreamTokenUpdate = (): void => {

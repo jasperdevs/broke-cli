@@ -74,6 +74,7 @@ const FALLBACK_SPECS: ModelSpec[] = [
     name: "Claude Sonnet 4.6",
     cost: { input: 3.0, output: 15.0, cacheRead: 0.3, cacheWrite: 3.75 },
     limit: { context: 200_000, output: 64_000 },
+    reasoning: true,
   },
   {
     providerId: "anthropic",
@@ -81,6 +82,7 @@ const FALLBACK_SPECS: ModelSpec[] = [
     name: "Claude Opus 4.6",
     cost: { input: 5.0, output: 25.0, cacheRead: 0.5, cacheWrite: 6.25 },
     limit: { context: 200_000, output: 64_000 },
+    reasoning: true,
   },
   {
     providerId: "anthropic",
@@ -88,6 +90,30 @@ const FALLBACK_SPECS: ModelSpec[] = [
     name: "Claude Haiku 4.5",
     cost: { input: 1.0, output: 5.0 },
     limit: { context: 200_000, output: 64_000 },
+  },
+  {
+    providerId: "openai",
+    id: "gpt-5-mini",
+    name: "GPT-5 mini",
+    cost: { input: 0.25, output: 2.0, reasoning: 0.25 },
+    limit: { context: 400_000, output: 128_000 },
+    reasoning: true,
+  },
+  {
+    providerId: "openai",
+    id: "gpt-5.4-mini",
+    name: "GPT-5.4 mini",
+    cost: { input: 0.4, output: 3.2, reasoning: 0.4 },
+    limit: { context: 400_000, output: 128_000 },
+    reasoning: true,
+  },
+  {
+    providerId: "openai",
+    id: "gpt-5.4",
+    name: "GPT-5.4",
+    cost: { input: 2.0, output: 8.0, reasoning: 2.0 },
+    limit: { context: 400_000, output: 128_000 },
+    reasoning: true,
   },
   {
     providerId: "openai",
@@ -123,6 +149,23 @@ const FALLBACK_SPECS: ModelSpec[] = [
     name: "o3-mini",
     cost: { input: 1.1, output: 4.4 },
     limit: { context: 200_000, output: 100_000 },
+    reasoning: true,
+  },
+  {
+    providerId: "openai",
+    id: "o3",
+    name: "o3",
+    cost: { input: 2.0, output: 8.0 },
+    limit: { context: 200_000, output: 100_000 },
+    reasoning: true,
+  },
+  {
+    providerId: "openai",
+    id: "o4-mini",
+    name: "o4-mini",
+    cost: { input: 1.1, output: 4.4 },
+    limit: { context: 200_000, output: 100_000 },
+    reasoning: true,
   },
   {
     providerId: "google",
@@ -130,6 +173,7 @@ const FALLBACK_SPECS: ModelSpec[] = [
     name: "Gemini 2.5 Flash",
     cost: { input: 0.3, output: 2.5, cacheRead: 0.075 },
     limit: { context: 1_048_576, output: 65_536 },
+    reasoning: true,
   },
   {
     providerId: "google",
@@ -137,6 +181,7 @@ const FALLBACK_SPECS: ModelSpec[] = [
     name: "Gemini 2.5 Pro",
     cost: { input: 1.25, output: 10.0, cacheRead: 0.31 },
     limit: { context: 1_048_576, output: 65_536 },
+    reasoning: true,
   },
   {
     providerId: "google",
@@ -226,6 +271,7 @@ function buildFallbackCatalog(): Catalog {
       id: spec.id,
       name: spec.name,
       family: spec.family,
+      reasoning: spec.reasoning,
       cost: spec.cost ? {
         input: spec.cost.input,
         output: spec.cost.output,
@@ -349,4 +395,9 @@ export function getModelPricing(modelId: string, providerId?: string): ModelPric
 export function getModelContextLimit(modelId: string, providerId?: string): number | null {
   const spec = getModelSpec(modelId, providerId);
   return spec?.limit.context ?? null;
+}
+
+export function modelSupportsReasoning(modelId: string, providerId?: string): boolean {
+  const spec = getModelSpec(modelId, providerId);
+  return !!spec?.reasoning;
 }

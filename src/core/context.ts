@@ -152,6 +152,11 @@ const AUTO_CAVEMAN_ROUTINE_PATTERNS = [
   /\brefactor|cleanup|polish|wrap|scroll|cursor|layout\b/i,
 ];
 
+const AUTO_CAVEMAN_ULTRA_PATTERNS = [
+  /\bdocs?|readme|comment|copy|wording|label|placeholder|tooltip|padding|margin|spacing|color|css\b/i,
+  /\brename|tiny|small|quick|simple|minor|compact|shorter|trim|align\b/i,
+];
+
 const AUTO_CAVEMAN_DANGER_PATTERNS = [
   /\bsecurity|auth|permission|secret|credential|xss|csrf|injection|exploit|vuln/i,
   /\bdebug|investigat|root cause|repro|failing test|broken|doesn'?t work|why\b/i,
@@ -169,8 +174,10 @@ export function resolveCavemanLevel(level: CavemanLevel, userMessage: string): C
   if (AUTO_CAVEMAN_DANGER_PATTERNS.some((pattern) => pattern.test(msg))) return "off";
   if (msg.length > 450) return "off";
   if (AUTO_CAVEMAN_SAFE_PATTERNS.some((pattern) => pattern.test(msg))) return "ultra";
+  if (AUTO_CAVEMAN_ULTRA_PATTERNS.some((pattern) => pattern.test(msg))) return "ultra";
+  if (AUTO_CAVEMAN_ROUTINE_PATTERNS.some((pattern) => pattern.test(msg)) && msg.length < 180) return "ultra";
   if (AUTO_CAVEMAN_ROUTINE_PATTERNS.some((pattern) => pattern.test(msg))) return "lite";
-  if (/\bwhat|which|where|when|who\b/i.test(msg) && msg.length < 120) return "lite";
+  if (/\bwhat|which|where|when|who\b/i.test(msg) && msg.length < 120) return "ultra";
 
   return "lite";
 }
@@ -201,16 +208,17 @@ AUTO CAVEMAN MODE ACTIVE. Compression level chosen per task.
 </output-style>`;
   }
   return `<output-style>
-MAXIMUM COMPRESSION MODE. Caveman ultra. Target: ~75% fewer output tokens.
-- Drop articles/filler/pleasantries/hedging.
-- Fragments OK. Short synonyms. Technical terms exact.
-- Abbreviate hard: DB/auth/cfg/env/req/res/fn/impl/msg/err/ref.
+MAXIMUM COMPRESSION MODE. Caveman ultra. Target: ~85% fewer output tokens.
+- Drop articles/filler/pleasantries/hedging/pronouns unless needed.
+- Fragments preferred. No full prose unless ambiguity/risk forces it.
+- Abbreviate hard: DB/auth/cfg/env/req/res/fn/impl/msg/err/ref/ctx/proj/prov.
 - Use arrows for causality: X → Y. Use slashes for alternatives.
 - One thought per line. Prefer bullets/fragments over paragraphs.
 - One word when one word enough. "Fixed." > "I fixed issue."
 - No action narration. No recap unless user asks.
 - If user asks explanation: answer in shards, not essay.
 - Good pattern: [thing] [action] [reason]. [next step].
+- Strong preference: verdict first. Then file/bug/fix. Then tests.
 - Code blocks unchanged. Errors quoted exact.
 
 NOT: "I've gone ahead and added the missing database configuration to your environment file."
