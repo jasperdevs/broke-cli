@@ -11,12 +11,15 @@ interface ConnectFlowItem {
 interface ConnectFlowApp {
   addMessage(role: "user" | "assistant" | "system", content: string): void;
   showQuestion(prompt: string, options?: string[]): Promise<string>;
-  openItemPicker(title: string, items: ConnectFlowItem[], onSelect: (id: string) => void): void;
+  openItemPicker(
+    title: string,
+    items: ConnectFlowItem[],
+    onSelect: (id: string) => void,
+    options?: { kind?: "connect" },
+  ): void;
 }
 
 const CONNECT_PROVIDER_ORDER = [
-  "codex",
-  "anthropic",
   "openai",
   "google",
   "groq",
@@ -55,7 +58,7 @@ export async function runConnectFlow(options: {
         label: info.name,
         detail: providerRegistry.getConnectStatus(info.id),
       }));
-    app.openItemPicker("Connect Provider", items, resolve);
+    app.openItemPicker("Connect Provider", items, resolve, { kind: "connect" });
   });
 
   const info = providerRegistry.getProviderInfo(selectedProviderId);

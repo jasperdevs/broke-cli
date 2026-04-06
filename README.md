@@ -25,10 +25,10 @@ npm install -g @jasperdevs/brokecli
 ## Core Commands
 
 - `/settings` toggle behavior and persistent preferences
-- `/connect` configure providers and local endpoints
+- `/login` login with subscription/oauth providers like Codex and Claude Code
+- `/connect` configure API-key providers and local endpoints
 - `/logout` clear stored brokecli credentials
-- `/model` choose the main model
-- `/scoped-models` pin or unpin models for `Ctrl+P` cycling
+- `/model` choose the main model and pin models for `Ctrl+P` cycling
 - `/resume` search and resume recent sessions in the current project
 - `/session` inspect the active session file, tokens, and cost
 - `/projects` search and switch among recently used projects

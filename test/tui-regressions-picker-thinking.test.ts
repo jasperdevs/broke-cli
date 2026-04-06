@@ -70,7 +70,7 @@ describe("picker menus", () => {
     let rendered: string[] = [];
     app.screen = { height: 16, width: 60, hasSidebar: false, mainWidth: 60, sidebarWidth: 20, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
     app.drawImmediate();
-    expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("Scope: all | scoped");
+    expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("Scope: all | pinned");
 
     const originalTheme = getSettings().theme;
     const themes = listThemes().slice(0, 4);

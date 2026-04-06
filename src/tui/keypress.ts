@@ -31,6 +31,9 @@ export class KeypressHandler {
   private isPasting = false;
   private pasteBuffer = "";
   private mouseTrackingEnabled = false;
+  private started = false;
+  private origEmit: typeof process.stdin.emit | null = null;
+  private keypressListener: ((str: string | undefined, key: readline.Key) => void) | null = null;
 
   constructor(onKey: KeyHandler, onPaste: PasteHandler) {
     this.onKey = onKey;
@@ -39,9 +42,11 @@ export class KeypressHandler {
 
   /** Start listening for input */
   start(): void {
+    if (this.started) return;
     if (!process.stdin.isTTY) {
       throw new Error("brokecli requires an interactive terminal (TTY).");
     }
+    this.started = true;
 
     process.stdin.setRawMode(true);
     process.stdin.resume();
@@ -56,6 +61,7 @@ export class KeypressHandler {
 
     // Intercept raw data BEFORE readline to handle mouse sequences
     const origEmit = process.stdin.emit.bind(process.stdin);
+    this.origEmit = origEmit;
     process.stdin.emit = ((event: string, ...args: any[]) => {
       if (event === "data") {
         const s = typeof args[0] === "string" ? args[0] : (args[0] as Buffer).toString("utf-8");
@@ -112,7 +118,7 @@ export class KeypressHandler {
     // Use readline for keypress parsing (after our intercept)
     readline.emitKeypressEvents(process.stdin);
 
-    process.stdin.on("keypress", (str: string | undefined, key: readline.Key) => {
+    this.keypressListener = (str: string | undefined, key: readline.Key) => {
       // Skip keypresses that are fragments of mouse escape sequences
       if (Date.now() - lastMouseTime < 10) return;
       if (str && /^\d+;?\d*[Mm]?$/.test(str)) return;
@@ -152,14 +158,25 @@ export class KeypressHandler {
       }
 
       this.onKey(kp);
-    });
+    };
+    process.stdin.on("keypress", this.keypressListener);
   }
 
   /** Stop listening, restore terminal */
   stop(): void {
+    if (!this.started) return;
+    this.started = false;
     this.setMouseTracking(false);
     write(MODIFY_OTHER_KEYS_OFF);
     write(PASTE_MODE_OFF);
+    if (this.keypressListener) {
+      process.stdin.off("keypress", this.keypressListener);
+      this.keypressListener = null;
+    }
+    if (this.origEmit) {
+      process.stdin.emit = this.origEmit;
+      this.origEmit = null;
+    }
     if (process.stdin.isTTY) {
       process.stdin.setRawMode(false);
     }

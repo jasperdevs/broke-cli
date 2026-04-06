@@ -17,6 +17,7 @@ import { listTemplates, loadTemplate } from "../core/templates.js";
 import { undoLastCheckpoint } from "../core/git.js";
 import { formatRelativeMinutes } from "./exports.js";
 import { runConnectFlow } from "./connect-flow.js";
+import { runLoginFlow } from "./login-flow.js";
 import { handleLogoutMenu, openExportMenu, openExtensionsMenu, openPermissionsMenu, openProjectsMenu, openResumeMenu, openSettingsMenu, openThemeMenu, shareTranscript } from "./slash-command-menus.js";
 import type { ModelOption, SettingEntry, PickerItem } from "../tui/app-types.js";
 import { SessionManager } from "../core/session-manager.js";
@@ -50,7 +51,7 @@ interface SlashCommandApp {
       onSecondaryAction?: (id: string) => void;
       secondaryHint?: string;
       closeOnSelect?: boolean;
-      kind?: "permissions" | "extensions" | "theme" | "export" | "resume" | "session" | "hotkeys" | "projects" | "logout" | "agents";
+      kind?: "login" | "connect" | "permissions" | "extensions" | "theme" | "export" | "resume" | "session" | "hotkeys" | "projects" | "logout" | "agents";
     },
   ): void;
   openAgentRunsView?(title: string, runs: Array<{ id: string; prompt: string; status: "running" | "done" | "error"; result?: string; detail?: string; createdAt: number }>): void;
@@ -61,6 +62,7 @@ interface SlashCommandApp {
   getLastAssistantContent(): string;
   getFileContexts(): Map<string, string>;
   showQuestion(prompt: string, options?: string[]): Promise<string>;
+  runExternalCommand?(title: string, command: string, args: string[]): number;
   updateItemPickerItems?(items: PickerItem[], focusId?: string): void;
   setCompacting?(compacting: boolean, tokenCount?: number): void;
   openBudgetView?(title: string, reports: { all: BudgetReport; session: BudgetReport }, scope?: "all" | "session"): void;
@@ -145,13 +147,21 @@ export async function handleSlashCommand(options: {
       getContextOptimizer().reset();
       return { handled: true };
     case "connect":
-    case "login":
       await runConnectFlow({
+        providerId: restText || undefined,
         app,
         providerRegistry,
         refreshProviderState,
         isSkippedPromptAnswer,
         isValidHttpBaseUrl,
+      });
+      return { handled: true };
+    case "login":
+      await runLoginFlow({
+        providerId: restText || undefined,
+        app,
+        providerRegistry,
+        refreshProviderState,
       });
       return { handled: true };
     case "model": {
@@ -176,30 +186,6 @@ export async function handleSlashCommand(options: {
         if (pinned && !scoped.includes(key)) updateSetting("scopedModels", [...scoped, key]);
         else if (!pinned) updateSetting("scopedModels", scoped.filter((entry: string) => entry !== key));
       }, 0);
-      return { handled: true };
-    }
-    case "scoped-models": {
-      const allOptions = buildVisibleModelOptions();
-      if (allOptions.length === 0) {
-        app.addMessage("system", "No connected providers found. Run /connect.");
-        return { handled: true };
-      }
-      app.openModelPicker(allOptions, (provId, modId) => {
-        try {
-          const nextModel = providerRegistry.createModel(provId, modId);
-          onModelChange(nextModel, modId);
-          app.setModel(nextModel.provider.name, modId);
-          session.setProviderModel(nextModel.provider.name, modId);
-          updateSetting("lastModel", `${provId}/${modId}`);
-        } catch (err) {
-          app.addMessage("system", `Failed: ${(err as Error).message}`);
-        }
-      }, (provId, modId, pinned) => {
-        const key = `${provId}/${modId}`;
-        const scoped = getSettings().scopedModels;
-        if (pinned && !scoped.includes(key)) updateSetting("scopedModels", [...scoped, key]);
-        else if (!pinned) updateSetting("scopedModels", scoped.filter((entry: string) => entry !== key));
-      }, 0, "scoped");
       return { handled: true };
     }
     case "settings": {

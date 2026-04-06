@@ -127,6 +127,8 @@ export function closeItemPicker(app: AppState, revertPreview = false): void {
 export function getMenuPromptPrefix(_app: AppState, kind: MenuPromptKind): string {
   switch (kind) {
     case "model": return "/model ";
+    case "login": return "/login ";
+    case "connect": return "/connect ";
     case "settings": return "/settings ";
     case "permissions": return "/permissions ";
     case "extensions": return "/extensions ";

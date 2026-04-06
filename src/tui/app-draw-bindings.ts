@@ -12,6 +12,7 @@ import {
   sparkleSpinner,
   start,
   stop,
+  runExternalCommand,
 } from "./app-draw-methods.js";
 
 type AppState = any;
@@ -30,6 +31,7 @@ export interface AppDrawMethods {
   getCommandMatches(): ReturnType<typeof getCommandMatches>;
   start(): void;
   stop(): void;
+  runExternalCommand(title: string, command: string, args: string[]): number;
 }
 
 export const appDrawMethods: AppDrawMethods = {
@@ -46,4 +48,5 @@ export const appDrawMethods: AppDrawMethods = {
   getCommandMatches(this: AppState) { return getCommandMatches(this); },
   start(this: AppState) { return start(this); },
   stop(this: AppState) { return stop(this); },
+  runExternalCommand(this: AppState, title: string, command: string, args: string[]) { return runExternalCommand(this, title, command, args); },
 };

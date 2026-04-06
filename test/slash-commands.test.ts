@@ -46,6 +46,9 @@ function createAppStub() {
     async showQuestion() {
       return "";
     },
+    runExternalCommand() {
+      return 0;
+    },
     openBudgetView() {},
     openAgentRunsView() {},
     getAgentRuns() {
@@ -222,23 +225,66 @@ describe("slash command handling", () => {
     expect(capturedEntries.some((entry) => entry.key === "followUpMode")).toBe(false);
   });
 
-  it("opens /scoped-models in scoped mode", async () => {
+  it("routes /login to the oauth login flow", async () => {
     const app = createAppStub();
-    let capturedScope: "all" | "scoped" | undefined;
-    app.openModelPicker = (_options: any, _onSelect: any, _onPin: any, _initialCursor: any, initialScope?: "all" | "scoped") => {
-      capturedScope = initialScope;
+    let ranLogin: { title: string; command: string; args: string[] } | null = null;
+    app.runExternalCommand = (title: string, command: string, args: string[]) => {
+      ranLogin = { title, command, args };
+      return 0;
     };
 
     const result = await handleSlashCommand({
-      text: "/scoped-models",
+      text: "/login codex",
       app,
-      session: new Session(`test-scoped-models-${Date.now()}`),
+      session: new Session(`test-login-${Date.now()}`),
       activeModel: null,
       currentModelId: "",
       currentMode: "build",
       systemPrompt: "sys",
-      providerRegistry: { createModel: () => ({ provider: { name: "Test", id: "test" } }) } as any,
-      buildVisibleModelOptions: () => [{ providerId: "test", providerName: "Test", modelId: "alpha", active: true, pinned: true }],
+      providerRegistry: { getProviderInfo: () => ({ name: "Codex" }) } as any,
+      buildVisibleModelOptions: () => [],
+      refreshProviderState: async () => [{ id: "codex" }] as any,
+      isSkippedPromptAnswer: () => false,
+      isValidHttpBaseUrl: () => true,
+      getContextOptimizer: () => ({ reset() {} }) as any,
+      onSessionReplace: () => {},
+      onModelChange: () => {},
+      onSystemPromptChange: () => {},
+      hooks: { emit() {} },
+      onProjectChange: () => {},
+    });
+
+    expect(result.handled).toBe(true);
+    expect(ranLogin).toEqual({
+      title: "Login to ChatGPT Plus/Pro (Codex Subscription)",
+      command: "codex",
+      args: ["login"],
+    });
+  });
+
+  it("routes /connect to the non-oauth connect flow", async () => {
+    const app = createAppStub();
+    let prompt = "";
+    app.showQuestion = async (nextPrompt: string) => {
+      prompt = nextPrompt;
+      return "sk-test-key";
+    };
+
+    const providerRegistry = {
+      getProviderInfo: () => ({ id: "openai", name: "OpenAI" }),
+      getConnectStatus: () => "api key",
+    } as any;
+
+    const result = await handleSlashCommand({
+      text: "/connect openai",
+      app,
+      session: new Session(`test-connect-${Date.now()}`),
+      activeModel: null,
+      currentModelId: "",
+      currentMode: "build",
+      systemPrompt: "sys",
+      providerRegistry,
+      buildVisibleModelOptions: () => [],
       refreshProviderState: async () => [],
       isSkippedPromptAnswer: () => false,
       isValidHttpBaseUrl: () => true,
@@ -251,7 +297,7 @@ describe("slash command handling", () => {
     });
 
     expect(result.handled).toBe(true);
-    expect(capturedScope).toBe("scoped");
+    expect(prompt).toBe("Paste OpenAI API key");
   });
 
   it("writes a standalone html share for /share", async () => {

@@ -1,9 +1,11 @@
 import stripAnsi from "strip-ansi";
-import { execSync } from "child_process";
+import { execSync, spawnSync } from "child_process";
 import { getSettings } from "../core/config.js";
 import { renderBudgetDashboard } from "../core/budget-insights.js";
 import { BOLD, DIM, RESET } from "../utils/ansi.js";
 import { truncateVisible, visibleWidth } from "../utils/terminal-width.js";
+import { resolveNativeCommand } from "../ai/native-cli.js";
+import { resolveNativeSpawnCommand } from "../ai/native-stream.js";
 import { getCommandMatches as findCommandMatches } from "./command-surface.js";
 import { fmtCost, fmtTokens, wordWrap } from "./render/formatting.js";
 import { APP_BG, ERR, MUTED, OK, P, T, TXT, WARN } from "./app-shared.js";
@@ -358,8 +360,9 @@ export function appendModelPicker(app: AppState, lines: string[], _maxTotal: num
   const picker = app.modelPicker!;
   lines.push(` ${T()}${BOLD}Select model${RESET}`);
   const allLabel = picker.scope === "all" ? `${TXT()}${BOLD}all${RESET}` : `${MUTED()}all${RESET}`;
-  const scopedLabel = picker.scope === "scoped" ? `${TXT()}${BOLD}scoped${RESET}` : `${MUTED()}scoped${RESET}`;
+  const scopedLabel = picker.scope === "scoped" ? `${TXT()}${BOLD}pinned${RESET}` : `${MUTED()}pinned${RESET}`;
   lines.push(` ${DIM}Scope:${RESET} ${allLabel} ${DIM}|${RESET} ${scopedLabel}`);
+  lines.push(` ${DIM}space pin · tab scope${RESET}`);
   if (app.getFilteredModels().length === 0) {
     lines.push(`  ${DIM}no matches${RESET}`);
     return;
@@ -445,4 +448,19 @@ export function stop(app: AppState): void {
   console.log(`${DIM} ${fmtCost(app.sessionCost)} | ${fmtTokens(app.sessionTokens)} tokens${RESET}`);
   console.log("");
   process.exit(0);
+}
+
+export function runExternalCommand(app: AppState, _title: string, commandName: string, args: string[]): number {
+  const resolved = resolveNativeCommand(commandName);
+  if (!resolved) return 1;
+  const spawnTarget = resolveNativeSpawnCommand(resolved, args);
+  app.screen.setAlternateScreen?.(false);
+  app.screen.exit();
+  app.keypress.stop();
+  const result = spawnSync(spawnTarget.command, spawnTarget.args, { stdio: "inherit" });
+  app.screen.enter();
+  app.keypress.start();
+  app.drawNow();
+  if (typeof result.status === "number") return result.status;
+  return result.error ? 1 : 0;
 }

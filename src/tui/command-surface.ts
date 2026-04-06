@@ -8,10 +8,10 @@ export interface CommandEntry {
 
 export const COMMANDS: CommandEntry[] = [
   { name: "settings", desc: "configure options", sortPriority: -1 },
-  { name: "connect", desc: "connect provider", aliases: ["login"] },
+  { name: "login", desc: "login with subscription/oauth" },
+  { name: "connect", desc: "connect api key or local endpoint" },
   { name: "logout", desc: "clear stored auth" },
-  { name: "model", desc: "switch model", hotkey: "ctrl+l" },
-  { name: "scoped-models", desc: "pin models for ctrl+p cycling" },
+  { name: "model", desc: "switch model and pin for ctrl+p", hotkey: "ctrl+l" },
   { name: "theme", desc: "change color theme" },
   { name: "compact", desc: "compress context" },
   { name: "budget", desc: "inspect token pressure" },
