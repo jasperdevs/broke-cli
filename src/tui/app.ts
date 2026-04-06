@@ -11,11 +11,13 @@ import type { Mode, ThinkingLevel, CavemanLevel } from "../core/config.js";
 import { dirname, join } from "path";
 import stripAnsi from "strip-ansi";
 import { collectProjectFiles, filterFiles, readFileForContext } from "./file-picker.js";
-import { buildSidebarFooterLines, loadSidebarFileTree, type SidebarTreeItem } from "./sidebar.js";
+import { loadSidebarFileTree, type SidebarTreeItem } from "./sidebar.js";
 import { fileURLToPath } from "url";
 import { renderAnsiColorGrid, parseMascotSvgGrid, resolveMascotPath, type RgbColor } from "./render/mascot.js";
 import { renderHomeBox as buildRenderHomeBox, renderHomeView as buildRenderHomeView } from "./render/home.js";
 import { renderStaticMessages as buildStaticMessages } from "./render/messages.js";
+import { renderToolCallBlock as buildToolCallBlock, renderMessageOverlays } from "./render/chat.js";
+import { buildSidebarFooter, buildSidebarLines as composeSidebarLines, renderSidebarViewport } from "./render/sidebar-view.js";
 
 interface ChatMessage {
   role: "user" | "assistant" | "system";
@@ -418,7 +420,6 @@ export class App {
 
   private renderSidebarFooter(): string[] {
     const settings = getSettings();
-    if (!settings.showTokens) return [];
     const width = this.screen.sidebarWidth;
     const statusParts: string[] = [];
     const modeLabel = this.mode === "plan" ? "plan" : "build";
@@ -427,8 +428,9 @@ export class App {
     if (thinkLevel !== "off") statusParts.push(thinkLevel);
     const caveLevel = settings.cavemanLevel ?? "off";
     if (caveLevel !== "off") statusParts.push(`🪨 ${caveLevel}`);
-    const footer = buildSidebarFooterLines({
+    return buildSidebarFooter({
       width,
+      showTokens: settings.showTokens,
       statusParts,
       cost: settings.showCost && this.sessionCost > 0 ? fmtCost(this.animCost.get()) : undefined,
       tokenParts: this.renderTokenSummaryParts().filter((part) => !part.startsWith("Σ ")),
@@ -442,7 +444,6 @@ export class App {
         error: currentTheme().error,
       },
     });
-    return footer.length > 0 ? ["", ...footer] : footer;
   }
 
   private clearInterruptPrompt(): void {
@@ -1764,210 +1765,53 @@ export class App {
     return lines;
   }
 
-  /** Descriptive tool call label */
-  private toolDescription(tc: typeof this.toolCallGroups[0]): string {
-    const a = tc.args as Record<string, string> | undefined;
-    switch (tc.name) {
-      case "readFile": return `Reading ${tc.preview}`;
-      case "listFiles": return `Listing ${tc.preview}`;
-      case "grep": return `Searching for ${a?.pattern ? `"${a.pattern}"` : "pattern"}`;
-      case "writeFile": return `Writing ${tc.preview}`;
-      case "editFile": return `Updating ${tc.preview}`;
-      case "bash": return `Running \`${tc.preview}\``;
-      case "webSearch": return `Searching web for "${a?.query ?? tc.preview}"`;
-      case "webFetch": return `Fetching ${a?.url ?? tc.preview}`;
-      case "askUser": return `Asking: ${a?.question ?? tc.preview}`;
-      case "todoWrite": return `Updating task list`;
-      default: return `${tc.name} ${tc.preview}`;
-    }
-  }
-
-  /** Render a tool call block — green circle running, grey circle done, red circle error */
   private renderToolCallBlock(tc: typeof this.toolCallGroups[0], maxWidth: number): string[] {
-    const lines: string[] = [];
-    const done = !!tc.result;
-    const running = !done;
-    const L = "\u2514"; // └
-
-    // Icon: green circle (running/blinking), dim circle (done), red circle (error)
-    const icon = tc.error ? `${ERR()}\u25CF${RESET}`
-      : done ? `${DIM}\u25CF${RESET}`
-      : (this.spinnerFrame % 2 === 0 ? `${OK()}\u25CF${RESET}` : `${ACCENT_2()}\u25CF${RESET}`);
-
-    const desc = this.toolDescription(tc);
-    lines.push(`  ${icon} ${done ? MUTED() : TXT()}${desc}${running ? "..." : ""}${RESET}`);
-
-    const a = tc.args as Record<string, string> | undefined;
-
-    // --- Streaming bash output (show last lines while running) ---
-    if (tc.name === "bash" && running && tc.streamOutput) {
-      const outLines = tc.streamOutput.split("\n").filter(l => l.trim());
-      const tail = outLines.slice(-5);
-      for (const l of tail) {
-        lines.push(`${DIM}  ${L} ${l.slice(0, maxWidth - 6)}${RESET}`);
-      }
-      if (outLines.length > 5) {
-        lines.push(`${DIM}  ${L} ... +${outLines.length - 5} lines${RESET}`);
-      }
-    }
-
-    // --- Running non-bash: show "Running..." ---
-    if (running && tc.name !== "bash") {
-      // No extra detail while running
-    }
-
-    // --- Completed output ---
-    if (done) {
-      if (tc.name === "editFile" && a?.old_string && a?.new_string) {
-        const oldLines = a.old_string.split("\n");
-        const newLines = a.new_string.split("\n");
-        const diffW = maxWidth - 6;
-
-        // Always show diff inline (like Claude Code screenshots)
-        lines.push(`${DIM}  ${L} +${newLines.length} -${oldLines.length} lines${RESET}`);
-        // Show removed lines (red bg)
-        for (const l of oldLines.slice(0, 4)) {
-          const text = `- ${l}`.slice(0, diffW - 2);
-          const pad = Math.max(0, diffW - 2 - text.length);
-          lines.push(`  ${currentTheme().diffRemoveBg} ${text}${" ".repeat(pad)} ${RESET}`);
-        }
-        if (oldLines.length > 4) lines.push(`${DIM}      ... +${oldLines.length - 4} more${RESET}`);
-        // Show added lines (green bg)
-        for (const l of newLines.slice(0, 4)) {
-          const text = `+ ${l}`.slice(0, diffW - 2);
-          const pad = Math.max(0, diffW - 2 - text.length);
-          lines.push(`  ${currentTheme().diffAddBg} ${text}${" ".repeat(pad)} ${RESET}`);
-        }
-        if (newLines.length > 4) lines.push(`${DIM}      ... +${newLines.length - 4} more${RESET}`);
-      } else if (tc.name === "writeFile" && a?.content) {
-        const newLines = a.content.split("\n");
-        const diffW = maxWidth - 6;
-        lines.push(`${DIM}  ${L} ${newLines.length} lines written${RESET}`);
-        for (const l of newLines.slice(0, 6)) {
-          const text = `+ ${l}`.slice(0, diffW - 2);
-          const pad = Math.max(0, diffW - 2 - text.length);
-          lines.push(`  ${currentTheme().diffAddBg} ${text}${" ".repeat(pad)} ${RESET}`);
-        }
-        if (newLines.length > 6) {
-          lines.push(`${DIM}      ... +${newLines.length - 6} more${RESET}`);
-        }
-      } else if (tc.name === "bash" && tc.streamOutput) {
-        // Show last few lines of output collapsed
-        const outLines = tc.streamOutput.split("\n").filter(l => l.trim());
-        if (tc.expanded) {
-          const showLines = outLines.slice(-20);
-          if (outLines.length > 20) lines.push(`${DIM}    ... ${outLines.length - 20} earlier lines${RESET}`);
-          for (const l of showLines) {
-            lines.push(`${DIM}  ${L} ${l.slice(0, maxWidth - 6)}${RESET}`);
-          }
-        } else {
-          const tail = outLines.slice(-3);
-          for (const l of tail) {
-            lines.push(`${DIM}  ${L} ${l.slice(0, maxWidth - 6)}${RESET}`);
-          }
-          if (outLines.length > 3) {
-            lines.push(`${DIM}  ${L} ... +${outLines.length - 3} lines (ctrl+o to expand)${RESET}`);
-          }
-        }
-      } else if (tc.resultDetail) {
-        lines.push(`${DIM}  ${L} ${tc.resultDetail.slice(0, maxWidth - 6)}${RESET}`);
-      }
-    }
-
-    if (tc.error && tc.result) {
-      lines.push(`${ERR()}  ${L} ${tc.result}${RESET}`);
-    }
-
-    return lines;
+    return buildToolCallBlock({
+      tc,
+      maxWidth,
+      spinnerFrame: this.spinnerFrame,
+      colors: {
+        error: ERR(),
+        ok: OK(),
+        accent2: ACCENT_2(),
+        muted: DIM,
+        text: TXT(),
+        diffRemoveBg: currentTheme().diffRemoveBg,
+        diffAddBg: currentTheme().diffAddBg,
+      },
+      reset: RESET,
+    });
   }
 
   /** Render messages + dynamic overlays (tool calls, thinking, loading) */
   private renderMessages(maxWidth: number): string[] {
-    const lines = [...this.renderStaticMessages(maxWidth)];
-
-    // Thinking block — show reasoning as it streams in
-    if (this.thinkingBuffer) {
-      const thinkLines = this.thinkingBuffer.split("\n").slice(-8);
-      lines.push(`  ${T()}${this.isStreaming ? "thinking" : "thought"}${RESET}`);
-      for (const tl of thinkLines) {
-        lines.push(`  ${DIM}${tl.slice(0, maxWidth - 4)}${RESET}`);
-      }
-      lines.push("");
-    }
-
-    // TODO task list — show when tasks exist
-    if (this.todoItems.length > 0) {
-      const done = this.todoItems.filter(t => t.status === "done").length;
-      const total = this.todoItems.length;
-      const spinChars = ["\u25DC", "\u25DD", "\u25DE", "\u25DF"];
-      const spin = spinChars[this.spinnerFrame % spinChars.length];
-      const allDone = done === total;
-
-      // Header line
-      if (this.isStreaming) {
-        const elapsed = Date.now() - this.streamStartTime;
-        const secs = Math.floor(elapsed / 1000);
-        const mins = Math.floor(secs / 60);
-        const timeStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
-        const inProgress = this.todoItems.find(t => t.status === "in_progress");
-        const headerText = inProgress ? inProgress.text : (allDone ? "Done" : "Working...");
-        lines.push(`  ${T()}${spin}${RESET} ${T()}${headerText}${RESET}  ${DIM}${timeStr} \u00B7 ${done}/${total}${RESET}`);
-      } else {
-        lines.push(`  ${allDone ? OK() : T()}\u2714${RESET} ${DIM}Tasks ${done}/${total}${RESET}`);
-      }
-      // Task items
-      for (let i = 0; i < this.todoItems.length; i++) {
-        const item = this.todoItems[i];
-        const isLast = i === this.todoItems.length - 1;
-        const branch = isLast ? "\u2514" : "\u251C"; // └ or ├
-        const icon = item.status === "done" ? `${OK()}\u25A0${RESET}` // ■ green
-          : item.status === "in_progress" ? `${T()}${spin}${RESET}` // spinner
-          : `${DIM}\u25A1${RESET}`; // □ dim
-        const textColor = item.status === "done" ? DIM : item.status === "in_progress" ? `${TXT()}${BOLD}` : DIM;
-        lines.push(`  ${DIM}${branch}${RESET} ${icon} ${textColor}${item.text.slice(0, maxWidth - 10)}${RESET}`);
-      }
-      lines.push("");
-    }
-
-    // Compacting indicator
-    if (this.isCompacting) {
-      const elapsed = Date.now() - this.compactStartTime;
-      const secs = Math.floor(elapsed / 1000);
-      const mins = Math.floor(secs / 60);
-      const timeStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
-      const tokenStr = this.compactTokens > 0 ? ` \u2191 ${fmtTokens(this.compactTokens)} tokens` : "";
-      const sparkle = this.sparkleSpinner(this.spinnerFrame, WARN());
-      const shimmer = this.shimmerText("Compacting conversation...", this.spinnerFrame);
-      lines.push(`  ${sparkle} ${shimmer} ${DIM}(${timeStr}${tokenStr ? ` \u00B7${tokenStr}` : ""})${RESET}`);
-      lines.push("");
-    }
-
-    // Streaming status — ALWAYS pinned at bottom while generating
-    if (this.isStreaming) {
-      const elapsed = Date.now() - this.streamStartTime;
-      const secs = Math.floor(elapsed / 1000);
-      const mins = Math.floor(secs / 60);
-      const timeStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
-      const statParts: string[] = [timeStr];
-      const animTok = this.animStreamTokens.getInt();
-      if (animTok > 0) statParts.push(`\u2193 ${fmtTokens(animTok)} tokens`);
-      // Show thinking duration
-      if (this.thinkingStartTime > 0) {
-        // Still thinking — show live
-        const thinkSecs = Math.floor((Date.now() - this.thinkingStartTime) / 1000);
-        if (thinkSecs > 0) statParts.push(`thinking ${thinkSecs}s`);
-      } else if (this.thinkingDuration > 0) {
-        statParts.push(`thought for ${this.thinkingDuration}s`);
-      }
-      const stats = statParts.join(" \u00B7 ");
-      const sparkle = this.sparkleSpinner(this.spinnerFrame);
-      // Label: "Thinking..." while thinking, "Composing..." while outputting text
-      const label = this.thinkingBuffer ? "Thinking..." : "Composing...";
-      const shimmer = this.shimmerText(label, this.spinnerFrame);
-      lines.push(`  ${sparkle} ${shimmer} ${T()}(${stats})${RESET}`);
-      lines.push("");
-    }
-    return lines;
+    return renderMessageOverlays({
+      staticLines: this.renderStaticMessages(maxWidth),
+      maxWidth,
+      thinkingBuffer: this.thinkingBuffer,
+      isStreaming: this.isStreaming,
+      todoItems: this.todoItems,
+      spinnerFrame: this.spinnerFrame,
+      streamStartTime: this.streamStartTime,
+      streamTokens: this.animStreamTokens.getInt(),
+      thinkingStartTime: this.thinkingStartTime,
+      thinkingDuration: this.thinkingDuration,
+      isCompacting: this.isCompacting,
+      compactStartTime: this.compactStartTime,
+      compactTokens: this.compactTokens,
+      fmtTokens,
+      sparkleSpinner: (frame, color) => this.sparkleSpinner(frame, color),
+      shimmerText: (text, frame) => this.shimmerText(text, frame),
+      colors: {
+        accent: T(),
+        ok: OK(),
+        warn: WARN(),
+        dim: DIM,
+        text: TXT(),
+        bold: BOLD,
+        reset: RESET,
+      },
+    });
   }
 
   private renderCompactHeader(): string {
@@ -2166,103 +2010,46 @@ export class App {
 
   /** Build the full sidebar content before viewport slicing */
   private buildSidebarLines(): string[] {
-    const w = this.screen.sidebarWidth;
-    const lines: string[] = [];
-
-    // Session name + version
-    lines.push(`${TXT()}${BOLD}${this.sessionName.slice(0, w - 2)}${RESET}`);
-    lines.push(`${MUTED()}v${this.appVersion}${RESET}`);
-    lines.push("");
-
-    // Model
-    lines.push(`${T()}${this.providerName}/${this.modelName}${RESET}`);
-    lines.push("");
-
-    // Providers
-    if (this.detectedProviders.length > 0) {
-      lines.push(`${TXT()}Providers${RESET}`);
-      for (const p of this.detectedProviders.slice(0, 4)) {
-        lines.push(`  ${MUTED()}${p}${RESET}`);
-      }
-      if (this.detectedProviders.length > 4) {
-        lines.push(`  ${MUTED()}+${this.detectedProviders.length - 4} more${RESET}`);
-      }
-      lines.push("");
+    if (this.sidebarTreeOpen && !this.sidebarFileTree) {
+      this.sidebarFileTree = loadSidebarFileTree(this.cwd);
     }
-
-    // MCP connections
-    if (this.mcpConnections.length > 0) {
-      lines.push(`${TXT()}MCP${RESET}`);
-      for (const c of this.mcpConnections.slice(0, 3)) {
-        lines.push(`  ${currentTheme().success}\u25CF${RESET} ${MUTED()}${c.slice(0, w - 6)}${RESET}`);
-      }
-      lines.push("");
-    }
-
-    // Directory
-    lines.push(`${TXT()}Directory${RESET}`);
-    const shortCwd = this.formatShortCwd(Math.max(4, w - 2));
-    lines.push(`  ${MUTED()}${shortCwd}${RESET}`);
-    if (this.gitBranch) {
-      lines.push(`  ${MUTED()}${this.gitBranch}${this.gitDirty ? " *" : ""}${RESET}`);
-    }
-    lines.push("");
-
-    // File tree (collapsible)
-    const treeArrow = this.sidebarTreeOpen ? "▾" : "▸";
-    lines.push(`${TXT()}${treeArrow} Files${RESET}`);
-    if (this.sidebarTreeOpen) {
-      if (!this.sidebarFileTree) {
-        this.sidebarFileTree = loadSidebarFileTree(this.cwd);
-      }
-      const tree = this.sidebarFileTree ?? [];
-      for (const item of tree) {
-        if (item.isDir) {
-          const expanded = this.sidebarExpandedDirs.has(item.name);
-          const arrow = expanded ? "▾" : "▸";
-          const display = item.name.length > w - 6 ? item.name.slice(-(w - 7)) : item.name;
-          lines.push(`  ${T()}${arrow} ${display}/${RESET}`);
-          if (expanded && item.children) {
-            const showCount = this.sidebarExpandedDirs.has(`${item.name}:all`) ? item.children.length : Math.min(item.children.length, 4);
-            for (let i = 0; i < showCount; i++) {
-              const child = item.children[i];
-              const cDisplay = child.length > w - 8 ? child.slice(-(w - 9)) : child;
-              lines.push(`    ${DIM}${cDisplay}${RESET}`);
-            }
-            if (showCount < item.children.length) {
-              const remaining = item.children.length - showCount;
-              lines.push(`    ${DIM}▸ +${remaining} more${RESET}`);
-            }
-          }
-        } else {
-          const display = item.name.length > w - 4 ? item.name.slice(-(w - 5)) : item.name;
-          lines.push(`  ${DIM}${display}${RESET}`);
-        }
-      }
-    }
-
-    return lines;
+    return composeSidebarLines({
+      width: this.screen.sidebarWidth,
+      sessionName: this.sessionName,
+      appVersion: this.appVersion,
+      providerName: this.providerName,
+      modelName: this.modelName,
+      detectedProviders: this.detectedProviders,
+      mcpConnections: this.mcpConnections,
+      shortCwd: this.formatShortCwd(Math.max(4, this.screen.sidebarWidth - 2)),
+      gitBranch: this.gitBranch,
+      gitDirty: this.gitDirty,
+      sidebarTreeOpen: this.sidebarTreeOpen,
+      sidebarFileTree: this.sidebarFileTree,
+      sidebarExpandedDirs: this.sidebarExpandedDirs,
+      colors: {
+        text: TXT(),
+        muted: MUTED(),
+        accent: T(),
+        success: currentTheme().success,
+        bold: BOLD,
+        reset: RESET,
+      },
+    });
   }
 
   /** Render the visible sidebar viewport */
   private renderSidebar(visibleHeight: number): string[] {
-    const allLines = this.buildSidebarLines();
-    const maxScroll = Math.max(0, allLines.length - visibleHeight);
-    if (this.sidebarScrollOffset > maxScroll) this.sidebarScrollOffset = maxScroll;
-    if (this.sidebarScrollOffset < 0) this.sidebarScrollOffset = 0;
-
-    if (allLines.length <= visibleHeight) return allLines;
-
-    const visible = allLines.slice(this.sidebarScrollOffset, this.sidebarScrollOffset + visibleHeight);
-    if (visible.length === 0) return visible;
-
-    if (this.sidebarScrollOffset > 0) {
-      visible[0] = `${DIM}^ more${this.sidebarFocused ? " · scroll" : ""}${RESET}`;
-    }
-    if (this.sidebarScrollOffset + visibleHeight < allLines.length) {
-      visible[visible.length - 1] = `${DIM}v more${this.sidebarFocused ? " · scroll" : ""}${RESET}`;
-    }
-    return visible;
+    const viewport = renderSidebarViewport({
+      allLines: this.buildSidebarLines(),
+      visibleHeight,
+      sidebarScrollOffset: this.sidebarScrollOffset,
+      sidebarFocused: this.sidebarFocused,
+      muted: DIM,
+      reset: RESET,
+    });
+    this.sidebarScrollOffset = viewport.scrollOffset;
+    return viewport.lines;
   }
 
   /** Pad or truncate a visible string to a target width */
