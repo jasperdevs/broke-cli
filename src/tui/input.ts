@@ -46,6 +46,13 @@ export class InputWidget {
       return "interrupt";
     }
 
+    // Shift+Enter — newline in input
+    if (key.shift && key.name === "return") {
+      this.text = this.text.slice(0, this.cursor) + "\n" + this.text.slice(this.cursor);
+      this.cursor++;
+      return "none";
+    }
+
     // Enter — submit
     if (key.name === "return") {
       return "submit";
@@ -122,6 +129,43 @@ export class InputWidget {
         }
         this.cursor = this.text.length;
       }
+      return "none";
+    }
+
+    // Ctrl+W — delete previous word
+    if (key.ctrl && key.name === "w") {
+      if (this.cursor > 0) {
+        let i = this.cursor - 1;
+        while (i > 0 && this.text[i - 1] === " ") i--;
+        while (i > 0 && this.text[i - 1] !== " ") i--;
+        this.text = this.text.slice(0, i) + this.text.slice(this.cursor);
+        this.cursor = i;
+      }
+      return "none";
+    }
+
+    // Alt+D — delete next word
+    if (key.meta && key.name === "d") {
+      if (this.cursor < this.text.length) {
+        let i = this.cursor;
+        while (i < this.text.length && this.text[i] === " ") i++;
+        while (i < this.text.length && this.text[i] !== " ") i++;
+        this.text = this.text.slice(0, this.cursor) + this.text.slice(i);
+      }
+      return "none";
+    }
+
+    // Ctrl+V or Ctrl+Shift+V — paste from clipboard
+    if (key.ctrl && (key.name === "v" || (key.shift && key.name === "v"))) {
+      try {
+        const { execSync } = require("child_process");
+        const clip = process.platform === "win32"
+          ? execSync("powershell -command Get-Clipboard", { encoding: "utf-8" }).trim()
+          : process.platform === "darwin"
+            ? execSync("pbpaste", { encoding: "utf-8" }).trim()
+            : execSync("xclip -selection clipboard -o", { encoding: "utf-8" }).trim();
+        if (clip) this.paste(clip);
+      } catch { /* clipboard unavailable */ }
       return "none";
     }
 

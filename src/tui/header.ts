@@ -24,7 +24,7 @@ function formatTokens(n: number): string {
 /** Render the header bar as a single string */
 export function renderHeader(state: HeaderState, width: number): string {
   const left = `${GREEN}${BOLD} brokecli${RESET} ${GRAY}│${RESET} ${state.provider}/${state.model}`;
-  const streaming = state.isStreaming ? ` ${GREEN}●${RESET}` : "";
+  const streaming = state.isStreaming ? ` ${GREEN}*${RESET}` : "";
   const right = `${GREEN}${formatCost(state.cost)}${RESET} ${GRAY}│${RESET} ${formatTokens(state.tokens)} tok${streaming} `;
 
   // The actual visible characters (without ANSI) determine padding

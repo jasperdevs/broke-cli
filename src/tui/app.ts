@@ -3,25 +3,40 @@ import { KeypressHandler, type Keypress } from "./keypress.js";
 import { InputWidget } from "./input.js";
 import { GREEN, GRAY, RESET, BOLD, DIM, RED, WHITE, moveTo } from "../utils/ansi.js";
 import stripAnsi from "strip-ansi";
+import { renderMarkdown } from "../utils/markdown.js";
+import { collectProjectFiles, filterFiles, readFileForContext } from "./file-picker.js";
 
 interface ChatMessage {
   role: "user" | "assistant" | "system";
   content: string;
 }
 
-// BrokeCLI logo — Silkscreen Bold pixel font (from brokecli-text-v1.svg)
-const LOGO = [
-  "████                 █  █           ████  █      ███",
-  "█   █  █ ██    ███   █ █     ███   █      █       █",
-  "████   ██     █   █  ██     ████   █      █       █",
-  "█   █  █      █   █  █ █    █      █      █       █",
-  "████   █       ███   █  █    ███    ████  █████  ███",
-];
+interface ModelOption {
+  providerId: string;
+  providerName: string;
+  modelId: string;
+  active: boolean;
+}
+
+export interface SettingEntry {
+  key: string;
+  label: string;
+  value: string;
+  description: string;
+}
 
 const COMMANDS = [
-  { name: "help", desc: "show commands" },
   { name: "model", desc: "switch model" },
-  { name: "setup", desc: "add provider" },
+  { name: "settings", desc: "configure options" },
+  { name: "compact", desc: "compress context" },
+  { name: "sessions", desc: "recent sessions" },
+  { name: "new", desc: "new session" },
+  { name: "name", desc: "name this session" },
+  { name: "export", desc: "export to markdown" },
+  { name: "copy", desc: "copy last response" },
+  { name: "undo", desc: "undo last change" },
+  { name: "resume", desc: "resume session" },
+  { name: "reload", desc: "reload context" },
   { name: "cost", desc: "session spend" },
   { name: "clear", desc: "clear chat" },
   { name: "exit", desc: "quit" },
@@ -32,21 +47,32 @@ export class App {
   private keypress: KeypressHandler;
   private input: InputWidget;
   private messages: ChatMessage[] = [];
+  private thinkingBuffer = "";
   private sessionCost = 0;
   private sessionTokens = 0;
-  private contextUsed = 0; // percentage
+  private contextUsed = 0;
   private modelName = "none";
-  private providerName = "—";
+  private providerName = "---";
   private isStreaming = false;
+  private spinnerFrame = 0;
+  private spinnerTimer: ReturnType<typeof setInterval> | null = null;
   private ctrlCCount = 0;
   private ctrlCTimeout: ReturnType<typeof setTimeout> | null = null;
   private scrollOffset = 0;
   private onSubmit: ((text: string) => void) | null = null;
+  private onAbort: (() => void) | null = null;
   private running = false;
   private statusMessage: string | undefined;
   private detectedProviders: string[] = [];
-  private sessionId = new Date().toISOString();
   private cwd = process.cwd();
+  private modelPicker: { options: ModelOption[]; cursor: number } | null = null;
+  private onModelSelect: ((providerId: string, modelId: string) => void) | null = null;
+  private settingsPicker: { entries: SettingEntry[]; cursor: number } | null = null;
+  private onSettingToggle: ((key: string) => void) | null = null;
+  private filePicker: { files: string[]; filtered: string[]; query: string; cursor: number } | null = null;
+  private projectFiles: string[] | null = null;
+  private fileContexts: Map<string, string> = new Map();
+  private cmdSuggestionCursor = 0;
 
   constructor() {
     this.screen = new Screen();
@@ -59,6 +85,14 @@ export class App {
 
   setModel(provider: string, model: string): void {
     this.providerName = provider;
+    // Shorten long model names (e.g. ggml-org/gemma-4-E4B-it-GGUF:Q4_K_M -> gemma-4-E4B-it:Q4_K_M)
+    if (model.includes("/")) {
+      const parts = model.split("/");
+      model = parts[parts.length - 1];
+    }
+    if (model.includes("-GGUF")) {
+      model = model.replace(/-GGUF/g, "");
+    }
     this.modelName = model;
     this.draw();
   }
@@ -76,11 +110,51 @@ export class App {
 
   setStreaming(streaming: boolean): void {
     this.isStreaming = streaming;
+    if (!streaming) {
+      this.thinkingBuffer = "";
+    }
+    if (streaming) {
+      this.spinnerFrame = 0;
+      this.spinnerTimer = setInterval(() => {
+        this.spinnerFrame++;
+        this.draw();
+      }, 150);
+    } else if (this.spinnerTimer) {
+      clearInterval(this.spinnerTimer);
+      this.spinnerTimer = null;
+    }
     this.draw();
   }
 
   setDetectedProviders(providers: string[]): void {
     this.detectedProviders = providers;
+  }
+
+  openModelPicker(options: ModelOption[], onSelect: (providerId: string, modelId: string) => void): void {
+    const activeIdx = options.findIndex((o) => o.active);
+    this.modelPicker = { options, cursor: activeIdx >= 0 ? activeIdx : 0 };
+    this.onModelSelect = onSelect;
+    this.draw();
+  }
+
+  openSettings(entries: SettingEntry[], onToggle: (key: string) => void): void {
+    this.settingsPicker = { entries, cursor: 0 };
+    this.onSettingToggle = onToggle;
+    this.draw();
+  }
+
+  updateSettings(entries: SettingEntry[]): void {
+    if (this.settingsPicker) {
+      this.settingsPicker.entries = entries;
+      this.draw();
+    }
+  }
+
+  clearMessages(): void {
+    this.messages = [];
+    this.scrollOffset = 0;
+    this.screen.forceRedraw([]);
+    this.draw();
   }
 
   addMessage(role: "user" | "assistant" | "system", content: string): void {
@@ -100,8 +174,32 @@ export class App {
     this.draw();
   }
 
+  appendThinking(delta: string): void {
+    this.thinkingBuffer += delta;
+    this.scrollToBottom();
+    this.draw();
+  }
+
+  getLastAssistantContent(): string {
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      if (this.messages[i].role === "assistant") return this.messages[i].content;
+    }
+    return "";
+  }
+
+  getFileContexts(): Map<string, string> {
+    const ctx = new Map(this.fileContexts);
+    this.fileContexts.clear();
+    return ctx;
+  }
+
   setStatus(message: string): void {
     this.statusMessage = message;
+    this.draw();
+  }
+
+  clearStatus(): void {
+    this.statusMessage = undefined;
     this.draw();
   }
 
@@ -112,11 +210,122 @@ export class App {
   }
 
   private getChatHeight(): number {
-    return this.screen.height - 3; // status(1) + input(1) + suggestions area(1 max)
+    const headerLines = this.screen.hasSidebar ? 0 : 1; // compact header when narrow
+    return this.screen.height - 2 - headerLines; // status(1) + input(1) + optional header
   }
 
   private handleKey(key: Keypress): void {
+    // Settings picker
+    if (this.settingsPicker) {
+      if (key.name === "up") {
+        this.settingsPicker.cursor = Math.max(0, this.settingsPicker.cursor - 1);
+        this.draw();
+      } else if (key.name === "down") {
+        this.settingsPicker.cursor = Math.min(this.settingsPicker.entries.length - 1, this.settingsPicker.cursor + 1);
+        this.draw();
+      } else if (key.name === "return" || key.name === "space") {
+        const entry = this.settingsPicker.entries[this.settingsPicker.cursor];
+        if (entry && this.onSettingToggle) this.onSettingToggle(entry.key);
+        this.draw();
+      } else if (key.name === "escape" || (key.ctrl && key.name === "c")) {
+        this.settingsPicker = null;
+        this.draw();
+      }
+      return;
+    }
+
+    // Model picker intercepts all keys when open
+    if (this.modelPicker) {
+      if (key.name === "up") {
+        this.modelPicker.cursor = Math.max(0, this.modelPicker.cursor - 1);
+        this.draw();
+      } else if (key.name === "down") {
+        this.modelPicker.cursor = Math.min(this.modelPicker.options.length - 1, this.modelPicker.cursor + 1);
+        this.draw();
+      } else if (key.name === "space") {
+        const opt = this.modelPicker.options[this.modelPicker.cursor];
+        if (opt) {
+          opt.active = !opt.active;
+          // Re-sort: starred models go to top
+          this.modelPicker.options.sort((a, b) => {
+            if (a.active && !b.active) return -1;
+            if (!a.active && b.active) return 1;
+            return 0;
+          });
+          // Keep cursor on the same item
+          this.modelPicker.cursor = this.modelPicker.options.indexOf(opt);
+        }
+        this.draw();
+      } else if (key.name === "return") {
+        const selected = this.modelPicker.options[this.modelPicker.cursor];
+        this.modelPicker = null;
+        if (selected && this.onModelSelect) {
+          this.onModelSelect(selected.providerId, selected.modelId);
+        }
+        this.draw();
+      } else if (key.name === "escape" || (key.ctrl && key.name === "c")) {
+        this.modelPicker = null;
+        this.draw();
+      }
+      return;
+    }
+
+    // File picker (@file references)
+    if (this.filePicker) {
+      if (key.name === "up") {
+        this.filePicker.cursor = Math.max(0, this.filePicker.cursor - 1);
+        this.draw();
+      } else if (key.name === "down") {
+        this.filePicker.cursor = Math.min(this.filePicker.filtered.length - 1, this.filePicker.cursor + 1);
+        this.draw();
+      } else if (key.name === "return" || key.name === "tab") {
+        const selected = this.filePicker.filtered[this.filePicker.cursor];
+        if (selected) {
+          // Replace @query with @filepath in input
+          const text = this.input.getText();
+          const atIdx = text.lastIndexOf("@");
+          if (atIdx >= 0) {
+            this.input.clear();
+            this.input.paste(text.slice(0, atIdx) + `@${selected} `);
+          }
+          // Inject file contents as hidden context
+          const content = readFileForContext(this.cwd, selected);
+          this.fileContexts.set(selected, content);
+        }
+        this.filePicker = null;
+        this.draw();
+      } else if (key.name === "escape") {
+        this.filePicker = null;
+        this.draw();
+      } else if (key.name === "backspace") {
+        if (this.filePicker.query.length > 0) {
+          this.filePicker.query = this.filePicker.query.slice(0, -1);
+          this.filePicker.filtered = filterFiles(this.filePicker.files, this.filePicker.query);
+          this.filePicker.cursor = 0;
+          // Also update input
+          this.input.handleKey(key);
+          this.draw();
+        } else {
+          this.filePicker = null;
+          this.input.handleKey(key);
+          this.draw();
+        }
+      } else if (key.char && !key.ctrl && !key.meta) {
+        this.filePicker.query += key.char;
+        this.filePicker.filtered = filterFiles(this.filePicker.files, this.filePicker.query);
+        this.filePicker.cursor = 0;
+        this.input.handleKey(key);
+        this.draw();
+      }
+      return;
+    }
+
     if (key.ctrl && key.name === "c") {
+      if (this.isStreaming && this.onAbort) {
+        this.onAbort();
+        this.ctrlCCount = 0;
+        return;
+      }
       this.ctrlCCount++;
       if (this.ctrlCCount >= 2) { this.stop(); return; }
       this.statusMessage = `${RED}Press Ctrl+C again to exit${RESET}`;
@@ -131,22 +340,48 @@ export class App {
     }
     this.ctrlCCount = 0;
 
+    // Ctrl+L — open model picker
+    if (key.ctrl && key.name === "l") {
+      if (this.onSubmit) this.onSubmit("/model");
+      return;
+    }
+
     if (key.name === "pageup") { this.scrollOffset = Math.max(0, this.scrollOffset - 5); this.draw(); return; }
     if (key.name === "pagedown") { this.scrollToBottom(); this.draw(); return; }
 
-    // Tab to autocomplete first command suggestion
-    if (key.name === "tab") {
-      const text = this.input.getText();
-      if (text.startsWith("/")) {
-        const query = text.slice(1).toLowerCase();
-        const match = COMMANDS.find((c) => c.name.startsWith(query));
-        if (match) {
-          this.input.clear();
-          this.input.paste(`/${match.name}`);
+    // Command suggestion navigation when / is typed
+    const inputText = this.input.getText();
+    if (inputText.startsWith("/")) {
+      const suggestions = this.getCommandMatches();
+      if (suggestions.length > 0) {
+        if (key.name === "up") {
+          this.cmdSuggestionCursor = Math.max(0, this.cmdSuggestionCursor - 1);
+          this.draw();
+          return;
+        }
+        if (key.name === "down") {
+          this.cmdSuggestionCursor = Math.min(suggestions.length - 1, this.cmdSuggestionCursor + 1);
+          this.draw();
+          return;
+        }
+        if (key.name === "tab" || key.name === "return") {
+          const selected = suggestions[this.cmdSuggestionCursor];
+          if (selected) {
+            this.input.clear();
+            this.input.paste(`/${selected.name}`);
+            this.cmdSuggestionCursor = 0;
+            // If it's a complete command, submit it
+            if (key.name === "return") {
+              const cmd = this.input.submit();
+              if (cmd && this.onSubmit) this.onSubmit(cmd);
+            }
+          }
+          this.draw();
+          return;
         }
       }
-      this.draw();
-      return;
+    } else {
+      this.cmdSuggestionCursor = 0;
     }
 
     const action = this.input.handleKey(key);
@@ -154,6 +389,20 @@ export class App {
       const text = this.input.submit();
       if (text && this.onSubmit) this.onSubmit(text);
     }
+
+    // Detect @ trigger for file picker
+    if (key.char === "@" && !this.filePicker) {
+      if (!this.projectFiles) {
+        this.projectFiles = collectProjectFiles(this.cwd);
+      }
+      this.filePicker = {
+        files: this.projectFiles,
+        filtered: this.projectFiles.slice(0, 10),
+        query: "",
+        cursor: 0,
+      };
+    }
+
     this.draw();
   }
 
@@ -167,71 +416,92 @@ export class App {
     const lines: string[] = [];
     for (const msg of this.messages) {
       if (msg.role === "user") {
-        lines.push(`${BOLD}${WHITE}  ❯ ${msg.content}${RESET}`);
+        lines.push(`${BOLD}${WHITE}  > ${msg.content}${RESET}`);
       } else if (msg.role === "assistant") {
-        lines.push(`${GREEN}  ◆ ${this.modelName}${RESET}`);
-        for (const cl of msg.content.split("\n")) {
-          if (cl.length <= maxWidth - 4) {
+        const rendered = !this.isStreaming || msg !== this.messages[this.messages.length - 1]
+          ? renderMarkdown(msg.content)
+          : msg.content;
+        for (const cl of rendered.split("\n")) {
+          const visLen = stripAnsi(cl).length;
+          if (visLen <= maxWidth - 4) {
             lines.push(`    ${cl}`);
           } else {
-            for (let i = 0; i < cl.length; i += maxWidth - 4) {
-              lines.push(`    ${cl.slice(i, i + maxWidth - 4)}`);
-            }
+            // Simple wrap — just push the line as-is for now (ANSI-aware wrapping is complex)
+            lines.push(`    ${cl}`);
           }
         }
       } else {
-        lines.push(`${DIM}  ℹ ${msg.content}${RESET}`);
+        lines.push(`${DIM}  ${msg.content}${RESET}`);
       }
       lines.push("");
     }
+    // Thinking block (shown during streaming if model sends reasoning)
+    if (this.thinkingBuffer) {
+      const thinkLines = this.thinkingBuffer.split("\n").slice(-3); // show last 3 lines
+      lines.push(`${DIM}  thinking...${RESET}`);
+      for (const tl of thinkLines) {
+        lines.push(`${DIM}  ${tl.slice(0, maxWidth - 4)}${RESET}`);
+      }
+      lines.push("");
+    }
+    if (this.isStreaming && !this.thinkingBuffer) {
+      const frames = ["\u280B", "\u2819", "\u2839", "\u2838", "\u283C", "\u2834", "\u2826", "\u2827", "\u2807", "\u280F"];
+      const frame = frames[this.spinnerFrame % frames.length];
+      lines.push(`${GREEN}  ${frame} ${RESET}${DIM}Working...${RESET}`);
+      lines.push("");
+    }
     return lines;
+  }
+
+  private renderCompactHeader(): string {
+    const model = `${GREEN}${this.providerName}/${this.modelName}${RESET}`;
+    const cost = `${GREEN}$${this.sessionCost.toFixed(4)}${RESET}`;
+    const tokens = `${DIM}${this.sessionTokens} tok${RESET}`;
+    const sep = `${DIM} | ${RESET}`;
+    const ctxColor = this.contextUsed > 90 ? RED : this.contextUsed > 70 ? "\x1b[33m" : DIM;
+    const ctx = this.contextUsed > 0 ? `${sep}${ctxColor}${this.contextUsed}%${RESET}` : "";
+    const streaming = this.isStreaming ? `${sep}${GREEN}working${RESET}` : "";
+    return ` ${model}${sep}${cost}${sep}${tokens}${ctx}${streaming}`;
   }
 
   /** Render the sidebar content */
   private renderSidebar(): string[] {
     const w = this.screen.sidebarWidth;
     const lines: string[] = [];
-    const sep = `${GREEN}${"─".repeat(w)}${RESET}`;
-
-    // Session header
-    lines.push(`${GREEN}${BOLD} Session${RESET}`);
-    lines.push(`${DIM} ${this.sessionId.slice(0, w - 2)}${RESET}`);
-    lines.push("");
-
-    // Context
-    lines.push(`${GREEN}${BOLD} Context${RESET}`);
-    lines.push(`${DIM} ${this.sessionTokens} tokens${RESET}`);
-    lines.push(`${DIM} ${this.contextUsed}% used${RESET}`);
-    lines.push(`${GREEN} $${this.sessionCost.toFixed(4)} spent${RESET}`);
-    lines.push("");
 
     // Model
-    lines.push(`${GREEN}${BOLD} Model${RESET}`);
-    lines.push(` ${this.providerName}/${this.modelName}`);
+    lines.push(`${GREEN}${BOLD} ${this.providerName}/${this.modelName}${RESET}`);
+    lines.push("");
+
+    // Cost + tokens
+    lines.push(`${GREEN} $${this.sessionCost.toFixed(4)}${RESET} ${DIM}${this.sessionTokens} tok${RESET}`);
+    if (this.contextUsed > 0) {
+      const color = this.contextUsed > 90 ? RED : this.contextUsed > 70 ? "\x1b[33m" : DIM;
+      lines.push(`${color} ${this.contextUsed}% context${RESET}`);
+    }
     lines.push("");
 
     // Providers
     if (this.detectedProviders.length > 0) {
-      lines.push(`${GREEN}${BOLD} Providers${RESET}`);
+      lines.push(`${DIM} providers${RESET}`);
       for (const p of this.detectedProviders) {
-        lines.push(`${GREEN} ● ${RESET}${p}`);
+        lines.push(`${GREEN}  + ${RESET}${p}`);
       }
       lines.push("");
     }
 
     // Working dir
-    lines.push(`${GREEN}${BOLD} Working Dir${RESET}`);
     const shortCwd = this.cwd.length > w - 3
       ? "..." + this.cwd.slice(-(w - 6))
       : this.cwd;
     lines.push(`${DIM} ${shortCwd}${RESET}`);
 
     // Fill remaining height
-    const remaining = this.screen.height - 2 - lines.length; // -2 for status+input
+    const remaining = this.screen.height - 2 - lines.length;
     for (let i = 0; i < remaining; i++) lines.push("");
 
-    // Bottom
-    lines.push(`${DIM} /help for commands${RESET}`);
+    // Bottom hint
+    lines.push(`${DIM} /help${RESET}`);
 
     return lines;
   }
@@ -243,7 +513,6 @@ export class App {
     return line + " ".repeat(targetWidth - visible);
   }
 
-  /** Build and render a frame */
   private draw(): void {
     const { height, width } = this.screen;
     const hasSidebar = this.screen.hasSidebar && this.messages.length > 0;
@@ -251,34 +520,63 @@ export class App {
     const inputText = this.input.getText();
     const cursor = this.input.getCursor();
     const isHome = this.messages.length === 0;
-    const suggestions = this.getCommandSuggestions();
 
+    // Build bottom section first to know how much space it takes
+    const bottomLines: string[] = [];
+
+    // Input line
+    if (inputText) {
+      bottomLines.push(`${GREEN} > ${RESET}${inputText}`);
+    } else {
+      bottomLines.push(`${GREEN} > ${RESET}`);
+    }
+
+    // Suggestions/picker appear BELOW input (like Pi)
+    if (this.filePicker) {
+      this.appendFilePicker(bottomLines, height);
+    } else if (this.settingsPicker) {
+      this.appendSettingsPicker(bottomLines, height);
+    } else if (this.modelPicker) {
+      this.appendModelPicker(bottomLines, height);
+    } else {
+      const suggestions = this.getCommandSuggestions();
+      for (const s of suggestions) bottomLines.push(s);
+    }
+
+    // Status bar — only show if there's a status message (errors, warnings)
+    if (this.statusMessage) {
+      bottomLines.push(` ${this.statusMessage}`);
+    }
+
+    // Now build the top section (chat area fills remaining space)
     const frameLines: string[] = [];
+    const topHeight = height - bottomLines.length;
+
+    // Always show compact header at top (model info)
+    const showCompactHeader = !hasSidebar && this.modelName !== "none";
+    if (showCompactHeader) {
+      frameLines.push(this.renderCompactHeader());
+    }
 
     if (isHome) {
-      // Home: logo top-left, rest empty, input at bottom
-      for (const l of LOGO) {
-        frameLines.push(` ${GREEN}${l}${RESET}`);
-      }
-      frameLines.push(`${DIM} AI coding that doesn't waste your money${RESET}`);
       frameLines.push("");
-
-      // Fill to input area
-      const filled = LOGO.length + 2;
-      const chatH = height - 2 - suggestions.length; // status + input + suggestions
-      for (let i = filled; i < chatH; i++) frameLines.push("");
-
+      frameLines.push(`${GREEN}${BOLD}  BrokeCLI${RESET}`);
+      frameLines.push(`${DIM}  AI coding on a budget${RESET}`);
+      frameLines.push("");
+      const used = frameLines.length;
+      for (let i = used; i < topHeight; i++) frameLines.push("");
     } else {
-      // Chat mode
-      const chatH = height - 2 - suggestions.length;
+      if (false) { // compact header already rendered above
+        frameLines.push(this.renderCompactHeader());
+      }
+
+      const chatH = topHeight - (showCompactHeader ? 1 : 0);
       const messageLines = this.renderMessages(mainW);
       const visible = messageLines.slice(this.scrollOffset, this.scrollOffset + chatH);
 
       if (hasSidebar) {
-        // Merge chat lines with sidebar
         const sidebarLines = this.renderSidebar();
-        const border = `${GREEN}│${RESET}`;
-
+        const border = `${GREEN}|${RESET}`;
         for (let i = 0; i < chatH; i++) {
           const chatLine = this.padLine(visible[i] ?? "", mainW);
           const sidebarLine = sidebarLines[i] ?? "";
@@ -292,52 +590,116 @@ export class App {
       }
     }
 
-    // Command suggestions
-    for (const s of suggestions) {
-      frameLines.push(s);
-    }
-
-    // Input line
-    if (this.isStreaming) {
-      frameLines.push(`${GREEN} ● ${RESET}${DIM}generating...${RESET}`);
-    } else if (inputText) {
-      frameLines.push(`${GREEN} ❯ ${RESET}${inputText}`);
-    } else {
-      frameLines.push(`${GREEN} ❯ ${RESET}${DIM}Ask anything... "Fix broken tests"${RESET}`);
-    }
-
-    // Status bar
-    const statusLeft = this.statusMessage
-      ? ` ${this.statusMessage}`
-      : `${DIM} ${this.providerName}/${this.modelName}  ${GREEN}$${this.sessionCost.toFixed(4)}${RESET}  ${DIM}${this.sessionTokens} tok${RESET}`;
-    const statusRight = `${DIM}/help commands  ctrl+c exit${RESET} `;
-    frameLines.push(`${statusLeft}${"  "}${statusRight}`);
+    // Combine top + bottom
+    for (const l of bottomLines) frameLines.push(l);
 
     this.screen.render(frameLines);
 
-    // Cursor position
-    if (!this.isStreaming) {
-      const inputRow = height - 1;
-      const inputCol = 4 + cursor; // " ❯ " = 3 chars + 1-based
-      this.screen.setCursor(inputRow, inputCol);
+    // Cursor on input line
+    const inputRow = topHeight + 1; // +1 because input is first line of bottomLines
+    const inputCol = 4 + cursor;
+    this.screen.setCursor(inputRow, inputCol);
+  }
+
+  private appendModelPicker(lines: string[], _maxTotal: number): void {
+    const picker = this.modelPicker!;
+    const maxVisible = 5;
+    let start = Math.max(0, picker.cursor - Math.floor(maxVisible / 2));
+    if (start + maxVisible > picker.options.length) start = Math.max(0, picker.options.length - maxVisible);
+    const end = Math.min(start + maxVisible, picker.options.length);
+
+    for (let i = start; i < end; i++) {
+      const opt = picker.options[i];
+      const isCursor = i === picker.cursor;
+      const isActive = opt.active;
+      const arrow = isCursor ? `${GREEN}> ${RESET}` : "  ";
+      const check = isActive ? ` ${GREEN}*${RESET}` : "";
+      const nameCol = isCursor ? `${WHITE}${BOLD}` : "";
+      const provCol = `${DIM}${opt.providerName}${RESET}`;
+      lines.push(` ${arrow}${nameCol}${opt.modelId}${RESET}${check}  ${provCol}`);
+    }
+    lines.push(` ${DIM}(${picker.cursor + 1}/${picker.options.length}) space to pin, enter to select${RESET}`);
+  }
+
+  private appendFilePicker(lines: string[], maxTotal: number): void {
+    const picker = this.filePicker!;
+    const maxItems = Math.min(picker.filtered.length, maxTotal - 4);
+    for (let i = 0; i < maxItems; i++) {
+      const f = picker.filtered[i];
+      const isCursor = i === picker.cursor;
+      const arrow = isCursor ? `${GREEN}> ${RESET}` : "  ";
+      const color = isCursor ? `${WHITE}${BOLD}` : DIM;
+      lines.push(` ${arrow}${color}${f}${RESET}`);
+    }
+    if (picker.filtered.length === 0) {
+      lines.push(` ${DIM}  no matches${RESET}`);
+    }
+    lines.push(` ${DIM}(${picker.filtered.length} files)${RESET}`);
+  }
+
+  private appendSettingsPicker(lines: string[], _maxTotal: number): void {
+    const picker = this.settingsPicker!;
+    const maxVisible = 5;
+    let start = Math.max(0, picker.cursor - Math.floor(maxVisible / 2));
+    if (start + maxVisible > picker.entries.length) start = Math.max(0, picker.entries.length - maxVisible);
+    const end = Math.min(start + maxVisible, picker.entries.length);
+
+    for (let i = start; i < end; i++) {
+      const e = picker.entries[i];
+      const isCursor = i === picker.cursor;
+      const arrow = isCursor ? `${GREEN}> ${RESET}` : "  ";
+      const nameCol = isCursor ? `${WHITE}${BOLD}` : GREEN;
+      const pad = " ".repeat(Math.max(1, 22 - e.label.length));
+      const valColor = e.value === "true" ? GREEN : DIM;
+      lines.push(` ${arrow}${nameCol}${e.label}${RESET}${pad}${valColor}${e.value}${RESET}`);
+    }
+    lines.push(` ${DIM}(${picker.cursor + 1}/${picker.entries.length})${RESET}`);
+
+    const selected = picker.entries[picker.cursor];
+    if (selected) {
+      lines.push("");
+      lines.push(` ${DIM}${selected.description}${RESET}`);
+      lines.push(` ${DIM}Enter/Space to change${RESET}`);
     }
   }
 
-  private getCommandSuggestions(): string[] {
+  private getCommandMatches(): typeof COMMANDS {
     const text = this.input.getText();
     if (!text.startsWith("/")) return [];
     const query = text.slice(1).toLowerCase();
-    if (!query && text === "/") {
-      // Show all commands
-      return COMMANDS.map((c) => `   ${GREEN}/${c.name}${RESET}  ${DIM}${c.desc}${RESET}`);
-    }
-    const matches = COMMANDS.filter((c) => c.name.startsWith(query) && c.name !== query);
+    if (!query && text === "/") return [...COMMANDS];
+    return COMMANDS.filter((c) => c.name.startsWith(query) && c.name !== query);
+  }
+
+  private getCommandSuggestions(): string[] {
+    const matches = this.getCommandMatches();
     if (matches.length === 0) return [];
-    return matches.map((c) => `   ${GREEN}/${c.name}${RESET}  ${DIM}${c.desc}${RESET}`);
+
+    const cursor = Math.min(this.cmdSuggestionCursor, matches.length - 1);
+    const maxVisible = 5;
+    // Scroll window around cursor
+    let start = Math.max(0, cursor - Math.floor(maxVisible / 2));
+    if (start + maxVisible > matches.length) start = Math.max(0, matches.length - maxVisible);
+    const end = Math.min(start + maxVisible, matches.length);
+
+    const lines: string[] = [];
+    for (let i = start; i < end; i++) {
+      const c = matches[i];
+      const arrow = i === cursor ? `${GREEN}> ${RESET}` : "  ";
+      const nameColor = i === cursor ? `${WHITE}${BOLD}` : GREEN;
+      const pad = " ".repeat(Math.max(1, 16 - c.name.length));
+      lines.push(` ${arrow}${nameColor}${c.name}${RESET}${pad}${DIM}${c.desc}${RESET}`);
+    }
+    lines.push(` ${DIM}(${cursor + 1}/${matches.length})${RESET}`);
+    return lines;
   }
 
   onInput(handler: (text: string) => void): void {
     this.onSubmit = handler;
+  }
+
+  onAbortRequest(handler: () => void): void {
+    this.onAbort = handler;
   }
 
   start(): void {
@@ -355,13 +717,13 @@ export class App {
   stop(): void {
     if (!this.running) return;
     this.running = false;
+    if (this.spinnerTimer) clearInterval(this.spinnerTimer);
     this.keypress.stop();
     this.screen.exit();
 
-    // Exit message
     console.log("");
-    for (const l of LOGO) console.log(` ${GREEN}${l}${RESET}`);
-    console.log(`${DIM} Session ended · $${this.sessionCost.toFixed(4)} · ${this.sessionTokens} tokens${RESET}`);
+    console.log(`${GREEN}${BOLD} BrokeCLI${RESET} ${DIM}session ended${RESET}`);
+    console.log(`${DIM} $${this.sessionCost.toFixed(4)} | ${this.sessionTokens} tokens${RESET}`);
     console.log("");
     process.exit(0);
   }

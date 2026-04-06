@@ -8,7 +8,7 @@ export interface StatusState {
 /** Render the status bar as a single string */
 export function renderStatusBar(state: StatusState, _width: number): string {
   if (state.isStreaming) {
-    return `${GREEN} ● streaming...${RESET}  ${GRAY}esc${RESET} cancel`;
+    return `${GREEN} * streaming...${RESET}  ${GRAY}esc${RESET} cancel`;
   }
 
   if (state.message) {
