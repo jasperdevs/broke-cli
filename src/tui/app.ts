@@ -2126,6 +2126,50 @@ export class App {
     return lines;
   }
 
+  private renderBrailleColorGrid(grid: Array<Array<RgbColor | null>>): string[] {
+    const lines: string[] = [];
+    const fg = (color: RgbColor): string => `\x1b[38;2;${color.r};${color.g};${color.b}m`;
+    const dotBits = [
+      [0x01, 0x08],
+      [0x02, 0x10],
+      [0x04, 0x20],
+      [0x40, 0x80],
+    ];
+    const height = grid.length;
+    const width = grid[0]?.length ?? 0;
+
+    for (let row = 0; row < height; row += 4) {
+      let line = "";
+      for (let col = 0; col < width; col += 2) {
+        let pattern = 0;
+        const colors: RgbColor[] = [];
+        for (let dy = 0; dy < 4; dy++) {
+          for (let dx = 0; dx < 2; dx++) {
+            const color = grid[row + dy]?.[col + dx] ?? null;
+            if (!color) continue;
+            pattern |= dotBits[dy][dx];
+            colors.push(color);
+          }
+        }
+        if (pattern === 0) {
+          line += " ";
+          continue;
+        }
+        const colorCounts = new Map<string, { color: RgbColor; count: number }>();
+        for (const color of colors) {
+          const key = `${color.r},${color.g},${color.b}`;
+          const existing = colorCounts.get(key);
+          if (existing) existing.count += 1;
+          else colorCounts.set(key, { color, count: 1 });
+        }
+        const dominant = [...colorCounts.values()].sort((a, b) => b.count - a.count)[0]?.color;
+        line += `${fg(dominant!)}${String.fromCodePoint(0x2800 + pattern)}${RESET}`;
+      }
+      lines.push(line);
+    }
+    return lines;
+  }
+
   private parseMascotSvgGrid(path: string): Array<Array<RgbColor | null>> {
     try {
       const svg = readFileSync(path, "utf-8");
@@ -2189,8 +2233,7 @@ export class App {
     const path = this.resolveMascotPath();
     if (!path) return [];
     const cells = this.parseMascotSvgGrid(path);
-    const scaled = this.scaleColorGrid(cells, 8, 4);
-    return this.renderAnsiColorGrid(scaled);
+    return this.renderBrailleColorGrid(cells);
   }
 
   private wrapHomeDetail(label: string, value: string, width: number): string[] {
