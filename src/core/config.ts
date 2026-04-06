@@ -5,6 +5,7 @@ import { parse as parseJsonc } from "jsonc-parser";
 
 export type Mode = "build" | "plan";
 export type FollowUpMode = "immediate" | "after_tool" | "after_response";
+export type ThinkingLevel = "off" | "low" | "medium" | "high";
 
 export interface Settings {
   yoloMode: boolean;
@@ -14,8 +15,10 @@ export interface Settings {
   showCost: boolean;
   autoSaveSessions: boolean;
   enableThinking: boolean;
+  thinkingLevel: ThinkingLevel;
   gitCheckpoints: boolean;
   notifyOnResponse: boolean;
+  hideSidebar: boolean;
   scopedModels: string[];
   lastModel: string;
   mode: Mode;
@@ -30,8 +33,10 @@ export const DEFAULT_SETTINGS: Settings = {
   showCost: true,
   autoSaveSessions: true,
   enableThinking: false,
+  thinkingLevel: "off" as ThinkingLevel,
   gitCheckpoints: true,
   notifyOnResponse: false,
+  hideSidebar: false,
   scopedModels: [],
   lastModel: "",
   mode: "build",

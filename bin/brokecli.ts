@@ -8,6 +8,7 @@ import { loadPricing } from "../src/ai/cost.js";
 import { buildSystemPrompt, reloadContext } from "../src/core/context.js";
 import { Session } from "../src/core/session.js";
 import { getTools } from "../src/tools/registry.js";
+import { createAskUserTool } from "../src/tools/ask.js";
 import { renderMarkdown } from "../src/utils/markdown.js";
 import { checkBudget } from "../src/core/budget.js";
 import { getSettings, updateSetting, type Settings, type Mode } from "../src/core/config.js";
@@ -158,7 +159,10 @@ program.action(async (opts) => {
     }
   })();
 
-  const tools = getTools();
+  const tools = {
+    ...getTools(),
+    askUser: createAskUserTool((q, opts) => app.showQuestion(q, opts)),
+  };
 
   // Handle pending messages when they become ready
   app.onPendingMessagesReadyHandler(() => {
@@ -261,7 +265,8 @@ program.action(async (opts) => {
               { key: "autoCompact", label: "Auto-compact", value: String(s.autoCompact), description: "Automatically compress context when it gets too large" },
               { key: "autoSaveSessions", label: "Auto-save sessions", value: String(s.autoSaveSessions), description: "Save conversation history to disk" },
               { key: "gitCheckpoints", label: "Git checkpoints", value: String(s.gitCheckpoints), description: "Auto-commit before file modifications" },
-              { key: "enableThinking", label: "Enable thinking", value: String(s.enableThinking), description: "Show model reasoning when supported" },
+              { key: "thinkingLevel", label: "Thinking mode", value: s.thinkingLevel || (s.enableThinking ? "low" : "off"), description: "off / low / medium / high (ctrl+t to cycle)" },
+              { key: "hideSidebar", label: "Hide sidebar", value: String(s.hideSidebar), description: "Hide the right sidebar panel" },
               { key: "showTokens", label: "Show tokens", value: String(s.showTokens), description: "Display token count in status bar" },
               { key: "showCost", label: "Show cost", value: String(s.showCost), description: "Display cost in status bar" },
               { key: "maxSessionCost", label: "Max session cost", value: s.maxSessionCost === 0 ? "unlimited" : `$${s.maxSessionCost}`, description: "Maximum cost per session (0 = unlimited)" },
@@ -272,7 +277,14 @@ program.action(async (opts) => {
           app.openSettings(buildEntries(), (key) => {
             const s = getSettings();
             const val = s[key as keyof Settings];
-            if (typeof val === "boolean") {
+            if (key === "thinkingLevel") {
+              const levels = ["off", "low", "medium", "high"] as const;
+              const current = s.thinkingLevel || (s.enableThinking ? "low" : "off");
+              const idx = levels.indexOf(current as any);
+              const next = levels[(idx + 1) % levels.length];
+              updateSetting("thinkingLevel", next);
+              updateSetting("enableThinking", next !== "off");
+            } else if (typeof val === "boolean") {
               updateSetting(key as keyof Settings, !val);
             } else if (key === "maxSessionCost") {
               const next = s.maxSessionCost === 0 ? 1 : s.maxSessionCost === 1 ? 5 : s.maxSessionCost === 5 ? 10 : 0;
@@ -609,6 +621,7 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
         tools,
         abortSignal: abortController.signal,
         enableThinking: getSettings().enableThinking,
+        thinkingLevel: getSettings().thinkingLevel || "low",
       },
       {
         onText: (delta) => {
@@ -638,7 +651,8 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
             try {
               const { execSync: exec } = require("child_process");
               if (process.platform === "win32") {
-                exec(`powershell -command "New-BurntToastNotification -Text 'BrokeCLI', 'Response complete' -ErrorAction SilentlyContinue; if ($?) {} else { [System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms') | Out-Null; [System.Windows.Forms.MessageBox]::Show('Response complete','BrokeCLI') }"`, { stdio: "ignore", timeout: 5000 });
+                // Use PowerShell toast via .NET — no modules needed
+                exec(`powershell -NoProfile -Command "[void][System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms'); $n = New-Object System.Windows.Forms.NotifyIcon; $n.Icon = [System.Drawing.SystemIcons]::Information; $n.BalloonTipTitle = 'BrokeCLI'; $n.BalloonTipText = 'Response complete'; $n.Visible = $true; $n.ShowBalloonTip(3000); Start-Sleep -Milliseconds 3100; $n.Dispose()"`, { stdio: "ignore", timeout: 8000 });
               } else if (process.platform === "darwin") {
                 exec(`osascript -e 'display notification "Response complete" with title "BrokeCLI"'`, { stdio: "ignore", timeout: 5000 });
               } else {

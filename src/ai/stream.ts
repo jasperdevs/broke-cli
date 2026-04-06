@@ -22,6 +22,7 @@ export interface StreamOptions {
   tools?: ToolSet;
   abortSignal?: AbortSignal;
   enableThinking?: boolean;
+  thinkingLevel?: string;
 }
 
 export async function startStream(
@@ -47,10 +48,22 @@ export async function startStream(
       return { role: m.role, content: m.content };
     });
 
-    // Build provider options (e.g. thinking for Anthropic)
-    const providerOptions: Record<string, Record<string, Record<string, string>>> = {};
-    if (opts.enableThinking && opts.providerId === "anthropic") {
-      providerOptions.anthropic = { thinking: { type: "adaptive" } };
+    // Build provider options (thinking/reasoning for supported providers)
+    const providerOptions: Record<string, Record<string, Record<string, string | number>>> = {};
+    if (opts.enableThinking) {
+      const level = opts.thinkingLevel || "low";
+      if (opts.providerId === "anthropic") {
+        // Anthropic: budget-based thinking
+        const budgets: Record<string, number> = { low: 5000, medium: 12000, high: 25000 };
+        providerOptions.anthropic = { thinking: { type: "enabled", budgetTokens: budgets[level] ?? 5000 } };
+      } else if (opts.providerId === "openai") {
+        // OpenAI: reasoning_effort (low/medium/high map directly)
+        providerOptions.openai = { reasoningEffort: { value: level } };
+      } else if (opts.providerId === "google") {
+        // Google: thinkingBudget
+        const budgets: Record<string, number> = { low: 4096, medium: 12000, high: 24000 };
+        providerOptions.google = { thinkingConfig: { thinkingBudget: budgets[level] ?? 4096 } };
+      }
     }
 
     const result = streamText({

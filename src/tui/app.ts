@@ -5,8 +5,8 @@ import { GRAY, RESET, BOLD, DIM, RED, WHITE, GREEN, YELLOW, bg, moveTo } from ".
 import { currentTheme, getPlanColor } from "../core/themes.js";
 import { execSync } from "child_process";
 import { matchesBinding, loadKeybindings } from "../core/keybindings.js";
-import { getSettings } from "../core/config.js";
-import type { Mode } from "../core/config.js";
+import { getSettings, updateSetting } from "../core/config.js";
+import type { Mode, ThinkingLevel } from "../core/config.js";
 import stripAnsi from "strip-ansi";
 import { renderMarkdown } from "../utils/markdown.js";
 import { collectProjectFiles, filterFiles, readFileForContext } from "./file-picker.js";
@@ -124,18 +124,21 @@ export class App {
   private itemPicker: { title: string; items: PickerItem[]; cursor: number; query: string } | null = null;
   private onItemSelect: ((id: string) => void) | null = null;
   private toolOutputCollapsed = false;
+  private questionPrompt: { question: string; options?: string[]; cursor: number; textInput: string; resolve: (answer: string) => void } | null = null;
   private pendingImages: Array<{ mimeType: string; data: string }> = [];
   private gitBranch = "";
   private gitDirty = false;
   private onCycleScopedModel: (() => void) | null = null;
   private mode: Mode = "build";
   private onModeChange: ((mode: Mode) => void) | null = null;
+  private onThinkingChange: ((level: ThinkingLevel) => void) | null = null;
   private pendingMessages: Array<{ text: string; images?: Array<{ mimeType: string; data: string }> }> = [];
   private onPendingMessagesReady: (() => void) | null = null;
   private streamStartTime = 0;
   private streamTokens = 0;
   private toolCallGroups: Array<{ name: string; preview: string; args?: unknown; resultDetail?: string; result?: string; error?: boolean }> = [];
   private isCompacting = false;
+  private escPrimed = false;
   private compactStartTime = 0;
   private compactTokens = 0;
 
@@ -165,14 +168,15 @@ export class App {
 
   setModel(provider: string, model: string): void {
     this.providerName = provider;
-    // Shorten long model names (e.g. ggml-org/gemma-4-E4B-it-GGUF:Q4_K_M -> gemma-4-E4B-it:Q4_K_M)
+    // Shorten long model names
+    // e.g. ggml-org/gemma-4-E4B-it-GGUF:Q4_K_M -> gemma-4-E4B-it
     if (model.includes("/")) {
-      const parts = model.split("/");
-      model = parts[parts.length - 1];
+      model = model.split("/").pop()!;
     }
-    if (model.includes("-GGUF")) {
-      model = model.replace(/-GGUF/g, "");
-    }
+    // Strip GGUF suffix and quantization tag (e.g. "-GGUF:Q4_K_M")
+    model = model.replace(/-GGUF(:[^\s]*)?/g, "");
+    // Strip trailing colon artifacts
+    model = model.replace(/:$/, "");
     this.modelName = model;
     this.draw();
   }
@@ -203,18 +207,16 @@ export class App {
       if (this.toolCallGroups.length > 0) {
         this.collapseToolCalls();
       }
-      // Show completion message with elapsed time
+      // Show completion message with elapsed time — always
       if (this.streamStartTime > 0) {
         const elapsed = Date.now() - this.streamStartTime;
         const secs = Math.floor(elapsed / 1000);
-        if (secs >= 2) {
-          const mins = Math.floor(secs / 60);
-          const timeStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
-          const doneVerbs = ["Churned", "Cooked", "Brewed", "Hammered", "Crunched", "Wrapped up"];
-          const verb = doneVerbs[Math.floor(Math.random() * doneVerbs.length)];
-          this.messages.push({ role: "system", content: `${T()}\u25C9${RESET} ${DIM}${verb} for ${timeStr}${RESET}` });
-          this.invalidateMsgCache();
-        }
+        const mins = Math.floor(secs / 60);
+        const timeStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
+        const doneVerbs = ["Churned", "Cooked", "Brewed", "Hammered", "Crunched", "Wrapped up", "Forged", "Crafted"];
+        const verb = doneVerbs[Math.floor(Math.random() * doneVerbs.length)];
+        this.messages.push({ role: "system", content: `${DIM}\u25C9 ${verb} for ${timeStr}${RESET}` });
+        this.invalidateMsgCache();
         this.streamStartTime = 0;
       }
     }
@@ -404,6 +406,22 @@ export class App {
     this.onModeChange = callback;
   }
 
+  onThinkingToggle(callback: (level: ThinkingLevel) => void): void {
+    this.onThinkingChange = callback;
+  }
+
+  private cycleThinkingMode(): void {
+    const levels: ThinkingLevel[] = ["off", "low", "medium", "high"];
+    const settings = getSettings();
+    const current = settings.thinkingLevel || (settings.enableThinking ? "low" : "off");
+    const idx = levels.indexOf(current);
+    const next = levels[(idx + 1) % levels.length];
+    updateSetting("thinkingLevel", next);
+    updateSetting("enableThinking", next !== "off");
+    if (this.onThinkingChange) this.onThinkingChange(next);
+    this.draw();
+  }
+
   private scrollToBottom(): void {
     const chatHeight = this.getChatHeight();
     const messageLines = this.renderMessages(this.screen.mainWidth - 2);
@@ -449,6 +467,76 @@ export class App {
   }
 
   private handleKey(key: Keypress): void {
+    // Block input during compacting (only allow Ctrl+C to exit)
+    if (this.isCompacting) {
+      if (key.ctrl && key.name === "c") {
+        this.ctrlCCount++;
+        if (this.ctrlCCount >= 2) { this.stop(); return; }
+        this.statusMessage = `${RED}Press Ctrl+C again to exit${RESET}`;
+        this.draw();
+        if (this.ctrlCTimeout) clearTimeout(this.ctrlCTimeout);
+        this.ctrlCTimeout = setTimeout(() => {
+          this.ctrlCCount = 0;
+          this.statusMessage = undefined;
+          this.draw();
+        }, 1500);
+      }
+      return;
+    }
+
+    // Question prompt (model asked user a question)
+    if (this.questionPrompt) {
+      const qp = this.questionPrompt;
+      if (qp.options) {
+        // Multiple choice
+        if (key.name === "up") {
+          qp.cursor = Math.max(0, qp.cursor - 1);
+          this.draw();
+        } else if (key.name === "down") {
+          qp.cursor = Math.min(qp.options.length - 1, qp.cursor + 1);
+          this.draw();
+        } else if (key.name === "return") {
+          const answer = qp.options[qp.cursor];
+          this.questionPrompt = null;
+          this.addMessage("system", `${DIM}> ${answer}${RESET}`);
+          this.invalidateMsgCache();
+          this.draw();
+          qp.resolve(answer);
+        } else if (key.name === "escape") {
+          this.questionPrompt = null;
+          this.addMessage("system", `${DIM}> [skipped]${RESET}`);
+          this.invalidateMsgCache();
+          this.draw();
+          qp.resolve("[user skipped]");
+        }
+      } else {
+        // Free text input
+        if (key.name === "return") {
+          const answer = qp.textInput.trim() || "[no answer]";
+          this.questionPrompt = null;
+          this.addMessage("system", `${DIM}> ${answer}${RESET}`);
+          this.invalidateMsgCache();
+          this.draw();
+          qp.resolve(answer);
+        } else if (key.name === "escape") {
+          this.questionPrompt = null;
+          this.addMessage("system", `${DIM}> [skipped]${RESET}`);
+          this.invalidateMsgCache();
+          this.draw();
+          qp.resolve("[user skipped]");
+        } else if (key.name === "backspace") {
+          if (qp.textInput.length > 0) {
+            qp.textInput = qp.textInput.slice(0, -1);
+            this.draw();
+          }
+        } else if (key.char && !key.ctrl && !key.meta && key.char.length === 1) {
+          qp.textInput += key.char;
+          this.draw();
+        }
+      }
+      return;
+    }
+
     // Settings picker (searchable)
     if (this.settingsPicker) {
       const filtered = this.getFilteredSettings();
@@ -603,20 +691,18 @@ export class App {
       return;
     }
 
-    // ESC to interrupt streaming (double-press)
+    // ESC to interrupt streaming (double-press — first turns info bar red)
     if (key.name === "escape" && this.isStreaming && this.onAbort) {
-      this.ctrlCCount++;
-      if (this.ctrlCCount >= 2) {
+      if (this.escPrimed) {
+        this.escPrimed = false;
         this.onAbort();
-        this.ctrlCCount = 0;
         return;
       }
-      this.statusMessage = `${RED}Press esc again to interrupt${RESET}`;
+      this.escPrimed = true;
       this.draw();
       if (this.ctrlCTimeout) clearTimeout(this.ctrlCTimeout);
       this.ctrlCTimeout = setTimeout(() => {
-        this.ctrlCCount = 0;
-        this.statusMessage = undefined;
+        this.escPrimed = false;
         this.draw();
       }, 1500);
       return;
@@ -670,20 +756,26 @@ export class App {
       return;
     }
 
-    // Scroll: PageUp/Down or Ctrl+Up/Down
-    if (key.name === "pageup" || (key.ctrl && key.name === "up")) {
-      this.scrollOffset = Math.max(0, this.scrollOffset - 5);
+    // Scroll: mouse wheel, PageUp/Down
+    if (key.name === "scrollup" || key.name === "pageup") {
+      this.scrollOffset = Math.max(0, this.scrollOffset - 3);
       this.invalidateMsgCache();
       this.draw();
       return;
     }
-    if (key.name === "pagedown" || (key.ctrl && key.name === "down")) {
+    if (key.name === "scrolldown" || key.name === "pagedown") {
       const chatHeight = this.getChatHeight();
       const messageLines = this.renderMessages(this.screen.mainWidth - 2);
       const maxScroll = Math.max(0, messageLines.length - chatHeight);
-      this.scrollOffset = Math.min(maxScroll, this.scrollOffset + 5);
+      this.scrollOffset = Math.min(maxScroll, this.scrollOffset + 3);
       this.invalidateMsgCache();
       this.draw();
+      return;
+    }
+
+    // Ctrl+T — cycle thinking mode
+    if (key.ctrl && key.name === "t") {
+      this.cycleThinkingMode();
       return;
     }
 
@@ -838,7 +930,11 @@ export class App {
             content += ` ${tag}`;
           }
         }
-        lines.push(`${bg(30, 30, 30)}${BOLD}${WHITE}  > ${content}${" ".repeat(Math.max(0, maxWidth - stripAnsi(content).length - 4))}${RESET}`);
+        const visContentLen = stripAnsi(content).length;
+        const availW = maxWidth - 4; // "  > " prefix
+        const truncContent = visContentLen > availW ? content.slice(0, availW) : content;
+        const padW = Math.max(0, maxWidth - stripAnsi(truncContent).length - 4);
+        lines.push(`${bg(30, 30, 30)}${BOLD}${WHITE}  > ${truncContent}${" ".repeat(padW)}${RESET}`);
         lines.push("");
       } else if (msg.role === "assistant") {
         const rendered = renderMarkdown(msg.content);
@@ -857,7 +953,7 @@ export class App {
         }
         if (idx + 1 < this.messages.length && this.messages[idx + 1].role === "user") {
           lines.push("");
-          lines.push(`${DIM}  ${"─".repeat(Math.min(40, maxWidth - 4))}${RESET}`);
+          lines.push(`${DIM}  ${"─".repeat(Math.max(1, maxWidth - 4))}${RESET}`);
         }
       } else if (this.toolOutputCollapsed && this.isToolOutput(msg.content)) {
         while (idx + 1 < this.messages.length
@@ -867,12 +963,32 @@ export class App {
         }
         lines.push(`${DIM}  [tool output hidden]${RESET}`);
       } else if (msg.content.includes("\x1b[")) {
-        // Pre-formatted content (tool blocks with ANSI) — render lines as-is
+        // Pre-formatted content (tool blocks with ANSI) — render lines as-is, wrap to width
+        const wrapW = maxWidth - 4;
         for (const cl of msg.content.split("\n")) {
-          lines.push(`  ${cl}`);
+          const visLen = stripAnsi(cl).length;
+          if (visLen <= wrapW) {
+            lines.push(`  ${cl}`);
+          } else {
+            const plain = stripAnsi(cl);
+            // Preserve color prefix from original line
+            const colorPrefix = cl.slice(0, cl.indexOf(plain[0]));
+            for (let i = 0; i < plain.length; i += wrapW) {
+              lines.push(`  ${i === 0 ? colorPrefix : ""}${plain.slice(i, i + wrapW)}${RESET}`);
+            }
+          }
         }
       } else {
-        lines.push(`${DIM}  ${msg.content}${RESET}`);
+        // Plain system message — wrap to fit
+        const wrapW = maxWidth - 4;
+        const plain = msg.content;
+        if (plain.length <= wrapW) {
+          lines.push(`${DIM}  ${plain}${RESET}`);
+        } else {
+          for (let i = 0; i < plain.length; i += wrapW) {
+            lines.push(`${DIM}  ${plain.slice(i, i + wrapW)}${RESET}`);
+          }
+        }
       }
       lines.push("");
       idx++;
@@ -883,96 +999,68 @@ export class App {
     return lines;
   }
 
-  /** Contextual tool action label */
-  private toolActionLabel(name: string, done: boolean): string {
-    const labels: Record<string, [string, string]> = {
-      readFile: ["Reading", "Read"],
-      listFiles: ["Listing", "Listed"],
-      grep: ["Searching", "Searched"],
-      writeFile: ["Writing", "Wrote"],
-      editFile: ["Editing", "Edited"],
-      bash: ["Running", "Ran"],
-    };
-    const pair = labels[name];
-    if (pair) return done ? pair[1] : pair[0];
-    return done ? name : `${name}`;
+  /** Descriptive tool call label */
+  private toolDescription(tc: typeof this.toolCallGroups[0]): string {
+    const a = tc.args as Record<string, string> | undefined;
+    switch (tc.name) {
+      case "readFile": return `Reading ${tc.preview}`;
+      case "listFiles": return `Listing ${tc.preview}`;
+      case "grep": return `Searching for ${a?.pattern ? `"${a.pattern}"` : "pattern"}`;
+      case "writeFile": return `Writing ${tc.preview}`;
+      case "editFile": return `Updating ${tc.preview}`;
+      case "bash": return `Running \`${tc.preview}\``;
+      case "webSearch": return `Searching web for "${a?.query ?? tc.preview}"`;
+      case "webFetch": return `Fetching ${a?.url ?? tc.preview}`;
+      case "askUser": return `Asking: ${a?.question ?? tc.preview}`;
+      default: return `${tc.name} ${tc.preview}`;
+    }
   }
 
-  /** Render a tool call block with diff/detail */
+  /** Render a tool call block */
   private renderToolCallBlock(tc: typeof this.toolCallGroups[0], maxWidth: number): string[] {
     const lines: string[] = [];
     const done = !!tc.result;
-    const icon = tc.error ? `${RED}\u25CF${RESET}` : done ? `${GREEN}\u25CF${RESET}` : `${DIM}\u25CF${RESET}`;
-    const label = this.toolActionLabel(tc.name, done);
-    const titleLabel = tc.name === "editFile" ? "Update" : tc.name === "writeFile" ? "Write" : tc.name === "bash" ? "Bash" : label;
+    // Blinking green while active, grey when done, red on error
+    const icon = tc.error ? `${RED}\u25CF${RESET}`
+      : done ? `${DIM}\u25CF${RESET}`
+      : `${GREEN}\u25CF${RESET}`;
+    const desc = this.toolDescription(tc);
+    const suffix = !done ? "\u2026" : "";
 
-    // Header line: ● Update(src/ai/stream.ts)
-    lines.push(`${icon} ${WHITE}${titleLabel}(${tc.preview})${RESET}`);
+    lines.push(`${icon} ${done ? DIM : WHITE}${desc}${suffix}${RESET}`);
 
     const a = tc.args as Record<string, string> | undefined;
+    const sub = "\u23BF"; // ⎿
 
-    if (tc.name === "editFile" && a?.old_string && a?.new_string) {
-      // Show diff with context
+    if (tc.name === "editFile" && a?.old_string && a?.new_string && done) {
       const oldLines = a.old_string.split("\n");
       const newLines = a.new_string.split("\n");
-      const addedCount = newLines.length;
-      const removedCount = oldLines.length;
-      lines.push(`${DIM}  \u2514 Added ${addedCount} line${addedCount !== 1 ? "s" : ""}, removed ${removedCount} line${removedCount !== 1 ? "s" : ""}${RESET}`);
-
-      // Show removed lines (red bg), max 6 lines
-      const maxDiffLines = 6;
+      lines.push(`${DIM}  ${sub} +${newLines.length} -${oldLines.length} lines${RESET}`);
+      // Show diff preview (max 4 lines each)
       const diffW = maxWidth - 4;
-      const showOld = oldLines.slice(0, maxDiffLines);
-      for (const l of showOld) {
-        const text = ` - ${l}`.slice(0, diffW);
+      for (const l of oldLines.slice(0, 4)) {
+        const text = `- ${l}`.slice(0, diffW);
         const pad = Math.max(0, diffW - text.length);
         lines.push(`${bg(80, 20, 20)} ${text}${" ".repeat(pad)} ${RESET}`);
       }
-      if (oldLines.length > maxDiffLines) {
-        lines.push(`${DIM}    ... +${oldLines.length - maxDiffLines} more removed${RESET}`);
-      }
-      // Show added lines (green bg), max 6 lines
-      const showNew = newLines.slice(0, maxDiffLines);
-      for (const l of showNew) {
-        const text = ` + ${l}`.slice(0, diffW);
+      if (oldLines.length > 4) lines.push(`${DIM}    +${oldLines.length - 4} more${RESET}`);
+      for (const l of newLines.slice(0, 4)) {
+        const text = `+ ${l}`.slice(0, diffW);
         const pad = Math.max(0, diffW - text.length);
         lines.push(`${bg(20, 60, 20)} ${text}${" ".repeat(pad)} ${RESET}`);
       }
-      if (newLines.length > maxDiffLines) {
-        lines.push(`${DIM}    ... +${newLines.length - maxDiffLines} more added${RESET}`);
-      }
-    } else if (tc.name === "writeFile" && a?.content) {
-      const contentLines = a.content.split("\n");
-      const diffW = maxWidth - 4;
-      lines.push(`${DIM}  \u2514 ${contentLines.length} line${contentLines.length !== 1 ? "s" : ""}${RESET}`);
-      const preview = contentLines.slice(0, 4);
-      for (const l of preview) {
-        const text = ` + ${l}`.slice(0, diffW);
-        const pad = Math.max(0, diffW - text.length);
-        lines.push(`${bg(20, 60, 20)} ${text}${" ".repeat(pad)} ${RESET}`);
-      }
-      if (contentLines.length > 4) {
-        lines.push(`${DIM}    ... +${contentLines.length - 4} more lines${RESET}`);
-      }
-    } else if (tc.name === "bash") {
-      if (tc.resultDetail) {
-        const outLines = tc.resultDetail.split("\n").slice(0, 3);
-        for (const l of outLines) {
-          lines.push(`${DIM}  \u2514 ${l.slice(0, maxWidth - 6)}${RESET}`);
-        }
-      } else if (!done) {
-        lines.push(`${DIM}  \u2514 running...${RESET}`);
-      }
-    } else if (tc.name === "readFile" || tc.name === "listFiles" || tc.name === "grep") {
-      // Simple one-liner for read operations
-      if (tc.resultDetail) {
-        lines.push(`${DIM}  \u2514 ${tc.resultDetail.slice(0, maxWidth - 6)}${RESET}`);
-      }
+      if (newLines.length > 4) lines.push(`${DIM}    +${newLines.length - 4} more${RESET}`);
+    } else if (tc.name === "writeFile" && a?.content && done) {
+      const n = a.content.split("\n").length;
+      lines.push(`${DIM}  ${sub} ${n} lines written${RESET}`);
+    } else if (tc.resultDetail) {
+      lines.push(`${DIM}  ${sub} ${tc.resultDetail.slice(0, maxWidth - 6)}${RESET}`);
+    } else if (tc.name === "readFile" && done && !tc.resultDetail) {
+      lines.push(`${DIM}  ${sub} ${tc.preview}${RESET}`);
     }
 
-    // Show error if any
     if (tc.error && tc.result) {
-      lines.push(`${RED}  \u2514 ${tc.result}${RESET}`);
+      lines.push(`${RED}  ${sub} ${tc.result}${RESET}`);
     }
 
     return lines;
@@ -1037,25 +1125,28 @@ export class App {
   private renderCompactHeader(): string {
     const model = `${T()}${this.providerName}/${this.modelName}${RESET}`;
     const git = this.gitBranch ? ` ${DIM}${this.gitBranch}${this.gitDirty ? "*" : ""}${RESET}` : "";
-    const activity = this.isStreaming ? `${bounceDot(this.spinnerFrame)} ` : "";
-    return `${activity} ${model}${git}`;
+    return ` ${model}${git}`;
   }
 
   /** Render the sidebar content */
   private renderSidebar(): string[] {
     const w = this.screen.sidebarWidth;
     const lines: string[] = [];
-    const sideActivity = this.isStreaming ? ` ${bounceDot(this.spinnerFrame)}` : "";
+    const sep = `${DIM}${"─".repeat(Math.max(1, w - 2))}${RESET}`;
+
+    // Top separator
+    lines.push(sep);
+    lines.push("");
 
     // Model
-    lines.push(`${T()}${this.providerName}/${this.modelName}${RESET}${sideActivity}`);
-    lines.push(`${DIM}${"─".repeat(Math.max(1, w - 2))}${RESET}`);
+    lines.push(`${T()}${this.providerName}/${this.modelName}${RESET}`);
+    lines.push("");
+    lines.push(sep);
     lines.push("");
 
     // Providers
     if (this.detectedProviders.length > 0) {
       lines.push(`${DIM}providers${RESET}`);
-      lines.push("");
       for (const p of this.detectedProviders.slice(0, 5)) {
         lines.push(`  ${p}`);
       }
@@ -1063,15 +1154,14 @@ export class App {
         lines.push(`  ${DIM}+${this.detectedProviders.length - 5} more${RESET}`);
       }
       lines.push("");
-      lines.push(`${DIM}${"─".repeat(Math.max(1, w - 2))}${RESET}`);
+      lines.push(sep);
       lines.push("");
     }
 
     // Working directory
     lines.push(`${DIM}directory${RESET}`);
-    lines.push("");
     const shortCwd = this.cwd.length > w - 4
-      ? "..." + this.cwd.slice(-(w - 7))
+      ? "~" + this.cwd.slice(-(w - 5))
       : this.cwd;
     lines.push(`  ${DIM}${shortCwd}${RESET}`);
     if (this.gitBranch) {
@@ -1079,12 +1169,12 @@ export class App {
     }
 
     // Fill remaining height
-    const bottomLines = 4; // separator + buffer
+    const bottomLines = 4;
     const remaining = this.screen.height - bottomLines - lines.length;
     for (let i = 0; i < remaining; i++) lines.push("");
 
     // Bottom
-    lines.push(`${DIM}${"─".repeat(Math.max(1, w - 2))}${RESET}`);
+    lines.push(sep);
     lines.push(`${DIM}/help  /model  /settings${RESET}`);
 
     return lines;
@@ -1093,8 +1183,23 @@ export class App {
   /** Pad or truncate a visible string to a target width */
   private padLine(line: string, targetWidth: number): string {
     const visible = stripAnsi(line).length;
-    if (visible >= targetWidth) return line;
-    return line + " ".repeat(targetWidth - visible);
+    if (visible > targetWidth) {
+      // Truncate: walk through chars counting visible width
+      let count = 0;
+      let i = 0;
+      while (i < line.length && count < targetWidth) {
+        if (line[i] === "\x1b") {
+          // Skip ANSI escape sequence
+          const end = line.indexOf("m", i);
+          if (end !== -1) { i = end + 1; continue; }
+        }
+        count++;
+        i++;
+      }
+      return line.slice(0, i) + RESET;
+    }
+    if (visible < targetWidth) return line + " ".repeat(targetWidth - visible);
+    return line;
   }
 
   /** Throttled draw — coalesces rapid calls to ~60fps */
@@ -1116,7 +1221,7 @@ export class App {
   private drawImmediate(): void {
     this.lastDrawTime = Date.now();
     const { height, width } = this.screen;
-    const hasSidebar = this.screen.hasSidebar && this.messages.length > 0;
+    const hasSidebar = this.screen.hasSidebar && this.messages.length > 0 && !getSettings().hideSidebar;
     const mainW = hasSidebar ? this.screen.mainWidth : width;
     const inputText = this.input.getText();
     const cursor = this.input.getCursor();
@@ -1137,6 +1242,24 @@ export class App {
       }
     } else {
       bottomLines.push(`${T()} > ${RESET}${inputText}`);
+    }
+
+    // Question prompt from model
+    if (this.questionPrompt) {
+      const qp = this.questionPrompt;
+      bottomLines.push(` ${T()}?${RESET} ${WHITE}${BOLD}${qp.question}${RESET}`);
+      if (qp.options) {
+        for (let i = 0; i < qp.options.length; i++) {
+          const isCursor = i === qp.cursor;
+          const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
+          const color = isCursor ? `${WHITE}${BOLD}` : DIM;
+          bottomLines.push(` ${arrow}${color}${qp.options[i]}${RESET}`);
+        }
+        bottomLines.push(` ${DIM}enter select, esc skip${RESET}`);
+      } else {
+        bottomLines.push(` ${T()} > ${RESET}${qp.textInput}`);
+        bottomLines.push(` ${DIM}enter submit, esc skip${RESET}`);
+      }
     }
 
     // Suggestions/picker appear BELOW input (like Pi)
@@ -1162,22 +1285,32 @@ export class App {
       const modeColor = this.mode === "plan" ? P() : T();
       const modeLabel = this.mode === "plan" ? "plan" : "build";
       if (this.isStreaming) {
-        parts.push({ text: `${DIM}esc${RESET} ${DIM}interrupt${RESET}`, plain: "esc interrupt", priority: 0 });
+        if (this.escPrimed) {
+          parts.push({ text: `${RED}esc again to interrupt${RESET}`, plain: "esc again to interrupt", priority: 0 });
+        } else {
+          parts.push({ text: `${DIM}esc${RESET} ${DIM}interrupt${RESET}`, plain: "esc interrupt", priority: 0 });
+        }
       }
       parts.push({ text: `${modeColor}${modeLabel}${RESET} ${DIM}(shift+tab)${RESET}`, plain: `${modeLabel} (shift+tab)`, priority: 1 });
       if (this.pendingMessages.length > 0) {
         parts.push({ text: `${P()}${this.pendingMessages.length} queued${RESET}`, plain: `${this.pendingMessages.length} queued`, priority: 2 });
       }
       const settings = getSettings();
-      if (settings.enableThinking) {
-        parts.push({ text: `${DIM}thinking${RESET}`, plain: "thinking", priority: 3 });
+      const thinkLevel = settings.thinkingLevel || (settings.enableThinking ? "low" : "off");
+      if (thinkLevel !== "off") {
+        parts.push({ text: `${T()}thinking:${thinkLevel}${RESET} ${DIM}(ctrl+t)${RESET}`, plain: `thinking:${thinkLevel} (ctrl+t)`, priority: 3 });
+      } else {
+        parts.push({ text: `${DIM}thinking:off${RESET} ${DIM}(ctrl+t)${RESET}`, plain: "thinking:off (ctrl+t)", priority: 3 });
       }
-      // Cost/tokens/context in bottom bar
+      // Cost/tokens/context in bottom bar — respect showCost/showTokens settings
       const liveTokens = this.isStreaming ? this.sessionTokens + this.streamTokens : this.sessionTokens;
-      if (this.sessionCost > 0 || liveTokens > 0) {
-        const costStr = fmtCost(this.sessionCost);
-        const tokStr = fmtTokens(liveTokens);
-        parts.push({ text: `${DIM}${costStr} ${tokStr} tok${RESET}`, plain: `${costStr} ${tokStr} tok`, priority: 4 });
+      const showCost = settings.showCost && this.sessionCost > 0;
+      const showTokens = settings.showTokens && liveTokens > 0;
+      if (showCost || showTokens) {
+        const costPart = showCost ? fmtCost(this.sessionCost) : "";
+        const tokPart = showTokens ? `${fmtTokens(liveTokens)} tok` : "";
+        const statStr = [costPart, tokPart].filter(Boolean).join(" ");
+        parts.push({ text: `${DIM}${statStr}${RESET}`, plain: statStr, priority: 4 });
       }
       if (this.contextUsed > 0) {
         const ctxColor = this.contextUsed > 90 ? RED : this.contextUsed > 70 ? "\x1b[33m" : DIM;
@@ -1217,10 +1350,6 @@ export class App {
       const used = frameLines.length;
       for (let i = used; i < topHeight; i++) frameLines.push("");
     } else {
-      if (false) { // compact header already rendered above
-        frameLines.push(this.renderCompactHeader());
-      }
-
       const chatH = topHeight - (showCompactHeader ? 1 : 0);
       const messageLines = this.renderMessages(mainW);
       // Clamp scroll offset to prevent overflow
@@ -1245,8 +1374,17 @@ export class App {
       }
     }
 
-    // Combine top + bottom
-    for (const l of bottomLines) frameLines.push(l);
+    // Combine top + bottom — extend sidebar border through bottom area
+    if (hasSidebar) {
+      const border = `${DIM}│${RESET}`;
+      const sideW = this.screen.sidebarWidth;
+      for (const l of bottomLines) {
+        const padded = this.padLine(l, mainW);
+        frameLines.push(`${padded} ${border}${" ".repeat(sideW)}`);
+      }
+    } else {
+      for (const l of bottomLines) frameLines.push(l);
+    }
 
     this.screen.render(frameLines);
 
@@ -1341,7 +1479,7 @@ export class App {
     if (picker.filtered.length === 0) {
       lines.push(` ${DIM}  no matches${RESET}`);
     }
-    lines.push(` ${DIM}(${picker.filtered.length} files)${RESET}`);
+    lines.push(` ${DIM}(${Math.min(picker.cursor + 1, picker.filtered.length)}/${picker.filtered.length} files)${RESET}`);
   }
 
   private appendSettingsPicker(lines: string[], _maxTotal: number): void {
@@ -1373,6 +1511,7 @@ export class App {
     if (selected) {
       lines.push(` ${DIM}${selected.description}${RESET}`);
     }
+    lines.push(` ${DIM}(${Math.min(picker.cursor + 1, filtered.length)}/${filtered.length}) enter to toggle${RESET}`);
   }
 
   private appendItemPicker(lines: string[], _maxTotal: number): void {
@@ -1474,6 +1613,20 @@ export class App {
     if (this.onPendingMessagesReady) {
       this.onPendingMessagesReady();
     }
+  }
+
+  /** Show a question to the user and return a promise that resolves with their answer */
+  showQuestion(question: string, options?: string[]): Promise<string> {
+    return new Promise((resolve) => {
+      this.questionPrompt = {
+        question,
+        options: options && options.length > 0 ? options : undefined,
+        cursor: 0,
+        textInput: "",
+        resolve,
+      };
+      this.draw();
+    });
   }
 
   onAbortRequest(handler: () => void): void {

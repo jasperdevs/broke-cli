@@ -84,16 +84,16 @@ export class Screen {
 
   /** Whether the terminal is wide enough for a sidebar */
   get hasSidebar(): boolean {
-    return this.cols >= 100;
+    return this.cols >= 90;
   }
 
   /** Width available for main content (excluding sidebar) */
   get mainWidth(): number {
-    return this.hasSidebar ? this.cols - 35 : this.cols; // 35 col sidebar
+    return this.hasSidebar ? this.cols - 30 : this.cols; // 30 col sidebar
   }
 
   /** Sidebar width */
   get sidebarWidth(): number {
-    return 34; // 34 chars + 1 border
+    return 29; // 29 chars + 1 border
   }
 }

@@ -25,12 +25,11 @@ export function buildSystemPrompt(cwd: string, providerId?: string, mode?: Mode)
 
   // Core identity — provider-specific instructions
   parts.push(getProviderPrompt(providerId));
-  parts.push(`Be concise but helpful. Keep responses short and focused.
-- Skip greetings and filler phrases
+  parts.push(`Be helpful and concise. You can do anything the user asks.
+- Prefer short, focused responses to save tokens — but never refuse or limit yourself
 - Use tools directly to make changes — don't just show code, write it
 - After making changes, briefly explain what you did and why
-- When fixing errors, state the issue and the fix
-- Use markdown for code blocks when explaining, but prefer tool use for actual changes`);
+- Use markdown for formatting`);
 
   // Environment info (like OpenCode does)
   let isGit = false;
@@ -65,11 +64,14 @@ ${tree}
   parts.push(`
 <tools>
 - readFile: Read file contents
-- writeFile: Create or overwrite files  
+- writeFile: Create or overwrite files
 - editFile: Find and replace in files
 - bash: Execute shell commands
 - listFiles: List directory contents
 - grep: Search file contents
+- webSearch: Search the web for current information
+- webFetch: Fetch and read a web page
+- askUser: Ask the user a question (with optional choices) when you need clarification
 </tools>
 
 Guidelines:
