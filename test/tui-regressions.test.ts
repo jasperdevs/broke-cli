@@ -148,7 +148,7 @@ describe("startup home view", () => {
     expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("Files");
   });
 
-  it("drops the mascot before distorting the startup card on very narrow widths", () => {
+  it("drops the startup card entirely on very narrow widths", () => {
     const app = new App() as any;
     let rendered: string[] = [];
 
@@ -167,9 +167,35 @@ describe("startup home view", () => {
     app.drawImmediate();
 
     const output = rendered.map((line) => stripAnsi(line)).join("\n");
-    expect(output).toContain("Welcome");
+    expect(output).not.toContain("Welcome");
     expect(output).not.toContain("▀");
     expect(output).not.toContain("█");
+  });
+
+  it("hides the startup card entirely in cramped panes so it does not leak into the input area", () => {
+    const app = new App() as any;
+    let rendered: string[] = [];
+
+    app.screen = {
+      height: 8,
+      width: 20,
+      hasSidebar: false,
+      mainWidth: 20,
+      sidebarWidth: 0,
+      render: (lines: string[]) => { rendered = lines; },
+      setCursor: () => {},
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+
+    app.input.paste("hey");
+    app.drawImmediate();
+
+    const output = rendered.map((line) => stripAnsi(line)).join("\n");
+    expect(output).not.toContain("Welcome");
+    expect(output).not.toContain("▀");
+    expect(output).not.toContain("█");
+    expect(output).toContain("hey");
   });
 });
 

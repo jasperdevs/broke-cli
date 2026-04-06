@@ -2271,6 +2271,9 @@ export class App {
   }
 
   private renderHomeView(mainW: number, topHeight: number): string[] {
+    if (topHeight < 8 || mainW < 24) {
+      return Array.from({ length: Math.max(0, topHeight) }, () => "");
+    }
     const fullMascot = this.renderMascotInline();
     const modelLabel = this.modelName === "none"
       ? "Pick one with /model"
