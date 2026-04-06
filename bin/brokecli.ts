@@ -94,6 +94,7 @@ program.action(async (opts) => {
         systemPrompt = buildSystemPrompt(process.cwd(), parts[0], currentMode);
         app.setModel(activeModel.provider.name, currentModelId);
         session.setProviderModel(activeModel.provider.name, currentModelId);
+        updateSetting("lastModel", entry);
       } catch (err) {
         app.addMessage("system", `Failed to switch: ${(err as Error).message}`);
       }
@@ -110,7 +111,7 @@ program.action(async (opts) => {
     app.setDetectedProviders(providers.map((p) => p.name));
     await refreshLocalModels(providers.map((p) => p.id));
 
-    let providerId: string;
+    let providerId: string | undefined;
     let modelId: string | undefined;
 
     if (opts.model) {
@@ -124,21 +125,38 @@ program.action(async (opts) => {
         modelId = opts.model;
       }
     } else {
-      const def = pickDefault(providers);
-      if (!def) {
-        app.addMessage("system", "No providers found. Set ANTHROPIC_API_KEY or OPENAI_API_KEY, or start Ollama.");
-        return;
+      // Try to use last used model from settings
+      const lastModel = getSettings().lastModel;
+      if (lastModel) {
+        const parts = lastModel.split("/");
+        if (parts.length === 2) {
+          // Check if provider still available
+          const provider = providers.find(p => p.id === parts[0]);
+          if (provider) {
+            providerId = parts[0];
+            modelId = parts[1];
+          }
+        }
       }
-      providerId = def.id;
+      if (!providerId) {
+        const def = pickDefault(providers);
+        if (!def) {
+          app.addMessage("system", "No providers found. Set ANTHROPIC_API_KEY or OPENAI_API_KEY, or start Ollama.");
+          return;
+        }
+        providerId = def.id;
+      }
     }
 
     try {
-      activeModel = createModel(providerId, modelId);
+      activeModel = createModel(providerId!, modelId);
       currentModelId = modelId ?? activeModel.provider.defaultModel;
-      systemPrompt = buildSystemPrompt(process.cwd(), providerId, currentMode);
+      systemPrompt = buildSystemPrompt(process.cwd(), providerId!, currentMode);
       app.setModel(activeModel.provider.name, currentModelId);
       app.setMode(currentMode);
       session.setProviderModel(activeModel.provider.name, currentModelId);
+      // Save as last used model
+      updateSetting("lastModel", `${activeModel.provider.id}/${currentModelId}`);
       app.clearStatus();
     } catch (err) {
       app.addMessage("system", `Failed to init ${providerId}: ${(err as Error).message}`);
@@ -190,6 +208,8 @@ program.action(async (opts) => {
               systemPrompt = buildSystemPrompt(process.cwd(), provId, currentMode);
               app.setModel(activeModel.provider.name, currentModelId);
               session.setProviderModel(activeModel.provider.name, currentModelId);
+              // Save as last used model
+              updateSetting("lastModel", `${provId}/${modId}`);
             } catch (err) {
               app.addMessage("system", `Failed: ${(err as Error).message}`);
             }

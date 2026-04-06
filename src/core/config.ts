@@ -16,6 +16,7 @@ export interface Settings {
   enableThinking: boolean;
   gitCheckpoints: boolean;
   scopedModels: string[];
+  lastModel: string;
   mode: Mode;
 }
 
@@ -30,6 +31,7 @@ export const DEFAULT_SETTINGS: Settings = {
   enableThinking: false,
   gitCheckpoints: true,
   scopedModels: [],
+  lastModel: "",
   mode: "build",
 };
 

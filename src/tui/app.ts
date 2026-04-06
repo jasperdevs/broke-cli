@@ -527,19 +527,16 @@ export class App {
   }
 
   private renderCompactHeader(): string {
-    const modeColor = this.mode === "plan" ? P() : T();
-    const modeLabel = this.mode === "plan" ? "PLAN" : "BUILD";
-    const model = `${modeColor}${this.providerName}/${this.modelName}${RESET}`;
-    const cost = `${modeColor}$${this.sessionCost.toFixed(4)}${RESET}`;
+    const model = `${T()}${this.providerName}/${this.modelName}${RESET}`;
+    const cost = `${T()}$${this.sessionCost.toFixed(4)}${RESET}`;
     const tokens = `${DIM}${this.sessionTokens} tok${RESET}`;
     const sep = `${DIM} | ${RESET}`;
     const ctxColor = this.contextUsed > 90 ? RED : this.contextUsed > 70 ? "\x1b[33m" : DIM;
     const ctx = this.contextUsed > 0 ? `${sep}${ctxColor}${this.contextUsed}%${RESET}` : "";
-    const modeStr = `${modeColor}[${modeLabel}]${RESET}`;
-    const streaming = this.isStreaming ? `${sep}${modeColor}working${RESET}` : "";
+    const streaming = this.isStreaming ? `${sep}${T()}working${RESET}` : "";
     const dirty = this.gitDirty ? " *" : "";
     const git = this.gitBranch ? `${sep}${DIM}${this.gitBranch}${dirty}${RESET}` : "";
-    return ` ${modeStr}${sep}${model}${sep}${cost}${sep}${tokens}${ctx}${streaming}${git}`;
+    return ` ${model}${sep}${cost}${sep}${tokens}${ctx}${streaming}${git}`;
   }
 
   /** Render the sidebar content */
@@ -547,10 +544,13 @@ export class App {
     const w = this.screen.sidebarWidth;
     const lines: string[] = [];
 
-    // Mode indicator
+    // Mode indicator (prominent at top)
     const modeColor = this.mode === "plan" ? P() : T();
     const modeLabel = this.mode === "plan" ? "PLAN" : "BUILD";
-    lines.push(`${modeColor}${BOLD} [${modeLabel}]${RESET} ${T()}${this.providerName}/${this.modelName}${RESET}`);
+    lines.push(`${modeColor}${BOLD} ▶ ${modeLabel}${RESET}`);
+
+    // Model
+    lines.push(`${T()}${BOLD} ${this.providerName}/${this.modelName}${RESET}`);
     lines.push("");
 
     // Cost + tokens
