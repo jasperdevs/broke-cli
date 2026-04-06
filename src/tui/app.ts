@@ -1,7 +1,7 @@
 import { Screen } from "./screen.js";
 import { KeypressHandler, type Keypress } from "./keypress.js";
 import { InputWidget } from "./input.js";
-import { GRAY, RESET, BOLD, DIM, RED, WHITE, moveTo } from "../utils/ansi.js";
+import { GRAY, RESET, BOLD, DIM, RED, WHITE, GREEN, bg, moveTo } from "../utils/ansi.js";
 import { currentTheme, getPlanColor } from "../core/themes.js";
 import { execSync } from "child_process";
 import { matchesBinding, loadKeybindings } from "../core/keybindings.js";
@@ -552,6 +552,31 @@ export class App {
         return;
       }
     }
+    // Check if pasted content is a file path (drag & drop)
+    const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'];
+    const trimmed = text.trim();
+    const isImagePath = imageExtensions.some(ext => trimmed.toLowerCase().endsWith(ext));
+    
+    if (isImagePath && (trimmed.includes('/') || trimmed.includes('\\'))) {
+      // Try to read and convert the image file
+      try {
+        const { readFileSync, existsSync } = require("fs");
+        if (existsSync(trimmed)) {
+          const data = readFileSync(trimmed);
+          const ext = trimmed.split('.').pop()?.toLowerCase() || 'png';
+          const mimeType = `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+          const base64 = data.toString('base64');
+          this.pendingImages.push({ mimeType, data: base64 });
+          // Insert inline tag in input
+          const tag = ` ${T()}[IMAGE ${this.pendingImages.length}]${RESET} `;
+          this.input.paste(tag);
+          this.statusMessage = `${T()}✓ Image loaded${RESET}`;
+          setTimeout(() => { this.statusMessage = undefined; this.draw(); }, 1500);
+          this.draw();
+          return;
+        }
+      } catch { /* fall through to normal paste */ }
+    }
     this.input.paste(text);
     this.draw();
   }
@@ -568,12 +593,15 @@ export class App {
     while (idx < this.messages.length) {
       const msg = this.messages[idx];
       if (msg.role === "user") {
-        lines.push(`${BOLD}${WHITE}  > ${msg.content}${RESET}`);
-        // Show image attachment indicator
+        // Build inline image tags with green background
+        let content = msg.content;
         if (msg.images && msg.images.length > 0) {
-          const imgText = msg.images.length === 1 ? "1 image" : `${msg.images.length} images`;
-          lines.push(`    ${DIM}[${imgText} attached]${RESET}`);
+          for (let i = 0; i < msg.images.length; i++) {
+            const tag = `${bg(58, 199, 58)}${BOLD}${WHITE}[IMAGE ${i + 1}]${RESET}`;
+            content += ` ${tag}`;
+          }
         }
+        lines.push(`${BOLD}${WHITE}  > ${content}${RESET}`);
       } else if (msg.role === "assistant") {
         // Always render markdown - even during streaming
         const rendered = renderMarkdown(msg.content);

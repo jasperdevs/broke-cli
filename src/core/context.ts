@@ -25,8 +25,13 @@ export function buildSystemPrompt(cwd: string, providerId?: string, mode?: Mode)
 
   // Core identity — provider-specific instructions
   parts.push(getProviderPrompt(providerId));
-  parts.push(`Be concise and direct. Lead with the answer, not the reasoning.
-When writing code, write complete implementations. Do not leave TODOs or placeholders.`);
+  parts.push(`EXTREME BREVITY: Every token costs money. Be maximally concise.
+- Use short sentences. Delete unnecessary words.
+- No greetings, no "Here's the code:", no "As you can see"
+- No markdown unless explicitly asked
+- Code only: show the code, nothing else
+- Errors only: state the error, one line fix
+- One word answers when possible`);
 
   // Environment info (like OpenCode does)
   let isGit = false;
@@ -107,9 +112,11 @@ Guidelines:
 
   // Mode-specific instructions
   if (mode === "plan") {
-    parts.push(`\nPLAN MODE: Read and analyze first. Present a plan with numbered steps. Ask for confirmation before making changes. Do not write files without approval.`);
+    parts.push(`
+PLAN MODE: Read first. Plan: 1) step 2) step 3) step. Wait for confirmation.`);
   } else {
-    parts.push(`\nBUILD MODE: Execute immediately. Make changes directly. Do not ask for permission.`);
+    parts.push(`
+BUILD MODE: Execute. No asking. Just do it.`);
   }
 
   const prompt = parts.join("\n");
