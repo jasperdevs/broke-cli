@@ -427,15 +427,15 @@ export async function handleSlashCommand(options: {
         app.addMessage("system", "Session history is off. Enable Auto-save sessions in /settings to use /resume.");
         return { handled: true };
       }
-      const recent = Session.listRecent(20, restText, cwd);
+      const recent = Session.listRecent(50, restText);
       if (recent.length === 0) {
-        app.addMessage("system", "No sessions for this directory.");
+        app.addMessage("system", "No saved sessions found.");
         return { handled: true };
       }
       const items = recent.map((entry) => ({
         id: entry.id,
         label: entry.preview || entry.model || "unknown",
-        detail: `${entry.model || "unknown"} · ${entry.messageCount} msgs · ${formatRelativeMinutes(entry.updatedAt)}`,
+        detail: `${entry.cwd === cwd ? "here" : entry.cwd} · ${entry.model || "unknown"} · ${entry.messageCount} msgs · ${formatRelativeMinutes(entry.updatedAt)}`,
       }));
       app.openItemPicker("Resume Session", items, (sessionId) => {
         const loaded = Session.load(sessionId);

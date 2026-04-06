@@ -310,6 +310,46 @@ describe("slash command handling", () => {
     }
   });
 
+  it("shows saved sessions across projects in /resume", async () => {
+    updateSetting("autoSaveSessions", true);
+    const app = createAppStub();
+    let capturedItems: Array<{ id: string; label: string; detail?: string }> = [];
+    app.openItemPicker = (_title: string, items: Array<{ id: string; label: string; detail?: string }>) => {
+      capturedItems = items;
+    };
+
+    const local = new Session(`test-resume-local-${Date.now()}`);
+    local.addMessage("user", "local session");
+    const remote = new Session(`test-resume-remote-${Date.now()}`);
+    (remote as any).cwd = "C:\\other-project";
+    remote.addMessage("user", "remote session");
+
+    const result = await handleSlashCommand({
+      text: "/resume",
+      app,
+      session: new Session(`test-resume-query-${Date.now()}`),
+      activeModel: null,
+      currentModelId: "",
+      currentMode: "build",
+      systemPrompt: "sys",
+      providerRegistry: {} as any,
+      buildVisibleModelOptions: () => [],
+      refreshProviderState: async () => [],
+      isSkippedPromptAnswer: () => false,
+      isValidHttpBaseUrl: () => true,
+      getContextOptimizer: () => ({ reset() {} }) as any,
+      onSessionReplace: () => {},
+      onModelChange: () => {},
+      onSystemPromptChange: () => {},
+      hooks: { emit() {} },
+      onProjectChange: () => {},
+    });
+
+    expect(result.handled).toBe(true);
+    expect(capturedItems.some((item) => item.detail?.includes("here"))).toBe(true);
+    expect(capturedItems.some((item) => item.detail?.includes("C:\\other-project"))).toBe(true);
+  });
+
   it("clears stored auth for /logout <provider>", async () => {
     const previousConfig = existsSync(configPath) ? readFileSync(configPath, "utf-8") : null;
     const previousAuth = existsSync(authPath) ? readFileSync(authPath, "utf-8") : null;
