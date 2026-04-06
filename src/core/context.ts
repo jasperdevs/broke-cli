@@ -60,16 +60,22 @@ ${tree}
   // Tool capabilities
   parts.push(`
 <tools>
-You have access to these tools:
-- bash: Execute shell commands. Use for running tests, builds, git operations, package management.
-- readFile: Read file contents by path.
-- writeFile: Create or overwrite a file with new content.
-- editFile: Find and replace a specific string in a file.
-- listFiles: List files in a directory recursively.
-- grep: Search for a regex pattern across files.
+You have access to these tools. Use them to complete tasks:
 
-When the user asks you to make changes, use the tools to implement them directly.
-Do not just describe what to do - actually do it using the tools.
+- bash: Execute shell commands. Use for tests, builds, git, package managers.
+- readFile: Read file contents. Use to understand existing code.
+- writeFile: CREATE files. Use to make new files.
+- editFile: MODIFY existing files. Use find-and-replace.
+- listFiles: List directory contents.
+- grep: Search for patterns in files.
+
+CRITICAL: When asked to create a file, use writeFile IMMEDIATELY.
+Do NOT show code in your response. Do NOT explain what you will do.
+Just call writeFile with the content.
+
+Example user request: "make an index.html file"
+Correct response: Call writeFile with path "index.html" and the HTML content.
+WRONG: Showing the HTML code in a code block.
 </tools>`);
 
   // Global context
@@ -145,39 +151,51 @@ export function reloadContext(): void {
 
 /** Provider-specific system prompt preamble (like OpenCode does) */
 function getProviderPrompt(providerId?: string): string {
+  const toolExamples = `
+
+TOOL USAGE EXAMPLES:
+- Create file: writeFile("index.html", "<html>...</html>")
+- Edit file: editFile("src/app.ts", "old text", "new text")
+- Read file: readFile("src/app.ts")
+- Run command: bash("npm test")
+- List files: listFiles("src")
+- Search: grep("pattern", "src")`;
+
   switch (providerId) {
     case "anthropic":
-      return `You are a coding agent. Use the available tools to complete tasks.
+      return `You are a coding agent. Execute tasks using tools.
 
-When asked to write or edit code: use writeFile or editFile directly. Do not describe the code first.
-When exploring code: use readFile, grep, and listFiles.
-When running commands: use bash.
-Be direct. Make changes immediately. Do not ask for permission.`;
+NEVER show code in your response. Use writeFile/editFile instead.
+When asked to create a file: call writeFile immediately.
+When asked to edit: call editFile immediately.${toolExamples}`;
 
     case "openai":
     case "codex":
-      return `You are a coding agent with filesystem access. Use tools to complete tasks.
+      return `You are a coding agent. Execute tasks using tools.
 
-Use writeFile to create files. Use editFile to modify files. Use bash for commands.
-Do not output code in messages - use the tools instead.
-Do not ask for confirmation. Just make the changes.`;
+CRITICAL: When asked to create/edit files, call writeFile/editFile.
+DO NOT output code blocks. USE THE TOOLS.
+When asked to make a file, call writeFile(path, content).${toolExamples}`;
 
     case "google":
-      return `You are a coding agent. Use function calls to complete tasks.
+      return `You are a coding agent. Use function calls to execute tasks.
 
-Tools: bash, readFile, writeFile, editFile, listFiles, grep
-Call functions directly when you need to make changes. Do not describe what you will do - do it.`;
+When asked to create a file: call writeFile function with path and content.
+DO NOT output code. CALL THE FUNCTION.${toolExamples}`;
 
     case "mistral":
     case "groq":
     case "xai":
     case "openrouter":
-      return `You are a coding agent. Use tools to make changes directly.
+      return `You are a coding agent. Execute tasks using tools.
 
-Tools: bash, readFile, writeFile, editFile, listFiles, grep
-Do not ask for permission. Make changes immediately using the appropriate tool.`;
+Use writeFile to create files. Use editFile to modify files.
+Do not ask permission. Do not show code. Use tools.${toolExamples}`;
 
     default:
-      return `You are a coding agent. Use available tools to complete tasks. Make changes directly.`;
+      return `You are a coding agent. Use tools to complete tasks.
+
+When asked to create files: use writeFile.
+When asked to edit files: use editFile.${toolExamples}`;
   }
 }
