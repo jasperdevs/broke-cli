@@ -44,6 +44,30 @@ function T(): string { return currentTheme().primary; }
 /** Shorthand for plan mode color (yellow/amber). */
 function P(): string { return getPlanColor(); }
 
+/** Animated counter — eases toward target value each tick */
+class AnimCounter {
+  target = 0;
+  display = 0;
+  tick(): void {
+    if (this.display === this.target) return;
+    const diff = this.target - this.display;
+    // Move 25% of the way, min step 1 (for ints) or 0.0001 (for floats)
+    const isFloat = this.target !== Math.floor(this.target);
+    const minStep = isFloat ? Math.max(0.0001, Math.abs(diff) * 0.01) : 1;
+    const step = Math.max(minStep, Math.abs(diff) * 0.25);
+    if (Math.abs(diff) <= minStep) {
+      this.display = this.target;
+    } else {
+      this.display += diff > 0 ? step : -step;
+      if (!isFloat) this.display = Math.round(this.display);
+    }
+  }
+  set(val: number): void { this.target = val; }
+  reset(): void { this.target = 0; this.display = 0; }
+  get(): number { return this.display; }
+  getInt(): number { return Math.round(this.display); }
+}
+
 /** Format token count: 0, 142, 3.2k, 1.5M */
 function fmtTokens(n: number): string {
   if (n < 1000) return `${n}`;
@@ -209,8 +233,15 @@ export class App {
   private escPrimed = false;
   private compactStartTime = 0;
   private compactTokens = 0;
-  private sidebarFileTree: string[] | null = null;
+  private sidebarFileTree: Array<{ name: string; isDir: boolean; children?: string[]; depth: number }> | null = null;
+  private sidebarExpandedDirs = new Set<string>();
   private sidebarTreeOpen = true;
+
+  // Animated counters
+  private animTokens = new AnimCounter();
+  private animCost = new AnimCounter();
+  private animStreamTokens = new AnimCounter();
+  private animContext = new AnimCounter();
 
   // Render throttling
   private drawScheduled = false;
@@ -254,6 +285,8 @@ export class App {
   updateCost(cost: number, tokens: number): void {
     this.sessionCost = cost;
     this.sessionTokens = tokens;
+    this.animCost.set(cost);
+    this.animTokens.set(tokens);
     this.draw();
   }
 
@@ -261,11 +294,16 @@ export class App {
     this.sessionCost = 0;
     this.sessionTokens = 0;
     this.contextUsed = 0;
+    this.animCost.reset();
+    this.animTokens.reset();
+    this.animStreamTokens.reset();
+    this.animContext.reset();
     this.draw();
   }
 
   setContextUsed(pct: number): void {
     this.contextUsed = pct;
+    this.animContext.set(pct);
     this.draw();
   }
 
@@ -306,9 +344,14 @@ export class App {
       this.spinnerFrame = 0;
       this.streamStartTime = Date.now();
       this.streamTokens = 0;
+      this.animStreamTokens.reset();
       this.toolCallGroups = [];
       this.spinnerTimer = setInterval(() => {
         this.spinnerFrame++;
+        this.animTokens.tick();
+        this.animCost.tick();
+        this.animStreamTokens.tick();
+        this.animContext.tick();
         this.draw();
       }, 150);
     } else if (this.spinnerTimer) {
@@ -471,6 +514,7 @@ export class App {
 
   setStreamTokens(tokens: number): void {
     this.streamTokens = tokens;
+    this.animStreamTokens.set(tokens);
   }
 
   setCompacting(compacting: boolean, tokenCount?: number): void {
@@ -856,24 +900,9 @@ export class App {
       return;
     }
 
-    // ESC to interrupt streaming (double press)
+    // ESC to interrupt streaming (single press)
     if (key.name === "escape" && this.isStreaming && this.onAbort) {
-      if (this.escPrimed) {
-        this.escPrimed = false;
-        this.statusMessage = undefined;
-        this.onAbort();
-      } else {
-        this.escPrimed = true;
-        this.statusMessage = `${RED}Press ESC again to stop${RESET}`;
-        this.draw();
-        setTimeout(() => {
-          this.escPrimed = false;
-          if (this.statusMessage?.includes("ESC again")) {
-            this.statusMessage = undefined;
-            this.draw();
-          }
-        }, 1500);
-      }
+      this.onAbort();
       return;
     }
 
@@ -927,10 +956,40 @@ export class App {
     if (key.name === "click" && key.char) {
       const [colStr, rowStr] = key.char.split(",");
       const col = parseInt(colStr, 10);
+      const row = parseInt(rowStr, 10);
       const hasSB = this.screen.hasSidebar && this.messages.length > 0 && !getSettings().hideSidebar;
       if (hasSB && col > this.screen.mainWidth) {
-        // Clicked in sidebar — toggle file tree
-        this.sidebarTreeOpen = !this.sidebarTreeOpen;
+        // Determine which sidebar row was clicked
+        const sidebarLines = this.renderSidebar();
+        const clickedLine = sidebarLines[row - 1]; // 1-based rows
+        if (clickedLine) {
+          const plain = stripAnsi(clickedLine).trim();
+          // Click on "▼ Files" / "▶ Files" — toggle whole tree
+          if (plain.startsWith("\u25BC Files") || plain.startsWith("\u25B6 Files")) {
+            this.sidebarTreeOpen = !this.sidebarTreeOpen;
+          }
+          // Click on a folder "▶ dirname/" or "▼ dirname/" — toggle that folder
+          else if (plain.match(/^[\u25BC\u25B6] .+\/$/)) {
+            const dirName = plain.slice(2).replace(/\/$/, "");
+            if (this.sidebarExpandedDirs.has(dirName)) {
+              this.sidebarExpandedDirs.delete(dirName);
+            } else {
+              this.sidebarExpandedDirs.add(dirName);
+            }
+          }
+          // Click on "▶ +N more" — expand all children of that dir
+          else if (plain.match(/^[\u25B6] \+\d+ more$/)) {
+            // Find which dir this belongs to by scanning backwards
+            for (let i = row - 2; i >= 0; i--) {
+              const prevPlain = stripAnsi(sidebarLines[i] ?? "").trim();
+              if (prevPlain.match(/^[\u25BC] .+\/$/)) {
+                const dirName = prevPlain.slice(2).replace(/\/$/, "");
+                this.sidebarExpandedDirs.add(`${dirName}:all`);
+                break;
+              }
+            }
+          }
+        }
         this.draw();
       }
       return;
@@ -1375,7 +1434,8 @@ export class App {
       const mins = Math.floor(secs / 60);
       const timeStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
       const statParts: string[] = [timeStr];
-      if (this.streamTokens > 0) statParts.push(`\u2193 ${fmtTokens(this.streamTokens)} tokens`);
+      const animTok = this.animStreamTokens.getInt();
+      if (animTok > 0) statParts.push(`\u2193 ${fmtTokens(animTok)} tokens`);
       // Show thinking duration
       if (this.thinkingStartTime > 0) {
         // Still thinking — show live
@@ -1455,8 +1515,6 @@ export class App {
         try {
           const files = execSync("git ls-files --others --cached --exclude-standard", { cwd: this.cwd, encoding: "utf-8", timeout: 2000 }).trim();
           const raw = files.split("\n").filter(Boolean);
-          // Build nested tree: show dirs with their contents indented
-          const tree: string[] = [];
           const dirContents = new Map<string, string[]>();
           const topFiles: string[] = [];
           for (const f of raw) {
@@ -1469,53 +1527,62 @@ export class App {
               topFiles.push(f);
             }
           }
-          // Dirs first, then files
+          const items: Array<{ name: string; isDir: boolean; children?: string[]; depth: number }> = [];
           for (const dir of [...dirContents.keys()].sort()) {
-            tree.push(`${dir}/`);
-            const children = dirContents.get(dir)!.sort();
-            // Show up to 5 children per dir, collapse the rest
-            for (let i = 0; i < Math.min(children.length, 5); i++) {
-              // Show just the filename (strip subdirs for display)
-              const name = children[i].includes("/") ? children[i].split("/").pop()! : children[i];
-              tree.push(`  ${name}`);
-            }
-            if (children.length > 5) tree.push(`  +${children.length - 5} more`);
+            const children = dirContents.get(dir)!.sort().map(c => c.includes("/") ? c.split("/").pop()! : c);
+            items.push({ name: dir, isDir: true, children, depth: 0 });
           }
-          for (const f of topFiles.sort()) tree.push(f);
-          this.sidebarFileTree = tree.slice(0, 50);
+          for (const f of topFiles.sort()) {
+            items.push({ name: f, isDir: false, depth: 0 });
+          }
+          this.sidebarFileTree = items;
         } catch {
           try {
             const { readdirSync, statSync } = require("fs");
-            const { join } = require("path");
+            const { join: pathJoin } = require("path");
             this.sidebarFileTree = readdirSync(this.cwd)
               .filter((f: string) => !f.startsWith(".") && f !== "node_modules")
               .map((f: string) => {
-                try { return statSync(join(this.cwd, f)).isDirectory() ? `${f}/` : f; }
-                catch { return f; }
+                const isD = (() => { try { return statSync(pathJoin(this.cwd, f)).isDirectory(); } catch { return false; } })();
+                return { name: f, isDir: isD, children: isD ? [] : undefined, depth: 0 };
               })
-              .slice(0, 20);
+              .slice(0, 30) as typeof this.sidebarFileTree;
           } catch {
             this.sidebarFileTree = [];
           }
         }
       }
       const tree = this.sidebarFileTree ?? [];
-      const maxTreeLines = Math.min(tree.length, 20);
-      for (let i = 0; i < maxTreeLines; i++) {
-        const f = tree[i];
-        const isDir = f.endsWith("/");
-        const isChild = f.startsWith("  ");
-        const display = f.length > w - 4 ? f.slice(-(w - 5)) : f;
-        if (isDir) {
-          lines.push(`  ${T()}${display}${RESET}`);
-        } else if (isChild) {
-          lines.push(`  ${DIM}${display}${RESET}`);
+      let lineCount = 0;
+      const maxLines = 25;
+      for (const item of tree) {
+        if (lineCount >= maxLines) { lines.push(`  ${DIM}+${tree.length - lineCount} more${RESET}`); break; }
+        if (item.isDir) {
+          const expanded = this.sidebarExpandedDirs.has(item.name);
+          const arrow = expanded ? "\u25BC" : "\u25B6";
+          const display = item.name.length > w - 6 ? item.name.slice(-(w - 7)) : item.name;
+          lines.push(`  ${T()}${arrow} ${display}/${RESET}`);
+          lineCount++;
+          if (expanded && item.children) {
+            const showCount = this.sidebarExpandedDirs.has(`${item.name}:all`) ? item.children.length : Math.min(item.children.length, 5);
+            for (let i = 0; i < showCount; i++) {
+              if (lineCount >= maxLines) break;
+              const child = item.children[i];
+              const cDisplay = child.length > w - 8 ? child.slice(-(w - 9)) : child;
+              lines.push(`    ${DIM}${cDisplay}${RESET}`);
+              lineCount++;
+            }
+            if (showCount < item.children.length) {
+              const remaining = item.children.length - showCount;
+              lines.push(`    ${DIM}\u25B6 +${remaining} more${RESET}`);
+              lineCount++;
+            }
+          }
         } else {
+          const display = item.name.length > w - 4 ? item.name.slice(-(w - 5)) : item.name;
           lines.push(`  ${DIM}${display}${RESET}`);
+          lineCount++;
         }
-      }
-      if (tree.length > 20) {
-        lines.push(`  ${DIM}+${tree.length - 20} more${RESET}`);
       }
     }
 
@@ -1644,19 +1711,20 @@ export class App {
       if (caveLevel !== "off") {
         parts.push({ text: `\u{1FAA8}:${YELLOW}${caveLevel}${RESET} ${DIM}(ctrl+y)${RESET}`, plain: `\u{1FAA8}:${caveLevel} (ctrl+y)`, priority: 3 });
       }
-      // Cost/tokens/context in bottom bar — respect showCost/showTokens settings
-      const liveTokens = this.isStreaming ? this.sessionTokens + this.streamTokens : this.sessionTokens;
+      // Cost/tokens/context in bottom bar — animated values
+      const liveTokens = this.animTokens.getInt() + this.animStreamTokens.getInt();
       const showCost = settings.showCost && this.sessionCost > 0;
       const showTokens = settings.showTokens && liveTokens > 0;
       if (showCost || showTokens) {
-        const costPart = showCost ? fmtCost(this.sessionCost) : "";
+        const costPart = showCost ? fmtCost(this.animCost.get()) : "";
         const tokPart = showTokens ? `${fmtTokens(liveTokens)} tok` : "";
         const statStr = [costPart, tokPart].filter(Boolean).join(" ");
         parts.push({ text: `${DIM}${statStr}${RESET}`, plain: statStr, priority: 4 });
       }
-      if (this.contextUsed > 0) {
-        const ctxColor = this.contextUsed > 90 ? RED : this.contextUsed > 70 ? "\x1b[33m" : DIM;
-        parts.push({ text: `${ctxColor}${this.contextUsed}% ctx${RESET}`, plain: `${this.contextUsed}% ctx`, priority: 5 });
+      const animCtx = this.animContext.getInt();
+      if (animCtx > 0) {
+        const ctxColor = animCtx > 90 ? RED : animCtx > 70 ? "\x1b[33m" : DIM;
+        parts.push({ text: `${ctxColor}${animCtx}% ctx${RESET}`, plain: `${animCtx}% ctx`, priority: 5 });
       }
       // Collapse from lowest priority until it fits
       const sep = " | ";

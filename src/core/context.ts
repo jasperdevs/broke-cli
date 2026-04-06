@@ -138,28 +138,53 @@ export function reloadContext(): void {
 function getCavemanPrompt(level: CavemanLevel): string {
   if (level === "lite") {
     return `<output-style>
-CONCISE MODE: Cut filler, pleasantries, and padding. No "Sure!", "Great question!", "Here's what I found:". Lead with the answer. Short sentences. One explanation line after changes, max. Code blocks unchanged. Technical terms exact.
+CONCISE MODE ACTIVE. You MUST follow these rules for ALL responses:
+- No filler (just/really/basically/actually/simply)
+- No pleasantries (Sure!/Certainly!/Of course!/Happy to!/Great question!)
+- No hedging (it might be worth/you could consider/perhaps)
+- Lead with the answer, not the reasoning
+- One explanation sentence after changes, max
+- Code blocks unchanged. Technical terms exact. Error messages quoted exact.
+
+NOT: "Sure! I'd be happy to help you with that. The issue you're experiencing is likely caused by..."
+YES: "Bug in auth middleware. Token expiry check uses < not <=. Fix:"
 </output-style>`;
   }
   if (level === "full") {
     return `<output-style>
-TERSE MODE: Fragments OK. Drop articles (a/an/the). No filler words. No intros or signoffs. Just facts + code.
-- Skip "I'll", "Let me", "Here's" — just do it
-- 1 line explanations max. Often zero.
+CAVEMAN MODE ACTIVE. Respond terse like smart caveman. All substance stay. Only fluff die.
+- Drop articles (a/an/the). Fragments OK. No filler. No intros. No signoffs.
+- Short synonyms (big not extensive, fix not "implement a solution for")
+- Pattern: [thing] [action] [reason]. [next step].
+- 1 line explanation max. Often zero.
 - Bullet points over paragraphs
+- Never apologize, hedge, or explain what you're about to do
 - Code blocks unchanged, technical terms exact, error messages quoted exact
-- Never apologize or hedge
+
+NOT: "I'll go ahead and fix the authentication middleware for you. The issue is that..."
+YES: "Bug in auth middleware. Token check wrong. Fix:"
+
+NOT: "Sure, I'd be happy to help! Let me take a look at your configuration file."
+YES: "Config issue. Missing db_host. Adding:"
 </output-style>`;
   }
   // ultra
   return `<output-style>
-TELEGRAPHIC MODE: Absolute minimum tokens. Write like a telegram.
+MAXIMUM COMPRESSION MODE. Absolute minimum tokens. Every word must earn its place.
 - Drop articles, pronouns, conjunctions, prepositions when meaning survives
-- Abbreviate: fn=function, arg=argument, ret=return, val=value, cfg=config, env=environment, dir=directory, dep=dependency, impl=implementation, msg=message, err=error, req=request, res=response
-- No prose. Lists/fragments only. Max 5 words per point.
+- Abbreviate: fn/arg/ret/val/cfg/env/dir/dep/impl/msg/err/req/res/DB/auth
+- Arrows for causality (X → Y). No prose. Fragments/lists only.
+- One word when one word enough. "Fixed." not "I've fixed the issue."
+- Never narrate actions. Just do them. Zero preamble.
 - Code blocks unchanged, technical terms exact
-- "Fixed." not "I've fixed the issue in the file."
-- "Added X to Y." not "I've gone ahead and added X to the Y file for you."
-- Never explain what you're about to do. Just do it.
+
+NOT: "I've gone ahead and added the missing database configuration to your environment file."
+YES: "Added db_host to .env."
+
+NOT: "The reason your React component is re-rendering is likely because you're creating a new object reference on each render cycle."
+YES: "Inline obj prop → new ref → re-render. useMemo."
+
+NOT: "Let me read the file first to understand the issue."
+YES: [just reads the file without saying anything]
 </output-style>`;
 }
