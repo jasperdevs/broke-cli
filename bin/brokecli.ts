@@ -73,52 +73,71 @@ function resolveWindowsPowerShell(): string {
   return candidates.find((candidate) => candidate.includes("\\") ? existsSync(candidate) : true) ?? "powershell.exe";
 }
 
+function escapePowerShellSingleQuoted(value: string): string {
+  return value.replace(/'/g, "''");
+}
+
 function sendResponseNotification(message = "Response complete"): void {
   try {
     const iconPath = getNotificationIconPath();
     if (process.platform === "win32") {
+      const escapedMessage = escapePowerShellSingleQuoted(message);
+      const escapedIconPath = escapePowerShellSingleQuoted(iconPath ?? "");
       const script = `
 $shown = $false
 try {
-  Add-Type -AssemblyName System.Windows.Forms
-  Add-Type -AssemblyName System.Drawing
-  $icon = New-Object System.Windows.Forms.NotifyIcon
-  $iconObj = $null
-  if ('${(iconPath ?? "").replace(/\\/g, "\\\\").replace(/'/g, "''")}') {
-    try {
-      $bitmap = New-Object System.Drawing.Bitmap '${(iconPath ?? "").replace(/\\/g, "\\\\").replace(/'/g, "''")}'
-      $iconObj = [System.Drawing.Icon]::FromHandle($bitmap.GetHicon())
-    } catch {}
-  }
-  if ($iconObj -eq $null) {
-    $iconObj = [System.Drawing.SystemIcons]::Information
-  }
-  $icon.Icon = $iconObj
-  $icon.BalloonTipIcon = [System.Windows.Forms.ToolTipIcon]::Info
-  $icon.BalloonTipTitle = 'BrokeCLI'
-  $icon.BalloonTipText = '${message.replace(/'/g, "''")}'
-  $icon.Visible = $true
-  $icon.ShowBalloonTip(4000)
-  $end = (Get-Date).AddMilliseconds(4500)
-  while ((Get-Date) -lt $end) {
-    [System.Windows.Forms.Application]::DoEvents()
-    Start-Sleep -Milliseconds 50
-  }
-  $icon.Dispose()
+  [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null
+  [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] > $null
+  $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
+  $template = @"
+<toast>
+  <visual>
+    <binding template="ToastGeneric">
+      <text>BrokeCLI</text>
+      <text>${escapedMessage}</text>
+    </binding>
+  </visual>
+</toast>
+"@
+  $xml.LoadXml($template)
+  $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
+  [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('Microsoft.Windows.PowerShell').Show($toast)
   $shown = $true
 } catch {}
 if (-not $shown) {
   try {
-    Start-Process msg.exe -ArgumentList '*', 'BrokeCLI: ${message.replace(/'/g, "''")}' -WindowStyle Hidden
+    $wshell = New-Object -ComObject WScript.Shell
+    $null = $wshell.Popup('${escapedMessage}', 4, 'BrokeCLI', 0x40)
     $shown = $true
   } catch {}
 }
 if (-not $shown) {
-  try { [System.Media.SystemSounds]::Exclamation.Play(); $shown = $true } catch {}
+  try {
+    Add-Type -AssemblyName System.Windows.Forms
+    Add-Type -AssemblyName System.Drawing
+    $icon = New-Object System.Windows.Forms.NotifyIcon
+    $iconObj = $null
+    if ('${escapedIconPath}') {
+      try {
+        $bitmap = New-Object System.Drawing.Bitmap '${escapedIconPath}'
+        $iconObj = [System.Drawing.Icon]::FromHandle($bitmap.GetHicon())
+      } catch {}
+    }
+    if ($iconObj -eq $null) {
+      $iconObj = [System.Drawing.SystemIcons]::Information
+    }
+    $icon.Icon = $iconObj
+    $icon.BalloonTipIcon = [System.Windows.Forms.ToolTipIcon]::Info
+    $icon.BalloonTipTitle = 'BrokeCLI'
+    $icon.BalloonTipText = '${escapedMessage}'
+    $icon.Visible = $true
+    $icon.ShowBalloonTip(4000)
+    Start-Sleep -Milliseconds 4500
+    $icon.Dispose()
+    $shown = $true
+  } catch {}
 }
-if (-not $shown) {
-  try { [console]::beep(880, 220) } catch {}
-}
+try { [System.Media.SystemSounds]::Exclamation.Play() } catch {}
 try { [console]::write([char]7) } catch {}
 `;
       const child = spawn(resolveWindowsPowerShell(), [
