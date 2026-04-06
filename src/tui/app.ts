@@ -130,8 +130,6 @@ export class App {
   private gitDirty = false;
   private sessionName = "New Session";
   private appVersion = "0.0.1";
-  private sidebarFileTree: string[] | null = null;
-  private sidebarTreeOpen = true;
   private mcpConnections: string[] = [];
   private onCycleScopedModel: (() => void) | null = null;
   private mode: Mode = "build";
@@ -146,6 +144,7 @@ export class App {
   private escPrimed = false;
   private compactStartTime = 0;
   private compactTokens = 0;
+  private lastBottomHeight = 0;
 
   // Render throttling
   private drawScheduled = false;
@@ -226,6 +225,7 @@ export class App {
       }
     }
     if (streaming) {
+      this.thinkingBuffer = "";
       this.spinnerFrame = 0;
       this.streamStartTime = Date.now();
       this.streamTokens = 0;
@@ -249,11 +249,6 @@ export class App {
   setSessionName(name: string): void { this.sessionName = name; }
   setVersion(v: string): void { this.appVersion = v; }
   setMcpConnections(conns: string[]): void { this.mcpConnections = conns; }
-
-  toggleSidebarTree(): void {
-    this.sidebarTreeOpen = !this.sidebarTreeOpen;
-    this.draw();
-  }
 
   openModelPicker(options: ModelOption[], onSelect: (providerId: string, modelId: string) => void, onPin?: (providerId: string, modelId: string, pinned: boolean) => void, initialCursor?: number): void {
     const cursorIdx = initialCursor ?? options.findIndex((o) => o.active);
@@ -1146,17 +1141,15 @@ export class App {
   private renderSidebar(): string[] {
     const w = this.screen.sidebarWidth;
     const lines: string[] = [];
-    const sep = `${DIM}${"─".repeat(Math.max(1, w - 2))}${RESET}`;
 
     // Session name + version
-    lines.push(sep);
     lines.push(`${WHITE}${BOLD}${this.sessionName.slice(0, w - 2)}${RESET}`);
     lines.push(`${DIM}v${this.appVersion}${RESET}`);
-    lines.push(sep);
+    lines.push("");
 
     // Model
     lines.push(`${T()}${this.providerName}/${this.modelName}${RESET}`);
-    lines.push(sep);
+    lines.push("");
 
     // Providers
     if (this.detectedProviders.length > 0) {
@@ -1167,7 +1160,7 @@ export class App {
       if (this.detectedProviders.length > 4) {
         lines.push(`  ${DIM}+${this.detectedProviders.length - 4} more${RESET}`);
       }
-      lines.push(sep);
+      lines.push("");
     }
 
     // MCP connections
@@ -1176,7 +1169,7 @@ export class App {
       for (const c of this.mcpConnections.slice(0, 3)) {
         lines.push(`  ${GREEN}\u25CF${RESET} ${DIM}${c.slice(0, w - 6)}${RESET}`);
       }
-      lines.push(sep);
+      lines.push("");
     }
 
     // Directory
@@ -1187,38 +1180,6 @@ export class App {
     lines.push(`  ${DIM}${shortCwd}${RESET}`);
     if (this.gitBranch) {
       lines.push(`  ${DIM}${this.gitBranch}${this.gitDirty ? " *" : ""}${RESET}`);
-    }
-    lines.push(sep);
-
-    // File tree (collapsible)
-    const treeArrow = this.sidebarTreeOpen ? "\u25BC" : "\u25B6";
-    lines.push(`${WHITE}${treeArrow} Files${RESET}`);
-    if (this.sidebarTreeOpen) {
-      if (!this.sidebarFileTree) {
-        // Lazy-load file tree
-        try {
-          const { execSync: exec } = require("child_process");
-          const files = exec("git ls-files --others --cached --exclude-standard", { cwd: this.cwd, encoding: "utf-8", timeout: 2000 }).trim();
-          this.sidebarFileTree = files.split("\n").filter(Boolean).slice(0, 30);
-        } catch {
-          try {
-            const { readdirSync } = require("fs");
-            this.sidebarFileTree = readdirSync(this.cwd).filter((f: string) => !f.startsWith(".") && f !== "node_modules").slice(0, 20);
-          } catch {
-            this.sidebarFileTree = [];
-          }
-        }
-      }
-      const tree = this.sidebarFileTree ?? [];
-      const maxTreeLines = Math.min(tree.length, 15);
-      for (let i = 0; i < maxTreeLines; i++) {
-        const f = tree[i];
-        const display = f.length > w - 4 ? f.slice(-(w - 5)) : f;
-        lines.push(`  ${DIM}${display}${RESET}`);
-      }
-      if (tree.length > 15) {
-        lines.push(`  ${DIM}+${tree.length - 15} more${RESET}`);
-      }
     }
 
     return lines;
@@ -1306,7 +1267,7 @@ export class App {
       }
     }
 
-    // Suggestions/picker appear BELOW input (like Pi)
+    // Pickers appear below input
     if (this.filePicker) {
       this.appendFilePicker(bottomLines, height);
     } else if (this.itemPicker) {
@@ -1417,7 +1378,7 @@ export class App {
         const border = `${DIM}\u2502${RESET}`;
         for (let i = 0; i < chatH; i++) {
           const scrollChar = showScrollbar
-            ? (i >= scrollThumbStart && i < scrollThumbEnd ? `${DIM}\u2588${RESET}` : `${DIM}\u2502${RESET}`)
+            ? (i >= scrollThumbStart && i < scrollThumbEnd ? `${DIM}\u2591${RESET}` : " ")
             : "";
           const chatLine = this.padLine(visibleMsgs[i] ?? "", mainW - (showScrollbar ? 1 : 0));
           const sidebarLine = sidebarLines[i] ?? "";
@@ -1427,7 +1388,7 @@ export class App {
       } else {
         for (let i = 0; i < chatH; i++) {
           const scrollChar = showScrollbar
-            ? (i >= scrollThumbStart && i < scrollThumbEnd ? `${DIM}\u2588${RESET}` : ` `)
+            ? (i >= scrollThumbStart && i < scrollThumbEnd ? `${DIM}\u2591${RESET}` : " ")
             : "";
           frameLines.push((visibleMsgs[i] ?? "") + scrollChar);
         }
@@ -1450,7 +1411,13 @@ export class App {
     while (frameLines.length < height) frameLines.push("");
     if (frameLines.length > height) frameLines.length = height;
 
-    this.screen.render(frameLines);
+    // Force full redraw when bottom section height changes to prevent stale lines
+    if (bottomLines.length !== this.lastBottomHeight) {
+      this.lastBottomHeight = bottomLines.length;
+      this.screen.forceRedraw(frameLines);
+    } else {
+      this.screen.render(frameLines);
+    }
 
     // Cursor on input line — account for multi-line input
     const textBeforeCursor = inputText.slice(0, cursor);
@@ -1486,19 +1453,16 @@ export class App {
     const filtered = this.getFilteredModels();
     if (filtered.length === 0) {
       lines.push(`  ${DIM}no matches${RESET}`);
-      lines.push("");
       lines.push(` ${DIM}type to search, esc to close${RESET}`);
       return;
     }
 
-    // Group filtered options by provider
     const byProvider = new Map<string, ModelOption[]>();
     for (const opt of filtered) {
       if (!byProvider.has(opt.providerName)) byProvider.set(opt.providerName, []);
       byProvider.get(opt.providerName)!.push(opt);
     }
 
-    // Flat list with headers
     let currentIdx = 0;
     const flatList: Array<{ type: 'header' | 'model'; provider: string; option?: ModelOption; index: number }> = [];
     for (const [provider, opts] of byProvider) {

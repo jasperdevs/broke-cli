@@ -59,6 +59,12 @@ export const GRAY = fg(128, 128, 128);
 export const RED = fg(255, 80, 80);
 export const YELLOW = fg(255, 200, 50);
 
+// Box-drawing characters (rounded corners)
+export const BOX = {
+  tl: "╭", tr: "╮", bl: "╰", br: "╯",
+  h: "─", v: "│",
+};
+
 /** Write directly to stdout without newline */
 export function write(s: string): void {
   process.stdout.write(s);
