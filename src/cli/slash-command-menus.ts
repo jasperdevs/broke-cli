@@ -16,6 +16,16 @@ import { SessionManager } from "../core/session-manager.js";
 type AnyApp = any;
 type AnyHooks = any;
 
+type EmptyMenuKind = "extensions" | "resume" | "projects" | "logout" | "templates" | "skills" | "changelog";
+
+export function openEmptyItemMenu(app: AnyApp, title: string, detail: string, kind: EmptyMenuKind): false {
+  app.openItemPicker(title, [{ id: "__none__", label: "None", detail }], () => {}, {
+    closeOnSelect: false,
+    kind,
+  });
+  return false;
+}
+
 function listLogoutTargets(): string[] {
   const configuredProviders = Object.entries(loadConfig().providers ?? {})
     .filter(([, entry]) => !!entry?.apiKey)
@@ -100,8 +110,7 @@ export function openPermissionsMenu(app: AnyApp): void {
 export function openExtensionsMenu(app: AnyApp, hooks: AnyHooks): boolean {
   const extensions = listExtensions();
   if (extensions.length === 0) {
-    app.addMessage("system", "No extensions found in ~/.brokecli/extensions.");
-    return false;
+    return openEmptyItemMenu(app, "Extensions", "~/.brokecli/extensions is empty", "extensions");
   }
   const buildExtensionItems = () => listExtensions().map((entry) => ({ id: entry.id, label: entry.id, detail: entry.enabled ? "enabled" : "disabled" }));
   app.openItemPicker("Extensions", buildExtensionItems(), (id: string) => {
@@ -200,13 +209,11 @@ export async function shareTranscript(args: { app: AnyApp; session: Session; act
 export function openResumeMenu(args: { app: AnyApp; restText: string; onSessionReplace: (session: Session) => void; }): boolean {
   const { app, restText, onSessionReplace } = args;
   if (!getSettings().autoSaveSessions) {
-    app.addMessage("system", "Session history is off. Enable Auto-save sessions in /settings to use /resume.");
-    return false;
+    return openEmptyItemMenu(app, "Resume Session", "session history is off", "resume");
   }
   const recent = Session.listRecent(50, restText, process.cwd());
   if (recent.length === 0) {
-    app.addMessage("system", "No saved sessions found.");
-    return false;
+    return openEmptyItemMenu(app, "Resume Session", "no saved sessions in this project", "resume");
   }
   const items = recent.map((entry) => ({
     id: entry.id,
@@ -227,8 +234,7 @@ export function openResumeMenu(args: { app: AnyApp; restText: string; onSessionR
 export function openProjectsMenu(app: AnyApp, restText: string, onProjectChange: (cwd: string) => void): boolean {
   const projects = listProjects(20, restText);
   if (projects.length === 0) {
-    app.addMessage("system", "No saved projects yet.");
-    return false;
+    return openEmptyItemMenu(app, "Projects", "no saved projects yet", "projects");
   }
   const items = projects.map((entry) => ({
     id: entry.cwd,
@@ -280,7 +286,7 @@ export async function handleLogoutMenu(args: { app: AnyApp; restText: string; ac
   }
   const targets = listLogoutTargets();
   if (targets.length === 0) {
-    app.addMessage("system", "No stored brokecli credentials found to clear.");
+    openEmptyItemMenu(app, "Logout", "no stored brokecli credentials", "logout");
     return;
   }
   const items = [

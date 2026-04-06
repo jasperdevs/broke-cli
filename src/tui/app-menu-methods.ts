@@ -138,6 +138,9 @@ export function getMenuPromptPrefix(_app: AppState, kind: MenuPromptKind): strin
     case "session": return "/session ";
     case "hotkeys": return "/hotkeys ";
     case "agents": return "/agents ";
+    case "templates": return "/templates ";
+    case "skills": return "/skills ";
+    case "changelog": return "/changelog ";
     case "projects": return "/projects ";
     case "logout": return "/logout ";
   }

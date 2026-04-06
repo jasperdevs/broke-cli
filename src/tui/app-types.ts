@@ -121,6 +121,9 @@ export type MenuPromptKind =
   | "session"
   | "hotkeys"
   | "agents"
+  | "templates"
+  | "skills"
+  | "changelog"
   | "projects"
   | "logout";
 

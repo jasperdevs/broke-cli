@@ -20,7 +20,7 @@ import { checkForNewVersion } from "../core/update.js";
 import { formatRelativeMinutes } from "./exports.js";
 import { runConnectFlow } from "./connect-flow.js";
 import { runLoginFlow } from "./login-flow.js";
-import { handleLogoutMenu, openExportMenu, openExtensionsMenu, openPermissionsMenu, openProjectsMenu, openResumeMenu, openSettingsMenu, openThemeMenu, shareTranscript } from "./slash-command-menus.js";
+import { handleLogoutMenu, openEmptyItemMenu, openExportMenu, openExtensionsMenu, openPermissionsMenu, openProjectsMenu, openResumeMenu, openSettingsMenu, openThemeMenu, shareTranscript } from "./slash-command-menus.js";
 import type { ModelOption, SettingEntry, PickerItem, UpdateNotice } from "../tui/app-types.js";
 import { SessionManager } from "../core/session-manager.js";
 
@@ -53,7 +53,7 @@ interface SlashCommandApp {
       onSecondaryAction?: (id: string) => void;
       secondaryHint?: string;
       closeOnSelect?: boolean;
-      kind?: "login" | "connect" | "permissions" | "extensions" | "theme" | "export" | "resume" | "session" | "hotkeys" | "projects" | "logout" | "agents";
+      kind?: "login" | "connect" | "permissions" | "extensions" | "theme" | "export" | "resume" | "session" | "hotkeys" | "agents" | "templates" | "skills" | "changelog" | "projects" | "logout";
     },
   ): void;
   openAgentRunsView?(title: string, runs: Array<{ id: string; prompt: string; status: "running" | "done" | "error"; result?: string; detail?: string; createdAt: number }>): void;
@@ -262,7 +262,7 @@ export async function handleSlashCommand(options: {
     case "agents": {
       const runs = app.getAgentRuns?.() ?? [];
       if (runs.length === 0) {
-        app.addMessage("system", "No delegated agent tasks yet.");
+        app.openAgentRunsView?.("Agent Tasks", []);
         return { handled: true };
       }
       app.openAgentRunsView?.("Agent Tasks", runs);
@@ -350,9 +350,9 @@ export async function handleSlashCommand(options: {
           return { id: `${index}`, label: rest.join(" ").trim(), detail: sha };
         });
         if (items.length === 0) {
-          app.addMessage("system", "No changelog entries found.");
+          openEmptyItemMenu(app, "Recent Changes", "no changelog entries yet", "changelog");
         } else {
-          app.openItemPicker("Recent Changes", items, () => {}, { kind: "hotkeys" });
+          app.openItemPicker("Recent Changes", items, () => {}, { kind: "changelog" });
         }
       } catch (err) {
         app.addMessage("system", `Changelog failed: ${(err as Error).message}`);
@@ -402,21 +402,33 @@ export async function handleSlashCommand(options: {
     case "templates": {
       const templates = listTemplates();
       if (templates.length === 0) {
-        app.addMessage("system", "No templates found. Add .md files to ~/.brokecli/prompts/ or .brokecli/prompts/");
+        openEmptyItemMenu(app, "Templates", "add .md files to ~/.brokecli/prompts or .brokecli/prompts", "templates");
         return { handled: true };
       }
-      const lines = templates.map((template) => `  /${template.name}${template.description ? ` -- ${template.description}` : ""}`);
-      app.addMessage("system", `Templates:\n${lines.join("\n")}`);
+      const items = templates.map((template) => ({
+        id: template.name,
+        label: `/${template.name}`,
+        detail: template.description || "prompt template",
+      }));
+      app.openItemPicker("Templates", items, (id: string) => {
+        app.setDraft?.(`/${id} `);
+      }, { kind: "templates" });
       return { handled: true };
     }
     case "skills": {
       const skills = listSkills();
       if (skills.length === 0) {
-        app.addMessage("system", "No skills found.");
+        openEmptyItemMenu(app, "Skills", "no skills available", "skills");
         return { handled: true };
       }
-      const lines = skills.map((skill) => `  /skill:${skill.name}${skill.description ? ` -- ${skill.description}` : ""}`);
-      app.addMessage("system", `Skills:\n${lines.join("\n")}`);
+      const items = skills.map((skill) => ({
+        id: skill.name,
+        label: `/skill:${skill.name}`,
+        detail: skill.description || "skill prompt",
+      }));
+      app.openItemPicker("Skills", items, (id: string) => {
+        app.setDraft?.(`/skill:${id} `);
+      }, { kind: "skills" });
       return { handled: true };
     }
     case "logout": {

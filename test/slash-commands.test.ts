@@ -482,10 +482,110 @@ describe("slash command handling", () => {
     expect(latestItems.find((item) => item.id === "slash-test-extension")?.detail).toBe("disabled");
   });
 
+  it("opens an empty extensions picker instead of writing a transcript message", async () => {
+    const app = createAppStub();
+    let pickerItems: Array<{ id: string; label: string; detail?: string }> = [];
+    app.openItemPicker = (_title: string, items: Array<{ id: string; label: string; detail?: string }>) => {
+      pickerItems = items;
+    };
+
+    const result = await handleSlashCommand({
+      text: "/extensions",
+      app,
+      session: new Session(`test-extensions-empty-${Date.now()}`),
+      activeModel: null,
+      currentModelId: "",
+      currentMode: "build",
+      systemPrompt: "sys",
+      providerRegistry: {} as any,
+      buildVisibleModelOptions: () => [],
+      refreshProviderState: async () => [],
+      isSkippedPromptAnswer: () => false,
+      isValidHttpBaseUrl: () => true,
+      getContextOptimizer: () => ({ reset() {} }) as any,
+      onSessionReplace: () => {},
+      onModelChange: () => {},
+      onSystemPromptChange: () => {},
+      hooks: { emit() {} },
+      onProjectChange: () => {},
+    });
+
+    expect(result.handled).toBe(true);
+    expect(app.messages).toEqual([]);
+    expect(pickerItems).toEqual([{ id: "__none__", label: "None", detail: "~/.brokecli/extensions is empty" }]);
+  });
+
+  it("opens templates and skills in pickers instead of dumping text into chat", async () => {
+    mkdirSync(localTemplateDir, { recursive: true });
+    writeFileSync(templatePath, "Template body", "utf-8");
+
+    const app = createAppStub();
+    const opened: Array<{ title: string; items: Array<{ id: string; label: string; detail?: string }> }> = [];
+    app.openItemPicker = (title: string, items: Array<{ id: string; label: string; detail?: string }>) => {
+      opened.push({ title, items });
+    };
+
+    try {
+      const templateResult = await handleSlashCommand({
+        text: "/templates",
+        app,
+        session: new Session(`test-templates-picker-${Date.now()}`),
+        activeModel: null,
+        currentModelId: "",
+        currentMode: "build",
+        systemPrompt: "sys",
+        providerRegistry: {} as any,
+        buildVisibleModelOptions: () => [],
+        refreshProviderState: async () => [],
+        isSkippedPromptAnswer: () => false,
+        isValidHttpBaseUrl: () => true,
+        getContextOptimizer: () => ({ reset() {} }) as any,
+        onSessionReplace: () => {},
+        onModelChange: () => {},
+        onSystemPromptChange: () => {},
+        hooks: { emit() {} },
+        onProjectChange: () => {},
+      });
+
+      const skillsResult = await handleSlashCommand({
+        text: "/skills",
+        app,
+        session: new Session(`test-skills-picker-${Date.now()}`),
+        activeModel: null,
+        currentModelId: "",
+        currentMode: "build",
+        systemPrompt: "sys",
+        providerRegistry: {} as any,
+        buildVisibleModelOptions: () => [],
+        refreshProviderState: async () => [],
+        isSkippedPromptAnswer: () => false,
+        isValidHttpBaseUrl: () => true,
+        getContextOptimizer: () => ({ reset() {} }) as any,
+        onSessionReplace: () => {},
+        onModelChange: () => {},
+        onSystemPromptChange: () => {},
+        hooks: { emit() {} },
+        onProjectChange: () => {},
+      });
+
+      expect(templateResult.handled).toBe(true);
+      expect(skillsResult.handled).toBe(true);
+      expect(app.messages).toEqual([]);
+      expect(opened.find((entry) => entry.title === "Templates")?.items.some((item) => item.label === "/slash-test-template")).toBe(true);
+      expect((opened.find((entry) => entry.title === "Skills")?.items.length ?? 0) > 0).toBe(true);
+    } finally {
+      if (existsSync(templatePath)) rmSync(templatePath, { force: true });
+    }
+  });
+
   it("explains that /resume is unavailable when session persistence is off", async () => {
     updateSetting("autoSaveSessions", false);
 
     const app = createAppStub();
+    let pickerItems: Array<{ id: string; label: string; detail?: string }> = [];
+    app.openItemPicker = (_title: string, items: Array<{ id: string; label: string; detail?: string }>) => {
+      pickerItems = items;
+    };
     const session = new Session(`test-resume-disabled-${Date.now()}`);
 
     try {
@@ -511,7 +611,8 @@ describe("slash command handling", () => {
       });
 
       expect(result.handled).toBe(true);
-      expect(app.messages.some((entry) => entry.content.includes("Session history is off"))).toBe(true);
+      expect(app.messages).toEqual([]);
+      expect(pickerItems).toEqual([{ id: "__none__", label: "None", detail: "session history is off" }]);
     } finally {
       updateSetting("autoSaveSessions", true);
     }
@@ -596,6 +697,40 @@ describe("slash command handling", () => {
     expect(result.handled).toBe(true);
     expect(opened?.title).toBe("Agent Tasks");
     expect(opened?.runs).toHaveLength(1);
+  });
+
+  it("opens an empty agent task inspector for /agents with no runs", async () => {
+    const app = createAppStub();
+    let opened: { title: string; runs: any[] } | null = null;
+    app.openAgentRunsView = (title: string, runs: any[]) => {
+      opened = { title, runs };
+    };
+
+    const result = await handleSlashCommand({
+      text: "/agents",
+      app,
+      session: new Session(`test-agents-empty-${Date.now()}`),
+      activeModel: null,
+      currentModelId: "",
+      currentMode: "build",
+      systemPrompt: "sys",
+      providerRegistry: {} as any,
+      buildVisibleModelOptions: () => [],
+      refreshProviderState: async () => [],
+      isSkippedPromptAnswer: () => false,
+      isValidHttpBaseUrl: () => true,
+      getContextOptimizer: () => ({ reset() {} }) as any,
+      onSessionReplace: () => {},
+      onModelChange: () => {},
+      onSystemPromptChange: () => {},
+      hooks: { emit() {} },
+      onProjectChange: () => {},
+    });
+
+    expect(result.handled).toBe(true);
+    expect(opened?.title).toBe("Agent Tasks");
+    expect(opened?.runs).toEqual([]);
+    expect(app.messages).toEqual([]);
   });
 
   it("opens a session info picker for /session", async () => {
