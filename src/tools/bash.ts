@@ -1,10 +1,15 @@
 import { spawn } from "child_process";
+import { writeFileSync } from "fs";
+import { join } from "path";
+import { tmpdir } from "os";
 import { z } from "zod";
 import { tool } from "ai";
 import { assessCommand } from "../core/safety.js";
 
-/** Max chars from bash output (~1500 tokens). Prevents context bloat. */
-const MAX_OUTPUT_CHARS = 6000;
+/** Max chars sent back to LLM context (~2000 tokens) */
+const MAX_OUTPUT_CHARS = 8000;
+/** Max chars kept in memory for UI display */
+const MAX_UI_CHARS = 100_000;
 
 /** Callback for streaming bash output chunks to the UI */
 export type BashOutputCallback = (chunk: string) => void;
@@ -101,10 +106,20 @@ export const bashTool = tool({
           return;
         }
 
+        // Save large output to temp file
+        let tempPath: string | undefined;
+        if (stdout.length > MAX_UI_CHARS) {
+          try {
+            tempPath = join(tmpdir(), `brokecli-bash-${Date.now()}.log`);
+            writeFileSync(tempPath, stdout, "utf-8");
+          } catch { /* ignore temp file errors */ }
+        }
+
         const output = truncateOutput(stdout.trim());
+        const note = tempPath ? `\n[Full output: ${tempPath}]` : "";
 
         if (code === 0 || code === null) {
-          resolve({ success: true as const, output });
+          resolve({ success: true as const, output: output + note });
         } else {
           let error = stderr.trim() || `Exit code ${code}`;
           if (error.length > MAX_OUTPUT_CHARS) {

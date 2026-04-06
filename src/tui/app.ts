@@ -1,7 +1,7 @@
 import { Screen } from "./screen.js";
 import { KeypressHandler, type Keypress } from "./keypress.js";
 import { InputWidget } from "./input.js";
-import { GRAY, RESET, BOLD, DIM, RED, WHITE, GREEN, YELLOW, bg, moveTo } from "../utils/ansi.js";
+import { GRAY, RESET, BOLD, DIM, RED, WHITE, GREEN, GREEN_DIM, YELLOW, bg, moveTo } from "../utils/ansi.js";
 import { currentTheme, getPlanColor } from "../core/themes.js";
 import { execSync } from "child_process";
 import { matchesBinding, loadKeybindings } from "../core/keybindings.js";
@@ -95,6 +95,29 @@ function intraLineDiff(oldLine: string, newLine: string, maxW: number): { oldHig
   return { oldHighlighted, newHighlighted };
 }
 
+/** Word-aware text wrapping — never breaks mid-word if possible */
+function wordWrap(text: string, width: number): string[] {
+  if (text.length <= width) return [text];
+  const words = text.split(/(\s+)/); // keep whitespace as tokens
+  const lines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    if (current.length + word.length <= width) {
+      current += word;
+    } else if (current.length === 0) {
+      // Single word longer than width — hard break
+      for (let i = 0; i < word.length; i += width) {
+        lines.push(word.slice(i, i + width));
+      }
+    } else {
+      lines.push(current);
+      current = word.trimStart(); // don't start new line with whitespace
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
 /** Bouncing dot animation: green dot slides across dim dots */
 function bounceDot(frame: number, len = 4): string {
   // Bounce: 0,1,2,3,2,1,0,1,...
@@ -131,6 +154,7 @@ export class App {
   private input: InputWidget;
   private messages: ChatMessage[] = [];
   private thinkingBuffer = "";
+  private todoItems: Array<{ id: string; text: string; status: "pending" | "in_progress" | "done" }> = [];
   private sessionCost = 0;
   private sessionTokens = 0;
   private contextUsed = 0;
@@ -255,9 +279,7 @@ export class App {
         const secs = Math.floor(elapsed / 1000);
         const mins = Math.floor(secs / 60);
         const timeStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
-        const doneVerbs = ["Churned", "Cooked", "Brewed", "Hammered", "Crunched", "Wrapped up", "Forged", "Crafted"];
-        const verb = doneVerbs[Math.floor(Math.random() * doneVerbs.length)];
-        this.messages.push({ role: "system", content: `${DIM}\u25C9 ${verb} for ${timeStr}${RESET}` });
+        this.messages.push({ role: "system", content: `${DIM}\u2500 ${timeStr}${RESET}` });
         this.invalidateMsgCache();
         this.streamStartTime = 0;
       }
@@ -348,6 +370,13 @@ export class App {
     this.draw();
   }
 
+  /** Update the TODO task list */
+  updateTodo(items: Array<{ id: string; text: string; status: "pending" | "in_progress" | "done" }>): void {
+    this.todoItems = items;
+    this.invalidateMsgCache();
+    this.draw();
+  }
+
   /** Track a tool call — rendered inline immediately */
   addToolCall(name: string, preview: string, args?: unknown): void {
     this.toolCallGroups.push({ name, preview, args, expanded: this.allToolsExpanded });
@@ -361,6 +390,31 @@ export class App {
     this.invalidateMsgCache();
     this.scrollToBottom();
     this.draw();
+  }
+
+  /** Update a pending tool call with real args once they're fully streamed */
+  updateToolCallArgs(name: string, preview: string, args: unknown): void {
+    for (let i = this.toolCallGroups.length - 1; i >= 0; i--) {
+      const tc = this.toolCallGroups[i];
+      if (tc.name === name && !tc.result) {
+        tc.preview = preview;
+        tc.args = args;
+        // Update the inline message
+        const maxW = this.screen.mainWidth - 4;
+        const block = this.renderToolCallBlock(tc, maxW);
+        for (let j = this.messages.length - 1; j >= 0; j--) {
+          if (this.messages[j].role === "system" && this.messages[j].content.includes("...")) {
+            this.messages[j].content = block.join("\n");
+            break;
+          }
+        }
+        this.invalidateMsgCache();
+        this.draw();
+        return;
+      }
+    }
+    // Fallback: if no pending tool call found, add as new
+    this.addToolCall(name, preview, args);
   }
 
   /** Track a tool result — update the inline message */
@@ -1018,14 +1072,13 @@ export class App {
         const rendered = renderMarkdown(msg.content);
         const wrapW = maxWidth - 6; // 4 indent + 2 margin
         for (const cl of rendered.split("\n")) {
-          const visLen = stripAnsi(cl).length;
-          if (visLen <= wrapW) {
+          const plain = stripAnsi(cl);
+          if (plain.length <= wrapW) {
             lines.push(`    ${cl}`);
           } else {
-            // Soft wrap long lines
-            const plain = stripAnsi(cl);
-            for (let i = 0; i < plain.length; i += wrapW) {
-              lines.push(`    ${plain.slice(i, i + wrapW)}`);
+            // Word-aware soft wrap
+            for (const wl of wordWrap(plain, wrapW)) {
+              lines.push(`    ${wl}`);
             }
           }
         }
@@ -1090,126 +1143,96 @@ export class App {
       case "webSearch": return `Searching web for "${a?.query ?? tc.preview}"`;
       case "webFetch": return `Fetching ${a?.url ?? tc.preview}`;
       case "askUser": return `Asking: ${a?.question ?? tc.preview}`;
+      case "todoWrite": return `Updating task list`;
       default: return `${tc.name} ${tc.preview}`;
     }
   }
 
-  /** Render a tool call block with state backgrounds, collapsible output, streaming bash */
+  /** Render a tool call block — green circle running, grey circle done, red circle error */
   private renderToolCallBlock(tc: typeof this.toolCallGroups[0], maxWidth: number): string[] {
     const lines: string[] = [];
     const done = !!tc.result;
     const running = !done;
-    const sub = "\u23BF"; // ⎿
+    const L = "\u2514"; // └
 
-    // State icon: spinning while running, check when done, X on error
-    const icon = tc.error ? `${RED}\u2718${RESET}`
-      : done ? `${GREEN}\u2714${RESET}`
-      : `${GREEN}${bounceDot(this.spinnerFrame, 3)}${RESET}`;
-
-    // State background: subtle colored bg for the header line
-    const headerBg = tc.error ? bg(60, 15, 15)
-      : done ? bg(15, 40, 15)
-      : bg(30, 30, 15);
-    const headerReset = RESET;
+    // Icon: green circle (running/blinking), dim circle (done), red circle (error)
+    const icon = tc.error ? `${RED}\u25CF${RESET}`
+      : done ? `${DIM}\u25CF${RESET}`
+      : (this.spinnerFrame % 2 === 0 ? `${GREEN}\u25CF${RESET}` : `${GREEN_DIM}\u25CF${RESET}`);
 
     const desc = this.toolDescription(tc);
-    const expandIcon = tc.expanded ? "\u25BC" : "\u25B6"; // ▼ or ▶
-    const headerText = ` ${desc}${running ? "\u2026" : ""}`;
-    const headerPad = Math.max(0, maxWidth - stripAnsi(headerText).length - 4);
-
-    lines.push(`${headerBg} ${icon} ${done ? "" : WHITE}${headerText}${" ".repeat(headerPad)}${headerReset}`);
+    lines.push(`${icon} ${done ? DIM : WHITE}${desc}${running ? "..." : ""}${RESET}`);
 
     const a = tc.args as Record<string, string> | undefined;
 
-    // --- Streaming bash output (always show last few lines while running) ---
+    // --- Streaming bash output (show last lines while running) ---
     if (tc.name === "bash" && running && tc.streamOutput) {
       const outLines = tc.streamOutput.split("\n").filter(l => l.trim());
-      const tail = outLines.slice(-4);
+      const tail = outLines.slice(-5);
       for (const l of tail) {
-        lines.push(`${DIM}  ${sub} ${l.slice(0, maxWidth - 6)}${RESET}`);
+        lines.push(`${DIM}  ${L} ${l.slice(0, maxWidth - 6)}${RESET}`);
       }
-      if (outLines.length > 4) {
-        lines.push(`${DIM}  ${sub} ... ${outLines.length - 4} more lines${RESET}`);
+      if (outLines.length > 5) {
+        lines.push(`${DIM}  ${L} ... +${outLines.length - 5} lines${RESET}`);
       }
     }
 
-    // --- Completed tool output ---
+    // --- Running non-bash: show "Running..." ---
+    if (running && tc.name !== "bash") {
+      // No extra detail while running
+    }
+
+    // --- Completed output ---
     if (done) {
-      // Collapsed summary line
-      if (!tc.expanded) {
-        if (tc.name === "editFile" && a?.old_string && a?.new_string) {
-          const oldN = a.old_string.split("\n").length;
-          const newN = a.new_string.split("\n").length;
-          lines.push(`${DIM}  ${sub} ${expandIcon} +${newN} -${oldN} lines${RESET}`);
-        } else if (tc.name === "writeFile" && a?.content) {
-          const n = a.content.split("\n").length;
-          lines.push(`${DIM}  ${sub} ${expandIcon} ${n} lines written${RESET}`);
-        } else if (tc.name === "bash" && tc.streamOutput) {
-          const n = tc.streamOutput.split("\n").filter(l => l.trim()).length;
-          lines.push(`${DIM}  ${sub} ${expandIcon} ${n} lines output${RESET}`);
-        } else if (tc.resultDetail) {
-          lines.push(`${DIM}  ${sub} ${tc.resultDetail.slice(0, maxWidth - 6)}${RESET}`);
+      if (tc.name === "editFile" && a?.old_string && a?.new_string) {
+        const oldLines = a.old_string.split("\n");
+        const newLines = a.new_string.split("\n");
+        const diffW = maxWidth - 6;
+
+        // Always show diff inline (like Claude Code screenshots)
+        lines.push(`${DIM}  ${L} +${newLines.length} -${oldLines.length} lines${RESET}`);
+        // Show removed lines (red bg)
+        for (const l of oldLines.slice(0, 4)) {
+          const text = `- ${l}`.slice(0, diffW);
+          const pad = Math.max(0, diffW - text.length);
+          lines.push(`${bg(60, 15, 15)} ${text}${" ".repeat(pad)} ${RESET}`);
         }
-      } else {
-        // Expanded detail
-        if (tc.name === "editFile" && a?.old_string && a?.new_string) {
-          const oldLines = a.old_string.split("\n");
-          const newLines = a.new_string.split("\n");
-          lines.push(`${DIM}  ${sub} ${expandIcon} +${newLines.length} -${oldLines.length} lines${RESET}`);
-
-          const diffW = maxWidth - 4;
-
-          // Intra-line diff: when both sides have same number of lines, highlight word changes
-          if (oldLines.length === newLines.length) {
-            for (let i = 0; i < Math.min(oldLines.length, 6); i++) {
-              const oldL = oldLines[i];
-              const newL = newLines[i];
-              if (oldL === newL) {
-                // Unchanged line
-                const text = `  ${oldL}`.slice(0, diffW);
-                lines.push(`${DIM}  ${text}${RESET}`);
-              } else {
-                // Highlight differences within the line
-                const { oldHighlighted, newHighlighted } = intraLineDiff(oldL, newL, diffW);
-                lines.push(`${bg(60, 15, 15)} - ${oldHighlighted} ${RESET}`);
-                lines.push(`${bg(15, 45, 15)} + ${newHighlighted} ${RESET}`);
-              }
-            }
-            if (oldLines.length > 6) lines.push(`${DIM}    ... +${oldLines.length - 6} more${RESET}`);
-          } else {
-            // Different line counts — show old/new blocks
-            for (const l of oldLines.slice(0, 5)) {
-              const text = `- ${l}`.slice(0, diffW);
-              const pad = Math.max(0, diffW - text.length);
-              lines.push(`${bg(60, 15, 15)} ${text}${" ".repeat(pad)} ${RESET}`);
-            }
-            if (oldLines.length > 5) lines.push(`${DIM}    +${oldLines.length - 5} more${RESET}`);
-            for (const l of newLines.slice(0, 5)) {
-              const text = `+ ${l}`.slice(0, diffW);
-              const pad = Math.max(0, diffW - text.length);
-              lines.push(`${bg(15, 45, 15)} ${text}${" ".repeat(pad)} ${RESET}`);
-            }
-            if (newLines.length > 5) lines.push(`${DIM}    +${newLines.length - 5} more${RESET}`);
-          }
-        } else if (tc.name === "bash" && tc.streamOutput) {
-          const outLines = tc.streamOutput.split("\n").filter(l => l.trim());
-          lines.push(`${DIM}  ${sub} ${expandIcon} ${outLines.length} lines output${RESET}`);
+        if (oldLines.length > 4) lines.push(`${DIM}    ... +${oldLines.length - 4} more${RESET}`);
+        // Show added lines (green bg)
+        for (const l of newLines.slice(0, 4)) {
+          const text = `+ ${l}`.slice(0, diffW);
+          const pad = Math.max(0, diffW - text.length);
+          lines.push(`${bg(15, 45, 15)} ${text}${" ".repeat(pad)} ${RESET}`);
+        }
+        if (newLines.length > 4) lines.push(`${DIM}    ... +${newLines.length - 4} more${RESET}`);
+      } else if (tc.name === "writeFile" && a?.content) {
+        const n = a.content.split("\n").length;
+        lines.push(`${DIM}  ${L} ${n} lines written${RESET}`);
+      } else if (tc.name === "bash" && tc.streamOutput) {
+        // Show last few lines of output collapsed
+        const outLines = tc.streamOutput.split("\n").filter(l => l.trim());
+        if (tc.expanded) {
           const showLines = outLines.slice(-20);
           if (outLines.length > 20) lines.push(`${DIM}    ... ${outLines.length - 20} earlier lines${RESET}`);
           for (const l of showLines) {
-            lines.push(`${DIM}  ${sub} ${l.slice(0, maxWidth - 6)}${RESET}`);
+            lines.push(`${DIM}  ${L} ${l.slice(0, maxWidth - 6)}${RESET}`);
           }
-        } else if (tc.name === "writeFile" && a?.content) {
-          const n = a.content.split("\n").length;
-          lines.push(`${DIM}  ${sub} ${expandIcon} ${n} lines written${RESET}`);
-        } else if (tc.resultDetail) {
-          lines.push(`${DIM}  ${sub} ${tc.resultDetail.slice(0, maxWidth - 6)}${RESET}`);
+        } else {
+          const tail = outLines.slice(-3);
+          for (const l of tail) {
+            lines.push(`${DIM}  ${L} ${l.slice(0, maxWidth - 6)}${RESET}`);
+          }
+          if (outLines.length > 3) {
+            lines.push(`${DIM}  ${L} ... +${outLines.length - 3} lines (ctrl+o to expand)${RESET}`);
+          }
         }
+      } else if (tc.resultDetail) {
+        lines.push(`${DIM}  ${L} ${tc.resultDetail.slice(0, maxWidth - 6)}${RESET}`);
       }
     }
 
     if (tc.error && tc.result) {
-      lines.push(`${RED}  ${sub} ${tc.result}${RESET}`);
+      lines.push(`${RED}  ${L} ${tc.result}${RESET}`);
     }
 
     return lines;
@@ -1225,6 +1248,40 @@ export class App {
       lines.push(`  ${T()}thinking${RESET}`);
       for (const tl of thinkLines) {
         lines.push(`  ${DIM}${tl.slice(0, maxWidth - 4)}${RESET}`);
+      }
+      lines.push("");
+    }
+
+    // TODO task list — show when tasks exist
+    if (this.todoItems.length > 0) {
+      const done = this.todoItems.filter(t => t.status === "done").length;
+      const total = this.todoItems.length;
+      const spinChars = ["\u25DC", "\u25DD", "\u25DE", "\u25DF"];
+      const spin = spinChars[this.spinnerFrame % spinChars.length];
+      const allDone = done === total;
+
+      // Header line
+      if (this.isStreaming) {
+        const elapsed = Date.now() - this.streamStartTime;
+        const secs = Math.floor(elapsed / 1000);
+        const mins = Math.floor(secs / 60);
+        const timeStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
+        const inProgress = this.todoItems.find(t => t.status === "in_progress");
+        const headerText = inProgress ? inProgress.text : (allDone ? "Done" : "Working...");
+        lines.push(`  ${T()}${spin}${RESET} ${T()}${headerText}${RESET}  ${DIM}${timeStr} \u00B7 ${done}/${total}${RESET}`);
+      } else {
+        lines.push(`  ${allDone ? GREEN : T()}\u2714${RESET} ${DIM}Tasks ${done}/${total}${RESET}`);
+      }
+      // Task items
+      for (let i = 0; i < this.todoItems.length; i++) {
+        const item = this.todoItems[i];
+        const isLast = i === this.todoItems.length - 1;
+        const branch = isLast ? "\u2514" : "\u251C"; // └ or ├
+        const icon = item.status === "done" ? `${GREEN}\u25A0${RESET}` // ■ green
+          : item.status === "in_progress" ? `${T()}${spin}${RESET}` // spinner
+          : `${DIM}\u25A1${RESET}`; // □ dim
+        const textColor = item.status === "done" ? DIM : item.status === "in_progress" ? WHITE : DIM;
+        lines.push(`  ${DIM}${branch}${RESET} ${icon} ${textColor}${item.text.slice(0, maxWidth - 10)}${RESET}`);
       }
       lines.push("");
     }
@@ -1488,9 +1545,9 @@ export class App {
       const settings = getSettings();
       const thinkLevel = settings.thinkingLevel || (settings.enableThinking ? "low" : "off");
       if (thinkLevel !== "off") {
-        parts.push({ text: `${T()}thinking:${thinkLevel}${RESET} ${DIM}(ctrl+t)${RESET}`, plain: `thinking:${thinkLevel} (ctrl+t)`, priority: 3 });
+        parts.push({ text: `${T()}${thinkLevel}${RESET} ${DIM}(ctrl+t)${RESET}`, plain: `${thinkLevel} (ctrl+t)`, priority: 3 });
       } else {
-        parts.push({ text: `${DIM}thinking:off${RESET} ${DIM}(ctrl+t)${RESET}`, plain: "thinking:off (ctrl+t)", priority: 3 });
+        parts.push({ text: `${DIM}off${RESET} ${DIM}(ctrl+t)${RESET}`, plain: "off (ctrl+t)", priority: 3 });
       }
       // Cost/tokens/context in bottom bar — respect showCost/showTokens settings
       const liveTokens = this.isStreaming ? this.sessionTokens + this.streamTokens : this.sessionTokens;
@@ -1581,7 +1638,7 @@ export class App {
     this.screen.render(frameLines);
 
     // Hide cursor during streaming/pickers/compacting — no input focus
-    if (this.isStreaming || this.isCompacting || this.modelPicker || this.settingsPicker || this.itemPicker || this.commandPicker || this.questionState) {
+    if (this.isStreaming || this.isCompacting || this.modelPicker || this.settingsPicker || this.itemPicker || this.questionPrompt) {
       this.screen.hideCursor();
       return;
     }

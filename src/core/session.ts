@@ -125,6 +125,21 @@ export class Session {
     }
   }
 
+  /** Fork this session — creates a copy with a new ID, preserving full history */
+  fork(): Session {
+    const forked = new Session();
+    forked.messages = [...this.messages];
+    forked.totalInputTokens = this.totalInputTokens;
+    forked.totalOutputTokens = this.totalOutputTokens;
+    forked.totalCost = this.totalCost;
+    forked.cwd = this.cwd;
+    forked.provider = this.provider;
+    forked.model = this.model;
+    forked.createdAt = Date.now();
+    forked.save();
+    return forked;
+  }
+
   static listRecent(limit = 10): Array<{ id: string; cwd: string; model: string; cost: number; updatedAt: number; messageCount: number }> {
     try {
       if (!existsSync(SESSIONS_DIR)) return [];

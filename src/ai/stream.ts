@@ -7,6 +7,7 @@ export interface StreamCallbacks {
   onReasoning: (delta: string) => void;
   onFinish: (usage: TokenUsage) => void;
   onError: (error: Error) => void;
+  onToolCallStart?: (toolName: string) => void;
   onToolCall?: (toolName: string, args: unknown) => void;
   onToolResult?: (toolName: string, result: unknown) => void;
   onAfterToolCall?: () => void;
@@ -144,8 +145,12 @@ export async function startStream(
           }
         } else if (part.type === "reasoning-delta") {
           callbacks.onReasoning((part as any).delta ?? (part as any).text ?? "");
+        } else if ((part as any).type === "tool-input-start") {
+          // Show tool call immediately when model starts generating it
+          const tc = part as any;
+          callbacks.onToolCallStart?.(tc.toolName);
         } else if (part.type === "tool-call") {
-          // Show tool calls immediately as they stream in (not waiting for onStepFinish)
+          // Tool call fully formed — pass complete args
           const tc = part as any;
           callbacks.onToolCall?.(tc.toolName, tc.input);
         }

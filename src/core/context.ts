@@ -59,6 +59,7 @@ grep: For finding definitions, usages, patterns across the codebase. Use include
 webSearch: For current docs, APIs, recent events. Not for things you already know.
 webFetch: For reading specific URLs — docs pages, API references. Content is stripped of HTML.
 askUser: Use when you need the user's preference or decision. Good for: "which color?", "option A or B?", "delete these files?". Not for: things you can figure out yourself.
+todoWrite: Create or update a task checklist for multi-step work. Use at the start of complex tasks (3+ steps) to show your plan, then update status as you complete each step. Helps the user track progress.
 </tool-tips>`);
 
   // Global context files (truncated)

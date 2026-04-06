@@ -6,28 +6,62 @@
     <title>My Dog</title>
     <style>
         body {
-            font-family: sans-serif;
+            font-family: 'Arial', sans-serif;
             text-align: center;
-            padding-top: 50px;
+            padding: 20px;
+            background-color: #f9f9f9;
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 30px;
+            background-color: #fff;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #d9534f; /* A nice reddish color */
+            margin-bottom: 10px;
+        }
+        .dog-section {
+            margin: 40px 0;
         }
         .dog-image {
-            width: 300px;
-            height: 300px;
-            background-color: #e0e0e0;
-            border-radius: 10px;
+            width: 100%;
+            max-width: 500px;
+            height: 350px;
+            background-color: #d4e6e1; /* Light blue-green background */
+            border-radius: 15px;
             display: flex;
             align-items: center;
             justify-content: center;
             color: #555;
+            font-size: 1.2em;
+            border: 2px dashed #a9c5bd;
+        }
+        p {
+            line-height: 1.6;
+            padding: 0 20px;
+        }
+        .description {
+            font-style: italic;
+            color: #666;
         }
     </style>
 </head>
 <body>
-    <h1>A Dog Friend!</h1>
-    <div class="dog-image">
-        <!-- Placeholder for a dog picture or illustration -->
-        Dog Picture Goes Here
+    <div class="container">
+        <h1>🐶 Meet My Canine Companion! 🐕</h1>
+        <div class="dog-section">
+            <div class="dog-image">
+                <!-- Replace this with an actual <img> tag: <img src="dog.jpg" alt="Cute Dog"> -->
+                A Placeholder for a Picture of a Happy Dog!
+            </div>
+        </div>
+        <p class="description">
+            My dog is wonderful because they bring so much joy and unconditional love into my life. They love playing fetch in the park!
+        </p>
     </div>
-    <p>This is a simple page dedicated to dogs.</p>
 </body>
 </html>

@@ -10,6 +10,7 @@ import { Session } from "../src/core/session.js";
 import { getTools } from "../src/tools/registry.js";
 import { createAskUserTool } from "../src/tools/ask.js";
 import { setBashOutputCallback } from "../src/tools/bash.js";
+import { setTodoChangeCallback, clearTodo } from "../src/tools/todo.js";
 import { renderMarkdown } from "../src/utils/markdown.js";
 import { checkBudget } from "../src/core/budget.js";
 import { getSettings, updateSetting, type Settings, type Mode } from "../src/core/config.js";
@@ -189,6 +190,11 @@ program.action(async (opts) => {
   // Wire bash streaming output to UI
   setBashOutputCallback((chunk) => {
     app.appendToolOutput(chunk);
+  });
+
+  // Wire TODO list to UI
+  setTodoChangeCallback((items) => {
+    app.updateTodo(items);
   });
 
   // Handle pending messages when they become ready
@@ -387,8 +393,15 @@ program.action(async (opts) => {
           if (activeModel) session.setProviderModel(activeModel.provider.name, currentModelId);
           app.clearMessages();
           app.resetCost();
-          app.addMessage("system", "New session started. Use /clear to reset current session.");
+          app.addMessage("system", "New session started.");
           return;
+        case "fork": {
+          const forked = session.fork();
+          session = forked;
+          if (activeModel) session.setProviderModel(activeModel.provider.name, currentModelId);
+          app.addMessage("system", `Forked session. History preserved, new branch started.`);
+          return;
+        }
         case "name": {
           const name = text.slice(6).trim();
           if (name) {
@@ -638,6 +651,7 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
     }
 
     app.setStreaming(true);
+    clearTodo();
     let streamCharCount = 0;
     nextTurn();
 
@@ -735,9 +749,16 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
           app.addMessage("system", `${RED}${msg}${RESET}`);
           abortController = null;
         },
+        onToolCallStart: (name) => {
+          // Show tool call immediately when model starts generating args
+          if (name === "todoWrite") return;
+          app.addToolCall(name, "...");
+        },
         onToolCall: (name, args) => {
           hooks.emit("on_tool_call", { name, args });
           lastToolCalls.push(name);
+          if (name === "todoWrite") return;
+          // Update the existing tool call with real args
           let preview = "";
           if (name === "writeFile" || name === "editFile") {
             preview = (args as any)?.path ?? "?";
@@ -749,10 +770,11 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
           } else {
             preview = typeof args === "object" ? JSON.stringify(args).slice(0, 50) : String(args).slice(0, 50);
           }
-          app.addToolCall(name, preview, args);
+          app.updateToolCallArgs(name, preview, args);
         },
         onToolResult: (_name, result) => {
           hooks.emit("on_tool_result", { name: _name, result });
+          if (_name === "todoWrite") return; // rendered as overlay
           const r = result as { success?: boolean; output?: string; error?: string; content?: string; matches?: unknown[]; files?: string[] };
           let detail: string | undefined;
           if (_name === "bash" && r.output) {
