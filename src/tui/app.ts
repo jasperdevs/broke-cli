@@ -2201,6 +2201,16 @@ export class App {
     return wrapped.map((part, index) => index === 0 ? `${prefix}${MUTED()}${part}${RESET}` : `${" ".repeat(prefixPlain.length)}${MUTED()}${part}${RESET}`);
   }
 
+  private wrapHomeText(prefix: string, prefixPlain: string, value: string, width: number, color = MUTED()): string[] {
+    const available = Math.max(6, width - prefixPlain.length);
+    const wrapped = wordWrap(value, available);
+    return wrapped.map((part, index) =>
+      index === 0
+        ? `${prefix}${color}${part}${RESET}`
+        : `${" ".repeat(prefixPlain.length)}${color}${part}${RESET}`,
+    );
+  }
+
   private centerVisibleLine(line: string, width: number): string {
     const visible = stripAnsi(line).length;
     if (visible >= width) return line;
@@ -2227,22 +2237,24 @@ export class App {
       : `${this.providerName}/${this.modelName}`;
     const versionText = `v${this.appVersion}`;
     const innerWidth = Math.max(1, mainW - 2);
+    const contentWidth = Math.max(8, innerWidth - 2);
     const mascotWidth = stripAnsi(mascotInline).length;
     const headerPrefix = mascotInline ? `${mascotInline} ` : "";
+    const headerPrefixPlain = `${" ".repeat(mascotWidth)} `;
     const headerCandidates = ["Welcome to BrokeCLI", "Welcome"];
     const headerText = headerCandidates.find((candidate) =>
-      mascotWidth + (mascotInline ? 1 : 0) + candidate.length <= innerWidth,
+      mascotWidth + (mascotInline ? 1 : 0) + candidate.length <= contentWidth,
     ) ?? headerCandidates[headerCandidates.length - 1];
-    const locationBase = this.formatShortCwd(Math.max(10, innerWidth - 1));
+    const locationBase = this.formatShortCwd(Math.max(10, contentWidth - 1));
     const locationWithVersion = `${locationBase}  ${versionText}`;
-    const locationText = locationWithVersion.length <= innerWidth ? locationWithVersion : locationBase;
+    const locationText = locationWithVersion.length <= contentWidth ? locationWithVersion : locationBase;
 
     const body = [
-      `${headerPrefix}${T()}${BOLD}${headerText}${RESET}`,
-      `${MUTED()} ${locationText}${RESET}`,
+      ...this.wrapHomeText(`${headerPrefix}${T()}${BOLD}`, headerPrefixPlain, headerText, contentWidth, ""),
+      ...this.wrapHomeText(`${MUTED()} `, " ", locationText, contentWidth),
       "",
-      ...this.wrapHomeDetail("Model", modelLabel, Math.max(18, mainW - 4)),
-      ...this.wrapHomeDetail("Tip", this.homeTip, Math.max(18, mainW - 4)),
+      ...this.wrapHomeDetail("Model", modelLabel, Math.max(18, contentWidth)),
+      ...this.wrapHomeDetail("Tip", this.homeTip, Math.max(18, contentWidth)),
     ];
 
     const boxBodyHeight = Math.max(8, topHeight - 2);
