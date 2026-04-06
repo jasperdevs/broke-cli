@@ -55,6 +55,7 @@ interface SlashCommandApp {
   showQuestion(prompt: string, options?: string[]): Promise<string>;
   updateItemPickerItems?(items: PickerItem[], focusId?: string): void;
   setCompacting?(compacting: boolean, tokenCount?: number): void;
+  openBudgetView?(title: string, lines: string[]): void;
 }
 
 interface ExtensionHooks {
@@ -197,7 +198,8 @@ export async function handleSlashCommand(options: {
       return { handled: true };
     }
     case "budget":
-      app.addMessage("system", buildBudgetReport(session));
+      if (app.openBudgetView) app.openBudgetView("Budget Inspector", buildBudgetReport(session).split("\n"));
+      else app.addMessage("system", buildBudgetReport(session));
       return { handled: true };
     case "fork": {
       const forked = session.fork();

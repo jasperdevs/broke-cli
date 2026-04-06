@@ -240,6 +240,19 @@ describe("input editing", () => {
   });
 });
 
+describe("budget inspector", () => {
+  it("opens as a fullscreen mode and closes with escape", () => {
+    const app = new App() as any;
+    let rendered: string[] = [];
+    app.screen = { height: 12, width: 40, hasSidebar: true, mainWidth: 28, sidebarWidth: 11, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
+    app.openBudgetView("Budget Inspector", ["Token Budget", "", "Idle cache cliffs: 2", "Exposed but unused: 4"]);
+    app.drawImmediate();
+    expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("Budget Inspector");
+    app.handleKey({ name: "escape", char: "", ctrl: false, meta: false, shift: false } as Keypress);
+    expect(rendered.map((line) => stripAnsi(line)).join("\n")).not.toContain("Budget Inspector");
+  });
+});
+
 describe("theme rendering", () => {
   it("applies theme text color to assistant markdown on light themes", () => {
     setPreviewTheme("brokecli-light");

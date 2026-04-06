@@ -73,6 +73,16 @@ export function openItemPicker(
   app.drawNow();
 }
 
+export function openBudgetView(app: AppState, title: string, lines: string[]): void {
+  app.budgetView = { title, lines, scrollOffset: 0 };
+  app.drawNow();
+}
+
+export function closeBudgetView(app: AppState): void {
+  app.budgetView = null;
+  app.drawNow();
+}
+
 export function clearMessages(app: AppState): void {
   app.messages = [];
   app.scrollOffset = 0;
@@ -347,6 +357,8 @@ export interface AppStateUiMethods {
   updateSettings(entries: SettingEntry[]): void;
   updateItemPickerItems(items: PickerItem[], focusId?: string): void;
   openItemPicker(title: string, items: PickerItem[], onSelect: (id: string) => void, options?: { initialCursor?: number; previewHint?: string; onPreview?: (id: string) => void; onCancel?: () => void; onSecondaryAction?: (id: string) => void; secondaryHint?: string; closeOnSelect?: boolean; kind?: MenuPromptKind }): void;
+  openBudgetView(title: string, lines: string[]): void;
+  closeBudgetView(): void;
   clearMessages(): void;
   addMessage(role: "user" | "assistant" | "system", content: string, images?: PendingImage[]): void;
   appendToLastMessage(text: string): void;
@@ -390,6 +402,8 @@ export const appStateUiMethods: AppStateUiMethods = {
   updateSettings(this: AppState, entries) { return updateSettings(this, entries); },
   updateItemPickerItems(this: AppState, items, focusId) { return updateItemPickerItems(this, items, focusId); },
   openItemPicker(this: AppState, title, items, onSelect, options) { return openItemPicker(this, title, items, onSelect, options); },
+  openBudgetView(this: AppState, title, lines) { return openBudgetView(this, title, lines); },
+  closeBudgetView(this: AppState) { return closeBudgetView(this); },
   clearMessages(this: AppState) { return clearMessages(this); },
   addMessage(this: AppState, role, content, images) { return addMessage(this, role, content, images); },
   appendToLastMessage(this: AppState, text) { return appendToLastMessage(this, text); },

@@ -47,7 +47,7 @@ describe("session budget metrics", () => {
     const summary = summarizeBudgetMetrics(session.getBudgetMetrics());
 
     expect(report).toContain("Small-model turns: 1");
-    expect(report).toContain("Tool waste: 4");
+    expect(report).toContain("Exposed but unused: 4");
     expect(report).toContain("Fresh carry-forwards: 1");
     expect(summary).toContain("cliffs 1");
     expect(summary).toContain("tool waste 4");

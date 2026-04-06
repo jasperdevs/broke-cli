@@ -3,7 +3,7 @@ import { execSync } from "child_process";
 import { getSettings } from "../core/config.js";
 import { BOLD, DIM, RESET } from "../utils/ansi.js";
 import { getCommandMatches as findCommandMatches } from "./command-surface.js";
-import { fmtCost, fmtTokens } from "./render/formatting.js";
+import { fmtCost, fmtTokens, wordWrap } from "./render/formatting.js";
 import { APP_BG, ERR, MUTED, P, T, TXT, WARN } from "./app-shared.js";
 
 type AppState = any;
@@ -32,6 +32,10 @@ export function drawNow(app: AppState): void {
 export function drawImmediate(app: AppState): void {
   app.lastDrawTime = Date.now();
   app.keypress.setMouseTracking(app.shouldEnableMenuMouse());
+  if (app.budgetView) {
+    drawBudgetView(app);
+    return;
+  }
   const { height, width } = app.screen;
   const hasSidebar = app.shouldShowSidebar();
   const mainW = hasSidebar ? app.screen.mainWidth : width;
@@ -68,6 +72,37 @@ export function drawImmediate(app: AppState): void {
   }
   const mainTopHeight = Math.max(0, height - bottomLines.length);
   app.screen.setCursor(Math.min(height, mainTopHeight + 2 + inputLayout.row), Math.min(width, 1 + inputLayout.col));
+}
+
+function drawBudgetView(app: AppState): void {
+  const { width, height } = app.screen;
+  const separatorColor = app.getModeAccent();
+  const title = ` ${T()}${BOLD}${app.budgetView.title}${RESET}`;
+  const hint = `${DIM}esc back${RESET}`;
+  const innerWidth = Math.max(10, width - 4);
+  const bodyHeight = Math.max(1, height - 4);
+  const allLines = app.budgetView.lines.flatMap((line: string) => {
+    if (!line) return [""];
+    return stripAnsi(line).length <= innerWidth ? [line] : wordWrap(line, innerWidth);
+  });
+  const maxScroll = Math.max(0, allLines.length - bodyHeight);
+  if (app.budgetView.scrollOffset > maxScroll) app.budgetView.scrollOffset = maxScroll;
+  const visible = allLines.slice(app.budgetView.scrollOffset, app.budgetView.scrollOffset + bodyHeight);
+
+  const frame: string[] = [];
+  frame.push(`${separatorColor}${"─".repeat(width)}${RESET}`);
+  const headerBase = `${title}`;
+  const headerPlain = stripAnsi(headerBase).length + stripAnsi(hint).length + 1;
+  const gap = Math.max(1, width - headerPlain - 1);
+  frame.push(`${headerBase}${" ".repeat(gap)}${hint}`);
+  for (let i = 0; i < bodyHeight; i++) {
+    const line = visible[i] ?? "";
+    frame.push(` ${app.padLine(line, width - 2)}`);
+  }
+  while (frame.length < height - 1) frame.push("");
+  frame.push(`${separatorColor}${"─".repeat(width)}${RESET}`);
+  app.screen.render(frame.map((line) => app.decorateFrameLine(line, width)));
+  app.screen.hideCursor();
 }
 
 function appendBottomMenus(app: AppState, bottomLines: string[], bottomMenuClicks: Array<{ lineIndex: number; action: () => void }>, height: number, mainW: number, separatorColor: string): void {

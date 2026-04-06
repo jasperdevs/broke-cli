@@ -44,6 +44,7 @@ function createAppStub() {
     async showQuestion() {
       return "";
     },
+    openBudgetView() {},
   };
 }
 
@@ -241,6 +242,11 @@ describe("slash command handling", () => {
     session.recordIdleCacheCliff();
     session.recordCompaction({ freshThreadCarryForward: true });
 
+    let opened: { title: string; lines: string[] } | null = null;
+    app.openBudgetView = (title: string, lines: string[]) => {
+      opened = { title, lines };
+    };
+
     const result = await handleSlashCommand({
       text: "/budget",
       app,
@@ -263,9 +269,10 @@ describe("slash command handling", () => {
     });
 
     expect(result.handled).toBe(true);
-    expect(app.messages.at(-1)?.content).toContain("Budget Insights");
-    expect(app.messages.at(-1)?.content).toContain("Idle cache cliffs: 1");
-    expect(app.messages.at(-1)?.content).toContain("Fresh carry-forwards: 1");
+    expect(opened?.title).toBe("Budget Inspector");
+    expect(opened?.lines.join("\n")).toContain("Token Budget");
+    expect(opened?.lines.join("\n")).toContain("Idle cache cliffs: 1");
+    expect(opened?.lines.join("\n")).toContain("Fresh carry-forwards: 1");
   });
 
   it("reloads extensions immediately when toggled with enter", async () => {

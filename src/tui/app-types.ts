@@ -27,6 +27,12 @@ export interface PickerItem {
   detail?: string;
 }
 
+export interface BudgetView {
+  title: string;
+  lines: string[];
+  scrollOffset: number;
+}
+
 export type MenuPromptKind =
   | "model"
   | "settings"

@@ -12,7 +12,7 @@ export const COMMANDS: CommandEntry[] = [
   { name: "model", desc: "switch model", hotkey: "ctrl+l" },
   { name: "theme", desc: "change color theme" },
   { name: "compact", desc: "compress context" },
-  { name: "budget", desc: "show budget insights" },
+  { name: "budget", desc: "inspect token pressure" },
   { name: "permissions", desc: "allow or block tools" },
   { name: "extensions", desc: "manage extension loading" },
   { name: "projects", desc: "switch or search recent projects" },

@@ -10,6 +10,11 @@ import { T } from "./app-shared.js";
 type AppState = any;
 
 export function handleKey(app: AppState, key: Keypress): void {
+  if (app.budgetView) {
+    handleBudgetViewKey(app, key);
+    return;
+  }
+
   if (app.isCompacting) {
     if (key.ctrl && key.name === "c") {
       app.ctrlCCount++;
@@ -231,6 +236,34 @@ export function handleKey(app: AppState, key: Keypress): void {
     };
   }
   app.draw();
+}
+
+function handleBudgetViewKey(app: AppState, key: Keypress): void {
+  const page = Math.max(1, app.screen.height - 6);
+  const maxScroll = Math.max(0, app.budgetView.lines.length - Math.max(1, app.screen.height - 4));
+  if (key.name === "escape" || key.name === "q" || (key.ctrl && key.name === "c")) {
+    app.closeBudgetView();
+    return;
+  }
+  if (key.name === "up" || key.name === "scrollup") {
+    app.budgetView.scrollOffset = Math.max(0, app.budgetView.scrollOffset - 1);
+    app.draw();
+    return;
+  }
+  if (key.name === "down" || key.name === "scrolldown") {
+    app.budgetView.scrollOffset = Math.min(maxScroll, app.budgetView.scrollOffset + 1);
+    app.draw();
+    return;
+  }
+  if (key.name === "pageup") {
+    app.budgetView.scrollOffset = Math.max(0, app.budgetView.scrollOffset - page);
+    app.draw();
+    return;
+  }
+  if (key.name === "pagedown") {
+    app.budgetView.scrollOffset = Math.min(maxScroll, app.budgetView.scrollOffset + page);
+    app.draw();
+  }
 }
 
 function handlePickerKey(app: AppState, key: Keypress): void {
