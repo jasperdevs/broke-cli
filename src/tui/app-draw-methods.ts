@@ -122,15 +122,15 @@ function buildInfoBar(app: AppState, hasSidebar: boolean, mainW: number): string
   if (app.isStreaming) parts.push({ text: `${DIM}esc${RESET} ${DIM}stop${RESET}`, plain: "esc stop" });
 
   const settings = getSettings();
-  if (!hasSidebar) {
-    const modeLabel = app.mode === "plan" ? "plan" : "build";
-    parts.push({ text: `${app.mode === "plan" ? P() : T()}${modeLabel}${RESET}`, plain: modeLabel });
-    if (app.pendingMessages.length > 0) parts.push({ text: `${P()}${app.pendingMessages.length} queued${RESET}`, plain: `${app.pendingMessages.length} queued` });
-    const thinkLevel = settings.thinkingLevel || (settings.enableThinking ? "low" : "off");
-    if (thinkLevel !== "off") parts.push({ text: `${T()}${thinkLevel}${RESET}`, plain: thinkLevel });
-    const caveLevel = settings.cavemanLevel ?? "off";
-    if (caveLevel !== "off") parts.push({ text: `🪨 ${WARN()}${caveLevel}${RESET}`, plain: `rock ${caveLevel}` });
+  const modeLabel = app.mode === "plan" ? "plan" : "build";
+  parts.push({ text: `${app.mode === "plan" ? P() : T()}${modeLabel}${RESET}`, plain: modeLabel });
+  if (!hasSidebar && app.pendingMessages.length > 0) {
+    parts.push({ text: `${P()}${app.pendingMessages.length} queued${RESET}`, plain: `${app.pendingMessages.length} queued` });
   }
+  const thinkLevel = settings.thinkingLevel || (settings.enableThinking ? "low" : "off");
+  if (thinkLevel !== "off") parts.push({ text: `${T()}${thinkLevel}${RESET}`, plain: thinkLevel });
+  const caveLevel = settings.cavemanLevel ?? "off";
+  if (caveLevel !== "off") parts.push({ text: `🪨 ${WARN()}${caveLevel}${RESET}`, plain: `rock ${caveLevel}` });
 
   const liveTokens = app.getLiveTotalTokens();
   if ((settings.showCost && app.sessionCost > 0) || (settings.showTokens && !hasSidebar && liveTokens > 0)) {

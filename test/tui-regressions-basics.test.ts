@@ -75,7 +75,7 @@ describe("sidebar token summary", () => {
     expect(footer.some((line: string) => line.includes("Session"))).toBe(true);
     expect(footer.some((line: string) => line.trim() === "$0.0016")).toBe(true);
     expect(footer.some((line: string) => line.trim() === "Σ 210 session")).toBe(true);
-    expect(footer.some((line: string) => line.includes("Context"))).toBe(true);
+    expect(footer.some((line: string) => line.includes("Next request"))).toBe(true);
     expect(footer.some((line: string) => line.trim() === "132k/344k")).toBe(true);
     expect(footer.some((line: string) => line.trim() === "38% of limit")).toBe(true);
     updateSetting("cavemanLevel", "off");
@@ -88,6 +88,30 @@ describe("sidebar token summary", () => {
     const footer = app.renderSidebarFooter().map((line: string) => stripAnsi(line)).join("\n");
     expect(footer).toContain("822/400k");
     expect(footer).toContain("<1% of limit");
+  });
+
+  it("keeps mode, thinking, and caveman badges in the bottom bar even with a sidebar", () => {
+    const app = new App() as any;
+    const settings = getSettings();
+    const original = { thinkingLevel: settings.thinkingLevel, enableThinking: settings.enableThinking, cavemanLevel: settings.cavemanLevel };
+    try {
+      updateSetting("thinkingLevel", "low");
+      updateSetting("enableThinking", true);
+      updateSetting("cavemanLevel", "ultra");
+      app.messages = [{ role: "user", content: "hello" }];
+      let rendered: string[] = [];
+      app.screen = { height: 16, width: 80, hasSidebar: true, mainWidth: 57, sidebarWidth: 22, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
+      app.drawImmediate();
+      const output = rendered.map((line) => stripAnsi(line)).join("\n");
+      expect(output).toContain("build");
+      expect(output).toContain("low");
+      expect(output).toContain("ultra");
+      expect(output).toContain("🪨");
+    } finally {
+      updateSetting("thinkingLevel", original.thinkingLevel);
+      updateSetting("enableThinking", original.enableThinking);
+      updateSetting("cavemanLevel", original.cavemanLevel ?? "off");
+    }
   });
 });
 
