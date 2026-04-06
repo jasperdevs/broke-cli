@@ -167,7 +167,7 @@ program.action(async (opts) => {
 
   const tools = getTools();
 
-  app.onInput(async (text) => {
+  app.onInput(async (text, images) => {
     await initPromise;
 
     // Slash commands
@@ -575,8 +575,8 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
         fullText = `${text}\n\n${contextBlock}`;
       }
 
-      app.addMessage("user", text);
-      session.addMessage("user", fullText);
+      app.addMessage("user", text, images);
+      session.addMessage("user", fullText, images);
     }
 
     app.setStreaming(true);

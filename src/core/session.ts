@@ -8,6 +8,7 @@ export interface Message {
   role: "user" | "assistant" | "system";
   content: string;
   timestamp: number;
+  images?: Array<{ mimeType: string; data: string }>;
 }
 
 interface SessionData {
@@ -45,8 +46,8 @@ export class Session {
     this.model = model;
   }
 
-  addMessage(role: Message["role"], content: string): void {
-    this.messages.push({ role, content, timestamp: Date.now() });
+  addMessage(role: Message["role"], content: string, images?: Array<{ mimeType: string; data: string }>): void {
+    this.messages.push({ role, content, timestamp: Date.now(), images });
     this.save();
   }
 
@@ -54,10 +55,10 @@ export class Session {
     return this.messages;
   }
 
-  getChatMessages(): Array<{ role: "user" | "assistant"; content: string }> {
+  getChatMessages(): Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }> {
     return this.messages
       .filter((m) => m.role === "user" || m.role === "assistant")
-      .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
+      .map((m) => ({ role: m.role as "user" | "assistant", content: m.content, images: m.images }));
   }
 
   addUsage(inputTokens: number, outputTokens: number, cost: number): void {

@@ -15,7 +15,7 @@ export interface StreamOptions {
   model: LanguageModel;
   modelId: string;
   system: string;
-  messages: Array<{ role: "user" | "assistant"; content: string }>;
+  messages: Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }>;
   tools?: ToolSet;
   abortSignal?: AbortSignal;
 }
@@ -28,10 +28,25 @@ export async function startStream(
   process.stderr.write = () => true;
 
   try {
+    // Convert messages to AI SDK format with images
+    const messages = opts.messages.map((m) => {
+      if (m.images && m.images.length > 0 && m.role === "user") {
+        // Create content array with text and images
+        const content: Array<{ type: "text"; text: string } | { type: "image"; image: string }> = [
+          { type: "text", text: m.content },
+        ];
+        for (const img of m.images) {
+          content.push({ type: "image", image: `data:${img.mimeType};base64,${img.data}` });
+        }
+        return { role: m.role as "user", content };
+      }
+      return { role: m.role, content: m.content };
+    });
+
     const result = streamText({
       model: opts.model,
       system: opts.system,
-      messages: opts.messages,
+      messages,
       tools: opts.tools,
       stopWhen: opts.tools ? stepCountIs(10) : stepCountIs(1),
       abortSignal: opts.abortSignal,

@@ -14,6 +14,7 @@ import { collectProjectFiles, filterFiles, readFileForContext } from "./file-pic
 interface ChatMessage {
   role: "user" | "assistant" | "system";
   content: string;
+  images?: Array<{ mimeType: string; data: string }>;
 }
 
 interface ModelOption {
@@ -95,6 +96,7 @@ export class App {
   private itemPicker: { title: string; items: PickerItem[]; cursor: number } | null = null;
   private onItemSelect: ((id: string) => void) | null = null;
   private toolOutputCollapsed = false;
+  private pendingImages: Array<{ mimeType: string; data: string }> = [];
   private gitBranch = "";
   private gitDirty = false;
   private onCycleScopedModel: (() => void) | null = null;
@@ -198,8 +200,8 @@ export class App {
     this.draw();
   }
 
-  addMessage(role: "user" | "assistant" | "system", content: string): void {
-    this.messages.push({ role, content });
+  addMessage(role: "user" | "assistant" | "system", content: string, images?: Array<{ mimeType: string; data: string }>): void {
+    this.messages.push({ role, content, images });
     this.scrollToBottom();
     this.draw();
   }
@@ -486,7 +488,14 @@ export class App {
     const action = this.input.handleKey(key);
     if (action === "submit") {
       const text = this.input.submit();
-      if (text && this.onSubmit) this.onSubmit(text);
+      const images = this.takePendingImages();
+      if (text && this.onSubmit) {
+        if (images.length > 0) {
+          (this.onSubmit as (text: string, images?: Array<{ mimeType: string; data: string }>) => void)(text, images);
+        } else {
+          this.onSubmit(text);
+        }
+      }
     }
 
     // Detect @ trigger for file picker
@@ -506,6 +515,19 @@ export class App {
   }
 
   private handlePaste(text: string): void {
+    // Check if pasted content is a base64 image
+    if (text.startsWith("data:image/")) {
+      const match = text.match(/^data:image\/(\w+);base64,(.+)$/);
+      if (match) {
+        const mimeType = `image/${match[1]}`;
+        const data = match[2];
+        this.pendingImages.push({ mimeType, data });
+        this.statusMessage = `${T()}✓ Image attached (${mimeType})${RESET}`;
+        setTimeout(() => { this.statusMessage = undefined; this.draw(); }, 1500);
+        this.draw();
+        return;
+      }
+    }
     this.input.paste(text);
     this.draw();
   }
@@ -523,6 +545,11 @@ export class App {
       const msg = this.messages[idx];
       if (msg.role === "user") {
         lines.push(`${BOLD}${WHITE}  > ${msg.content}${RESET}`);
+        // Show image attachment indicator
+        if (msg.images && msg.images.length > 0) {
+          const imgText = msg.images.length === 1 ? "1 image" : `${msg.images.length} images`;
+          lines.push(`    ${DIM}[${imgText} attached]${RESET}`);
+        }
       } else if (msg.role === "assistant") {
         // Always render markdown - even during streaming
         const rendered = renderMarkdown(msg.content);
@@ -848,8 +875,15 @@ export class App {
     return lines;
   }
 
-  onInput(handler: (text: string) => void): void {
-    this.onSubmit = handler;
+  onInput(handler: (text: string, images?: Array<{ mimeType: string; data: string }>) => void): void {
+    this.onSubmit = handler as (text: string) => void;
+  }
+
+  /** Get pending images and clear them */
+  takePendingImages(): Array<{ mimeType: string; data: string }> {
+    const images = this.pendingImages;
+    this.pendingImages = [];
+    return images;
   }
 
   onAbortRequest(handler: () => void): void {
