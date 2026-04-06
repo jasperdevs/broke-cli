@@ -31,6 +31,7 @@ vi.mock("fs", async () => {
 });
 
 import { createModel, shouldUseNativeProvider } from "../src/ai/providers.js";
+import { resolveNativeSpawnCommand } from "../src/ai/native-stream.js";
 
 describe("native provider runtime selection", () => {
   beforeEach(() => {
@@ -98,6 +99,31 @@ describe("native provider runtime selection", () => {
       expect(resolveNativeCommand("codex")).toBe("C:\\Users\\bunny\\AppData\\Roaming\\npm\\codex.cmd");
     } finally {
       if (platform) Object.defineProperty(process, "platform", platform);
+    }
+  });
+
+  it("launches Windows cmd shims through ComSpec for native streaming", () => {
+    const platform = Object.getOwnPropertyDescriptor(process, "platform");
+    const comSpec = process.env.ComSpec;
+    Object.defineProperty(process, "platform", { value: "win32" });
+    process.env.ComSpec = "C:\\Windows\\System32\\cmd.exe";
+
+    try {
+      const resolved = resolveNativeSpawnCommand(
+        "C:\\Users\\bunny\\AppData\\Roaming\\npm\\codex.cmd",
+        ["exec", "--json", "-m", "gpt-5.4-mini", "-C", "C:\\Users\\bunny\\Downloads\\broke-cli"],
+      );
+      expect(resolved.command).toBe("C:\\Windows\\System32\\cmd.exe");
+      expect(resolved.args[0]).toBe("/d");
+      expect(resolved.args[1]).toBe("/s");
+      expect(resolved.args[2]).toBe("/c");
+      expect(resolved.args[3]).toContain("\"C:\\Users\\bunny\\AppData\\Roaming\\npm\\codex.cmd\"");
+      expect(resolved.args[3]).toContain("-C");
+      expect(resolved.args[3]).toContain("C:\\Users\\bunny\\Downloads\\broke-cli");
+    } finally {
+      if (platform) Object.defineProperty(process, "platform", platform);
+      if (comSpec === undefined) delete process.env.ComSpec;
+      else process.env.ComSpec = comSpec;
     }
   });
 });

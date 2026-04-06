@@ -1,4 +1,4 @@
-import { spawn } from "child_process";
+import { spawn, type SpawnOptionsWithoutStdio } from "child_process";
 import { calculateCost, type TokenUsage } from "./cost.js";
 import { estimateConversationTokens, estimateTextTokens } from "./tokens.js";
 import { resolveNativeCommand } from "./native-cli.js";
@@ -156,6 +156,38 @@ function buildCodexArgs(opts: NativeStreamOptions): string[] {
   return args;
 }
 
+function needsWindowsShell(command: string): boolean {
+  return process.platform === "win32" && /\.(cmd|bat)$/i.test(command);
+}
+
+function quoteCmdArg(value: string): string {
+  if (value.length === 0) return "\"\"";
+  const escaped = value.replace(/(["^%!])/g, "^$1");
+  return /[\s"&|<>^%!]/.test(escaped) ? `"${escaped}"` : escaped;
+}
+
+export function resolveNativeSpawnCommand(
+  command: string,
+  args: string[],
+): { command: string; args: string[] } {
+  if (!needsWindowsShell(command)) {
+    return { command, args };
+  }
+
+  const comspec = process.env.ComSpec || "cmd.exe";
+  const invocation = [`"${command}"`, ...args.map(quoteCmdArg)].join(" ");
+  return { command: comspec, args: ["/d", "/s", "/c", invocation] };
+}
+
+function spawnNativeProcess(
+  command: string,
+  args: string[],
+  options: SpawnOptionsWithoutStdio,
+) {
+  const resolved = resolveNativeSpawnCommand(command, args);
+  return spawn(resolved.command, resolved.args, options);
+}
+
 export async function startNativeStream(
   opts: NativeStreamOptions,
   callbacks: NativeStreamCallbacks,
@@ -175,7 +207,7 @@ export async function startNativeStream(
     let aborted = false;
     let lineHadParseError = false;
 
-    const child = spawn(command, args, {
+    const child = spawnNativeProcess(command, args, {
       cwd: opts.cwd ?? process.cwd(),
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,
