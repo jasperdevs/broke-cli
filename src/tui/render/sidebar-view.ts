@@ -82,17 +82,17 @@ export function buildSidebarLines(options: {
     lines.push(`${colors.text}Providers${colors.reset}`);
     for (const provider of detectedProviders.slice(0, 4)) lines.push(`  ${colors.muted}${provider}${colors.reset}`);
     if (detectedProviders.length > 4) lines.push(`  ${colors.muted}+${detectedProviders.length - 4} more${colors.reset}`);
-    lines.push("");
   }
 
   if (mcpConnections.length > 0) {
+    if (lines[lines.length - 1] !== "") lines.push("");
     lines.push(`${colors.text}MCP${colors.reset}`);
     for (const connection of mcpConnections.slice(0, 3)) {
       lines.push(`  ${colors.success}\u25CF${colors.reset} ${colors.muted}${connection.slice(0, width - 6)}${colors.reset}`);
     }
-    lines.push("");
   }
 
+  if (lines[lines.length - 1] !== "") lines.push("");
   lines.push(`${colors.text}Directory${colors.reset}`);
   lines.push(`  ${colors.muted}${shortCwd}${colors.reset}`);
   if (gitBranch) lines.push(`  ${colors.muted}${gitBranch}${gitDirty ? " *" : ""}${colors.reset}`);
