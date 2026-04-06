@@ -2230,7 +2230,7 @@ export class App {
     const path = this.resolveMascotPath();
     if (!path) return [];
     const cells = this.parseMascotSvgGrid(path);
-    const compact = this.resampleColorGrid(cells, 9, 4);
+    const compact = this.resampleColorGrid(cells, 12, 6);
     return this.renderAnsiColorGrid(compact);
   }
 
