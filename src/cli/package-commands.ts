@@ -1,3 +1,4 @@
+import { runSelfUpdateCommand } from "../core/update.js";
 import type { Command } from "commander";
 import {
   describePackageResources,
@@ -30,6 +31,20 @@ function renderConfigOverview(): string {
 }
 
 export function registerPackageCommands(program: Command): void {
+  program
+    .command("self-update")
+    .alias("upgrade")
+    .description("Update brokecli itself")
+    .action(() => {
+      const result = runSelfUpdateCommand();
+      if (!result.performed) {
+        process.stdout.write(`${result.instruction}\n`);
+        return;
+      }
+      if (result.exitCode !== 0) process.exit(result.exitCode);
+      process.stdout.write("Updated brokecli. Restart to use the new version.\n");
+    });
+
   program
     .command("install")
     .argument("<source>")

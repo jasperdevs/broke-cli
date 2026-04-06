@@ -20,7 +20,8 @@ import { appStateCoreMethods } from "./app-state-core.js";
 import type { AppStateUiMethods } from "./app-state-ui.js";
 import { appStateUiMethods } from "./app-state-ui.js";
 import { AnimCounter, HOME_TIPS } from "./app-shared.js";
-import type { AgentRun, AgentRunView, BudgetView, ChatMessage, ModelOption, PendingImage, PendingMessage, PickerItem, QuestionView, SettingEntry, TodoItem } from "./app-types.js";
+import { APP_VERSION } from "../core/app-meta.js";
+import type { AgentRun, AgentRunView, BudgetView, ChatMessage, ModelOption, PendingImage, PendingMessage, PickerItem, QuestionView, SettingEntry, TodoItem, UpdateNotice } from "./app-types.js";
 
 export interface App extends AppStateCoreMethods, AppStateUiMethods, AppMenuMethods, AppInputMethods, AppRenderMethods, AppDrawMethods {}
 
@@ -95,7 +96,8 @@ export class App {
   private gitBranch = "";
   private gitDirty = false;
   private sessionName = "New Session";
-  private appVersion = "0.0.1";
+  private appVersion = APP_VERSION;
+  private updateNotice: UpdateNotice | null = null;
   private mcpConnections: string[] = [];
   private onCycleScopedModel: (() => void) | null = null;
   private mode: Mode = "build";

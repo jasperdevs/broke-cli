@@ -275,15 +275,17 @@ function buildFrameLines(app: AppState, opts: { height: number; width: number; m
   const sidebarTopHeight = hasSidebar ? Math.max(0, height - sidebarFooterHeight) : 0;
   app.activeMenuClickTargets = new Map(bottomMenuClicks.map(({ lineIndex, action }) => [mainTopHeight + lineIndex + 1, action]));
   const showCompactHeader = !isHome && !hasSidebar && app.modelName !== "none";
+  const bannerLines = app.renderUpdateBanner(mainW);
+  const reservedBannerLines = bannerLines.slice(0, mainTopHeight);
+  const fixedTopLines = [...reservedBannerLines];
+  if (showCompactHeader && fixedTopLines.length < mainTopHeight) fixedTopLines.push(app.renderCompactHeader());
 
   if (isHome) {
-    if (showCompactHeader) frameLines.push(app.renderCompactHeader());
-    const homeLines = app.renderHomeView(mainW, Math.max(0, mainTopHeight - (showCompactHeader ? 1 : 0)));
-    mergeMainAndSidebar(app, frameLines, homeLines, [], mainW, hasSidebar, sidebarTopHeight, showCompactHeader);
+    const homeLines = app.renderHomeView(mainW, Math.max(0, mainTopHeight - fixedTopLines.length));
+    mergeMainAndSidebar(app, frameLines, [...fixedTopLines, ...homeLines], [], mainW, hasSidebar, sidebarTopHeight, false);
     while (frameLines.length < mainTopHeight) frameLines.push("");
   } else {
-    if (showCompactHeader) frameLines.push(app.renderCompactHeader());
-    const chatH = Math.max(1, mainTopHeight - (showCompactHeader ? 1 : 0));
+    const chatH = Math.max(1, mainTopHeight - fixedTopLines.length);
     const messageLines = app.renderMessages(mainW);
     const previousChatHeight = app.lastChatHeight || chatH;
     const previousMaxScroll = Math.max(0, messageLines.length - previousChatHeight);
@@ -294,7 +296,7 @@ function buildFrameLines(app: AppState, opts: { height: number; width: number; m
     if (app.scrollOffset < 0) app.scrollOffset = 0;
     app.lastChatHeight = chatH;
     const visibleMsgs = messageLines.slice(app.scrollOffset, app.scrollOffset + chatH);
-    mergeMainAndSidebar(app, frameLines, visibleMsgs, [], mainW, hasSidebar, sidebarTopHeight, showCompactHeader);
+    mergeMainAndSidebar(app, frameLines, [...fixedTopLines, ...visibleMsgs], [], mainW, hasSidebar, sidebarTopHeight, false);
     while (frameLines.length < mainTopHeight) {
       if (hasSidebar) frameLines.push(`${app.padLine("", mainW)} ${app.getSidebarBorder()} ${app.padLine("", app.screen.sidebarWidth)}`);
       else frameLines.push("");

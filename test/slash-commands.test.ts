@@ -269,35 +269,50 @@ describe("slash command handling", () => {
       prompt = nextPrompt;
       return "sk-test-key";
     };
+    const previousOpenAiEnv = process.env.OPENAI_API_KEY;
+    const previousProviderConfig = loadConfig().providers?.openai
+      ? { ...loadConfig().providers!.openai }
+      : undefined;
+    delete process.env.OPENAI_API_KEY;
+    updateProviderConfig("openai", { apiKey: null, disabled: null }, "global");
 
     const providerRegistry = {
       getProviderInfo: () => ({ id: "openai", name: "OpenAI" }),
       getConnectStatus: () => "api key",
     } as any;
+    try {
+      const result = await handleSlashCommand({
+        text: "/connect openai",
+        app,
+        session: new Session(`test-connect-${Date.now()}`),
+        activeModel: null,
+        currentModelId: "",
+        currentMode: "build",
+        systemPrompt: "sys",
+        providerRegistry,
+        buildVisibleModelOptions: () => [],
+        refreshProviderState: async () => [],
+        isSkippedPromptAnswer: () => false,
+        isValidHttpBaseUrl: () => true,
+        getContextOptimizer: () => ({ reset() {} }) as any,
+        onSessionReplace: () => {},
+        onModelChange: () => {},
+        onSystemPromptChange: () => {},
+        hooks: { emit() {} },
+        onProjectChange: () => {},
+      });
 
-    const result = await handleSlashCommand({
-      text: "/connect openai",
-      app,
-      session: new Session(`test-connect-${Date.now()}`),
-      activeModel: null,
-      currentModelId: "",
-      currentMode: "build",
-      systemPrompt: "sys",
-      providerRegistry,
-      buildVisibleModelOptions: () => [],
-      refreshProviderState: async () => [],
-      isSkippedPromptAnswer: () => false,
-      isValidHttpBaseUrl: () => true,
-      getContextOptimizer: () => ({ reset() {} }) as any,
-      onSessionReplace: () => {},
-      onModelChange: () => {},
-      onSystemPromptChange: () => {},
-      hooks: { emit() {} },
-      onProjectChange: () => {},
-    });
-
-    expect(result.handled).toBe(true);
-    expect(prompt).toBe("Paste OpenAI API key");
+      expect(result.handled).toBe(true);
+      expect(prompt).toBe("Paste OpenAI API key");
+    } finally {
+      if (previousOpenAiEnv) process.env.OPENAI_API_KEY = previousOpenAiEnv;
+      else delete process.env.OPENAI_API_KEY;
+      updateProviderConfig("openai", {
+        apiKey: previousProviderConfig?.apiKey ?? null,
+        baseUrl: previousProviderConfig?.baseUrl ?? null,
+        disabled: previousProviderConfig?.disabled ?? null,
+      }, "global");
+    }
   });
 
   it("writes a standalone html share for /share", async () => {

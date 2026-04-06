@@ -14,6 +14,7 @@ export const COMMANDS: CommandEntry[] = [
   { name: "model", desc: "switch model and pin for ctrl+p", hotkey: "ctrl+l" },
   { name: "theme", desc: "change color theme" },
   { name: "compact", desc: "compress context" },
+  { name: "update", desc: "update brokecli itself" },
   { name: "budget", desc: "inspect token pressure" },
   { name: "permissions", desc: "allow or block tools" },
   { name: "extensions", desc: "manage extension loading" },

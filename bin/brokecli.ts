@@ -18,6 +18,7 @@ import { setTodoChangeCallback } from "../src/tools/todo.js";
 import { getApiKey, getSettings, updateSetting, type Mode } from "../src/core/config.js";
 import { clearRuntimeSettings, setRuntimeProviderApiKey, setRuntimeSettings } from "../src/core/config.js";
 import { loadExtensions } from "../src/core/extensions.js";
+import { APP_VERSION } from "../src/core/app-meta.js";
 import { ProviderRegistry } from "../src/ai/provider-registry.js";
 import { runRpcMode } from "../src/cli/rpc.js";
 import { resolveOneShotModel, runOneShotPrompt } from "../src/cli/oneshot.js";
@@ -27,11 +28,12 @@ import { handleSlashCommand } from "../src/cli/slash-commands.js";
 import { buildHtmlExport } from "../src/cli/exports.js";
 import { registerPackageCommands } from "../src/cli/package-commands.js";
 import { ensureConfiguredPackagesInstalled } from "../src/core/package-manager.js";
+import { checkForNewVersion } from "../src/core/update.js";
 
 const program = new Command()
   .name("brokecli")
   .description("AI coding CLI that doesn't waste your money")
-  .version("0.0.1")
+  .version(APP_VERSION)
   .argument("[prompt...]", "Prompt to run in single-shot print/json mode")
   .option("--broke", "Route to cheapest capable model")
   .option("--provider <provider>", "Provider to use")
@@ -242,7 +244,7 @@ program.action(async (promptParts, opts) => {
   }
 
   const app = new App();
-  app.setVersion(program.version() ?? "0.0.1");
+  app.setVersion(program.version() ?? APP_VERSION);
   let currentMode: Mode = "build";
   let lastActivityTime = Date.now(); // Track for cache expiry warning
 
@@ -292,6 +294,9 @@ program.action(async (promptParts, opts) => {
   app.setSessionName(session.getName());
   hooks.emit("on_session_start", { cwd: process.cwd() });
   app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
+  void checkForNewVersion(APP_VERSION).then((update) => {
+    if (update) app.setUpdateNotice(update);
+  }).catch(() => {});
 
   // Scoped model index for Ctrl+P cycling
   let scopedModelIndex = -1;

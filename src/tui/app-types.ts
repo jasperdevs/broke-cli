@@ -1,5 +1,6 @@
 import type { RgbColor } from "./render/mascot.js";
 import type { BudgetReport } from "../core/budget-insights.js";
+import type { UpdateInfo } from "../core/update.js";
 import type { InputWidget } from "./input.js";
 
 export interface ChatMessage {
@@ -38,6 +39,8 @@ export interface BudgetView {
   scope: "all" | "session";
   scrollOffset: number;
 }
+
+export type UpdateNotice = UpdateInfo;
 
 export interface AgentRun {
   id: string;

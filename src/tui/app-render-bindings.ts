@@ -12,6 +12,7 @@ import {
   renderCompactHeader,
   renderHomeBox,
   renderHomeView,
+  renderUpdateBanner,
   renderMascotBlock,
   renderMascotInline,
   renderMessages,
@@ -48,6 +49,7 @@ export interface AppRenderMethods {
   centerVisibleLine(line: string, width: number): string;
   renderHomeBox(width: number, title: string, body: string[]): string[];
   renderHomeView(mainW: number, topHeight: number): string[];
+  renderUpdateBanner(width: number): string[];
   buildSidebarLines(): string[];
   renderSidebar(visibleHeight: number): string[];
   padLine(line: string, targetWidth: number): string;
@@ -74,6 +76,7 @@ export const appRenderMethods: AppRenderMethods = {
   centerVisibleLine(this: AppState, line: string, width: number) { return centerVisibleLine(this, line, width); },
   renderHomeBox(this: AppState, width: number, title: string, body: string[]) { return renderHomeBox(this, width, title, body); },
   renderHomeView(this: AppState, mainW: number, topHeight: number) { return renderHomeView(this, mainW, topHeight); },
+  renderUpdateBanner(this: AppState, width: number) { return renderUpdateBanner(this, width); },
   buildSidebarLines(this: AppState) { return buildSidebarLines(this); },
   renderSidebar(this: AppState, visibleHeight: number) { return renderSidebar(this, visibleHeight); },
   padLine(this: AppState, line: string, targetWidth: number) { return padLine(this, line, targetWidth); },

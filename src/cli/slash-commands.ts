@@ -5,6 +5,7 @@ import type { ProviderRegistry } from "../ai/provider-registry.js";
 import { buildSystemPrompt, reloadContext } from "../core/context.js";
 import { buildAggregateBudgetReport, buildBudgetReport, renderBudgetDashboard, type BudgetReport } from "../core/budget-insights.js";
 import { compactMessages, getTotalContextTokens } from "../core/compact.js";
+import { APP_VERSION } from "../core/app-meta.js";
 import { clearCredentials, hasStoredCredentials, listAuthenticated } from "../core/auth.js";
 import { getProviderCredential, getSettings, loadConfig, updateProviderConfig, updateSetting, type Settings, type Mode } from "../core/config.js";
 import { listProjects } from "../core/projects.js";
@@ -15,11 +16,12 @@ import { Session } from "../core/session.js";
 import { listSkills, loadSkillPrompt } from "../core/skills.js";
 import { listTemplates, loadTemplate } from "../core/templates.js";
 import { undoLastCheckpoint } from "../core/git.js";
+import { checkForNewVersion } from "../core/update.js";
 import { formatRelativeMinutes } from "./exports.js";
 import { runConnectFlow } from "./connect-flow.js";
 import { runLoginFlow } from "./login-flow.js";
 import { handleLogoutMenu, openExportMenu, openExtensionsMenu, openPermissionsMenu, openProjectsMenu, openResumeMenu, openSettingsMenu, openThemeMenu, shareTranscript } from "./slash-command-menus.js";
-import type { ModelOption, SettingEntry, PickerItem } from "../tui/app-types.js";
+import type { ModelOption, SettingEntry, PickerItem, UpdateNotice } from "../tui/app-types.js";
 import { SessionManager } from "../core/session-manager.js";
 
 interface SlashCommandApp {
@@ -63,6 +65,8 @@ interface SlashCommandApp {
   getFileContexts(): Map<string, string>;
   showQuestion(prompt: string, options?: string[]): Promise<string>;
   runExternalCommand?(title: string, command: string, args: string[]): number;
+  setUpdateNotice?(notice: UpdateNotice | null): void;
+  clearUpdateNotice?(): void;
   updateItemPickerItems?(items: PickerItem[], focusId?: string): void;
   setCompacting?(compacting: boolean, tokenCount?: number): void;
   openBudgetView?(title: string, reports: { all: BudgetReport; session: BudgetReport }, scope?: "all" | "session"): void;
@@ -235,6 +239,26 @@ export async function handleSlashCommand(options: {
         app.addMessage("system", renderBudgetDashboard({ report: reports.all, scopeLabel: "all sessions", width: 100 }).join("\n"));
       }
       return { handled: true };
+    case "update": {
+      const update = await checkForNewVersion(APP_VERSION);
+      if (!update) {
+        app.addMessage("system", `Already on the latest brokecli (${APP_VERSION}).`);
+        return { handled: true };
+      }
+      if (update.command && app.runExternalCommand) {
+        const exitCode = app.runExternalCommand("Update brokecli", update.command.command, update.command.args);
+        if (exitCode === 0) {
+          app.clearUpdateNotice?.();
+          app.addMessage("system", `Updated brokecli to v${update.latestVersion}. Restart to use the new version.`);
+        } else {
+          app.addMessage("system", `Update failed. ${update.instruction}`);
+        }
+        return { handled: true };
+      }
+      app.setUpdateNotice?.(update);
+      app.addMessage("system", `Update available: v${update.latestVersion}. ${update.instruction}`);
+      return { handled: true };
+    }
     case "agents": {
       const runs = app.getAgentRuns?.() ?? [];
       if (runs.length === 0) {

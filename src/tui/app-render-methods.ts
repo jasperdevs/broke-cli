@@ -239,6 +239,27 @@ export function renderHomeView(app: AppState, mainW: number, topHeight: number):
   });
 }
 
+export function renderUpdateBanner(app: AppState, width: number): string[] {
+  const notice = app.updateNotice;
+  if (!notice || width < 28) return [];
+  const instruction = notice.command ? "Run /update" : notice.instruction;
+  const detail = notice.command ? notice.command.display : notice.releasesUrl;
+  const body = [
+    ` ${TXT()}Current${RESET} ${MUTED()}v${notice.currentVersion}${RESET}  ${TXT()}Latest${RESET} ${WARN()}${BOLD}v${notice.latestVersion}${RESET}`,
+    ...wordWrap(instruction, Math.max(16, width - 6)).map((line) => ` ${TXT()}${line}${RESET}`),
+    ...wordWrap(detail, Math.max(16, width - 6)).map((line) => ` ${MUTED()}${line}${RESET}`),
+  ];
+  return buildRenderHomeBox({
+    width,
+    title: ` ${WARN()}${BOLD}Update available${RESET} `,
+    body,
+    box: BOX,
+    frameColor: WARN(),
+    reset: RESET,
+    padLine: (line, innerWidth) => app.padLine(line, innerWidth),
+  });
+}
+
 export function buildSidebarLines(app: AppState): string[] {
   if (app.sidebarTreeOpen) app.sidebarFileTree = loadSidebarFileTree(app.cwd);
   return composeSidebarLines({

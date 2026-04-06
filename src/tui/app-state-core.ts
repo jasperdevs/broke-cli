@@ -4,7 +4,7 @@ import { buildSidebarFooter } from "./render/sidebar-view.js";
 import { fmtTokens } from "./render/formatting.js";
 import { DIM, RESET } from "../utils/ansi.js";
 import { MUTED, OK, P, T, TXT } from "./app-shared.js";
-import type { ModelOption } from "./app-types.js";
+import type { ModelOption, UpdateNotice } from "./app-types.js";
 
 type AppState = any;
 
@@ -213,6 +213,14 @@ export function setDetectedProviders(app: AppState, providers: string[]): void {
 export function setSessionName(app: AppState, name: string): void { app.sessionName = name; }
 export function setVersion(app: AppState, v: string): void { app.appVersion = v; }
 export function setMcpConnections(app: AppState, conns: string[]): void { app.mcpConnections = conns; }
+export function setUpdateNotice(app: AppState, notice: UpdateNotice | null): void {
+  app.updateNotice = notice;
+  app.draw();
+}
+export function clearUpdateNotice(app: AppState): void {
+  app.updateNotice = null;
+  app.draw();
+}
 
 export interface AppStateCoreMethods {
   invalidateMsgCache(): void;
@@ -235,6 +243,8 @@ export interface AppStateCoreMethods {
   setSessionName(name: string): void;
   setVersion(v: string): void;
   setMcpConnections(conns: string[]): void;
+  setUpdateNotice(notice: UpdateNotice | null): void;
+  clearUpdateNotice(): void;
 }
 
 export const appStateCoreMethods: AppStateCoreMethods = {
@@ -258,4 +268,6 @@ export const appStateCoreMethods: AppStateCoreMethods = {
   setSessionName(this: AppState, name: string) { return setSessionName(this, name); },
   setVersion(this: AppState, v: string) { return setVersion(this, v); },
   setMcpConnections(this: AppState, conns: string[]) { return setMcpConnections(this, conns); },
+  setUpdateNotice(this: AppState, notice: UpdateNotice | null) { return setUpdateNotice(this, notice); },
+  clearUpdateNotice(this: AppState) { return clearUpdateNotice(this); },
 };

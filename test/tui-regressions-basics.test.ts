@@ -168,6 +168,30 @@ describe("startup home view", () => {
     expect(output).not.toContain("Recent Sessions");
   });
 
+  it("renders an update banner above the startup card when a newer version is available", () => {
+    const app = new App() as any;
+    app.setUpdateNotice({
+      currentVersion: "0.0.1",
+      latestVersion: "0.0.2",
+      method: "npm",
+      instruction: "Run: npm install -g @jasperdevs/brokecli@latest",
+      releasesUrl: "https://github.com/jasperdevs/brokecli/releases/latest",
+      command: {
+        command: "npm",
+        args: ["install", "-g", "@jasperdevs/brokecli@latest"],
+        display: "npm install -g @jasperdevs/brokecli@latest",
+      },
+    });
+    let rendered: string[] = [];
+    app.screen = { height: 24, width: 100, hasSidebar: true, mainWidth: 73, sidebarWidth: 24, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
+    app.drawImmediate();
+    const output = rendered.map((line) => stripAnsi(line)).join("\n");
+    expect(output).toContain("Update available");
+    expect(output).toContain("Latest v0.0.2");
+    expect(output).toContain("/update");
+    expect(output).toContain("Welcome to BrokeCLI");
+  });
+
   it("only enables the sidebar after chat starts", () => {
     const app = new App() as any;
     let rendered: string[] = [];

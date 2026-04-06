@@ -29,6 +29,7 @@ npm install -g @jasperdevs/brokecli
 - `/connect` configure API-key providers and local endpoints
 - `/logout` clear stored brokecli credentials
 - `/model` choose the main model and pin models for `Ctrl+P` cycling
+- `/update` update brokecli itself and show upgrade availability
 - `/resume` search and resume recent sessions in the current project
 - `/session` inspect the active session file, tokens, and cost
 - `/projects` search and switch among recently used projects
@@ -110,6 +111,7 @@ brokecli install npm:@scope/pkg
 brokecli install git:https://github.com/org/pkg.git
 brokecli list
 brokecli update
+brokecli self-update
 brokecli config
 ```
 
