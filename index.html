@@ -3,58 +3,112 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Funky Fun Index!</title>
+    <title>✨ Fun Interactive Hub ✨</title>
     <style>
+        /* Modern, playful resets */
         body {
-            font-family: 'Comic Sans MS', cursive, sans-serif;
-            background-color: #f0f8ff; /* Light blue background */
+            font-family: 'Arial', 'Helvetica Neue', sans-serif;
+            background: linear-gradient(135deg, #ffecd2 0%, #fffaf0 100%); /* Soft gradient */
             color: #333;
-            text-align: center;
-            padding: 50px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
         }
         .container {
             background-color: #ffffff;
-            border: 5px dashed #ff69b4; /* Pink dashed border */
-            padding: 40px;
+            border: 3px solid #ff69b4; /* Pink border */
+            padding: 50px;
             border-radius: 20px;
-            max-width: 600px;
-            margin: 0 auto;
-            box-shadow: 10px 10px 0px #a0a0a0;
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.15); /* Softer shadow */
+            max-width: 700px;
+            width: 90%;
+            text-align: center;
         }
         h1 {
-            color: #ff4500; /* Orange-Red */
-            font-size: 3em;
-            text-shadow: 2px 2px #ffa07a;
+            color: #ff4500; /* Vibrant Orange-Red */
+            font-size: 2.8em;
+            margin-bottom: 10px;
+            letter-spacing: 2px;
         }
         p {
-            font-size: 1.2em;
-            margin-bottom: 20px;
+            font-size: 1.1em;
+            margin-bottom: 25px;
+        }
+        .interactive-area {
+            margin: 30px 0;
+            padding: 20px;
+            border: 2px dashed #32cd32; /* Lime Green dashed box */
+            border-radius: 10px;
+            display: inline-block;
         }
         button {
-            background-color: #32cd32; /* Lime Green */
+            background-color: #ff69b4; /* Pink primary button */
             color: white;
             border: none;
-            padding: 15px 30px;
+            padding: 12px 25px;
             font-size: 1.1em;
             cursor: pointer;
-            border-radius: 10px;
-            transition: background-color 0.2s;
-            box-shadow: 3px 3px #228b22;
+            border-radius: 30px;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 10px rgba(255, 105, 180, 0.4);
+            outline: none;
+            font-weight: bold;
+            margin: 5px;
         }
         button:hover {
-            background-color: #228b22;
+            background-color: #ff4500; /* Darker on hover */
+            transform: translateY(-2px) scale(1.02);
+            box-shadow: 0 6px 15px rgba(255, 69, 0, 0.5);
+        }
+        #output-message {
+            min-height: 40px;
+            font-style: italic;
+            color: #555;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🎉 Welcome to the Fun Zone! 🎉</h1>
-        <p>Get ready for some digital delight!</p>
+        <h1>✨ Fun Interactive Hub ✨</h1>
+        <p>Click below to trigger some digital fun!</p>
         
-        <button onclick="alert('Yay! You clicked something fun!')">Click Me!</button>
+        <div class="interactive-area">
+            <button id="funButton">Click for Fun!</button>
+            <button id="resetButton">Reset</button>
+        </div>
 
-        <p>This page is coded with maximum fun vibes!</p>
-        <p>Keep smiling! 😄</p>
+        <p id="output-message">Your fun messages appear here...</p>
     </div>
+
+    <script>
+        let clickCount = 0;
+        const output = document.getElementById('output-message');
+        const funBtn = document.getElementById('funButton');
+        const resetBtn = document.getElementById('resetButton');
+
+        funBtn.addEventListener('click', () => {
+            clickCount++;
+            let message = "";
+            if (clickCount === 1) {
+                message = "✨ WOW! You started the fun! ✨";
+            } else if (clickCount === 5) {
+                message = "🎉 Milestone! You're officially a fun enthusiast! 🎉";
+            } else if (clickCount > 10) {
+                message = `Wow, ${clickCount} clicks! You're unstoppable! 🚀`;
+            } else {
+                message = `Keep going! Click #${clickCount}.`;
+            }
+            output.textContent = message;
+        });
+
+        resetBtn.addEventListener('click', () => {
+            clickCount = 0;
+            output.textContent = "Ready for another round of fun!";
+        });
+    </script>
 </body>
 </html>

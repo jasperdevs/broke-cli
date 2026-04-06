@@ -1,5 +1,5 @@
 {
-  "last_turn_at": "2026-04-06T16:36:00.507Z",
-  "turn_count": 111,
-  "last_agent_output": "It’s two different counters.\n\n`2.4k in / 55 out` is your cumulative session usage.\n`770` or `770/128"
+  "last_turn_at": "2026-04-06T17:22:52.645Z",
+  "turn_count": 121,
+  "last_agent_output": "Yes. Excluding generated stuff like `package-lock.json`, these are over 500 lines:\n\n- [app.ts](/C:/U"
 }
