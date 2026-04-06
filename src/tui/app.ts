@@ -2127,9 +2127,10 @@ export class App {
     const frameLines: string[] = [];
     const reservedBottom = hasSidebar ? Math.max(bottomLines.length, footerLines.length) : bottomLines.length;
     const footerPad = reservedBottom - footerLines.length;
+    const bottomPad = reservedBottom - bottomLines.length;
     const topHeight = Math.max(0, height - reservedBottom);
     this.activeMenuClickTargets = new Map(
-      bottomMenuClicks.map(({ lineIndex, action }) => [topHeight + lineIndex + 1, action]),
+      bottomMenuClicks.map(({ lineIndex, action }) => [topHeight + bottomPad + lineIndex + 1, action]),
     );
 
     // Compact header when no sidebar
@@ -2181,7 +2182,7 @@ export class App {
       const border = this.getSidebarBorder();
       const sideW = this.screen.sidebarWidth;
       for (let i = 0; i < reservedBottom; i++) {
-        const mainLine = bottomLines[i] ?? "";
+        const mainLine = i >= bottomPad ? bottomLines[i - bottomPad] ?? "" : "";
         const footerLine = i >= footerPad ? footerLines[i - footerPad] ?? "" : "";
         const padded = this.padLine(mainLine, mainW);
         frameLines.push(`${padded} ${border} ${this.padLine(footerLine, sideW)}`);
@@ -2207,7 +2208,7 @@ export class App {
     }
 
     // Cursor on input line — account for multi-line input
-    const inputRow = Math.min(height, topHeight + 2 + inputLayout.row); // +1 separator, +1 for 1-based
+    const inputRow = Math.min(height, topHeight + bottomPad + 2 + inputLayout.row); // +1 separator, +1 for 1-based
     const inputCol = Math.min(width, 1 + inputLayout.col);
     this.screen.setCursor(inputRow, inputCol);
   }

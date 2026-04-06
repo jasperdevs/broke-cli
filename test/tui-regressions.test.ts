@@ -578,6 +578,7 @@ describe("wrapped input layout", () => {
 
       const rowText = stripAnsi(rendered[cursorRow - 1] ?? "");
       expect(rowText).not.toMatch(/^─+$/);
+      expect(cursorRow).toBeGreaterThanOrEqual(rendered.length - 3);
     } finally {
       updateSetting("showTokens", original.showTokens);
       updateSetting("showCost", original.showCost);
