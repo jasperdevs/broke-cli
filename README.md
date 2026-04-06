@@ -17,7 +17,6 @@ npm install -g @jasperdevs/brokecli
 - TUI with sidebar, file tree, compact mode, home screen, theme picker, keybindings, and desktop notifications
 - Session persistence with `/resume`, `/fork`, transcript export, and per-project recall
 - Cost-aware routing, caveman compression, auto-compaction, and token/cost telemetry
-- Architect/editor split mode using a planning model plus a separate editing model
 - Auto lint/test validation after edits, with optional one-pass auto-fix
 - Tool permission blocking and extension enable/disable controls
 - JSON RPC mode for non-interactive usage
@@ -27,9 +26,9 @@ npm install -g @jasperdevs/brokecli
 - `/settings` toggle behavior and persistent preferences
 - `/connect` configure providers and local endpoints
 - `/model` choose the main model
-- `/editor` choose the editor model for architect/editor mode
 - `/resume` search and resume recent sessions in the current project
 - `/projects` search and switch among recently used projects
+- `/share` create a standalone shareable HTML transcript
 - `/permissions` allow/block model tools
 - `/extensions` enable/disable loaded extensions
 - `/theme` switch themes
@@ -40,8 +39,6 @@ npm install -g @jasperdevs/brokecli
 
 The settings surface is in `/settings`. The most important toggles are:
 
-- `architect/editor`: current model writes the plan, editor model applies edits
-- `editor model`: persistent provider/model for the edit pass
 - `auto lint`: run the configured lint command after write/edit tool calls
 - `auto test`: run the configured test command after write/edit tool calls
 - `auto-fix validation`: send one automatic repair turn if validation fails

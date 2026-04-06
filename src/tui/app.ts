@@ -192,13 +192,13 @@ const COMMANDS: CommandEntry[] = [
   { name: "settings", desc: "configure options", sortPriority: -1 },
   { name: "connect", desc: "connect provider", aliases: ["login"] },
   { name: "model", desc: "switch model", hotkey: "ctrl+l" },
-  { name: "editor", desc: "pick editor model for architect/editor" },
   { name: "theme", desc: "change color theme" },
   { name: "compact", desc: "compress context" },
   { name: "permissions", desc: "allow or block tools" },
   { name: "extensions", desc: "manage extension loading" },
   { name: "projects", desc: "switch or search recent projects" },
   { name: "resume", desc: "resume session (sessions)", aliases: ["sessions"] },
+  { name: "share", desc: "create shareable transcript html" },
   { name: "name", desc: "name this session" },
   { name: "export", desc: "export or copy transcript" },
   { name: "copy", desc: "copy last response" },
@@ -896,8 +896,8 @@ export class App {
       count += 1;
       count += 1;
       count += this.questionPrompt.options
-        ? this.getQuestionOptionEntries().length + 1
-        : this.getWrappedInputLines(this.questionPrompt.textInput, mainW).length + 1;
+        ? this.getQuestionOptionEntries().length
+        : this.getWrappedInputLines(this.questionPrompt.textInput, mainW).length;
     }
 
     if (this.filePicker) {
@@ -920,7 +920,7 @@ export class App {
       const suggestions = this.getCommandSuggestionEntries();
       if (suggestions.length > 0) count += 1;
       count += suggestions.length;
-    }
+     }
 
     count += 1; // separator below input
     count += 1; // info bar
@@ -1439,7 +1439,7 @@ export class App {
       } else if (key.name === "down") {
         this.settingsPicker.cursor = Math.min(filtered.length - 1, this.settingsPicker.cursor + 1);
         this.draw();
-      } else if (key.name === "return" || key.name === "space") {
+      } else if (key.name === "return") {
         this.toggleSettingEntry(this.settingsPicker.cursor);
       } else if (key.name === "escape" || (key.ctrl && key.name === "c")) {
         this.settingsPicker = null;
@@ -1554,6 +1554,12 @@ export class App {
         this.input.handleKey(key);
         this.draw();
       }
+      return;
+    }
+
+    if (key.name === "escape" && this.sidebarFocused) {
+      this.sidebarFocused = false;
+      this.drawNow();
       return;
     }
 
@@ -2142,12 +2148,10 @@ export class App {
           }
           bottomLines.push(entry.text);
         }
-        bottomLines.push(` ${DIM}enter select, esc skip${RESET}`);
       } else {
         for (const line of this.getWrappedInputLines(qp.textInput, mainW)) {
           bottomLines.push(`  ${line}`);
         }
-        bottomLines.push(` ${DIM}enter submit, esc skip${RESET}`);
       }
     }
 
@@ -2174,9 +2178,6 @@ export class App {
           this.registerMenuClickTarget(bottomMenuClicks, bottomLines, () => this.applyCommandSuggestion(entry.selectIndex!));
         }
         bottomLines.push(entry.text);
-      }
-      if (suggestions.length > 0) {
-        bottomLines.push(` ${DIM}(${Math.min(this.cmdSuggestionCursor + 1, this.getCommandMatches().length)}/${this.getCommandMatches().length})${RESET}`);
       }
     }
 

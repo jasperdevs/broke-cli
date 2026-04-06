@@ -1,5 +1,7 @@
 import { marked } from "marked";
 import type { Session } from "../core/session.js";
+import { homedir } from "os";
+import { join } from "path";
 
 export function formatRelativeMinutes(updatedAt: number): string {
   const ago = Math.max(0, Math.floor((Date.now() - updatedAt) / 60000));
@@ -89,4 +91,22 @@ export function buildHtmlExport(
 </main>
 </body>
 </html>`;
+}
+
+function slugifySegment(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40) || "chat";
+}
+
+export function buildShareFilePath(
+  msgs: ReturnType<Session["getMessages"]>,
+  cwd: string,
+): string {
+  const firstUser = msgs.find((msg) => msg.role === "user")?.content ?? "";
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const name = `${slugifySegment(firstUser)}-${stamp}.html`;
+  return join(homedir(), ".brokecli", "shares", slugifySegment(cwd.split(/[\\/]/).pop() ?? "project"), name);
 }

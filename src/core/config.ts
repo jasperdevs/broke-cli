@@ -28,8 +28,6 @@ export interface Settings {
   followUpMode: FollowUpMode;
   cavemanLevel: CavemanLevel;
   theme: string;
-  architectMode: boolean;
-  editorModel: string;
   autoLint: boolean;
   autoTest: boolean;
   autoFixValidation: boolean;
@@ -59,8 +57,6 @@ export const DEFAULT_SETTINGS: Settings = {
   followUpMode: "after_response",
   cavemanLevel: "off",
   theme: "brokecli-dark",
-  architectMode: false,
-  editorModel: "",
   autoLint: false,
   autoTest: false,
   autoFixValidation: false,

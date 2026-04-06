@@ -12,7 +12,6 @@ import { setBashOutputCallback } from "../src/tools/bash.js";
 import { setTodoChangeCallback } from "../src/tools/todo.js";
 import { getApiKey, getSettings, updateSetting, type Mode } from "../src/core/config.js";
 import { loadExtensions } from "../src/core/extensions.js";
-import { RESET, DIM, GREEN } from "../src/utils/ansi.js";
 import { ProviderRegistry } from "../src/ai/provider-registry.js";
 import { runRpcMode } from "../src/cli/rpc.js";
 import { bootstrapSession } from "../src/cli/session-bootstrap.js";
@@ -292,23 +291,6 @@ program.action(async (opts) => {
       app.addMessage("system", "No provider configured. Run /connect.");
       return;
     }
-    let editorModel: ModelHandle | null = null;
-    let editorModelId = "";
-    const editorSetting = getSettings().editorModel.trim();
-    if (editorSetting) {
-      const slashIdx = editorSetting.indexOf("/");
-      if (slashIdx > 0) {
-        const providerId = editorSetting.slice(0, slashIdx);
-        const modelId = editorSetting.slice(slashIdx + 1);
-        try {
-          editorModel = providerRegistry.createModel(providerId, modelId);
-          editorModelId = modelId;
-        } catch {
-          editorModel = null;
-          editorModelId = "";
-        }
-      }
-    }
     touchProject(process.cwd(), session.getId(), text);
     const turnResult = await runModelTurn({
       app,
@@ -319,8 +301,6 @@ program.action(async (opts) => {
       currentModelId,
       smallModel,
       smallModelId,
-      editorModel,
-      editorModelId,
       currentMode,
       systemPrompt,
       tools: buildTools(),

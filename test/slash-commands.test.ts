@@ -168,7 +168,7 @@ describe("slash command handling", () => {
     expect(replaced?.getMessages().map((msg) => msg.content)).toEqual(["hello"]);
   });
 
-  it("keeps duplicate theme and editor controls out of /settings", async () => {
+  it("keeps duplicate theme and picker controls out of /settings", async () => {
     const app = createAppStub();
     let capturedEntries: Array<{ key: string; label: string }> = [];
     app.openSettings = (entries: Array<{ key: string; label: string }>) => {
@@ -199,7 +199,38 @@ describe("slash command handling", () => {
     expect(result.handled).toBe(true);
     expect(capturedEntries.some((entry) => entry.key === "theme")).toBe(false);
     expect(capturedEntries.some((entry) => entry.key === "editorModel")).toBe(false);
-    expect(capturedEntries.some((entry) => entry.key === "architectMode")).toBe(true);
+    expect(capturedEntries.some((entry) => entry.key === "architectMode")).toBe(false);
+  });
+
+  it("writes a standalone html share for /share", async () => {
+    const app = createAppStub();
+    const session = new Session(`test-share-${Date.now()}`);
+    session.addMessage("user", "share this session");
+    session.addMessage("assistant", "done");
+
+    const result = await handleSlashCommand({
+      text: "/share",
+      app,
+      session,
+      activeModel: null,
+      currentModelId: "",
+      currentMode: "build",
+      systemPrompt: "sys",
+      providerRegistry: {} as any,
+      buildVisibleModelOptions: () => [],
+      refreshProviderState: async () => [],
+      isSkippedPromptAnswer: () => false,
+      isValidHttpBaseUrl: () => true,
+      getContextOptimizer: () => ({ reset() {} }) as any,
+      onSessionReplace: () => {},
+      onModelChange: () => {},
+      onSystemPromptChange: () => {},
+      hooks: { emit() {} },
+      onProjectChange: () => {},
+    });
+
+    expect(result.handled).toBe(true);
+    expect(app.messages.some((entry) => entry.content.includes("Shared to"))).toBe(true);
   });
 
   it("reloads extensions immediately when toggled with enter", async () => {

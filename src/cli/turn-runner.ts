@@ -9,10 +9,8 @@ import { compactMessages, getTotalContextTokens } from "../core/compact.js";
 import { checkBudget } from "../core/budget.js";
 import { getModelContextLimitOverride, getSettings, type Mode } from "../core/config.js";
 import { clearTodo } from "../tools/todo.js";
-import { DIM, RED, RESET } from "../utils/ansi.js";
 import type { Session } from "../core/session.js";
 import { sendResponseNotification } from "./notify.js";
-import { buildArchitectPlan } from "./architect.js";
 import { runValidationSuite } from "./auto-validate.js";
 
 const SDK_TOOL_PROVIDER_IDS = new Set([
@@ -74,8 +72,6 @@ export async function runModelTurn(options: {
   currentModelId: string;
   smallModel: ModelHandle | null;
   smallModelId: string;
-  editorModel?: ModelHandle | null;
-  editorModelId?: string;
   currentMode: Mode;
   systemPrompt: string;
   tools: Record<string, unknown>;
@@ -85,13 +81,13 @@ export async function runModelTurn(options: {
   alreadyAddedUserMessage?: boolean;
   repairDepth?: number;
 }): Promise<{ lastToolCalls: string[]; lastActivityTime: number }> {
-  const { app, session, text, images, activeModel, currentModelId, smallModel, smallModelId, editorModel = null, editorModelId = "", currentMode, systemPrompt, tools, hooks, lastToolCalls, lastActivityTime, alreadyAddedUserMessage, repairDepth = 0 } = options;
+  const { app, session, text, images, activeModel, currentModelId, smallModel, smallModelId, currentMode, systemPrompt, tools, hooks, lastToolCalls, lastActivityTime, alreadyAddedUserMessage, repairDepth = 0 } = options;
   const getContextOptimizer = (): ReturnType<Session["getContextOptimizer"]> => session.getContextOptimizer();
 
   const idleMs = Date.now() - lastActivityTime;
   if (idleMs > 5 * 60 * 1000 && session.getChatMessages().length > 4) {
     const idleMins = Math.floor(idleMs / 60000);
-    app.setStatus(`${DIM}idle ${idleMins}m — context cache likely expired, consider /compact${RESET}`);
+    app.setStatus(`idle ${idleMins}m - context cache likely expired, consider /compact`);
   }
   let nextActivityTime = Date.now();
 
@@ -147,9 +143,8 @@ export async function runModelTurn(options: {
     : "main" as const;
   const useModel = route === "small" && smallModel ? smallModel : activeModel;
   const useModelId = route === "small" && smallModel ? smallModelId : currentModelId;
-  const dualModelEnabled = getSettings().architectMode && !!editorModel && !!editorModelId;
-  const executionModel = dualModelEnabled ? editorModel! : useModel;
-  const executionModelId = dualModelEnabled ? editorModelId : useModelId;
+  const executionModel = useModel;
+  const executionModelId = useModelId;
   const nextToolCalls: string[] = [];
   const optimizedMessages = getContextOptimizer().optimizeMessages(session.getChatMessages());
   let abortController: AbortController | null = new AbortController();
@@ -163,24 +158,6 @@ export async function runModelTurn(options: {
 
   const effectiveCavemanLevel = resolveCavemanLevel(getSettings().cavemanLevel ?? "off", text);
   let turnSystemPrompt = buildSystemPrompt(process.cwd(), executionModel.provider.id, currentMode, effectiveCavemanLevel);
-  if (dualModelEnabled) {
-    const architectPlan = await buildArchitectPlan({
-      architectModel: useModel,
-      editorModel: executionModel,
-      systemPrompt: turnSystemPrompt,
-      messages: optimizedMessages,
-      userText: text,
-    });
-    if (architectPlan) {
-      app.setStatus(`${DIM}architected by ${useModel.provider.name}/${useModelId} -> editor ${executionModel.provider.name}/${executionModelId}${RESET}`);
-      turnSystemPrompt = `${turnSystemPrompt}
-
-ARCHITECT PLAN
-${architectPlan}
-
-Follow the plan where it helps, but prefer correct edits over blindly following it.`;
-    }
-  }
   let streamTokenFlushTimer: ReturnType<typeof setTimeout> | null = null;
   const scheduleStreamTokenUpdate = (): void => {
     if (streamTokenFlushTimer) return;
@@ -218,10 +195,10 @@ Follow the plan where it helps, but prefer correct edits over blindly following 
         session.addMessage("assistant", content);
       } else if (looksLikeRawToolPayload(streamedText)) {
         session.addMessage("assistant", "[raw tool payload hidden]");
-        app.addMessage("system", `${DIM}Model emitted raw tool syntax. Hidden from chat.${RESET}`);
+        app.addMessage("system", "Model emitted raw tool syntax. Hidden from chat.");
       } else {
         session.addMessage("assistant", "[empty response]");
-        app.addMessage("system", `${DIM}No response from model. Try again or switch models with /model.${RESET}`);
+        app.addMessage("system", "No response from model. Try again or switch models with /model.");
       }
       session.addUsage(usage.inputTokens, usage.outputTokens, usage.cost);
       app.setStreaming(false);
@@ -244,7 +221,7 @@ Follow the plan where it helps, but prefer correct edits over blindly following 
       if (msg.length > 300) msg = `${msg.slice(0, 297)}...`;
       session.addMessage("assistant", `[error: ${msg}]`);
       app.setStreaming(false);
-      app.addMessage("system", `${RED}${msg}${RESET}`);
+      app.addMessage("system", msg);
       abortController = null;
     },
     onAfterResponse: () => {
@@ -319,7 +296,7 @@ Follow the plan where it helps, but prefer correct edits over blindly following 
   if (validation.attempted) {
     app.addMessage("system", validation.report);
     if (validation.failed && getSettings().autoFixValidation && repairDepth < 1) {
-      app.addMessage("system", `${DIM}Validation failed — attempting one repair pass.${RESET}`);
+      app.addMessage("system", "Validation failed - attempting one repair pass.");
       return runModelTurn({
         ...options,
         text: `Fix the validation failures from the last edit. Here is the validation output:\n\n${validation.report}`,
@@ -328,8 +305,6 @@ Follow the plan where it helps, but prefer correct edits over blindly following 
         currentModelId,
         smallModel,
         smallModelId,
-        editorModel,
-        editorModelId,
         currentMode,
         systemPrompt,
         tools,

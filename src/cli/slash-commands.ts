@@ -1,5 +1,6 @@
 import { execSync } from "child_process";
-import { writeFileSync } from "fs";
+import { mkdirSync, writeFileSync } from "fs";
+import { dirname } from "path";
 import type { ModelHandle } from "../ai/providers.js";
 import type { ProviderRegistry } from "../ai/provider-registry.js";
 import { buildSystemPrompt, reloadContext } from "../core/context.js";
@@ -13,7 +14,7 @@ import { Session } from "../core/session.js";
 import { listTemplates, loadTemplate } from "../core/templates.js";
 import { undoLastCheckpoint } from "../core/git.js";
 import { listThemes, setPreviewTheme } from "../core/themes.js";
-import { buildHtmlExport, buildMarkdownExport, formatRelativeMinutes } from "./exports.js";
+import { buildHtmlExport, buildMarkdownExport, buildShareFilePath, formatRelativeMinutes } from "./exports.js";
 import { runConnectFlow } from "./connect-flow.js";
 import { TOOL_NAMES } from "../tools/registry.js";
 
@@ -203,7 +204,6 @@ export async function handleSlashCommand(options: {
           { key: "followUpMode", label: "Follow-up mode", value: followUpLabels[s.followUpMode] ?? s.followUpMode, description: "When to send queued messages while AI is working" },
           { key: "notifyOnResponse", label: "Notify on response", value: String(s.notifyOnResponse), description: "Show a desktop notification when a response completes" },
           { key: "cavemanLevel", label: "Caveman mode", value: s.cavemanLevel ?? "off", description: "off / lite / auto / ultra — save output tokens (ctrl+y)" },
-          { key: "architectMode", label: "Architect mode", value: String(s.architectMode), description: "Draft an edit plan before the /editor model applies file edits" },
           { key: "autoLint", label: "Auto lint", value: String(s.autoLint), description: `Run ${s.lintCommand || "lint"} after model edits` },
           { key: "autoTest", label: "Auto test", value: String(s.autoTest), description: `Run ${s.testCommand || "tests"} after model edits` },
           { key: "autoFixValidation", label: "Auto-fix validation", value: String(s.autoFixValidation), description: "Send one automatic repair turn when lint/test fails" },
@@ -237,25 +237,6 @@ export async function handleSlashCommand(options: {
         }
         app.updateSettings(buildEntries());
       });
-      return { handled: true };
-    }
-    case "editor": {
-      const options = buildVisibleModelOptions();
-      if (options.length === 0) {
-        app.addMessage("system", "No models available. Run /connect.");
-        return { handled: true };
-      }
-      const items = options.map((option) => ({
-        id: `${option.providerId}/${option.modelId}`,
-        label: `${option.providerName}/${option.modelId}`,
-        detail: option.active ? "pinned" : undefined,
-      }));
-      items.unshift({ id: "", label: "off", detail: "disable architect/editor split" });
-      const current = getSettings().editorModel;
-      const initialCursor = Math.max(0, items.findIndex((item) => item.id === current));
-      app.openItemPicker("Editor model", items, (value) => {
-        updateSetting("editorModel", value);
-      }, { initialCursor });
       return { handled: true };
     }
     case "permissions": {
@@ -412,6 +393,31 @@ export async function handleSlashCommand(options: {
           app.addMessage("system", `Export failed: ${(err as Error).message}`);
         }
       });
+      return { handled: true };
+    }
+    case "share": {
+      const msgs = session.getMessages();
+      if (msgs.length === 0) {
+        app.addMessage("system", "Nothing to share yet.");
+        return { handled: true };
+      }
+      const filePath = buildShareFilePath(msgs, process.cwd());
+      const content = buildHtmlExport(msgs, activeModel?.provider.name ?? "unknown", currentModelId || "unknown", process.cwd());
+      try {
+        mkdirSync(dirname(filePath), { recursive: true });
+        writeFileSync(filePath, content, "utf-8");
+        const shareUrl = `file:///${filePath.replace(/\\/g, "/")}`;
+        try {
+          if (process.platform === "win32") execSync("clip", { input: shareUrl });
+          else if (process.platform === "darwin") execSync("pbcopy", { input: shareUrl });
+          else execSync("xclip -selection clipboard", { input: shareUrl });
+          app.addMessage("system", `Shared to ${filePath} (link copied)`);
+        } catch {
+          app.addMessage("system", `Shared to ${filePath}`);
+        }
+      } catch (err) {
+        app.addMessage("system", `Share failed: ${(err as Error).message}`);
+      }
       return { handled: true };
     }
     case "sessions":
