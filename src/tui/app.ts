@@ -2084,6 +2084,14 @@ export class App {
     return svgCandidates.find((candidate) => existsSync(candidate)) ?? null;
   }
 
+  private resolveInlineMascotPath(): string | null {
+    const svgCandidates = [
+      join(process.cwd(), "logos", "brokecli-face-2x.svg"),
+      join(APP_DIR, "..", "..", "logos", "brokecli-face-2x.svg"),
+    ];
+    return svgCandidates.find((candidate) => existsSync(candidate)) ?? this.resolveMascotPath();
+  }
+
   private parseSvgColor(fill: string | undefined, opacity: string | undefined): RgbColor | null {
     if (!fill || fill === "none") return null;
     const match = fill.match(/^#([0-9a-f]{6})$/i);
@@ -2227,7 +2235,7 @@ export class App {
   }
 
   private renderMascotInline(): string[] {
-    const path = this.resolveMascotPath();
+    const path = this.resolveInlineMascotPath();
     if (!path) return [];
     const cells = this.parseMascotSvgGrid(path);
     const compact = this.resampleColorGrid(cells, 12, 6);
