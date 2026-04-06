@@ -1500,19 +1500,22 @@ export class App {
         }
       }
       const tree = this.sidebarFileTree ?? [];
-      const maxTreeLines = Math.min(tree.length, 12);
+      const maxTreeLines = Math.min(tree.length, 20);
       for (let i = 0; i < maxTreeLines; i++) {
         const f = tree[i];
         const isDir = f.endsWith("/");
+        const isChild = f.startsWith("  ");
         const display = f.length > w - 4 ? f.slice(-(w - 5)) : f;
         if (isDir) {
           lines.push(`  ${T()}${display}${RESET}`);
+        } else if (isChild) {
+          lines.push(`  ${DIM}${display}${RESET}`);
         } else {
           lines.push(`  ${DIM}${display}${RESET}`);
         }
       }
-      if (tree.length > 12) {
-        lines.push(`  ${DIM}+${tree.length - 12} more${RESET}`);
+      if (tree.length > 20) {
+        lines.push(`  ${DIM}+${tree.length - 20} more${RESET}`);
       }
     }
 
