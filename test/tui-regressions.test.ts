@@ -118,10 +118,9 @@ describe("startup home view", () => {
     app.drawImmediate();
 
     const output = rendered.map((line) => stripAnsi(line)).join("\n");
-    expect(stripAnsi(rendered[0] ?? "")).toContain("╭");
-    expect(stripAnsi(rendered[0] ?? "")).not.toContain("BrokeCLI Home");
-    expect(stripAnsi(rendered[0] ?? "")).toContain("╭");
-    expect(stripAnsi(rendered[rendered.findIndex((line) => stripAnsi(line).includes("BrokeCLI Home")) + 16] ?? "")).not.toContain("┌");
+    const firstCardLine = rendered.find((line) => stripAnsi(line).includes("╭")) ?? "";
+    expect(stripAnsi(firstCardLine)).toContain("╭");
+    expect(stripAnsi(firstCardLine)).not.toContain("BrokeCLI Home");
     expect(output).toContain("Welcome to BrokeCLI");
     expect(output).toContain("openai/gpt-5.4-mini");
     expect(output).toContain("~\\Downloads\\broke-cli");
@@ -207,16 +206,18 @@ describe("startup home view", () => {
 });
 
 describe("input editing", () => {
-  it("persists plan/build mode when Shift+Tab toggles it", () => {
+  it("does not persist plan/build mode when Shift+Tab toggles it", () => {
     const originalMode = getSettings().mode;
     const app = new App() as any;
 
     try {
       updateSetting("mode", "build");
       app.handleKey({ name: "tab", char: "", ctrl: false, meta: false, shift: true });
-      expect(getSettings().mode).toBe("plan");
+      expect(app.mode).toBe("plan");
+      expect(getSettings().mode).toBe("build");
 
       app.handleKey({ name: "tab", char: "", ctrl: false, meta: false, shift: true });
+      expect(app.mode).toBe("build");
       expect(getSettings().mode).toBe("build");
     } finally {
       updateSetting("mode", originalMode);

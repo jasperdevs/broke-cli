@@ -820,7 +820,6 @@ export class App {
 
   setMode(mode: Mode): void {
     this.mode = mode;
-    updateSetting("mode", mode);
     this.draw();
   }
 
@@ -1601,7 +1600,6 @@ export class App {
     // Shift+Tab — toggle between build and plan mode
     if (key.shift && key.name === "tab") {
       this.mode = this.mode === "build" ? "plan" : "build";
-      updateSetting("mode", this.mode);
       if (this.onModeChange) this.onModeChange(this.mode);
       this.draw();
       return;
@@ -2248,7 +2246,12 @@ export class App {
     const path = this.resolveMascotPath();
     if (!path) return [];
     const cells = this.parseMascotSvgGrid(path);
-    return this.renderAnsiColorGrid(cells);
+    const srcHeight = cells.length;
+    const srcWidth = cells[0]?.length ?? 0;
+    if (srcHeight === 0 || srcWidth === 0) return [];
+    const targetWidth = Math.min(srcWidth, 16);
+    const targetHeight = Math.max(6, Math.round((targetWidth / srcWidth) * srcHeight));
+    return this.renderAnsiColorGrid(this.resampleColorGrid(cells, targetWidth, targetHeight));
   }
 
   private wrapHomeDetail(label: string, value: string, width: number): string[] {
@@ -2256,7 +2259,7 @@ export class App {
     const prefixPlain = `${label}  `;
     const available = Math.max(8, width - prefixPlain.length);
     const wrapped = wordWrap(value, available);
-    return wrapped.map((part, index) => index === 0 ? `${prefix}${MUTED()}${part}${RESET}` : `${" ".repeat(prefixPlain.length)}${MUTED()}${part}${RESET}`);
+    return wrapped.map((part, index) => index === 0 ? `${prefix}${TXT()}${part}${RESET}` : `${" ".repeat(prefixPlain.length)}${TXT()}${part}${RESET}`);
   }
 
   private wrapHomeText(prefix: string, prefixPlain: string, value: string, width: number, color = MUTED()): string[] {
@@ -2280,11 +2283,12 @@ export class App {
     const innerWidth = Math.max(1, width - 2);
     const titleText = title ? ` ${title} ` : "";
     const titleFill = Math.max(0, innerWidth - stripAnsi(titleText).length);
-    const lines = [`${BORDER()}${BOX.tl}${titleText}${BOX.h.repeat(titleFill)}${BOX.tr}${RESET}`];
+    const frameColor = MUTED();
+    const lines = [`${frameColor}${BOX.tl}${titleText}${BOX.h.repeat(titleFill)}${BOX.tr}${RESET}`];
     for (const row of body) {
-      lines.push(`${BORDER()}${BOX.v}${RESET}${this.padLine(row, innerWidth)}${BORDER()}${BOX.v}${RESET}`);
+      lines.push(`${frameColor}${BOX.v}${RESET}${this.padLine(row, innerWidth)}${frameColor}${BOX.v}${RESET}`);
     }
-    lines.push(`${BORDER()}${BOX.bl}${BOX.h.repeat(innerWidth)}${BOX.br}${RESET}`);
+    lines.push(`${frameColor}${BOX.bl}${BOX.h.repeat(innerWidth)}${BOX.br}${RESET}`);
     return lines;
   }
 
@@ -2318,7 +2322,7 @@ export class App {
     const locationText = titleWithVersion.length <= rightWidth ? locationBase : `${locationBase}  ${versionText}`;
     const heroText = [
       `${T()}${BOLD}${titleText}${RESET}`,
-      `${MUTED()}${locationText}${RESET}`,
+      `${TXT()}${locationText}${RESET}`,
       "",
       ...this.wrapHomeDetail("Model", modelLabel, rightWidth),
       ...this.wrapHomeDetail("Tip", this.homeTip, rightWidth),
@@ -2331,16 +2335,18 @@ export class App {
     });
 
     const paddedBody = [
-      "",
+      " ",
       ...heroLines,
-      "",
     ];
     const body = paddedBody.map((line) => `  ${line}`);
 
-    const boxBodyHeight = Math.max(8, topHeight - 2);
+    const boxBodyHeight = Math.max(7, topHeight - 4);
     const clippedBody = body.slice(0, boxBodyHeight);
     const box = this.renderHomeBox(boxWidth, "", clippedBody);
-    const lines = box.slice(0, topHeight);
+    const lines: string[] = [];
+    const topPad = Math.max(0, Math.floor((topHeight - box.length) / 2));
+    for (let i = 0; i < topPad; i++) lines.push("");
+    lines.push(...box.slice(0, Math.max(0, topHeight - lines.length)));
     while (lines.length < topHeight) lines.push("");
     return lines;
   }
@@ -2726,22 +2732,21 @@ export class App {
     const tr = rgbMatch ? parseInt(rgbMatch[1]) : 58;
     const tg = rgbMatch ? parseInt(rgbMatch[2]) : 199;
     const tb = rgbMatch ? parseInt(rgbMatch[3]) : 58;
-    // Stronger contrast so the shimmer is visible in terminal themes.
-    const dr = Math.round(tr * 0.18);
-    const dg = Math.round(tg * 0.18);
-    const db = Math.round(tb * 0.18);
+    // Softer shimmer so it reads as movement instead of flicker.
+    const dr = Math.round(tr * 0.55);
+    const dg = Math.round(tg * 0.55);
+    const db = Math.round(tb * 0.55);
 
-    const period = text.length + 6;
-    const pos = (frame * 1.15) % period;
+    const period = text.length + 8;
+    const pos = (frame * 0.48) % period;
     let result = "";
     for (let i = 0; i < text.length; i++) {
       const dist = Math.abs(i - pos);
-      const t = Math.max(0, 1 - dist / 5);
+      const t = Math.max(0, 1 - dist / 6);
       const r = Math.round(dr + t * (tr - dr));
       const g = Math.round(dg + t * (tg - dg));
       const b = Math.round(db + t * (tb - db));
-      const weight = t > 0.75 ? "\x1b[1m" : "";
-      result += `${weight}\x1b[38;2;${r};${g};${b}m${text[i]}`;
+      result += `\x1b[38;2;${r};${g};${b}m${text[i]}`;
     }
     return result + RESET;
   }

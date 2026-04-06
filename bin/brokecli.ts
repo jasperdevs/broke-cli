@@ -421,7 +421,7 @@ program.action(async (opts) => {
 
   const app = new App();
   app.setVersion(program.version() ?? "0.0.1");
-  let currentMode: Mode = getSettings().mode;
+  let currentMode: Mode = "build";
   let systemPrompt = buildSystemPrompt(process.cwd(), undefined, currentMode, getSettings().cavemanLevel ?? "off");
   let lastActivityTime = Date.now(); // Track for cache expiry warning
   let abortController: AbortController | null = null;
