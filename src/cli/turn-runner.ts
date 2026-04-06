@@ -145,7 +145,10 @@ export async function runModelTurn(options: {
   let streamedReasoning = "";
   getContextOptimizer().nextTurn();
 
-  const route = smallModel && getSettings().autoRoute
+  const canAutoRoute = !!smallModel
+    && getSettings().autoRoute
+    && !(activeModel.provider.id === "codex" && activeModel.runtime === "native-cli");
+  const route = canAutoRoute
     ? routeMessage(text, session.getChatMessages().length, lastToolCalls)
     : "main" as const;
   const useModel = route === "small" && smallModel ? smallModel : activeModel;
@@ -231,7 +234,9 @@ export async function runModelTurn(options: {
       else if (msg.includes("invalid_api_key") || msg.includes("Incorrect API key") || msg.includes("401")) msg = `Invalid API key for ${activeModel.provider.name}. Check your key and try again.`;
       else if (msg.includes("Could not resolve") || msg.includes("ECONNREFUSED") || msg.includes("fetch failed")) msg = `Can't reach ${activeModel.provider.name}. Check your connection or if the server is running.`;
       else if (msg.includes("429") || msg.includes("rate_limit") || msg.includes("hit your limit")) msg = "Rate limited. Wait a moment and try again.";
-      else if (msg.includes("model_not_found") || msg.includes("does not exist") || msg.includes("not found")) msg = `Model "${currentModelId}" not available. Try /model to pick a different one.`;
+      else if (msg.includes("is not supported when using Codex with a ChatGPT account")) {
+        msg = `Codex ChatGPT login does not support model "${executionModelId}". Use a supported GPT-5 model, or turn off Auto-route for Codex native login.`;
+      } else if (msg.includes("model_not_found") || msg.includes("does not exist") || msg.includes("not found")) msg = `Model "${executionModelId}" not available. Try /model to pick a different one.`;
       else if (msg.includes("overloaded") || msg.includes("503") || msg.includes("529")) msg = `${activeModel.provider.name} is overloaded right now. Try again in a moment.`;
       if (msg.length > 300) msg = `${msg.slice(0, 297)}...`;
       session.addMessage("assistant", `[error: ${msg}]`);

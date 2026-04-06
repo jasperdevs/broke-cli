@@ -3,6 +3,7 @@ import { execSync } from "child_process";
 import { App } from "../src/tui/app.js";
 import type { DetectedProvider } from "../src/ai/detect.js";
 import type { ModelHandle } from "../src/ai/providers.js";
+import { getSmallModelId } from "../src/ai/router.js";
 import { buildSystemPrompt, reloadContext } from "../src/core/context.js";
 import { Session } from "../src/core/session.js";
 import { touchProject } from "../src/core/projects.js";
@@ -119,6 +120,7 @@ program.action(async (opts) => {
       try {
         activeModel = providerRegistry.createModel(provId, modId);
         currentModelId = modId;
+        rebuildSmallModelState();
         systemPrompt = buildSystemPrompt(process.cwd(), provId, currentMode, getSettings().cavemanLevel ?? "off");
         app.setModel(activeModel.provider.name, currentModelId);
         session.setProviderModel(activeModel.provider.name, currentModelId);
@@ -143,6 +145,22 @@ program.action(async (opts) => {
     return providers;
   }
 
+  function rebuildSmallModelState(): void {
+    smallModel = null;
+    smallModelId = "";
+    if (!activeModel) return;
+    if (activeModel.provider.id === "codex" && activeModel.runtime === "native-cli") return;
+    const cheapId = getSmallModelId(activeModel.provider.id);
+    if (!cheapId || cheapId === currentModelId) return;
+    try {
+      smallModel = providerRegistry.createModel(activeModel.provider.id, cheapId);
+      smallModelId = cheapId;
+    } catch {
+      smallModel = null;
+      smallModelId = "";
+    }
+  }
+
   function buildVisibleModelOptions(): Array<{ providerId: string; providerName: string; modelId: string; active: boolean }> {
     return providerRegistry.buildVisibleModelOptions(activeModel, currentModelId, getSettings().scopedModels);
   }
@@ -161,6 +179,7 @@ program.action(async (opts) => {
     currentModelId = boot.currentModelId;
     smallModel = boot.smallModel;
     smallModelId = boot.smallModelId;
+    rebuildSmallModelState();
     systemPrompt = boot.systemPrompt;
   })();
 
@@ -228,6 +247,7 @@ program.action(async (opts) => {
         onModelChange: (nextModel, nextModelId) => {
           activeModel = nextModel;
           currentModelId = nextModelId;
+          rebuildSmallModelState();
           systemPrompt = buildSystemPrompt(process.cwd(), nextModel.provider.id, currentMode, getSettings().cavemanLevel ?? "off");
         },
         onSystemPromptChange: (nextSystemPrompt) => {

@@ -85,8 +85,8 @@ const PROVIDERS: Record<string, ProviderInfo> = {
   codex: {
     id: "codex",
     name: "Codex",
-    defaultModel: "gpt-4o-mini",
-    models: ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "gpt-4.1", "o3-mini"],
+    defaultModel: "gpt-5-mini",
+    models: ["gpt-5-mini", "gpt-5.4-mini", "gpt-5.4", "o4-mini", "o3"],
   },
   ollama: {
     id: "ollama",

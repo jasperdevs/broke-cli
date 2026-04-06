@@ -18,6 +18,12 @@ export interface SidebarFooterColors {
   error: string;
 }
 
+function formatContextPercent(contextUsed: number): string {
+  if (contextUsed <= 0) return "0% of limit";
+  if (contextUsed < 1) return "<1% of limit";
+  return `${Math.round(contextUsed)}% of limit`;
+}
+
 const fileTreeCache = new Map<string, { at: number; items: SidebarTreeItem[] }>();
 const FILE_TREE_CACHE_TTL_MS = 3000;
 
@@ -122,7 +128,7 @@ export function buildSidebarFooterLines(options: {
     const contextColor = contextUsed > 90 ? colors.error : contextUsed > 70 ? colors.warning : colors.muted;
     lines.push(`${colors.text}Prompt${RESET}`);
     lines.push(`  ${contextColor}${contextUsage}${RESET}`);
-    lines.push(`  ${contextColor}${contextUsed}% of limit${RESET}`);
+    lines.push(`  ${contextColor}${formatContextPercent(contextUsed)}${RESET}`);
   }
 
   return lines;

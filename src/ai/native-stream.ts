@@ -1,5 +1,4 @@
 import { spawn, type SpawnOptionsWithoutStdio } from "child_process";
-import { basename } from "path";
 import { calculateCost, type TokenUsage } from "./cost.js";
 import { estimateConversationTokens, estimateTextTokens } from "./tokens.js";
 import { resolveNativeCommand } from "./native-cli.js";
@@ -161,17 +160,24 @@ function needsWindowsShell(command: string): boolean {
   return process.platform === "win32" && /\.(cmd|bat)$/i.test(command);
 }
 
+function quoteWindowsCmdArg(arg: string): string {
+  if (arg.length === 0) return '""';
+  if (!/[\s"&<>|^()%!]/.test(arg)) return arg;
+  return `"${arg.replace(/"/g, '""')}"`;
+}
+
 export function resolveNativeSpawnCommand(
   command: string,
   args: string[],
-): { command: string; args: string[]; shell?: boolean } {
+): { command: string; args: string[] } {
   if (!needsWindowsShell(command)) {
     return { command, args };
   }
+  const comspec = process.env.ComSpec || "cmd.exe";
+  const commandLine = [`"${command.replace(/"/g, '""')}"`, ...args.map(quoteWindowsCmdArg)].join(" ");
   return {
-    command: basename(command),
-    args,
-    shell: true,
+    command: comspec,
+    args: ["/d", "/s", "/c", commandLine],
   };
 }
 
@@ -183,8 +189,27 @@ function spawnNativeProcess(
   const resolved = resolveNativeSpawnCommand(command, args);
   return spawn(resolved.command, resolved.args, {
     ...options,
-    shell: resolved.shell ?? options.shell,
   });
+}
+
+function extractNativeErrorMessage(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  const lines = trimmed.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  for (const line of lines) {
+    try {
+      const parsed = JSON.parse(line) as Record<string, unknown>;
+      const message = typeof parsed.message === "string"
+        ? parsed.message
+        : typeof (parsed.error as Record<string, unknown> | undefined)?.message === "string"
+          ? ((parsed.error as Record<string, unknown>).message as string)
+          : "";
+      if (message) return message;
+    } catch {
+      continue;
+    }
+  }
+  return trimmed;
 }
 
 export async function startNativeStream(
@@ -354,7 +379,7 @@ export async function startNativeStream(
         return;
       }
 
-      const details = stderrBuffer.trim()
+      const details = extractNativeErrorMessage(stderrBuffer)
         || (lineHadParseError ? "Native CLI emitted non-JSON output." : "")
         || `${commandName} exited with code ${code ?? "unknown"}`;
       fail(details);

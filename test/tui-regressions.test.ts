@@ -110,6 +110,16 @@ describe("sidebar token summary", () => {
 
     updateSetting("cavemanLevel", "off");
   });
+
+  it("shows less-than-one-percent prompt usage instead of rounding down to zero", () => {
+    const app = new App() as any;
+    app.setContextUsage(822, 400_000);
+    app.updateUsage(0.0016, 150, 60);
+
+    const footer = app.renderSidebarFooter().map((line: string) => stripAnsi(line)).join("\n");
+    expect(footer).toContain("822/400k");
+    expect(footer).toContain("<1% of limit");
+  });
 });
 
 describe("startup home view", () => {

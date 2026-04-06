@@ -15,6 +15,11 @@ export interface TodoRenderItem {
   status: "pending" | "in_progress" | "done";
 }
 
+function ensureOverlayGap(lines: string[]): void {
+  if (lines.length === 0) return;
+  if (lines[lines.length - 1] !== "") lines.push("");
+}
+
 function wrapVisibleText(text: string, width: number): string[] {
   if (width <= 0) return [text];
   const parts = text.split(/([ \t]+|[\\/._:-]+)/);
@@ -216,6 +221,7 @@ export function renderMessageOverlays(options: {
   const lines = [...staticLines];
 
   if (thinkingBuffer || (isStreaming && thinkingRequested)) {
+    ensureOverlayGap(lines);
     const thinkLines = thinkingBuffer.split("\n").slice(-8);
     lines.push(`  ${colors.accent}${isStreaming ? "thinking" : "thought"}${colors.reset}`);
     if (thinkLines.length > 0 && thinkLines.some((line) => line.length > 0)) {
@@ -227,6 +233,7 @@ export function renderMessageOverlays(options: {
   }
 
   if (todoItems.length > 0) {
+    ensureOverlayGap(lines);
     const done = todoItems.filter((item) => item.status === "done").length;
     const total = todoItems.length;
     const spinChars = ["\u25DC", "\u25DD", "\u25DE", "\u25DF"];
@@ -258,6 +265,7 @@ export function renderMessageOverlays(options: {
   }
 
   if (isCompacting) {
+    ensureOverlayGap(lines);
     const elapsed = Date.now() - compactStartTime;
     const secs = Math.floor(elapsed / 1000);
     const mins = Math.floor(secs / 60);
@@ -268,6 +276,7 @@ export function renderMessageOverlays(options: {
   }
 
   if (isStreaming) {
+    ensureOverlayGap(lines);
     const elapsed = Date.now() - streamStartTime;
     const secs = Math.floor(elapsed / 1000);
     const mins = Math.floor(secs / 60);

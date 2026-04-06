@@ -374,7 +374,7 @@ export class App {
   setContextUsage(tokens: number, limit: number): void {
     this.contextTokenCount = tokens;
     this.contextLimitTokens = limit;
-    this.contextUsed = limit > 0 ? Math.min(100, Math.round((tokens / limit) * 100)) : 0;
+    this.contextUsed = limit > 0 ? Math.min(100, (tokens / limit) * 100) : 0;
     this.animContext.set(this.contextUsed);
     if (!this.isStreaming) this.animContext.sync();
     this.draw();

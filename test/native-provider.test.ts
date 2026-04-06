@@ -111,11 +111,17 @@ describe("native provider runtime selection", () => {
         "C:\\Users\\bunny\\AppData\\Roaming\\npm\\codex.cmd",
         ["exec", "--json", "-m", "gpt-5.4-mini", "-C", "C:\\Users\\bunny\\Downloads\\broke-cli"],
       );
-      expect(resolved.command).toBe("codex.cmd");
-      expect(resolved.args).toEqual(["exec", "--json", "-m", "gpt-5.4-mini", "-C", "C:\\Users\\bunny\\Downloads\\broke-cli"]);
-      expect(resolved.shell).toBe(true);
+      expect(resolved.command.toLowerCase()).toContain("cmd.exe");
+      expect(resolved.args.slice(0, 3)).toEqual(["/d", "/s", "/c"]);
+      expect(resolved.args[3]).toContain('"C:\\Users\\bunny\\AppData\\Roaming\\npm\\codex.cmd"');
+      expect(resolved.args[3]).toContain("-m gpt-5.4-mini");
     } finally {
       if (platform) Object.defineProperty(process, "platform", platform);
     }
+  });
+
+  it("prefers a GPT-5 default for the Codex provider", () => {
+    const model = createModel("codex");
+    expect(model.modelId).toBe("gpt-5-mini");
   });
 });
