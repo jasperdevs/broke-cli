@@ -2246,12 +2246,7 @@ export class App {
     const path = this.resolveMascotPath();
     if (!path) return [];
     const cells = this.parseMascotSvgGrid(path);
-    const srcHeight = cells.length;
-    const srcWidth = cells[0]?.length ?? 0;
-    if (srcHeight === 0 || srcWidth === 0) return [];
-    const targetWidth = Math.min(srcWidth, 16);
-    const targetHeight = Math.max(6, Math.round((targetWidth / srcWidth) * srcHeight));
-    return this.renderAnsiColorGrid(this.resampleColorGrid(cells, targetWidth, targetHeight));
+    return this.renderAnsiColorGrid(cells);
   }
 
   private wrapHomeDetail(label: string, value: string, width: number): string[] {
@@ -2340,13 +2335,10 @@ export class App {
     ];
     const body = paddedBody.map((line) => `  ${line}`);
 
-    const boxBodyHeight = Math.max(7, topHeight - 4);
+    const boxBodyHeight = Math.max(7, topHeight - 2);
     const clippedBody = body.slice(0, boxBodyHeight);
     const box = this.renderHomeBox(boxWidth, "", clippedBody);
-    const lines: string[] = [];
-    const topPad = Math.max(0, Math.floor((topHeight - box.length) / 2));
-    for (let i = 0; i < topPad; i++) lines.push("");
-    lines.push(...box.slice(0, Math.max(0, topHeight - lines.length)));
+    const lines: string[] = [...box.slice(0, topHeight)];
     while (lines.length < topHeight) lines.push("");
     return lines;
   }
