@@ -2,6 +2,7 @@
 process.env.FORCE_COLOR = "3";
 
 import { Command } from "commander";
+import { writeFileSync } from "fs";
 import { App } from "../src/tui/app.js";
 import { detectProviders, pickDefault } from "../src/ai/detect.js";
 import { createModel, listProviders, refreshLocalModels } from "../src/ai/providers.js";
@@ -305,17 +306,32 @@ program.action(async (opts) => {
           return;
         }
         case "sessions": {
-          const recent = Session.listRecent(5);
+          const recent = Session.listRecent(20);
           if (recent.length === 0) {
             app.addMessage("system", "No saved sessions.");
             return;
           }
-          const lines = recent.map((s) => {
+          const items = recent.map((s) => {
             const ago = Math.floor((Date.now() - s.updatedAt) / 60000);
             const time = ago < 60 ? `${ago}m ago` : `${Math.floor(ago / 60)}h ago`;
-            return `  ${s.model}  ${s.messageCount} msgs  $${s.cost.toFixed(4)}  ${time}`;
+            const cost = `$${s.cost.toFixed(4)}`;
+            return {
+              id: s.id,
+              label: s.model || "unknown",
+              detail: `${s.messageCount} msgs ${cost} ${time}`,
+            };
           });
-          app.addMessage("system", `Recent sessions:\n${lines.join("\n")}\n\nUse brokecli -c to resume last session.`);
+          app.openItemPicker("Sessions", items, (id) => {
+            const loaded = Session.load(id);
+            if (loaded) {
+              session = loaded;
+              if (activeModel) session.setProviderModel(activeModel.provider.name, currentModelId);
+              app.clearMessages();
+              app.addMessage("system", `Resumed session`);
+            } else {
+              app.addMessage("system", "Failed to load session");
+            }
+          });
           return;
         }
         case "new":
@@ -354,20 +370,40 @@ program.action(async (opts) => {
           return;
         }
         case "export": {
-          const filePath = text.slice(8).trim() || "brokecli-export.md";
-          const msgs = session.getMessages();
-          const md = msgs.map((m) => {
-            if (m.role === "user") return `## User\n\n${m.content}\n`;
-            if (m.role === "assistant") return `## Assistant\n\n${m.content}\n`;
-            return `> ${m.content}\n`;
-          }).join("\n");
-          try {
-            const { writeFileSync } = await import("fs");
-            writeFileSync(filePath, md, "utf-8");
-            app.addMessage("system", `Exported to ${filePath}`);
-          } catch (err) {
-            app.addMessage("system", `Export failed: ${(err as Error).message}`);
-          }
+          const items = [
+            { id: "markdown", label: "Markdown", detail: ".md file format" },
+            { id: "html", label: "HTML", detail: "standalone HTML file" },
+          ];
+          app.openItemPicker("Export format", items, (id) => {
+            const defaultPath = `brokecli-export.${id === "html" ? "html" : "md"}`;
+            const filePath = text.slice(8).trim() || defaultPath;
+            const msgs = session.getMessages();
+            let content = "";
+            const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+            if (id === "html") {
+              content = `<!DOCTYPE html>
+<html>
+<head><title>BrokeCLI Export</title>
+<style>
+body { font-family: system-ui; max-width: 800px; margin: 0 auto; padding: 20px; background: #000; color: #fff; }
+.user { background: #1a1a1a; padding: 10px; border-radius: 8px; margin: 10px 0; }
+.assistant { background: #0a0a0a; color: #10b981; padding: 10px; border-radius: 8px; margin: 10px 0; white-space: pre-wrap; }
+.system { color: #666; font-style: italic; padding: 10px; }
+</style></head>
+<body>
+${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.content) : m.content}</div>`).join("\n")}
+</body>
+</html>`;
+            } else {
+              content = msgs.map((m) => `## ${m.role}\n\n${m.content}\n`).join("\n");
+            }
+            try {
+              writeFileSync(filePath, content, "utf-8");
+              app.addMessage("system", `Exported to ${filePath}`);
+            } catch (err) {
+              app.addMessage("system", `Export failed: ${(err as Error).message}`);
+            }
+          });
           return;
         }
         case "resume": {

@@ -92,6 +92,8 @@ export class App {
   private projectFiles: string[] | null = null;
   private fileContexts: Map<string, string> = new Map();
   private cmdSuggestionCursor = 0;
+  private itemPicker: { title: string; items: PickerItem[]; cursor: number } | null = null;
+  private onItemSelect: ((id: string) => void) | null = null;
   private toolOutputCollapsed = false;
   private gitBranch = "";
   private gitDirty = false;
@@ -174,6 +176,12 @@ export class App {
       this.settingsPicker.entries = entries;
       this.draw();
     }
+  }
+
+  openItemPicker(title: string, items: PickerItem[], onSelect: (id: string) => void): void {
+    this.itemPicker = { title, items, cursor: 0 };
+    this.onItemSelect = onSelect;
+    this.draw();
   }
 
   clearMessages(): void {
@@ -268,6 +276,28 @@ export class App {
         this.draw();
       } else if (key.name === "escape" || (key.ctrl && key.name === "c")) {
         this.settingsPicker = null;
+        this.draw();
+      }
+      return;
+    }
+
+    // Item picker (sessions, themes, etc.)
+    if (this.itemPicker) {
+      if (key.name === "up") {
+        this.itemPicker.cursor = Math.max(0, this.itemPicker.cursor - 1);
+        this.draw();
+      } else if (key.name === "down") {
+        this.itemPicker.cursor = Math.min(this.itemPicker.items.length - 1, this.itemPicker.cursor + 1);
+        this.draw();
+      } else if (key.name === "return") {
+        const item = this.itemPicker.items[this.itemPicker.cursor];
+        if (item && this.onItemSelect) {
+          this.onItemSelect(item.id);
+        }
+        this.itemPicker = null;
+        this.draw();
+      } else if (key.name === "escape" || (key.ctrl && key.name === "c")) {
+        this.itemPicker = null;
         this.draw();
       }
       return;
@@ -628,6 +658,8 @@ export class App {
     // Suggestions/picker appear BELOW input (like Pi)
     if (this.filePicker) {
       this.appendFilePicker(bottomLines, height);
+    } else if (this.itemPicker) {
+      this.appendItemPicker(bottomLines, height);
     } else if (this.settingsPicker) {
       this.appendSettingsPicker(bottomLines, height);
     } else if (this.modelPicker) {
@@ -755,6 +787,27 @@ export class App {
       lines.push(` ${DIM}${selected.description}${RESET}`);
       lines.push(` ${DIM}Enter/Space to change${RESET}`);
     }
+  }
+
+  private appendItemPicker(lines: string[], _maxTotal: number): void {
+    const picker = this.itemPicker!;
+    lines.push(` ${T()}${BOLD}${picker.title}${RESET}`);
+    lines.push("");
+
+    const maxVisible = 10;
+    let start = Math.max(0, picker.cursor - Math.floor(maxVisible / 2));
+    if (start + maxVisible > picker.items.length) start = Math.max(0, picker.items.length - maxVisible);
+    const end = Math.min(start + maxVisible, picker.items.length);
+
+    for (let i = start; i < end; i++) {
+      const item = picker.items[i];
+      const isCursor = i === picker.cursor;
+      const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
+      const labelCol = isCursor ? `${WHITE}${BOLD}` : T();
+      lines.push(` ${arrow}${labelCol}${item.label}${RESET}${item.detail ? ` ${DIM}${item.detail}${RESET}` : ""}`);
+    }
+    lines.push("");
+    lines.push(` ${DIM}(${picker.cursor + 1}/${picker.items.length}) Enter to select${RESET}`);
   }
 
   private getCommandMatches(): typeof COMMANDS {
