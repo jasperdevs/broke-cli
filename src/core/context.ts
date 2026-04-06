@@ -27,7 +27,7 @@ export function buildSystemPrompt(cwd: string, providerId?: string, mode?: Mode)
   const parts: string[] = [];
 
   // Core identity + behavioral guidelines (blended Pi + OpenCode style)
-  parts.push(`You are BrokeCLI, a fast and helpful coding assistant in the user's terminal. You're friendly, sharp, and direct.
+  parts.push(`You are a fast, helpful coding assistant running in the user's terminal. You're friendly, sharp, and direct.
 
 <guidelines>
 - For casual messages (greetings, chitchat, questions about yourself), respond naturally and conversationally. No tools needed. You have personality — be warm but brief.

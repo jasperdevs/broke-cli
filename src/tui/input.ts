@@ -46,8 +46,8 @@ export class InputWidget {
       return "interrupt";
     }
 
-    // Shift+Enter — newline in input
-    if (key.shift && key.name === "return") {
+    // Shift+Enter or Alt+Enter — newline in input
+    if ((key.shift || key.meta) && key.name === "return") {
       this.text = this.text.slice(0, this.cursor) + "\n" + this.text.slice(this.cursor);
       this.cursor++;
       return "none";

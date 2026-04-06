@@ -24,9 +24,11 @@ export const SYNC_END = `${CSI}?2026l`;
 export const PASTE_MODE_ON = `${CSI}?2004h`;
 export const PASTE_MODE_OFF = `${CSI}?2004l`;
 
-// Mouse tracking (SGR extended mode — scroll wheel support)
-export const MOUSE_ON = `${CSI}?1000h${CSI}?1006h`;
-export const MOUSE_OFF = `${CSI}?1000l${CSI}?1006l`;
+// Mouse: SGR extended (1006) + button event tracking (1002) for scroll wheel.
+// Text selection: hold Shift while dragging to select (standard terminal behavior).
+// Mode 1002 only reports button press/release, not movement — better for selection.
+export const MOUSE_ON = `${CSI}?1002h${CSI}?1006h`;
+export const MOUSE_OFF = `${CSI}?1002l${CSI}?1006l`;
 
 // Move cursor to row,col (1-based)
 export function moveTo(row: number, col: number): string {
