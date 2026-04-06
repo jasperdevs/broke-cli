@@ -2189,7 +2189,7 @@ export class App {
     const path = this.resolveMascotPath();
     if (!path) return "";
     const cells = this.parseMascotSvgGrid(path);
-    const scaled = this.scaleColorGrid(cells, 3, 2);
+    const scaled = this.scaleColorGrid(cells, 2, 2);
     return this.renderAnsiColorGrid(scaled)[0] ?? "";
   }
 
@@ -2226,8 +2226,11 @@ export class App {
       ? "Pick one with /model"
       : `${this.providerName}/${this.modelName}`;
     const versionText = `v${this.appVersion}`;
-    const headerText = mainW < 46 ? "Welcome" : "Welcome to BrokeCLI";
-    const locationText = `${this.formatShortCwd(Math.max(12, mainW - 14))}  ${versionText}`;
+    const headerText = mainW < 60 ? "Welcome" : "Welcome to BrokeCLI";
+    const showVersionInline = mainW >= 52;
+    const locationText = showVersionInline
+      ? `${this.formatShortCwd(Math.max(10, mainW - 14))}  ${versionText}`
+      : this.formatShortCwd(Math.max(10, mainW - 4));
 
     const body = [
       `${mascotInline ? `${mascotInline} ` : ""}${T()}${BOLD}${headerText}${RESET}`,

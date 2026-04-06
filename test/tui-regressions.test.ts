@@ -147,6 +147,30 @@ describe("startup home view", () => {
     app.drawImmediate();
     expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("Files");
   });
+
+  it("uses a compact home header on medium widths", () => {
+    const app = new App() as any;
+    let rendered: string[] = [];
+
+    app.screen = {
+      height: 18,
+      width: 48,
+      hasSidebar: false,
+      mainWidth: 48,
+      sidebarWidth: 0,
+      render: (lines: string[]) => { rendered = lines; },
+      setCursor: () => {},
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+
+    app.drawImmediate();
+
+    const output = rendered.map((line) => stripAnsi(line)).join("\n");
+    expect(output).toContain("Welcome");
+    expect(output).not.toContain("Welcome to BrokeCLI");
+    expect(output).not.toContain(`v${app.appVersion}`);
+  });
 });
 
 describe("input editing", () => {
