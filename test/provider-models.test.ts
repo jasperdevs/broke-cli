@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { filterModelIdsForDisplay, resolveVisibleProviderModelId, supportsProviderModel, syncCloudProviderModelsFromCatalog } from "../src/ai/providers.js";
 import { ProviderRegistry } from "../src/ai/provider-registry.js";
+import * as config from "../src/core/config.js";
 
 describe("provider model filtering", () => {
   it("removes image and embedding models while preserving useful coding/chat models", () => {
@@ -53,7 +54,8 @@ describe("provider model filtering", () => {
     expect(visible).toContain("mixtral");
   });
 
-  it("keeps local providers visible in the model picker even if only cloud providers were detected", () => {
+  it("does not keep undetected local providers visible in the model picker", () => {
+    const spy = vi.spyOn(config, "getBaseUrl").mockReturnValue(undefined);
     const registry = new ProviderRegistry() as any;
     registry.providers = [
       { id: "anthropic", name: "Anthropic", available: true, reason: "API key" },
@@ -63,9 +65,26 @@ describe("provider model filtering", () => {
     const options = registry.buildVisibleModelOptions(null, "", []);
     const providerIds = new Set(options.map((option: any) => option.providerId));
 
-    expect(providerIds.has("ollama")).toBe(true);
-    expect(providerIds.has("lmstudio")).toBe(true);
+    expect(providerIds.has("ollama")).toBe(false);
+    expect(providerIds.has("lmstudio")).toBe(false);
+    expect(providerIds.has("llamacpp")).toBe(false);
+    spy.mockRestore();
+  });
+
+  it("keeps an explicitly configured local provider visible in the model picker", () => {
+    const spy = vi.spyOn(config, "getBaseUrl").mockImplementation((providerId: string) => (
+      providerId === "llamacpp" ? "http://127.0.0.1:8080/v1" : undefined
+    ));
+    const registry = new ProviderRegistry() as any;
+    registry.providers = [
+      { id: "anthropic", name: "Anthropic", available: true, reason: "API key" },
+    ];
+
+    const options = registry.buildVisibleModelOptions(null, "", []);
+    const providerIds = new Set(options.map((option: any) => option.providerId));
+
     expect(providerIds.has("llamacpp")).toBe(true);
+    spy.mockRestore();
   });
 
   it("keeps Codex limited to its curated visible model set instead of importing broad OpenAI ids", () => {

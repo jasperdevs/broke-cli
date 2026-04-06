@@ -56,7 +56,7 @@ export class ProviderRegistry {
     const refreshPromise = (async () => {
       this.providers = await detectProviders();
       syncCloudProviderModelsFromCatalog();
-      await refreshLocalModels([...Object.keys(LOCAL_PROVIDER_DEFAULTS)]);
+      await refreshLocalModels(this.providers.map((provider) => provider.id));
       this.refreshCacheAt = Date.now();
       this.visibleModelOptionsCacheKey = "";
       return this.providers;
@@ -102,8 +102,14 @@ export class ProviderRegistry {
     }
 
     const visibleProviderIds = new Set(this.providers.map((provider) => provider.id));
-    for (const localProviderId of Object.keys(LOCAL_PROVIDER_DEFAULTS)) visibleProviderIds.add(localProviderId);
+    for (const localProviderId of Object.keys(LOCAL_PROVIDER_DEFAULTS)) {
+      if (getBaseUrl(localProviderId)) visibleProviderIds.add(localProviderId);
+    }
     if (activeModel?.provider.id) visibleProviderIds.add(activeModel.provider.id);
+    for (const pinnedModel of pinnedModels) {
+      const slashIndex = pinnedModel.indexOf("/");
+      if (slashIndex > 0) visibleProviderIds.add(pinnedModel.slice(0, slashIndex));
+    }
     const currentKey = activeModel ? `${activeModel.provider.id}/${currentModelId}` : "";
     const options: VisibleModelOption[] = [];
 
