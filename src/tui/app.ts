@@ -2304,12 +2304,9 @@ export class App {
       return text ? `${sprite}${" ".repeat(gap)}${text}` : sprite;
     });
 
-    const divider = `${DIM}${BOX.h.repeat(Math.max(8, contentWidth))}${RESET}`;
     const paddedBody = [
       "",
       ...heroLines,
-      "",
-      `  ${divider}`,
       "",
     ];
     const body = paddedBody.map((line) => `  ${line}`);
