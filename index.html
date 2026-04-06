@@ -1,114 +1,67 @@
 <!DOCTYPE html>
-<html lang="en">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>✨ Fun Interactive Hub ✨</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <title>The Canine Chronicle | Stories from the World of Dogs</title>
     <style>
-        /* Modern, playful resets */
-        body {
-            font-family: 'Arial', 'Helvetica Neue', sans-serif;
-            background: linear-gradient(135deg, #ffecd2 0%, #fffaf0 100%); /* Soft gradient */
-            color: #333;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            margin: 0;
-            padding: 20px;
-            box-sizing: border-box;
-        }
-        .container {
-            background-color: #ffffff;
-            border: 3px solid #ff69b4; /* Pink border */
-            padding: 50px;
-            border-radius: 20px;
-            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.15); /* Softer shadow */
-            max-width: 700px;
-            width: 90%;
-            text-align: center;
-        }
-        h1 {
-            color: #ff4500; /* Vibrant Orange-Red */
-            font-size: 2.8em;
-            margin-bottom: 10px;
-            letter-spacing: 2px;
-        }
-        p {
-            font-size: 1.1em;
-            margin-bottom: 25px;
-        }
-        .interactive-area {
-            margin: 30px 0;
-            padding: 20px;
-            border: 2px dashed #32cd32; /* Lime Green dashed box */
-            border-radius: 10px;
-            display: inline-block;
-        }
-        button {
-            background-color: #ff69b4; /* Pink primary button */
-            color: white;
-            border: none;
-            padding: 12px 25px;
-            font-size: 1.1em;
-            cursor: pointer;
-            border-radius: 30px;
-            transition: all 0.2s ease;
-            box-shadow: 0 4px 10px rgba(255, 105, 180, 0.4);
-            outline: none;
-            font-weight: bold;
-            margin: 5px;
-        }
-        button:hover {
-            background-color: #ff4500; /* Darker on hover */
-            transform: translateY(-2px) scale(1.02);
-            box-shadow: 0 6px 15px rgba(255, 69, 0, 0.5);
-        }
-        #output-message {
-            min-height: 40px;
-            font-style: italic;
-            color: #555;
-        }
+        body { font-family: Georgia, serif; line-height: 1.6; margin: 0; padding: 0; background-color: #f9f4e9; color: #333; }
+        header { background: #8b4513; color: white; padding: 20px 0; text-align: center; }
+        header h1 { margin-bottom: 5px; }
+        nav { background: #a0522d; padding: 10px 0; text-align: center; }
+        nav a { color: white; margin: 0 15px; text-decoration: none; font-weight: bold; }
+        .container { width: 80%; margin: 20px auto; padding: 20px; background: white; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        .blog-post { border-bottom: 1px solid #eee; padding: 20px 0; }
+        .blog-post:last-child { border-bottom: none; }
+        .blog-post h2 { color: #8b4513; }
+        .meta { font-size: 0.9em; color: #777; margin-bottom: 15px; display: block; }
+        footer { background: #333; color: white; text-align: center; padding: 10px 0; margin-top: 30px; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>✨ Fun Interactive Hub ✨</h1>
-        <p>Click below to trigger some digital fun!</p>
-        
-        <div class="interactive-area">
-            <button id="funButton">Click for Fun!</button>
-            <button id="resetButton">Reset</button>
-        </div>
+    <header>
+        <h1>🐾 The Canine Chronicle 🐾</h1>
+        <p>Your daily dose of dog adventures, tips, and heartwarming tales.</p>
+    </header>
 
-        <p id="output-message">Your fun messages appear here...</p>
+    <nav>
+        <a href="/">Home</a>
+        <a href="/about.xhtml">About Us</a>
+        <a href="/breeds.xhtml">Breeds</a>
+        <a href="/contact.xhtml">Contact</a>
+    </nav>
+
+    <div class="container">
+        <h2>Latest Pawsitive Posts</h2>
+
+        <!-- Placeholder Post 1 -->
+        <article class="blog-post">
+            <h2>Adventures in the Park: Golden Retrievers Conquer the Day!</h2>
+            <span class="meta">Posted on October 26, 2023 by WhiskersDaily</span>
+            <p>Nothing beats a day of muddy paws and endless fetching. We took Buster, the resident Golden, to Willow Creek Park, and the energy was unreal! Read more about the best toys for outdoor play...</p>
+            <p><a href="/post/golden-adventure.xhtml">Read Full Story &rarr;</a></p>
+        </article>
+
+        <!-- Placeholder Post 2 -->
+        <article class="blog-post">
+            <h2>Training Tips: Teaching Your Puppy 'Sit' the Fun Way</h2>
+            <span class="meta">Posted on October 24, 2023 by TrainerTails</span>
+            <p>Positive reinforcement is key when training a puppy. We're sharing our favorite tricks and games to make learning fun for everyone involved. Start early and stay patient!</p>
+            <p><a href="/post/puppy-sit-training.xhtml">Read Full Guide &rarr;</a></p>
+        </article>
+
+        <!-- Placeholder Post 3 -->
+        <article class="blog-post">
+            <h2>The Majesty of the Great Dane: A Breed Profile</h2>
+            <span class="meta">Posted on October 20, 2023 by BreedExperts</span>
+            <p>Did you know the Great Dane has a fascinating history? Learn about their noble origins, care requirements, and why they make incredible companions...</p>
+            <p><a href="/post/great-dane-profile.xhtml">View Profile &rarr;</a></p>
+        </article>
+
+        <p style="text-align: center; margin-top: 40px;"><a href="/archive.xhtml" style="padding: 10px 20px; background-color: #a0522d; color: white; text-decoration: none; border-radius: 5px;">View All Archives</a></p>
     </div>
 
-    <script>
-        let clickCount = 0;
-        const output = document.getElementById('output-message');
-        const funBtn = document.getElementById('funButton');
-        const resetBtn = document.getElementById('resetButton');
-
-        funBtn.addEventListener('click', () => {
-            clickCount++;
-            let message = "";
-            if (clickCount === 1) {
-                message = "✨ WOW! You started the fun! ✨";
-            } else if (clickCount === 5) {
-                message = "🎉 Milestone! You're officially a fun enthusiast! 🎉";
-            } else if (clickCount > 10) {
-                message = `Wow, ${clickCount} clicks! You're unstoppable! 🚀`;
-            } else {
-                message = `Keep going! Click #${clickCount}.`;
-            }
-            output.textContent = message;
-        });
-
-        resetBtn.addEventListener('click', () => {
-            clickCount = 0;
-            output.textContent = "Ready for another round of fun!";
-        });
-    </script>
+    <footer>
+        &copy; 2023 The Canine Chronicle. Built with love for dogs.
+    </footer>
 </body>
 </html>
