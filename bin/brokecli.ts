@@ -167,8 +167,22 @@ program.action(async (opts) => {
 
   const tools = getTools();
 
+  // Handle pending messages when they become ready
+  app.onPendingMessagesReadyHandler(() => {
+    const pending = app.takePendingMessages();
+    for (const msg of pending) {
+      // Process each pending message
+      processUserMessage(msg.text, msg.images);
+    }
+  });
+
   app.onInput(async (text, images) => {
     await initPromise;
+    await processUserMessage(text, images);
+  });
+
+  async function processUserMessage(text: string, images?: Array<{ mimeType: string; data: string }>) {
+    if (!text.trim()) return;
 
     // Slash commands
     let templateLoaded = false;
@@ -245,6 +259,11 @@ program.action(async (opts) => {
         case "settings": {
           function buildEntries(): Array<{ key: string; label: string; value: string; description: string }> {
             const s = getSettings();
+            const followUpLabels: Record<string, string> = {
+              immediate: "send now",
+              after_tool: "after tool",
+              after_response: "after response",
+            };
             return [
               { key: "yoloMode", label: "Yolo mode", value: String(s.yoloMode), description: "Run commands without safety checks" },
               { key: "autoCompact", label: "Auto-compact", value: String(s.autoCompact), description: "Automatically compress context when it gets too large" },
@@ -254,6 +273,7 @@ program.action(async (opts) => {
               { key: "showTokens", label: "Show tokens", value: String(s.showTokens), description: "Display token count in status bar" },
               { key: "showCost", label: "Show cost", value: String(s.showCost), description: "Display cost in status bar" },
               { key: "maxSessionCost", label: "Max session cost", value: s.maxSessionCost === 0 ? "unlimited" : `$${s.maxSessionCost}`, description: "Maximum cost per session (0 = unlimited)" },
+              { key: "followUpMode", label: "Follow-up mode", value: followUpLabels[s.followUpMode] ?? s.followUpMode, description: "When to send queued messages while AI is working" },
             ];
           }
           app.openSettings(buildEntries(), (key) => {
@@ -264,6 +284,11 @@ program.action(async (opts) => {
             } else if (key === "maxSessionCost") {
               const next = s.maxSessionCost === 0 ? 1 : s.maxSessionCost === 1 ? 5 : s.maxSessionCost === 5 ? 10 : 0;
               updateSetting("maxSessionCost", next);
+            } else if (key === "followUpMode") {
+              const modes: Array<"immediate" | "after_tool" | "after_response"> = ["immediate", "after_tool", "after_response"];
+              const currentIdx = modes.indexOf(s.followUpMode);
+              const nextIdx = (currentIdx + 1) % modes.length;
+              updateSetting("followUpMode", modes[nextIdx]);
             }
             app.updateSettings(buildEntries());
           });
@@ -669,9 +694,25 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
             app.addMessage("system", `${GREEN}✓${RESET}`);
           }
         },
+        onAfterToolCall: () => {
+          // Check if we need to flush pending messages after tool call
+          const settings = getSettings();
+          if (settings.followUpMode === "after_tool" && app.hasPendingMessages()) {
+            app.flushPendingMessages();
+          }
+        },
+        onAfterResponse: () => {
+          // Check if we need to flush pending messages after response
+          const settings = getSettings();
+          if (settings.followUpMode === "after_response" && app.hasPendingMessages()) {
+            app.flushPendingMessages();
+          }
+        },
       },
     );
-  });
+  }
+
+// Close the program.action callback
 });
 
 async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts: any): Promise<void> {

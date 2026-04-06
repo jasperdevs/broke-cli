@@ -9,6 +9,8 @@ export interface StreamCallbacks {
   onError: (error: Error) => void;
   onToolCall?: (toolName: string, args: unknown) => void;
   onToolResult?: (toolName: string, result: unknown) => void;
+  onAfterToolCall?: () => void;
+  onAfterResponse?: () => void;
 }
 
 export interface StreamOptions {
@@ -61,6 +63,8 @@ export async function startStream(
           for (const tr of event.toolResults) {
             callbacks.onToolResult?.(tr.toolName, tr.output);
           }
+          // Trigger after tool call callback for pending messages
+          callbacks.onAfterToolCall?.();
         }
       },
     });
@@ -88,6 +92,8 @@ export async function startStream(
       usage.inputTokens ?? 0,
       usage.outputTokens ?? 0,
     );
+    // Trigger after response callback for pending messages
+    callbacks.onAfterResponse?.();
     callbacks.onFinish(tokenUsage);
   } catch (err: unknown) {
     if (err instanceof Error && err.name === "AbortError") return;

@@ -4,6 +4,7 @@ import { homedir } from "os";
 import { parse as parseJsonc } from "jsonc-parser";
 
 export type Mode = "build" | "plan";
+export type FollowUpMode = "immediate" | "after_tool" | "after_response";
 
 export interface Settings {
   yoloMode: boolean;
@@ -18,6 +19,7 @@ export interface Settings {
   scopedModels: string[];
   lastModel: string;
   mode: Mode;
+  followUpMode: FollowUpMode;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -33,6 +35,7 @@ export const DEFAULT_SETTINGS: Settings = {
   scopedModels: [],
   lastModel: "",
   mode: "build",
+  followUpMode: "after_response",
 };
 
 export interface BrokeConfig {

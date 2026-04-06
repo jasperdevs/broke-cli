@@ -103,6 +103,8 @@ export class App {
   private onCycleScopedModel: (() => void) | null = null;
   private mode: Mode = "build";
   private onModeChange: ((mode: Mode) => void) | null = null;
+  private pendingMessages: Array<{ text: string; images?: Array<{ mimeType: string; data: string }> }> = [];
+  private onPendingMessagesReady: (() => void) | null = null;
 
   constructor() {
     this.screen = new Screen();
@@ -491,10 +493,31 @@ export class App {
       const text = this.input.submit();
       const images = this.takePendingImages();
       if (text && this.onSubmit) {
-        if (images.length > 0) {
-          (this.onSubmit as (text: string, images?: Array<{ mimeType: string; data: string }>) => void)(text, images);
+        const settings = getSettings();
+        const followUpMode = settings.followUpMode;
+        
+        // If not streaming, always submit immediately
+        // If streaming, check followUpMode
+        if (!this.isStreaming) {
+          // Not streaming - submit immediately
+          if (images.length > 0) {
+            (this.onSubmit as (text: string, images?: Array<{ mimeType: string; data: string }>) => void)(text, images);
+          } else {
+            this.onSubmit(text);
+          }
+        } else if (followUpMode === "immediate") {
+          // Send immediately even while streaming
+          if (images.length > 0) {
+            (this.onSubmit as (text: string, images?: Array<{ mimeType: string; data: string }>) => void)(text, images);
+          } else {
+            this.onSubmit(text);
+          }
         } else {
-          this.onSubmit(text);
+          // Queue the message for later (after_tool or after_response)
+          this.addPendingMessage(text, images);
+          this.statusMessage = `${T()}✓ Queued (${this.pendingMessages.length} pending)${RESET}`;
+          setTimeout(() => { this.statusMessage = undefined; this.draw(); }, 1500);
+          this.draw();
         }
       }
     }
@@ -628,6 +651,11 @@ export class App {
     if (this.contextUsed > 0) {
       const color = this.contextUsed > 90 ? RED : this.contextUsed > 70 ? "\x1b[33m" : DIM;
       lines.push(`   ${color}${this.contextUsed}% ctx${RESET}`);
+    }
+    // Pending messages indicator
+    if (this.pendingMessages.length > 0) {
+      const pendingCount = this.pendingMessages.length;
+      lines.push(`   ${P()}${pendingCount} queued${RESET}`);
     }
     lines.push("");
 
@@ -910,11 +938,45 @@ private appendModelPicker(lines: string[], _maxTotal: number): void {
     this.onSubmit = handler as (text: string) => void;
   }
 
+  onPendingMessagesReadyHandler(handler: () => void): void {
+    this.onPendingMessagesReady = handler;
+  }
+
   /** Get pending images and clear them */
   takePendingImages(): Array<{ mimeType: string; data: string }> {
     const images = this.pendingImages;
     this.pendingImages = [];
     return images;
+  }
+
+  /** Add a message to the pending queue */
+  addPendingMessage(text: string, images?: Array<{ mimeType: string; data: string }>): void {
+    this.pendingMessages.push({ text, images });
+    this.draw();
+  }
+
+  /** Get and clear pending messages */
+  takePendingMessages(): Array<{ text: string; images?: Array<{ mimeType: string; data: string }> }> {
+    const messages = this.pendingMessages;
+    this.pendingMessages = [];
+    return messages;
+  }
+
+  /** Check if there are pending messages */
+  hasPendingMessages(): boolean {
+    return this.pendingMessages.length > 0;
+  }
+
+  /** Get count of pending messages */
+  getPendingMessagesCount(): number {
+    return this.pendingMessages.length;
+  }
+
+  /** Trigger processing of pending messages */
+  flushPendingMessages(): void {
+    if (this.onPendingMessagesReady) {
+      this.onPendingMessagesReady();
+    }
   }
 
   onAbortRequest(handler: () => void): void {
