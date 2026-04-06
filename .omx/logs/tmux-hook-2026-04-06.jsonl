@@ -119,3 +119,15 @@
 {"timestamp":"2026-04-06T17:16:33.235Z","type":"auto_nudge_skipped","reason":"unmanaged_session"}
 {"timestamp":"2026-04-06T17:22:18.145Z","type":"auto_nudge_skipped","reason":"unmanaged_session"}
 {"timestamp":"2026-04-06T17:22:52.734Z","type":"auto_nudge_skipped","reason":"unmanaged_session"}
+{"timestamp":"2026-04-06T18:00:28.471Z","type":"auto_nudge_skipped","reason":"unmanaged_session"}
+{"timestamp":"2026-04-06T18:02:37.434Z","type":"auto_nudge_skipped","reason":"unmanaged_session"}
+{"timestamp":"2026-04-06T18:04:34.110Z","type":"auto_nudge_skipped","reason":"unmanaged_session"}
+{"timestamp":"2026-04-06T18:07:44.085Z","type":"auto_nudge_skipped","reason":"unmanaged_session"}
+{"timestamp":"2026-04-06T18:21:18.712Z","type":"tmux_hook","mode":null,"reason":"invalid_config","turn_id":"019d63fa-c2d8-7820-ac4e-792f8f3efac5","thread_id":"019d6284-1c43-7c10-9fb3-71a4c015b38b","target":null,"dry_run":false,"sent":false,"event":"injection_skipped"}
+{"timestamp":"2026-04-06T18:21:18.800Z","type":"auto_nudge_skipped","reason":"unmanaged_session"}
+{"timestamp":"2026-04-06T18:27:29.361Z","type":"tmux_hook","mode":null,"reason":"invalid_config","turn_id":"019d6407-13c2-7af3-b29c-817a9ad83c3f","thread_id":"019d6284-1c43-7c10-9fb3-71a4c015b38b","target":null,"dry_run":false,"sent":false,"event":"injection_skipped"}
+{"timestamp":"2026-04-06T18:27:29.445Z","type":"auto_nudge_skipped","reason":"unmanaged_session"}
+{"timestamp":"2026-04-06T18:39:35.024Z","type":"tmux_hook","mode":null,"reason":"invalid_config","turn_id":"019d640c-bb9d-7142-bb1e-6006446e36bb","thread_id":"019d6284-1c43-7c10-9fb3-71a4c015b38b","target":null,"dry_run":false,"sent":false,"event":"injection_skipped"}
+{"timestamp":"2026-04-06T18:39:35.107Z","type":"auto_nudge_skipped","reason":"unmanaged_session"}
+{"timestamp":"2026-04-06T18:44:28.836Z","type":"tmux_hook","mode":null,"reason":"invalid_config","turn_id":"019d6417-ce3c-7ce2-836a-60bd749bd29b","thread_id":"019d6284-1c43-7c10-9fb3-71a4c015b38b","target":null,"dry_run":false,"sent":false,"event":"injection_skipped"}
+{"timestamp":"2026-04-06T18:44:28.922Z","type":"auto_nudge_skipped","reason":"unmanaged_session"}
