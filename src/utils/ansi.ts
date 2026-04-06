@@ -13,6 +13,8 @@ export const CURSOR_HOME = `${CSI}H`;
 // Cursor
 export const CURSOR_HIDE = `${CSI}?25l`;
 export const CURSOR_SHOW = `${CSI}?25h`;
+export const CURSOR_BLOCK = `${CSI}2 q`;
+export const CURSOR_DEFAULT = `${CSI}0 q`;
 export const CURSOR_SAVE = `${ESC}7`;
 export const CURSOR_RESTORE = `${ESC}8`;
 
@@ -23,6 +25,8 @@ export const SYNC_END = `${CSI}?2026l`;
 // Bracketed paste mode
 export const PASTE_MODE_ON = `${CSI}?2004h`;
 export const PASTE_MODE_OFF = `${CSI}?2004l`;
+export const MODIFY_OTHER_KEYS_ON = `${CSI}>4;2m`;
+export const MODIFY_OTHER_KEYS_OFF = `${CSI}>4;0m`;
 
 // Mouse: SGR extended (1006) + normal tracking (1000).
 // Avoid button-motion tracking so terminal text selection still works.

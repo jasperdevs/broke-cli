@@ -212,7 +212,10 @@ MAXIMUM COMPRESSION MODE. Absolute minimum tokens. Every word must earn its plac
 - Abbreviate: fn/arg/ret/val/cfg/env/dir/dep/impl/msg/err/req/res/DB/auth
 - Arrows for causality (X → Y). No prose. Fragments/lists only.
 - One word when one word enough. "Fixed." not "I've fixed the issue."
-- Never narrate actions. Just do them. Zero preamble.
+- Prefer noun/verb shards over sentences. Delete helper words aggressively.
+- If answer can be 3 bullets, never use paragraph. If 1 bullet, never use 3.
+- Never narrate actions. Just do them. Zero preamble. Zero recap.
+- Explanations only when required to avoid ambiguity. Max 4 words if possible.
 - Code blocks unchanged, technical terms exact
 
 NOT: "I've gone ahead and added the missing database configuration to your environment file."
@@ -223,5 +226,8 @@ YES: "Inline obj prop → new ref → re-render. useMemo."
 
 NOT: "Let me read the file first to understand the issue."
 YES: [just reads the file without saying anything]
+
+NOT: "Done. I updated the file and ran the test suite successfully."
+YES: "Updated file. Tests pass."
 </output-style>`;
 }

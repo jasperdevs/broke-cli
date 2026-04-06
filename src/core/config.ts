@@ -53,6 +53,7 @@ export interface BrokeConfig {
   defaultModel?: string;
   budget?: { maxSessionCost?: number; maxMonthlyCost?: number };
   providers?: Record<string, { apiKey?: string; baseUrl?: string }>;
+  modelContextLimits?: Record<string, number>;
   settings?: Partial<Settings>;
 }
 
@@ -171,4 +172,9 @@ function readCodexToken(): string | undefined {
 export function getBaseUrl(provider: string): string | undefined {
   const config = loadConfig();
   return config.providers?.[provider]?.baseUrl;
+}
+
+export function getModelContextLimitOverride(provider: string, model: string): number | undefined {
+  const config = loadConfig();
+  return config.modelContextLimits?.[`${provider}/${model}`] ?? config.modelContextLimits?.[model];
 }

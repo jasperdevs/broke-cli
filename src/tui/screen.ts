@@ -1,6 +1,6 @@
 import {
   ALT_SCREEN_ON, ALT_SCREEN_OFF, CLEAR_SCREEN, CLEAR_LINE,
-  CURSOR_HOME, CURSOR_HIDE, CURSOR_SHOW,
+  CURSOR_HOME, CURSOR_HIDE, CURSOR_SHOW, CURSOR_BLOCK, CURSOR_DEFAULT,
   SYNC_START, SYNC_END,
   moveToRow, write, getTermSize,
 } from "../utils/ansi.js";
@@ -36,12 +36,14 @@ export class Screen {
     write(ALT_SCREEN_ON);
     write(CURSOR_HOME);
     write(CLEAR_SCREEN);
+    write(CURSOR_BLOCK);
     write(CURSOR_HIDE);
     this.prev = [];
   }
 
   /** Exit fullscreen mode, restore terminal */
   exit(): void {
+    write(CURSOR_DEFAULT);
     write(CURSOR_SHOW);
     write(ALT_SCREEN_OFF);
   }
@@ -67,6 +69,7 @@ export class Screen {
   /** Position cursor at a specific location (for input) */
   setCursor(row: number, col: number): void {
     write(`\x1b[${row};${col}H`);
+    write(CURSOR_BLOCK);
     write(CURSOR_SHOW);
   }
 

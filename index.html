@@ -3,61 +3,76 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-       <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Your Awesome Product Ad</title>
+    <title>Fun Page!</title>
+    <style>
         body {
-            font-family: Arial, sans-serif;
-            background-color: #f4f4f9;
-            color: #333;
+            font-family: 'Arial', sans-serif;
             display: flex;
             flex-direction: column;
-            align-items: center;
             justify-content: center;
-            height: 100vh;
+            align-items: center;
+            min-height: 100vh;
             margin: 0;
+            background-color: #f0f8ff; /* Light sky blue background */
+            color: #333;
             text-align: center;
-            padding: 20px;
+        }
+        .container {
+            background: #ffffff;
+            padding: 40px 60px;
+            border-radius: 15px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
         }
         h1 {
-            color: #2c3e50;
-            font-size: 3.5em;
-            margin-bottom: 0.2em;
-            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.1);
-        }
-        .placeholder-img {
-            width: 250px;
-            height: auto;
-            margin: 20px 0;
-            border-radius: 10px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            color: #ff6347; /* Tomato red */
+            font-size: 3em;
+            margin-bottom: 15px;
         }
         p {
-            color: #7f8c8d;
-            font-size: 1.4em;
-            margin-top: 15px;
-            max-width: 600px;
-        }
-        .cta-button {
-            background-color: #e74c3c;
-            color: white;
-            padding: 12px 30px;
-            text-decoration: none;
-            border-radius: 5px;
-            margin-top: 30px;
+            color: #555;
             font-size: 1.2em;
-            transition: background-color 0.3s ease;
+            margin-bottom: 30px;
         }
-        .cta-button:hover {
-            background-color: #c0392b;
+        button {
+            background-color: #4caf50; /* Green */
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 1.1em;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.1s;
+        }
+        button:hover {
+            background-color: #45a049;
+            transform: translateY(-2px);
+        }
+        #counter-display {
+            margin-top: 20px;
+            font-size: 3em;
+            color: #ff8c00; /* Dark orange */
         }
     </style>
 </head>
 <body>
-    <h1 style="">[Product Name] - The Best Solution!</h1>
-        <img src="placeholder.png" alt="Product Placeholder" class="placeholder-img">
-        <p>[Compelling headline summarizing benefit. Keep it short.]</p>
-    <a href="#buy" class="cta-button">Learn More & Buy Now</a>
+    <div class="container">
+        <h1>🎉 Welcome to Fun Page! 🎉</h1>
+        <p>Click the button below to count something silly.</p>
+        
+        <button id="funButton">Click Me!</button>
+        
+        <div id="counter-display">0</div>
+    </div>
+
+    <script>
+        let count = 0;
+        const button = document.getElementById('funButton');
+        const display = document.getElementById('counter-display');
+
+        button.addEventListener('click', () => {
+            count++;
+            display.textContent = count;
+        });
+    </script>
 </body>
-</html>
 </html>

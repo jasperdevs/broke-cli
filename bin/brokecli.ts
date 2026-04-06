@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { spawn } from "child_process";
 import { writeFileSync } from "fs";
 import { App } from "../src/tui/app.js";
 import { detectProviders, pickDefault } from "../src/ai/detect.js";
@@ -13,7 +14,7 @@ import { setBashOutputCallback } from "../src/tools/bash.js";
 import { setTodoChangeCallback, clearTodo } from "../src/tools/todo.js";
 import { renderMarkdown } from "../src/utils/markdown.js";
 import { checkBudget } from "../src/core/budget.js";
-import { getSettings, updateSetting, type Settings, type Mode } from "../src/core/config.js";
+import { getModelContextLimitOverride, getSettings, updateSetting, type Settings, type Mode } from "../src/core/config.js";
 import { compactMessages, getTotalContextTokens } from "../src/core/compact.js";
 import { undoLastCheckpoint } from "../src/core/git.js";
 import { listTemplates, loadTemplate } from "../src/core/templates.js";
@@ -32,6 +33,79 @@ const program = new Command()
   .option("-c, --continue", "Continue last session")
   .option("-p, --print", "Single-shot mode: print response and exit")
   .option("--rpc", "Non-interactive JSON RPC mode");
+
+function sendResponseNotification(): void {
+  try {
+    if (process.platform === "win32") {
+      const script = `
+$shown = $false
+try {
+  [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null
+  [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] > $null
+  $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
+  $xml.LoadXml('<toast><visual><binding template="ToastGeneric"><text>BrokeCLI</text><text>Response complete</text></binding></visual></toast>')
+  $toast = New-Object Windows.UI.Notifications.ToastNotification $xml
+  [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('Windows PowerShell').Show($toast)
+  $shown = $true
+} catch {}
+if (-not $shown) {
+  try {
+    Add-Type -AssemblyName System.Windows.Forms
+    Add-Type -AssemblyName System.Drawing
+    $n = New-Object System.Windows.Forms.NotifyIcon
+    $n.Icon = [System.Drawing.SystemIcons]::Information
+    $n.BalloonTipTitle = 'BrokeCLI'
+    $n.BalloonTipText = 'Response complete'
+    $n.Visible = $true
+    $n.ShowBalloonTip(5000)
+    Start-Sleep -Milliseconds 5500
+    $n.Dispose()
+    $shown = $true
+  } catch {}
+}
+if (-not $shown) {
+  try {
+    Start-Process msg.exe -ArgumentList '*', 'BrokeCLI: Response complete' -WindowStyle Hidden
+    $shown = $true
+  } catch {}
+}
+if (-not $shown) {
+  try { [console]::beep(880, 220) } catch {}
+}
+`;
+      const child = spawn("powershell", [
+        "-NoProfile",
+        "-Sta",
+        "-ExecutionPolicy", "Bypass",
+        "-WindowStyle", "Hidden",
+        "-Command", script,
+      ], {
+        detached: true,
+        stdio: "ignore",
+        windowsHide: true,
+      });
+      child.unref();
+      return;
+    }
+
+    if (process.platform === "darwin") {
+      const child = spawn("osascript", [
+        "-e",
+        'display notification "Response complete" with title "BrokeCLI"',
+      ], { detached: true, stdio: "ignore" });
+      child.unref();
+      return;
+    }
+
+    const child = spawn("notify-send", ["BrokeCLI", "Response complete"], {
+      detached: true,
+      stdio: "ignore",
+    });
+    child.unref();
+  } catch {
+    // ignore notification failures
+  }
+}
 
 program.action(async (opts) => {
   // Load extension hooks
@@ -234,6 +308,7 @@ program.action(async (opts) => {
         case "help":
           app.addMessage("system", "Type / to see available commands.");
           return;
+        case "new":
         case "clear":
           session.clear();
           app.clearMessages();
@@ -409,13 +484,6 @@ program.action(async (opts) => {
           });
           return;
         }
-        case "new":
-          session = new Session();
-          if (activeModel) session.setProviderModel(activeModel.provider.name, currentModelId);
-          app.clearMessages();
-          app.resetCost();
-          app.addMessage("system", "New session started.");
-          return;
         case "fork": {
           const forked = session.fork();
           session = forked;
@@ -646,9 +714,11 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
     // Context size tracking
     const chatMsgs = session.getChatMessages();
     const ctxTokens = getTotalContextTokens(chatMsgs, systemPrompt, currentModelId);
-    const contextLimit = getContextLimit(currentModelId, activeModel?.provider.id) ?? 128000;
-    const ctxPct = Math.min(100, Math.round((ctxTokens / contextLimit) * 100));
-    app.setContextUsed(ctxPct);
+    const contextLimit = getModelContextLimitOverride(activeModel.provider.id, currentModelId)
+      ?? getContextLimit(currentModelId, activeModel?.provider.id)
+      ?? 128000;
+    const ctxPct = contextLimit > 0 ? Math.min(100, Math.round((ctxTokens / contextLimit) * 100)) : 0;
+    app.setContextUsage(ctxTokens, contextLimit);
 
     // Auto-compact if context > 80%
     if (ctxPct > 80 && chatMsgs.length > 8) {
@@ -746,18 +816,8 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
           app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
           abortController = null;
           lastActivityTime = Date.now();
-          // Desktop notification if enabled
           if (getSettings().notifyOnResponse) {
-            try {
-              const { exec: execAsync } = require("child_process");
-              if (process.platform === "win32") {
-                execAsync(`powershell -NoProfile -WindowStyle Hidden -Command "Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $n = New-Object System.Windows.Forms.NotifyIcon; $n.Icon = [System.Drawing.SystemIcons]::Information; $n.BalloonTipTitle = 'BrokeCLI'; $n.BalloonTipText = 'Response complete'; $n.Visible = $true; $n.ShowBalloonTip(3000); Start-Sleep -Milliseconds 3100; $n.Dispose()"`, { stdio: "ignore", timeout: 8000 });
-              } else if (process.platform === "darwin") {
-                execAsync(`osascript -e 'display notification "Response complete" with title "BrokeCLI"'`, { stdio: "ignore", timeout: 5000 });
-              } else {
-                execAsync(`notify-send "BrokeCLI" "Response complete"`, { stdio: "ignore", timeout: 5000 });
-              }
-            } catch { /* notification failed, ignore */ }
+            sendResponseNotification();
           }
         },
         onError: (err) => {

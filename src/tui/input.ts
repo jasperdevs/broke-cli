@@ -16,6 +16,12 @@ export class InputWidget {
   /** Get cursor position */
   getCursor(): number { return this.cursor; }
 
+  /** Replace input text while preserving a valid cursor */
+  setText(text: string): void {
+    this.text = text;
+    this.cursor = Math.min(this.cursor, this.text.length);
+  }
+
   /** Clear input */
   clear(): void {
     this.text = "";
@@ -46,15 +52,15 @@ export class InputWidget {
       return "interrupt";
     }
 
-    // Shift+Enter or Alt+Enter — newline in input
-    if ((key.shift || key.meta) && key.name === "return") {
+    // Shift+Enter / Alt+Enter / Ctrl+J — newline in input
+    if (((key.shift || key.meta) && (key.name === "return" || key.name === "enter")) || (key.ctrl && key.name === "j")) {
       this.text = this.text.slice(0, this.cursor) + "\n" + this.text.slice(this.cursor);
       this.cursor++;
       return "none";
     }
 
     // Enter — submit
-    if (key.name === "return") {
+    if (key.name === "return" || key.name === "enter") {
       return "submit";
     }
 

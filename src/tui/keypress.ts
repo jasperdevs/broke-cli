@@ -1,5 +1,13 @@
 import * as readline from "node:readline";
-import { PASTE_MODE_ON, PASTE_MODE_OFF, MOUSE_ON, MOUSE_OFF, write } from "../utils/ansi.js";
+import {
+  PASTE_MODE_ON,
+  PASTE_MODE_OFF,
+  MODIFY_OTHER_KEYS_ON,
+  MODIFY_OTHER_KEYS_OFF,
+  MOUSE_ON,
+  MOUSE_OFF,
+  write,
+} from "../utils/ansi.js";
 
 export interface Keypress {
   name: string;       // "return", "backspace", "up", "down", "left", "right", "tab", "escape", or the char itself
@@ -40,6 +48,7 @@ export class KeypressHandler {
 
     // Enable bracketed paste and mouse tracking (scroll wheel)
     write(PASTE_MODE_ON);
+    write(MODIFY_OTHER_KEYS_ON);
     write(MOUSE_ON);
 
     // Track mouse sequences
@@ -51,6 +60,18 @@ export class KeypressHandler {
     process.stdin.emit = ((event: string, ...args: any[]) => {
       if (event === "data") {
         const s = typeof args[0] === "string" ? args[0] : (args[0] as Buffer).toString("utf-8");
+        const specialEnterSequences: Record<string, Keypress> = {
+          "\x1b[13;2u": { name: "return", char: "", ctrl: false, meta: false, shift: true },
+          "\x1b[27;2;13~": { name: "return", char: "", ctrl: false, meta: false, shift: true },
+          "\x1b[27;13;2~": { name: "return", char: "", ctrl: false, meta: false, shift: true },
+          "\x1b[13;3u": { name: "return", char: "", ctrl: false, meta: true, shift: false },
+          "\x1b[27;3;13~": { name: "return", char: "", ctrl: false, meta: true, shift: false },
+          "\x1b\r": { name: "return", char: "", ctrl: false, meta: true, shift: false },
+        };
+        if (specialEnterSequences[s]) {
+          this.onKey(specialEnterSequences[s]);
+          return false;
+        }
         mouseSeqRe.lastIndex = 0;
         let match;
         let hasMouseData = false;
@@ -125,6 +146,7 @@ export class KeypressHandler {
   /** Stop listening, restore terminal */
   stop(): void {
     write(MOUSE_OFF);
+    write(MODIFY_OTHER_KEYS_OFF);
     write(PASTE_MODE_OFF);
     if (process.stdin.isTTY) {
       process.stdin.setRawMode(false);
