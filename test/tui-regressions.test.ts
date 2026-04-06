@@ -148,7 +148,7 @@ describe("startup home view", () => {
     expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("Files");
   });
 
-  it("drops title text before distorting the exact mascot on very narrow widths", () => {
+  it("drops the mascot before distorting the startup card on very narrow widths", () => {
     const app = new App() as any;
     let rendered: string[] = [];
 
@@ -167,9 +167,9 @@ describe("startup home view", () => {
     app.drawImmediate();
 
     const output = rendered.map((line) => stripAnsi(line)).join("\n");
-    expect(output).not.toContain("Welcome");
-    expect(output).not.toContain("Welcome to BrokeCLI");
-    expect(output).not.toContain(`v${app.appVersion}`);
+    expect(output).toContain("Welcome");
+    expect(output).not.toContain("▀");
+    expect(output).not.toContain("█");
   });
 });
 
@@ -196,24 +196,6 @@ describe("input editing", () => {
 });
 
 describe("command aliases", () => {
-  it("suggests btw from the slash-command surface", () => {
-    const app = new App() as any;
-    app.input.paste("/bt");
-
-    const matches = app.getCommandMatches();
-    expect(matches).toHaveLength(1);
-    expect(matches[0].name).toBe("btw");
-  });
-
-  it("suggests notify from the slash-command surface", () => {
-    const app = new App() as any;
-    app.input.paste("/not");
-
-    const matches = app.getCommandMatches();
-    expect(matches).toHaveLength(1);
-    expect(matches[0].name).toBe("notify");
-  });
-
   it("suggests theme from the slash-command surface", () => {
     const app = new App() as any;
     app.input.paste("/the");
@@ -245,21 +227,27 @@ describe("command aliases", () => {
     const all = app.getCommandMatches().map((entry: { name: string }) => entry.name);
     expect(all).not.toContain("reload");
     expect(all).not.toContain("cost");
+    expect(all).not.toContain("notify");
+    expect(all).not.toContain("btw");
     expect(all).toContain("thinking");
   });
 
-  it("queues /btw while streaming even if follow-up mode is immediate", () => {
+  it("keeps settings pinned first in the slash-command surface", () => {
     const app = new App() as any;
-    app.setStreaming(true);
-    app.input.paste("/btw quick question");
-    app.onSubmit = () => {
-      throw new Error("should not submit immediately");
-    };
+    app.input.paste("/");
 
-    app.handleKey({ name: "return" });
+    const matches = app.getCommandMatches();
+    expect(matches[0].name).toBe("settings");
+  });
 
-    expect(app.getPendingMessagesCount()).toBe(1);
-    expect(app.takePendingMessages()[0].text).toBe("/btw quick question");
+  it("shows hotkeys inline for slash commands that have them", () => {
+    const app = new App() as any;
+    app.input.paste("/");
+
+    const entries = app.getCommandSuggestionEntries().map((entry: { text: string }) => stripAnsi(entry.text));
+    expect(entries.some((entry: string) => entry.includes("model") && entry.includes("ctrl+l"))).toBe(true);
+    expect(entries.some((entry: string) => entry.includes("thinking") && entry.includes("ctrl+t"))).toBe(true);
+    expect(entries.some((entry: string) => entry.includes("caveman") && entry.includes("ctrl+y"))).toBe(true);
   });
 });
 

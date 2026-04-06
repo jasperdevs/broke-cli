@@ -669,22 +669,9 @@ program.action(async (opts) => {
 
     // Slash commands
     let templateLoaded = false;
-    let commandRewrittenText: string | null = null;
     if (text.startsWith("/")) {
       const [cmd] = text.slice(1).split(" ");
       switch (cmd) {
-        case "btw": {
-          const sideQuestion = text.slice(5).trim();
-          if (!sideQuestion) {
-            app.addMessage("system", "Usage: /btw <side question>");
-            return;
-          }
-          session = session.fork();
-          if (activeModel) session.setProviderModel(activeModel.provider.name, currentModelId);
-          app.addMessage("system", "Forked session for /btw.");
-          commandRewrittenText = sideQuestion;
-          break;
-        }
         case "help":
           app.addMessage("system", "Type / to see available commands.");
           return;
@@ -788,11 +775,6 @@ program.action(async (opts) => {
             }
             app.updateSettings(buildEntries());
           });
-          return;
-        }
-        case "notify": {
-          sendResponseNotification("Test notification");
-          app.addMessage("system", "Notification test sent.");
           return;
         }
         case "theme": {
@@ -1023,10 +1005,6 @@ program.action(async (opts) => {
           return;
         }
       }
-    }
-
-    if (commandRewrittenText) {
-      text = commandRewrittenText;
     }
 
     if (!templateLoaded) {

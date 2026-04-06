@@ -47,6 +47,8 @@ interface CommandEntry {
   name: string;
   desc: string;
   aliases?: string[];
+  hotkey?: string;
+  sortPriority?: number;
 }
 
 interface MenuEntry {
@@ -191,11 +193,9 @@ function bounceDot(frame: number, len = 4): string {
 }
 
 const COMMANDS: CommandEntry[] = [
-  { name: "btw", desc: "fork and ask a side question" },
+  { name: "settings", desc: "configure options", sortPriority: -1 },
   { name: "connect", desc: "connect provider", aliases: ["login"] },
-  { name: "model", desc: "switch model" },
-  { name: "settings", desc: "configure options" },
-  { name: "notify", desc: "send test notification" },
+  { name: "model", desc: "switch model", hotkey: "ctrl+l" },
   { name: "theme", desc: "change color theme" },
   { name: "compact", desc: "compress context" },
   { name: "resume", desc: "resume session (sessions)", aliases: ["sessions"] },
@@ -203,8 +203,8 @@ const COMMANDS: CommandEntry[] = [
   { name: "export", desc: "export or copy transcript" },
   { name: "copy", desc: "copy last response" },
   { name: "undo", desc: "undo last change" },
-  { name: "thinking", desc: "cycle thinking" },
-  { name: "caveman", desc: "cycle token saving" },
+  { name: "thinking", desc: "cycle thinking", hotkey: "ctrl+t" },
+  { name: "caveman", desc: "cycle token saving", hotkey: "ctrl+y" },
   { name: "clear", desc: "clear chat (new)", aliases: ["new"] },
   { name: "exit", desc: "quit" },
 ];
@@ -213,8 +213,8 @@ const HOME_TIPS = [
   "Use /resume to jump back into an older session.",
   "Use /model to switch providers without leaving the chat.",
   "Use /compact before long refactors to keep token pressure down.",
-  "Use /btw to fork a side question without derailing the main thread.",
   "Paste an image path to attach a screenshot to your next prompt.",
+  "Use /settings to tweak behavior without leaving the keyboard.",
 ];
 
 const APP_DIR = dirname(fileURLToPath(import.meta.url));
@@ -1105,8 +1105,9 @@ export class App {
       const arrow = i === cursor ? `${T()}> ${RESET}` : "  ";
       const nameColor = i === cursor ? `${TXT()}${BOLD}` : T();
       const pad = " ".repeat(Math.max(1, 16 - entry.name.length));
+      const detail = entry.hotkey ? `${entry.desc} (${entry.hotkey})` : entry.desc;
       return {
-        text: ` ${arrow}${nameColor}${entry.name}${RESET}${pad}${DIM}${entry.desc}${RESET}`,
+        text: ` ${arrow}${nameColor}${entry.name}${RESET}${pad}${DIM}${detail}${RESET}`,
         selectIndex: i,
       };
     });
@@ -1631,7 +1632,6 @@ export class App {
       if (text && this.onSubmit) {
         const settings = getSettings();
         const followUpMode = settings.followUpMode;
-        const shouldQueueBtw = this.isStreaming && text.startsWith("/btw");
         
         // If not streaming, always submit immediately
         // If streaming, check followUpMode
@@ -1642,7 +1642,7 @@ export class App {
           } else {
             this.onSubmit(text);
           }
-        } else if (followUpMode === "immediate" && !shouldQueueBtw) {
+        } else if (followUpMode === "immediate") {
           // Send immediately even while streaming
           if (images.length > 0) {
             (this.onSubmit as (text: string, images?: Array<{ mimeType: string; data: string }>) => void)(text, images);
@@ -2271,7 +2271,7 @@ export class App {
   }
 
   private renderHomeView(mainW: number, topHeight: number): string[] {
-    const mascotInline = this.renderMascotInline();
+    const fullMascot = this.renderMascotInline();
     const modelLabel = this.modelName === "none"
       ? "Pick one with /model"
       : `${this.providerName}/${this.modelName}`;
@@ -2279,13 +2279,18 @@ export class App {
     const boxWidth = Math.max(12, mainW);
     const innerWidth = Math.max(1, boxWidth - 2);
     const contentWidth = Math.max(8, innerWidth - 4);
+    const fullMascotWidth = stripAnsi(fullMascot[0] ?? "").length;
+    const canShowMascot = fullMascot.length > 0 && contentWidth >= fullMascotWidth + 24 && topHeight >= 8;
+    const mascotInline = canShowMascot ? fullMascot : [];
     const mascotWidth = stripAnsi(mascotInline[0] ?? "").length;
     const gap = mascotWidth > 0 ? 2 : 0;
     const headerCandidates = ["Welcome to BrokeCLI", "Welcome"];
     const headerText = headerCandidates.find((candidate) =>
       mascotWidth + gap + candidate.length <= contentWidth,
     ) ?? headerCandidates[headerCandidates.length - 1];
-    const rightWidth = Math.max(18, contentWidth - mascotWidth - gap);
+    const rightWidth = mascotWidth > 0
+      ? Math.max(18, contentWidth - mascotWidth - gap)
+      : contentWidth;
     const locationBase = this.formatShortCwd(Math.max(10, rightWidth - 1));
     const titleWithVersion = `${headerText}  ${versionText}`;
     const titleText = titleWithVersion.length <= rightWidth ? titleWithVersion : headerText;
@@ -2821,11 +2826,15 @@ export class App {
     const text = this.input.getText();
     if (!text.startsWith("/")) return [];
     const query = text.slice(1).toLowerCase();
-    if (!query && text === "/") return [...COMMANDS];
-    return COMMANDS.filter((c) => {
+    const matches = (!query && text === "/") ? [...COMMANDS] : COMMANDS.filter((c) => {
       const matchesName = c.name.startsWith(query) && c.name !== query;
       const matchesAlias = c.aliases?.some((alias) => alias.startsWith(query)) ?? false;
       return matchesName || matchesAlias;
+    });
+    return matches.sort((a, b) => {
+      const priorityDelta = (a.sortPriority ?? 0) - (b.sortPriority ?? 0);
+      if (priorityDelta !== 0) return priorityDelta;
+      return COMMANDS.indexOf(a) - COMMANDS.indexOf(b);
     });
   }
 
