@@ -2189,8 +2189,7 @@ export class App {
     const path = this.resolveMascotPath();
     if (!path) return [];
     const cells = this.parseMascotSvgGrid(path);
-    const scaled = this.scaleColorGrid(cells, 4, 4);
-    return this.renderAnsiColorGrid(scaled);
+    return this.renderAnsiColorGrid(cells);
   }
 
   private wrapHomeDetail(label: string, value: string, width: number): string[] {
@@ -2232,8 +2231,6 @@ export class App {
 
   private renderHomeView(mainW: number, topHeight: number): string[] {
     const mascotInline = this.renderMascotInline();
-    const mascotTop = mascotInline[0] ?? "";
-    const mascotBottom = mascotInline[1] ?? "";
     const modelLabel = this.modelName === "none"
       ? "Pick one with /model"
       : `${this.providerName}/${this.modelName}`;
@@ -2241,22 +2238,27 @@ export class App {
     const boxWidth = Math.max(12, mainW - 4);
     const innerWidth = Math.max(1, boxWidth - 2);
     const contentWidth = Math.max(8, innerWidth - 2);
-    const mascotWidth = stripAnsi(mascotTop).length;
-    const headerPrefix = mascotTop ? `${mascotTop} ` : "";
-    const headerPrefixPlain = `${" ".repeat(stripAnsi(headerPrefix).length)}`;
-    const subheadPrefix = mascotBottom ? `${mascotBottom} ` : "";
-    const subheadPrefixPlain = `${" ".repeat(stripAnsi(subheadPrefix).length)}`;
+    const mascotWidth = stripAnsi(mascotInline[0] ?? "").length;
+    const textOffset = mascotWidth > 0 ? `${" ".repeat(mascotWidth)} ` : "";
     const headerCandidates = ["Welcome to BrokeCLI", "Welcome"];
     const headerText = headerCandidates.find((candidate) =>
-      mascotWidth + (mascotTop ? 1 : 0) + candidate.length <= contentWidth,
+      mascotWidth + (mascotInline.length > 0 ? 1 : 0) + candidate.length <= contentWidth,
     ) ?? headerCandidates[headerCandidates.length - 1];
     const locationBase = this.formatShortCwd(Math.max(10, contentWidth - 1));
     const locationWithVersion = `${locationBase}  ${versionText}`;
     const locationText = locationWithVersion.length <= contentWidth ? locationWithVersion : locationBase;
+    const titleLines = this.wrapHomeText(`${T()}${BOLD}`, "", headerText, Math.max(6, contentWidth - textOffset.length), "");
+    const locationLines = this.wrapHomeText(`${MUTED()}`, "", locationText, Math.max(6, contentWidth - textOffset.length), "");
+    const heroText = [...titleLines, ...locationLines];
+    const heroHeight = Math.max(mascotInline.length, heroText.length);
+    const heroLines = Array.from({ length: heroHeight }, (_, index) => {
+      const sprite = mascotInline[index] ?? textOffset.trimEnd();
+      const text = heroText[index] ?? "";
+      return text ? `${sprite} ${text}` : sprite;
+    });
 
     const body = [
-      ...this.wrapHomeText(`${headerPrefix}${T()}${BOLD}`, headerPrefixPlain, headerText, contentWidth, ""),
-      ...this.wrapHomeText(`${subheadPrefix}${MUTED()}`, subheadPrefixPlain, locationText, contentWidth, ""),
+      ...heroLines,
       "",
       ...this.wrapHomeDetail("Model", modelLabel, Math.max(18, contentWidth)),
       ...this.wrapHomeDetail("Tip", this.homeTip, Math.max(18, contentWidth)),

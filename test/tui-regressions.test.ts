@@ -148,7 +148,7 @@ describe("startup home view", () => {
     expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("Files");
   });
 
-  it("falls back to a shorter home header only when needed", () => {
+  it("drops title text before distorting the exact mascot on very narrow widths", () => {
     const app = new App() as any;
     let rendered: string[] = [];
 
@@ -167,7 +167,7 @@ describe("startup home view", () => {
     app.drawImmediate();
 
     const output = rendered.map((line) => stripAnsi(line)).join("\n");
-    expect(output).toContain("Welcome");
+    expect(output).not.toContain("Welcome");
     expect(output).not.toContain("Welcome to BrokeCLI");
     expect(output).not.toContain(`v${app.appVersion}`);
   });
