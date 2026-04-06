@@ -9,7 +9,7 @@ import { Session } from "../src/core/session.js";
 import { touchProject } from "../src/core/projects.js";
 import { getTools, type ToolName } from "../src/tools/registry.js";
 import { createAskUserTool } from "../src/tools/ask.js";
-import { createSubagentTool } from "../src/tools/subagent.js";
+import { createAgentTool } from "../src/tools/subagent.js";
 import { setBashOutputCallback } from "../src/tools/bash.js";
 import { setTodoChangeCallback } from "../src/tools/todo.js";
 import { getApiKey, getSettings, updateSetting, type Mode } from "../src/core/config.js";
@@ -187,7 +187,7 @@ program.action(async (opts) => {
     ...getTools({
       include: allowedTools,
       extraTools: {
-        subagent: createSubagentTool({
+        agent: createAgentTool({
           cwd: () => process.cwd(),
           providerRegistry,
           getActiveModel: () => activeModel,

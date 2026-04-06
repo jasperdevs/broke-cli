@@ -20,7 +20,7 @@ npm install -g @jasperdevs/brokecli
 - Auto lint/test validation after edits, with optional one-pass auto-fix
 - Tool permission blocking and extension enable/disable controls
 - JSON RPC mode for non-interactive usage
-- Delegated read-only `subagent` tool for focused research/plan/review work
+- Delegated read-only `agent` tool for focused search, research, planning, and review work
 
 ## Core Commands
 
@@ -63,7 +63,7 @@ The agent has first-class tools for:
 - web search
 - web fetch
 - todo/task tracking
-- delegated subagent research/plan/review
+- delegated stateless agent search/research/plan/review
 
 You can block specific tools with `/permissions`.
 

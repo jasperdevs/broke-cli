@@ -11,22 +11,17 @@ import { getSettings } from "../core/config.js";
 import { readFileForContext } from "../tui/file-picker.js";
 import { getTools, type ToolName } from "./registry.js";
 
-const SUBAGENT_TOOL_NAMES: ToolName[] = ["readFile", "listFiles", "grep", "webSearch", "webFetch"];
+const AGENT_TOOL_NAMES: ToolName[] = ["readFile", "listFiles", "grep", "webSearch", "webFetch"];
 const MAX_FILE_HINTS = 6;
-const subagentSchema = z.object({
-  task: z.string().min(1).describe("The delegated task"),
-  role: z.enum(["research", "plan", "review"]).default("research").describe("What kind of delegated work to do"),
-  model: z.string().optional().describe("Optional provider/model-id override"),
-  files: z.array(z.string()).optional().describe("Optional files to prioritize as context"),
+
+const agentSchema = z.object({
+  prompt: z.string().min(1).describe("A detailed, self-contained task for the agent to perform autonomously."),
+  model: z.string().optional().describe("Optional provider/model-id override."),
+  files: z.array(z.string()).optional().describe("Optional files to prioritize as context."),
+  task: z.string().optional().describe("Deprecated alias for prompt."),
 });
 
-type SubagentInput = z.infer<typeof subagentSchema>;
-
-const SUBAGENT_ROLE_GUIDANCE: Record<"research" | "plan" | "review", string> = {
-  research: "Investigate the assigned task with read-only tools. Focus on concrete evidence, code references, and concise findings.",
-  plan: "Analyze the assigned task and return a compact implementation plan with tradeoffs and risks. Do not modify files.",
-  review: "Review the assigned target for bugs, regressions, missing tests, and risky assumptions. Findings first, no fluff.",
-};
+type AgentInput = z.infer<typeof agentSchema>;
 
 function canUseSdkTools(model: ModelHandle): boolean {
   return model.runtime === "sdk"
@@ -69,26 +64,34 @@ function buildFileHintBlock(cwd: string, files: string[]): string {
     .join("\n\n");
 }
 
-export function buildSubagentSystemPrompt(role: "research" | "plan" | "review", cwd: string, providerId?: string): string {
+function resolvePrompt(input: AgentInput): string {
+  const prompt = input.prompt.trim();
+  if (prompt) return prompt;
+  if (input.task?.trim()) return input.task.trim();
+  return "";
+}
+
+export function buildAgentSystemPrompt(cwd: string, providerId?: string): string {
   const base = buildSystemPrompt(cwd, providerId, "build", resolveCavemanLevel(getSettings().cavemanLevel ?? "off", ""));
   return [
     base,
-    "You are a delegated subagent running inside BrokeCLI.",
-    SUBAGENT_ROLE_GUIDANCE[role],
-    "Stay inside the assigned task. Do not ask the user questions. Do not modify files. Do not claim to have changed anything.",
-    "Return only the useful result for the parent agent. Keep it concise and specific.",
+    "You are a delegated agent running inside BrokeCLI.",
+    "You are stateless. You get one prompt, you do the work autonomously, and you return one final report to the parent agent.",
+    "Use only read-only search and inspection tools. Do not modify files. Do not claim to have changed anything.",
+    "Prefer searching, listing, and reading over guessing. Trust your result enough to be concise.",
+    "Return raw useful findings only. No chatter. No questions back to the user.",
   ].join("\n\n");
 }
 
-async function runSubagentTurn(options: {
+async function runAgentTurn(options: {
   model: ModelHandle;
   modelId: string;
   system: string;
-  content: string;
+  prompt: string;
   tools?: ToolSet;
   cwd: string;
 }): Promise<{ text: string; toolsUsed: string[] }> {
-  const { model, modelId, system, content, tools, cwd } = options;
+  const { model, modelId, system, prompt, tools, cwd } = options;
   let text = "";
   const toolsUsed: string[] = [];
 
@@ -97,7 +100,7 @@ async function runSubagentTurn(options: {
       providerId: model.provider.id as "anthropic" | "codex",
       modelId,
       system,
-      messages: [{ role: "user", content }],
+      messages: [{ role: "user", content: prompt }],
       enableThinking: getSettings().enableThinking,
       thinkingLevel: getSettings().thinkingLevel || "low",
       yoloMode: false,
@@ -120,7 +123,7 @@ async function runSubagentTurn(options: {
     modelId,
     providerId: model.provider.id,
     system,
-    messages: [{ role: "user", content }],
+    messages: [{ role: "user", content: prompt }],
     tools,
     enableThinking: getSettings().enableThinking,
     thinkingLevel: getSettings().thinkingLevel || "low",
@@ -141,27 +144,32 @@ async function runSubagentTurn(options: {
   return { text: text.trim(), toolsUsed };
 }
 
-export function createSubagentTool(options: {
+export function createAgentTool(options: {
   cwd: () => string;
   providerRegistry: ProviderRegistry;
   getActiveModel: () => ModelHandle | null;
   getCurrentModelId: () => string;
 }) {
   return tool({
-    description: "Delegate a bounded task to a read-only subagent with isolated context. Use for focused research, planning, or review work that should not pollute the main conversation.",
-    inputSchema: subagentSchema,
-    execute: async ({ task, role, model, files = [] }: SubagentInput) => {
+    description: "Launch a stateless read-only agent for iterative search, planning, or review work. Prefer this when file or symbol search may need multiple rounds. The agent returns one final report, can not edit files, and should be trusted.",
+    inputSchema: agentSchema,
+    execute: async (input: AgentInput) => {
       const cwd = options.cwd();
+      const prompt = resolvePrompt(input);
+      if (!prompt) {
+        return { success: false as const, error: "prompt is required" };
+      }
+
       const activeModel = options.getActiveModel();
-      if (!activeModel && !model) {
-        return { success: false as const, error: "No active model available for subagent delegation." };
+      if (!activeModel && !input.model) {
+        return { success: false as const, error: "No active model available for agent delegation." };
       }
 
       let delegatedModel: ModelHandle;
       let delegatedModelId: string;
       try {
-        if (model) {
-          const [providerId, ...modelParts] = model.split("/");
+        if (input.model) {
+          const [providerId, ...modelParts] = input.model.split("/");
           delegatedModelId = modelParts.join("/");
           delegatedModel = options.providerRegistry.createModel(providerId, delegatedModelId || undefined);
           delegatedModelId ||= delegatedModel.provider.defaultModel;
@@ -173,31 +181,30 @@ export function createSubagentTool(options: {
         return { success: false as const, error: (error as Error).message };
       }
 
-      const system = buildSubagentSystemPrompt(role, cwd, delegatedModel.provider.id);
-      const fileHintBlock = buildFileHintBlock(cwd, files);
-      const content = fileHintBlock
-        ? `${task}\n\nPriority file context:\n${fileHintBlock}`
-        : task;
+      const system = buildAgentSystemPrompt(cwd, delegatedModel.provider.id);
+      const fileHintBlock = buildFileHintBlock(cwd, input.files ?? []);
+      const finalPrompt = fileHintBlock
+        ? `${prompt}\n\nPriority file context:\n${fileHintBlock}`
+        : prompt;
 
       const tools = canUseSdkTools(delegatedModel)
-        ? getTools({ include: SUBAGENT_TOOL_NAMES })
+        ? getTools({ include: AGENT_TOOL_NAMES })
         : undefined;
 
       try {
-        const result = await runSubagentTurn({
+        const result = await runAgentTurn({
           model: delegatedModel,
           modelId: delegatedModelId,
           system,
-          content,
+          prompt: finalPrompt,
           tools,
           cwd,
         });
         return {
           success: true as const,
-          role,
           model: `${delegatedModel.provider.id}/${delegatedModelId}`,
           toolsUsed: result.toolsUsed,
-          result: result.text || "[empty subagent response]",
+          result: result.text || "[empty agent response]",
         };
       } catch (error) {
         return { success: false as const, error: (error as Error).message.slice(0, 200) };
@@ -205,3 +212,6 @@ export function createSubagentTool(options: {
     },
   });
 }
+
+export const createSubagentTool = createAgentTool;
+export const buildSubagentSystemPrompt = buildAgentSystemPrompt;

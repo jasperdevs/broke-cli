@@ -20,10 +20,10 @@ export interface TurnPolicy {
 
 const PLAN_CACHE = new Map<TurnArchetype, string>();
 
-const ALL_EDIT_TOOLS: ToolName[] = ["bash", "readFile", "writeFile", "editFile", "listFiles", "grep", "todoWrite", "subagent"];
-const READ_ONLY_TOOLS: ToolName[] = ["readFile", "listFiles", "grep", "todoWrite", "subagent"];
+const ALL_EDIT_TOOLS: ToolName[] = ["bash", "readFile", "writeFile", "editFile", "listFiles", "grep", "todoWrite", "agent"];
+const READ_ONLY_TOOLS: ToolName[] = ["readFile", "listFiles", "grep", "todoWrite", "agent"];
 const SHELL_TOOLS: ToolName[] = ["bash", "readFile", "listFiles", "grep", "todoWrite"];
-const RESEARCH_TOOLS: ToolName[] = ["readFile", "listFiles", "grep", "webSearch", "webFetch", "todoWrite", "subagent"];
+const RESEARCH_TOOLS: ToolName[] = ["readFile", "listFiles", "grep", "webSearch", "webFetch", "todoWrite", "agent"];
 
 export function classifyTurnArchetype(userMessage: string, lastToolCalls: string[] = []): TurnArchetype {
   const msg = userMessage.toLowerCase().trim();
