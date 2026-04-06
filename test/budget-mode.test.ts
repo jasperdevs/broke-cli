@@ -39,6 +39,7 @@ describe("session budget metrics", () => {
 
   it("formats a useful budget report and summary", () => {
     const session = new Session(`test-insights-${Date.now()}`);
+    session.addUsage(200, 40, 0.001);
     session.recordTurn({ smallModel: true, toolsExposed: 6, toolsUsed: 2, plannerCacheHit: true });
     session.recordIdleCacheCliff();
     session.recordCompaction({ freshThreadCarryForward: true });
@@ -46,9 +47,10 @@ describe("session budget metrics", () => {
     const report = buildBudgetReport(session);
     const summary = summarizeBudgetMetrics(session.getBudgetMetrics());
 
-    expect(report).toContain("Small-model turns: 1");
-    expect(report).toContain("Exposed but unused: 4");
-    expect(report).toContain("Fresh carry-forwards: 1");
+    expect(report).toContain("Σ 240 total");
+    expect(report).toContain("unused tool exposure");
+    expect(report).toContain("carry-forwards    1");
+    expect(report).toContain("Biggest bleed right now");
     expect(summary).toContain("cliffs 1");
     expect(summary).toContain("tool waste 4");
   });

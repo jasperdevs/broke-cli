@@ -235,6 +235,57 @@ describe("slash command handling", () => {
     expect(app.messages.some((entry) => entry.content.includes("Shared to"))).toBe(true);
   });
 
+  it("does not add transcript comments for /thinking and /caveman toggles", async () => {
+    const app = createAppStub();
+    const session = new Session(`test-toggle-comments-${Date.now()}`);
+
+    const thinkingResult = await handleSlashCommand({
+      text: "/thinking",
+      app,
+      session,
+      activeModel: null,
+      currentModelId: "",
+      currentMode: "build",
+      systemPrompt: "sys",
+      providerRegistry: {} as any,
+      buildVisibleModelOptions: () => [],
+      refreshProviderState: async () => [],
+      isSkippedPromptAnswer: () => false,
+      isValidHttpBaseUrl: () => true,
+      getContextOptimizer: () => ({ reset() {} }) as any,
+      onSessionReplace: () => {},
+      onModelChange: () => {},
+      onSystemPromptChange: () => {},
+      hooks: { emit() {} },
+      onProjectChange: () => {},
+    });
+
+    const cavemanResult = await handleSlashCommand({
+      text: "/caveman",
+      app,
+      session,
+      activeModel: null,
+      currentModelId: "",
+      currentMode: "build",
+      systemPrompt: "sys",
+      providerRegistry: {} as any,
+      buildVisibleModelOptions: () => [],
+      refreshProviderState: async () => [],
+      isSkippedPromptAnswer: () => false,
+      isValidHttpBaseUrl: () => true,
+      getContextOptimizer: () => ({ reset() {} }) as any,
+      onSessionReplace: () => {},
+      onModelChange: () => {},
+      onSystemPromptChange: () => {},
+      hooks: { emit() {} },
+      onProjectChange: () => {},
+    });
+
+    expect(thinkingResult.handled).toBe(true);
+    expect(cavemanResult.handled).toBe(true);
+    expect(app.messages).toEqual([]);
+  });
+
   it("shows a compact budget report for /budget", async () => {
     const app = createAppStub();
     const session = new Session(`test-budget-${Date.now()}`);
@@ -271,9 +322,9 @@ describe("slash command handling", () => {
 
     expect(result.handled).toBe(true);
     expect(opened?.title).toBe("Budget Inspector");
-    expect(opened?.lines.join("\n")).toContain("Token Budget");
-    expect(opened?.lines.join("\n")).toContain("Idle cache cliffs: 1");
-    expect(opened?.lines.join("\n")).toContain("Fresh carry-forwards: 1");
+    expect(opened?.lines.join("\n")).toContain("Budget");
+    expect(opened?.lines.join("\n")).toContain("idle cache cliffs");
+    expect(opened?.lines.join("\n")).toContain("carry-forwards    1");
   });
 
   it("reloads extensions immediately when toggled with enter", async () => {

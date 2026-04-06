@@ -212,13 +212,11 @@ export async function handleSlashCommand(options: {
       app.cycleCavemanMode();
       reloadContext();
       const level = getSettings().cavemanLevel ?? "off";
-      app.addMessage("system", `🪨 ${level}`);
       onSystemPromptChange(buildSystemPrompt(process.cwd(), activeModel?.provider?.id, currentMode, level));
       return { handled: true };
     }
     case "thinking":
       app.cycleThinkingMode();
-      app.addMessage("system", `Thinking: ${getSettings().thinkingLevel || (getSettings().enableThinking ? "low" : "off")}`);
       return { handled: true };
     case "name": {
       const name = text.slice(6).trim();

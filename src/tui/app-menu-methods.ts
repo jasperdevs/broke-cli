@@ -448,13 +448,6 @@ export function scrollTranscript(app: AppState, delta: number): boolean {
 }
 
 export function shouldEnableMenuMouse(app: AppState): boolean {
-  return Boolean(
-    app.shouldShowSidebar()
-      || app.questionPrompt?.options
-      || app.filePicker
-      || app.itemPicker
-      || app.settingsPicker
-      || app.modelPicker
-      || app.getCommandMatches().length > 0,
-  );
+  void app;
+  return false;
 }

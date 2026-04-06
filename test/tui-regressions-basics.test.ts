@@ -25,6 +25,12 @@ describe("mouse reporting mode", () => {
     expect(MOUSE_ON).toBe("");
     expect(MOUSE_OFF).toBe("");
   });
+
+  it("does not enable terminal mouse capture even when the sidebar is visible", () => {
+    const app = new App() as any;
+    app.messages = [{ role: "user", content: "hello" }];
+    expect(app.shouldEnableMenuMouse()).toBe(false);
+  });
 });
 
 describe("message wrapping", () => {

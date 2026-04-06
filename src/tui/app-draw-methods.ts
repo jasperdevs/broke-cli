@@ -100,10 +100,9 @@ function appendQueuedMessagePreview(app: AppState, bottomLines: string[], mainW:
 function drawBudgetView(app: AppState): void {
   const { width, height } = app.screen;
   const separatorColor = app.getModeAccent();
-  const title = ` ${T()}${BOLD}${app.budgetView.title}${RESET}`;
-  const hint = `${DIM}esc back${RESET}`;
-  const innerWidth = Math.max(10, width - 4);
-  const bodyHeight = Math.max(1, height - 4);
+  const title = `${T()}${BOLD}${app.budgetView.title}${RESET}`;
+  const innerWidth = Math.max(20, width - 6);
+  const bodyHeight = Math.max(1, height - 6);
   const allLines = app.budgetView.lines.flatMap((line: string) => {
     if (!line) return [""];
     return stripAnsi(line).length <= innerWidth ? [line] : wordWrap(line, innerWidth);
@@ -113,17 +112,15 @@ function drawBudgetView(app: AppState): void {
   const visible = allLines.slice(app.budgetView.scrollOffset, app.budgetView.scrollOffset + bodyHeight);
 
   const frame: string[] = [];
-  frame.push(`${separatorColor}${"─".repeat(width)}${RESET}`);
-  const headerBase = `${title}`;
-  const headerPlain = stripAnsi(headerBase).length + stripAnsi(hint).length + 1;
-  const gap = Math.max(1, width - headerPlain - 1);
-  frame.push(`${headerBase}${" ".repeat(gap)}${hint}`);
+  frame.push(`${separatorColor}${"═".repeat(width)}${RESET}`);
+  frame.push(` ${title}`);
+  frame.push(` ${DIM}${"Budget inspector".padEnd(Math.max(0, width - 2))}${RESET}`);
   for (let i = 0; i < bodyHeight; i++) {
     const line = visible[i] ?? "";
     frame.push(` ${app.padLine(line, width - 2)}`);
   }
-  while (frame.length < height - 1) frame.push("");
-  frame.push(`${separatorColor}${"─".repeat(width)}${RESET}`);
+  while (frame.length < height - 1) frame.push(" ");
+  frame.push(`${separatorColor}${"═".repeat(width)}${RESET}`);
   app.screen.render(frame.map((line) => app.decorateFrameLine(line, width)));
   app.screen.hideCursor();
 }
