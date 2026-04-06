@@ -91,7 +91,7 @@ export function getApiKey(provider: string): string | undefined {
   // Check environment variables first
   switch (provider) {
     case "anthropic":
-      return process.env.ANTHROPIC_API_KEY;
+      return process.env.ANTHROPIC_API_KEY || readClaudeToken();
     case "openai":
       return process.env.OPENAI_API_KEY;
     case "codex":
@@ -109,6 +109,39 @@ export function getApiKey(provider: string): string | undefined {
     default:
       return undefined;
   }
+}
+
+function readClaudeToken(): string | undefined {
+  try {
+    const claudeDir = join(homedir(), ".claude");
+    if (!existsSync(claudeDir)) return undefined;
+    
+    // Check common token file locations
+    const tokenFiles = ["credentials.json", "access_token", "api_key", ".claude_api_key"];
+    for (const file of tokenFiles) {
+      const path = join(claudeDir, file);
+      if (existsSync(path)) {
+        const content = readFileSync(path, "utf-8").trim();
+        if (file.endsWith(".json")) {
+          const data = JSON.parse(content);
+          return data?.access_token || data?.api_key || data?.token;
+        }
+        if (content.length > 20 && !content.includes("\n")) {
+          return content;
+        }
+      }
+    }
+    
+    // Check for ANTHROPIC_API_KEY in credentials.json
+    const credsPath = join(claudeDir, "credentials.json");
+    if (existsSync(credsPath)) {
+      const data = JSON.parse(readFileSync(credsPath, "utf-8"));
+      return data?.anthropic_api_key || data?.ANTHROPIC_API_KEY;
+    }
+  } catch {
+    // Silently fail
+  }
+  return undefined;
 }
 
 function readCodexToken(): string | undefined {
