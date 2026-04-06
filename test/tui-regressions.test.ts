@@ -519,6 +519,51 @@ describe("wrapped input layout", () => {
     const count = app.getBottomLineCount(20, 20);
     expect(count).toBeGreaterThan(6);
   });
+
+  it("keeps the cursor on the real input row when the sidebar footer is taller than the prompt area", () => {
+    const app = new App() as any;
+    const settings = getSettings();
+    const original = {
+      showTokens: settings.showTokens,
+      showCost: settings.showCost,
+      thinkingLevel: settings.thinkingLevel,
+      cavemanLevel: settings.cavemanLevel,
+    };
+
+    try {
+      updateSetting("showTokens", true);
+      updateSetting("showCost", true);
+      updateSetting("thinkingLevel", "low");
+      updateSetting("cavemanLevel", "ultra");
+      app.messages = [{ role: "user", content: "hello" }];
+      app.setContextUsage(120_000, 128_000);
+      app.updateUsage(0.0021, 8_200, 621);
+
+      let cursorRow = 0;
+      let rendered: string[] = [];
+      app.screen = {
+        height: 12,
+        width: 60,
+        hasSidebar: true,
+        mainWidth: 37,
+        sidebarWidth: 22,
+        render: (lines: string[]) => { rendered = lines; },
+        setCursor: (row: number) => { cursorRow = row; },
+        hideCursor: () => {},
+        forceRedraw: () => {},
+      };
+
+      app.drawImmediate();
+
+      const rowText = stripAnsi(rendered[cursorRow - 1] ?? "");
+      expect(rowText).not.toMatch(/^─+$/);
+    } finally {
+      updateSetting("showTokens", original.showTokens);
+      updateSetting("showCost", original.showCost);
+      updateSetting("thinkingLevel", original.thinkingLevel);
+      updateSetting("cavemanLevel", original.cavemanLevel ?? "off");
+    }
+  });
 });
 
 describe("picker menus", () => {

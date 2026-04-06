@@ -2709,7 +2709,7 @@ export class App {
     }
 
     // Cursor on input line — account for multi-line input
-    const inputRow = Math.min(height, topHeight + 2 + inputLayout.row); // +1 separator, +1 for 1-based
+    const inputRow = Math.min(height, topHeight + bottomPad + 2 + inputLayout.row); // +1 separator, +1 for 1-based
     const inputCol = Math.min(width, 1 + inputLayout.col);
     this.screen.setCursor(inputRow, inputCol);
   }
