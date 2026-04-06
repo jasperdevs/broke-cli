@@ -496,51 +496,6 @@ describe("slash command handling", () => {
     expect(capturedItems.some((item) => item.label.includes("remote session"))).toBe(false);
   });
 
-  it("opens a tree picker and navigates to the selected node", async () => {
-    const app = createAppStub();
-    let treeItems: Array<{ id: string; label: string; detail?: string }> = [];
-    let onSelect: ((id: string) => void) | null = null;
-    let draft = "";
-    app.openItemPicker = (_title: string, items: Array<{ id: string; label: string; detail?: string }>, nextOnSelect: (id: string) => void) => {
-      treeItems = items;
-      onSelect = nextOnSelect;
-    };
-    app.setDraft = (text: string) => {
-      draft = text;
-    };
-
-    const session = new Session(`test-tree-${Date.now()}`);
-    session.addMessage("user", "first prompt");
-    session.addMessage("assistant", "first answer");
-    session.addMessage("user", "second prompt");
-
-    const result = await handleSlashCommand({
-      text: "/tree",
-      app,
-      session,
-      activeModel: null,
-      currentModelId: "",
-      currentMode: "build",
-      systemPrompt: "sys",
-      providerRegistry: {} as any,
-      buildVisibleModelOptions: () => [],
-      refreshProviderState: async () => [],
-      isSkippedPromptAnswer: () => false,
-      isValidHttpBaseUrl: () => true,
-      getContextOptimizer: () => ({ reset() {} }) as any,
-      onSessionReplace: () => {},
-      onModelChange: () => {},
-      onSystemPromptChange: () => {},
-      hooks: { emit() {} },
-      onProjectChange: () => {},
-    });
-
-    expect(result.handled).toBe(true);
-    expect(treeItems.length).toBe(3);
-    onSelect?.(treeItems[2].id);
-    expect(draft).toBe("second prompt");
-  });
-
   it("opens the agent task inspector for /agents", async () => {
     const app = createAppStub();
     let opened: { title: string; runs: any[] } | null = null;

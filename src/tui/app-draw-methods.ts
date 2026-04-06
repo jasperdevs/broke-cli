@@ -230,8 +230,7 @@ function buildInfoBar(app: AppState, hasSidebar: boolean, mainW: number): string
     const escapeAction = !app.isStreaming && !app.hasPendingMessages() && app.input.getText().trim().length === 0
       ? getSettings().doubleEscapeAction
       : null;
-    if (escapeAction === "tree") parts.push({ text: `${ERR()}Esc again for tree${RESET}`, plain: "Esc again for tree" });
-    else if (escapeAction === "fork") parts.push({ text: `${ERR()}Esc again to fork${RESET}`, plain: "Esc again to fork" });
+    if (escapeAction === "fork") parts.push({ text: `${ERR()}Esc again to fork${RESET}`, plain: "Esc again to fork" });
     else parts.push({ text: `${ERR()}Esc again to stop${RESET}`, plain: "Esc again to stop" });
   }
   if (app.isStreaming) parts.push({ text: `${DIM}esc${RESET} ${DIM}stop${RESET}`, plain: "esc stop" });

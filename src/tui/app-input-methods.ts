@@ -127,7 +127,7 @@ export function handleKey(app: AppState, key: Keypress): void {
     if (action !== "none") {
       if (app.escPrimed) {
         app.clearInterruptPrompt();
-        if (app.onSubmit) app.onSubmit(action === "tree" ? "/tree" : "/fork");
+        if (app.onSubmit && action === "fork") app.onSubmit("/fork");
       } else {
         app.primeEscapeAbort();
       }

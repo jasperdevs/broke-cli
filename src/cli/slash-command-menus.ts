@@ -2,7 +2,7 @@ import { execSync } from "child_process";
 import { writeFileSync } from "fs";
 import { buildSystemPrompt, reloadContext } from "../core/context.js";
 import { clearCredentials, hasStoredCredentials, listAuthenticated } from "../core/auth.js";
-import { getProviderCredential, getSettings, loadConfig, updateProviderConfig, updateSetting, type Mode, type Settings, type TreeFilterMode } from "../core/config.js";
+import { getProviderCredential, getSettings, loadConfig, updateProviderConfig, updateSetting, type Mode, type Settings } from "../core/config.js";
 import { listProjects } from "../core/projects.js";
 import { listExtensions } from "../core/extensions.js";
 import { isToolAllowed, toggleExtensionEnabled, toggleToolPermission } from "../core/permissions.js";
@@ -42,7 +42,7 @@ export function openSettingsMenu(args: { app: AnyApp; activeModel: any; currentM
       { key: "quietStartup", label: "Quiet startup", value: String(s.quietStartup), description: "Hide startup inventory details" },
       { key: "hideThinkingBlock", label: "Hide thinking block", value: String(s.hideThinkingBlock), description: "Hide streamed reasoning blocks in chat" },
       { key: "cavemanLevel", label: "Caveman mode", value: s.cavemanLevel ?? "off", description: "off / lite / auto / ultra — save output tokens (ctrl+y)" },
-      { key: "doubleEscapeAction", label: "Double-escape", value: s.doubleEscapeAction, description: "tree / fork / none" },
+      { key: "doubleEscapeAction", label: "Double-escape", value: s.doubleEscapeAction, description: "fork / none" },
       { key: "editorPaddingX", label: "Editor padding", value: String(s.editorPaddingX), description: "Horizontal input padding (0-3)" },
       { key: "autocompleteMaxVisible", label: "Autocomplete size", value: String(s.autocompleteMaxVisible), description: "Visible command rows" },
       { key: "showHardwareCursor", label: "Hardware cursor", value: String(s.showHardwareCursor), description: "Keep the terminal cursor visible while idle" },
@@ -76,7 +76,7 @@ export function openSettingsMenu(args: { app: AnyApp; activeModel: any; currentM
       reloadContext();
       onSystemPromptChange(buildSystemPrompt(process.cwd(), activeModel?.provider?.id, currentMode, next));
     } else if (key === "doubleEscapeAction") {
-      const levels: Array<Settings["doubleEscapeAction"]> = ["tree", "fork", "none"];
+      const levels: Array<Settings["doubleEscapeAction"]> = ["fork", "none"];
       const next = levels[(levels.indexOf(s.doubleEscapeAction) + 1) % levels.length];
       updateSetting("doubleEscapeAction", next);
     } else if (key === "editorPaddingX") {
@@ -226,146 +226,6 @@ export function openResumeMenu(args: { app: AnyApp; restText: string; onSessionR
     for (const msg of loaded.getMessages()) app.addMessage(msg.role, msg.content);
     app.updateUsage(loaded.getTotalCost(), loaded.getTotalInputTokens(), loaded.getTotalOutputTokens());
   }, { kind: "resume" });
-  return true;
-}
-
-export function openTreeMenu(args: {
-  app: AnyApp;
-  session: Session;
-  onSessionReplace?: (session: Session) => void;
-}): boolean {
-  const { app, session } = args;
-  let filterMode: TreeFilterMode = getSettings().treeFilterMode;
-  let showTimestamps = false;
-  const filterModes: TreeFilterMode[] = ["default", "no-tools", "user-only", "labeled-only", "all"];
-  const collapsed = new Set<string>();
-
-  const buildChildrenMap = () => {
-    const map = new Map<string, string[]>();
-    for (const entry of session.getTreeItems("all")) {
-      if (!entry.parentId) continue;
-      const bucket = map.get(entry.parentId) ?? [];
-      bucket.push(entry.id);
-      map.set(entry.parentId, bucket);
-    }
-    return map;
-  };
-  const childrenMap = buildChildrenMap();
-
-  const visibleEntries = () => {
-    const source = session.getTreeItems(filterMode);
-    const hidden = new Set<string>();
-    const byId = new Map(source.map((entry) => [entry.id, entry]));
-    for (const entry of source) {
-      let cursor = entry.parentId ? byId.get(entry.parentId) : undefined;
-      while (cursor) {
-        if (collapsed.has(cursor.id)) {
-          hidden.add(entry.id);
-          break;
-        }
-        cursor = cursor.parentId ? byId.get(cursor.parentId) : undefined;
-      }
-    }
-    return source.filter((entry) => !hidden.has(entry.id));
-  };
-
-  const buildItems = () => visibleEntries().map((entry) => {
-    const hasChildren = (childrenMap.get(entry.id)?.length ?? 0) > 0;
-    const branch = hasChildren ? (collapsed.has(entry.id) ? "▸" : "▾") : "•";
-    const active = entry.active ? " [active]" : "";
-    const label = entry.label ? ` · #${entry.label}` : "";
-    const summary = entry.content.split(/\r?\n/)[0]?.trim() || entry.role;
-    const indent = "  ".repeat(entry.depth);
-    const time = showTimestamps ? ` · ${formatRelativeMinutes(entry.timestamp)}` : "";
-    return {
-      id: entry.id,
-      label: `${indent}${branch} ${entry.role}${active}${label}`,
-      detail: `${summary.slice(0, 80)}${time}`,
-    };
-  });
-
-  const items = buildItems();
-  if (items.length === 0) {
-    app.addMessage("system", filterMode === "all" ? "No session tree yet." : `No tree items for filter "${filterMode}".`);
-    return false;
-  }
-
-  const refreshItems = (focusId?: string) => {
-    app.updateItemPickerItems?.(buildItems(), focusId);
-  };
-  const cycleFilter = () => {
-    filterMode = filterModes[(filterModes.indexOf(filterMode) + 1) % filterModes.length];
-    updateSetting("treeFilterMode", filterMode);
-    refreshItems();
-  };
-
-  app.openItemPicker("Session Tree", items, (entryId: string) => {
-    const result = session.navigateTo(entryId);
-    if (result.cancelled) return;
-    app.clearMessages();
-    for (const msg of session.getMessages()) app.addMessage(msg.role, msg.content);
-    app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
-    if (result.editorText) app.setDraft?.(result.editorText);
-  }, {
-    kind: "tree",
-    initialCursor: Math.max(0, items.findIndex((item) => item.id === session.getLeafId())),
-    onKey: (key: Keypress) => {
-      if (key.ctrl && key.name === "o") {
-        cycleFilter();
-        return true;
-      }
-      if (key.shift && key.name === "t") {
-        showTimestamps = !showTimestamps;
-        refreshItems();
-        return true;
-      }
-      if (key.shift && key.name === "l") {
-        const filtered = app.getFilteredItems?.() ?? buildItems();
-        const current = filtered[(app.itemPicker?.cursor ?? 0)];
-        if (!current) return true;
-        session.toggleLabel(current.id);
-        refreshItems(current.id);
-        return true;
-      }
-      if ((key.ctrl || key.meta) && ["left", "right"].includes(key.name)) {
-        const filtered = app.getFilteredItems?.() ?? buildItems();
-        const current = filtered[(app.itemPicker?.cursor ?? 0)];
-        if (!current) return true;
-        const entry = session.getTreeEntry(current.id);
-        if (!entry) return true;
-        const hasChildren = (childrenMap.get(entry.id)?.length ?? 0) > 0;
-        if (key.name === "right") {
-          if (collapsed.has(entry.id)) {
-            collapsed.delete(entry.id);
-            refreshItems(entry.id);
-          } else {
-            const children = childrenMap.get(entry.id) ?? [];
-            const nextChild = filtered.find((item: { id: string }) => children.includes(item.id));
-            if (nextChild) refreshItems(nextChild.id);
-          }
-          return true;
-        }
-        if (key.name === "left") {
-          if (hasChildren && !collapsed.has(entry.id)) {
-            collapsed.add(entry.id);
-            refreshItems(entry.id);
-          } else if (entry.parentId) {
-            refreshItems(entry.parentId);
-          }
-          return true;
-        }
-      }
-      if (key.name === "left" || key.name === "right") {
-        const filtered = app.getFilteredItems?.() ?? buildItems();
-        if (filtered.length === 0 || !app.itemPicker) return true;
-        const delta = key.name === "left" ? -10 : 10;
-        app.itemPicker.cursor = Math.max(0, Math.min(filtered.length - 1, app.itemPicker.cursor + delta));
-        return true;
-      }
-      return false;
-    },
-    secondaryHint: "ctrl+o filter · shift+l label · shift+t time · alt/ctrl+←/→ fold",
-  });
   return true;
 }
 

@@ -20,7 +20,6 @@ export const COMMANDS: CommandEntry[] = [
   { name: "skills", desc: "list loaded skills" },
   { name: "projects", desc: "switch or search recent projects" },
   { name: "resume", desc: "resume session (sessions)", aliases: ["sessions"] },
-  { name: "tree", desc: "browse session tree" },
   { name: "agents", desc: "inspect delegated agent tasks", hotkey: "alt+a" },
   { name: "share", desc: "create shareable transcript html" },
   { name: "session", desc: "show active session info" },

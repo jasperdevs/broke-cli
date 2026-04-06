@@ -17,7 +17,7 @@ import { listTemplates, loadTemplate } from "../core/templates.js";
 import { undoLastCheckpoint } from "../core/git.js";
 import { formatRelativeMinutes } from "./exports.js";
 import { runConnectFlow } from "./connect-flow.js";
-import { handleLogoutMenu, openExportMenu, openExtensionsMenu, openPermissionsMenu, openProjectsMenu, openResumeMenu, openSettingsMenu, openThemeMenu, openTreeMenu, shareTranscript } from "./slash-command-menus.js";
+import { handleLogoutMenu, openExportMenu, openExtensionsMenu, openPermissionsMenu, openProjectsMenu, openResumeMenu, openSettingsMenu, openThemeMenu, shareTranscript } from "./slash-command-menus.js";
 import type { ModelOption, SettingEntry, PickerItem } from "../tui/app-types.js";
 import { SessionManager } from "../core/session-manager.js";
 
@@ -50,7 +50,7 @@ interface SlashCommandApp {
       onSecondaryAction?: (id: string) => void;
       secondaryHint?: string;
       closeOnSelect?: boolean;
-      kind?: "permissions" | "extensions" | "theme" | "export" | "resume" | "session" | "hotkeys" | "projects" | "logout" | "tree" | "agents";
+      kind?: "permissions" | "extensions" | "theme" | "export" | "resume" | "session" | "hotkeys" | "projects" | "logout" | "agents";
     },
   ): void;
   openAgentRunsView?(title: string, runs: Array<{ id: string; prompt: string; status: "running" | "done" | "error"; result?: string; detail?: string; createdAt: number }>): void;
@@ -249,10 +249,6 @@ export async function handleSlashCommand(options: {
         app.addMessage("system", renderBudgetDashboard({ report: reports.all, scopeLabel: "all sessions", width: 100 }).join("\n"));
       }
       return { handled: true };
-    case "tree": {
-      openTreeMenu({ app, session, onSessionReplace });
-      return { handled: true };
-    }
     case "agents": {
       const runs = app.getAgentRuns?.() ?? [];
       if (runs.length === 0) {

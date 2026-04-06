@@ -80,7 +80,7 @@ export interface Settings {
   disabledExtensions: string[];
   quietStartup: boolean;
   collapseChangelog: boolean;
-  doubleEscapeAction: "tree" | "fork" | "none";
+  doubleEscapeAction: "fork" | "none";
   treeFilterMode: TreeFilterMode;
   editorPaddingX: number;
   autocompleteMaxVisible: number;
@@ -143,7 +143,7 @@ export const DEFAULT_SETTINGS: Settings = {
   disabledExtensions: [],
   quietStartup: false,
   collapseChangelog: false,
-  doubleEscapeAction: "tree",
+  doubleEscapeAction: "fork",
   treeFilterMode: "default",
   editorPaddingX: 0,
   autocompleteMaxVisible: 5,
@@ -314,6 +314,9 @@ export function getSettings(): Settings {
     images: { ...DEFAULT_SETTINGS.images, ...config.settings?.images, ...runtimeSettings.images },
     markdown: { ...DEFAULT_SETTINGS.markdown, ...config.settings?.markdown, ...runtimeSettings.markdown },
   };
+  if ((merged as Settings | { doubleEscapeAction?: string }).doubleEscapeAction === "tree") {
+    (merged as Settings).doubleEscapeAction = "fork";
+  }
   return merged as Settings;
 }
 

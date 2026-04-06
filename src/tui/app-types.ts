@@ -115,7 +115,6 @@ export type MenuPromptKind =
   | "resume"
   | "session"
   | "hotkeys"
-  | "tree"
   | "agents"
   | "projects"
   | "logout";

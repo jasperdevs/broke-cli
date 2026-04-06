@@ -30,7 +30,6 @@ npm install -g @jasperdevs/brokecli
 - `/model` choose the main model
 - `/scoped-models` pin or unpin models for `Ctrl+P` cycling
 - `/resume` search and resume recent sessions in the current project
-- `/tree` browse the active session tree in place
 - `/session` inspect the active session file, tokens, and cost
 - `/projects` search and switch among recently used projects
 - `/share` publish a secret GitHub gist when a share token is present, otherwise create a local shareable HTML transcript

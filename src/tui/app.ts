@@ -77,7 +77,7 @@ export class App {
     title: string;
     items: PickerItem[];
     cursor: number;
-    kind?: "model" | "settings" | "permissions" | "extensions" | "theme" | "export" | "resume" | "session" | "hotkeys" | "tree" | "agents" | "projects" | "logout";
+    kind?: "model" | "settings" | "permissions" | "extensions" | "theme" | "export" | "resume" | "session" | "hotkeys" | "agents" | "projects" | "logout";
     previewHint?: string;
     onPreview?: (id: string) => void;
     onCancel?: () => void;
