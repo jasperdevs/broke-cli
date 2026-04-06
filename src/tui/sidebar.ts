@@ -1,5 +1,4 @@
-import { execSync } from "child_process";
-import { readdirSync, statSync } from "fs";
+import { readdirSync } from "fs";
 import { join } from "path";
 import { RESET } from "../utils/ansi.js";
 
@@ -18,22 +17,22 @@ export interface SidebarFooterColors {
   error: string;
 }
 
-function formatContextPercentLabel(contextUsed: number): string {
-  if (contextUsed <= 0) return "0%";
-  if (contextUsed < 1) return "<1%";
-  return `${Math.round(contextUsed)}%`;
+function formatContextPercentLabel(contextPercent: number): string {
+  if (contextPercent <= 0) return "0%";
+  if (contextPercent < 1) return "<1%";
+  return `${Math.round(contextPercent)}%`;
 }
 
-function buildContextMeter(width: number, contextUsed: number, colors: SidebarFooterColors): string {
-  const percent = formatContextPercentLabel(contextUsed);
-  const available = Math.max(6, width - percent.length - 2);
-  const fillWidth = Math.max(1, Math.min(14, available));
-  const filled = Math.max(0, Math.min(fillWidth, Math.round((Math.max(0, contextUsed) / 100) * fillWidth)));
+function buildContextMeter(width: number, contextPercent: number, colors: SidebarFooterColors): string {
+  const percent = formatContextPercentLabel(contextPercent);
+  const available = Math.max(4, width - percent.length - 8);
+  const fillWidth = Math.max(4, Math.min(8, available));
+  const filled = Math.max(0, Math.min(fillWidth, Math.round((Math.max(0, contextPercent) / 100) * fillWidth)));
   const empty = Math.max(0, fillWidth - filled);
-  const fillColor = contextUsed > 90 ? colors.error : contextUsed > 70 ? colors.warning : colors.accent;
+  const fillColor = contextPercent > 90 ? colors.error : contextPercent > 70 ? colors.warning : colors.accent;
   const fill = filled > 0 ? `${fillColor}${"█".repeat(filled)}${RESET}` : "";
   const rest = empty > 0 ? `${colors.muted}${"░".repeat(empty)}${RESET}` : "";
-  return `${colors.muted}▕${RESET}${fill}${rest}${colors.muted}▏${RESET} ${fillColor}${percent}${RESET}`;
+  return `${colors.muted}[${RESET}${fill}${rest}${colors.muted}]${RESET} ${fillColor}${percent}${RESET}`;
 }
 
 const fileTreeCache = new Map<string, { at: number; items: SidebarTreeItem[] }>();
@@ -47,47 +46,40 @@ export function loadSidebarFileTree(cwd: string): SidebarTreeItem[] {
 
   let items: SidebarTreeItem[] = [];
   try {
-    const files = execSync("git ls-files --others --cached --exclude-standard", { cwd, encoding: "utf-8", timeout: 2000 }).trim();
-    const raw = files.split("\n").filter(Boolean);
-    const dirContents = new Map<string, string[]>();
-    const topFiles: string[] = [];
-    for (const f of raw) {
-      const slash = f.indexOf("/");
-      if (slash > 0) {
-        const dir = f.slice(0, slash);
-        if (!dirContents.has(dir)) dirContents.set(dir, []);
-        dirContents.get(dir)!.push(f.slice(slash + 1));
-      } else {
-        topFiles.push(f);
+    const entries = readdirSync(cwd, { withFileTypes: true })
+      .filter((entry) => entry.name !== "node_modules")
+      .sort((a, b) => {
+        if (a.isDirectory() !== b.isDirectory()) return a.isDirectory() ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      })
+      .slice(0, 40);
+
+    items = entries.map((entry) => {
+      const path = join(cwd, entry.name);
+      let children: string[] | undefined;
+      if (entry.isDirectory()) {
+        try {
+          children = readdirSync(path, { withFileTypes: true })
+            .filter((child) => child.name !== "node_modules")
+            .sort((a, b) => {
+              if (a.isDirectory() !== b.isDirectory()) return a.isDirectory() ? -1 : 1;
+              return a.name.localeCompare(b.name);
+            })
+            .slice(0, 40)
+            .map((child) => child.isDirectory() ? `${child.name}/` : child.name);
+        } catch {
+          children = [];
+        }
       }
-    }
-    for (const dir of [...dirContents.keys()].sort()) {
-      const children = dirContents.get(dir)!.sort().map((child) => child.includes("/") ? child.split("/").pop()! : child);
-      items.push({ name: dir, isDir: true, children, depth: 0 });
-    }
-    for (const file of topFiles.sort()) {
-      items.push({ name: file, isDir: false, depth: 0 });
-    }
+      return {
+        name: entry.name,
+        isDir: entry.isDirectory(),
+        children,
+        depth: 0,
+      };
+    });
   } catch {
-    try {
-      items = readdirSync(cwd)
-        .filter((file) => !file.startsWith(".") && file !== "node_modules")
-        .map((file) => ({
-          name: file,
-          isDir: (() => {
-            try {
-              return statSync(join(cwd, file)).isDirectory();
-            } catch {
-              return false;
-            }
-          })(),
-          children: undefined,
-          depth: 0,
-        }))
-        .slice(0, 30);
-    } catch {
-      items = [];
-    }
+    items = [];
   }
   fileTreeCache.set(cwd, { at: Date.now(), items });
   return items;
@@ -109,8 +101,8 @@ export function buildSidebarFooterLines(options: {
   }
 
   if (contextUsed !== undefined && contextTokens) {
-    const contextColor = contextUsed > 90 ? colors.error : contextUsed > 70 ? colors.warning : colors.muted;
-    lines.push(`${contextColor}live ${contextTokens}${RESET}`);
+    const contextColor = contextUsed > 90 ? colors.error : contextUsed > 70 ? colors.warning : colors.text;
+    lines.push(`${contextColor}${contextTokens} context${RESET}`);
     lines.push(buildContextMeter(width, contextUsed, colors));
   }
 

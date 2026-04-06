@@ -84,8 +84,9 @@ export function getFilteredModels(app: AppState): ModelOption[] {
     ? app.modelPicker.options.filter((option: ModelOption) => option.active)
     : app.modelPicker.options;
   const q = app.getMenuFilterQuery().toLowerCase();
-  if (!q) return pool;
-  return pool.filter((o: ModelOption) => o.modelId.toLowerCase().includes(q) || o.providerName.toLowerCase().includes(q));
+  const basePool = pool.length > 0 ? pool : app.modelPicker.options;
+  if (!q) return basePool;
+  return basePool.filter((o: ModelOption) => o.modelId.toLowerCase().includes(q) || o.providerName.toLowerCase().includes(q));
 }
 
 export function toggleModelScope(app: AppState): void {

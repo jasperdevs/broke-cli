@@ -108,7 +108,7 @@ describe("stream tool steps", () => {
     expect(streamTextMock).toHaveBeenCalled();
   });
 
-  it("suppresses planning narration before edit-tool work starts", async () => {
+  it("suppresses plain planning narration before edit-tool work starts", async () => {
     const app = {
       addMessage: vi.fn(),
       appendToLastMessage: vi.fn(),
@@ -166,5 +166,69 @@ describe("stream tool steps", () => {
     });
 
     expect(app.appendToLastMessage).not.toHaveBeenCalled();
+  });
+
+  it("hides buffered edit narration once real tool activity starts", async () => {
+    const app = {
+      addMessage: vi.fn(),
+      appendToLastMessage: vi.fn(),
+      appendThinking: vi.fn(),
+      setThinkingRequested: vi.fn(),
+      getLastAssistantContent: vi.fn(() => ""),
+      setStreaming: vi.fn(),
+      setStreamTokens: vi.fn(),
+      updateUsage: vi.fn(),
+      setContextUsage: vi.fn(),
+      setCompacting: vi.fn(),
+      setStatus: vi.fn(),
+      addToolCall: vi.fn(),
+      updateToolCallArgs: vi.fn(),
+      addToolResult: vi.fn(),
+      onAbortRequest: vi.fn(),
+      hasPendingMessages: vi.fn(() => false),
+      flushPendingMessages: vi.fn(),
+    };
+    const session = {
+      getTotalCost: () => 0,
+      getChatMessages: () => [{ role: "user", content: "make file" }],
+      addMessage: vi.fn(),
+      addUsage: vi.fn(),
+      recordTurn: vi.fn(),
+      recordIdleCacheCliff: vi.fn(),
+      replaceConversation: vi.fn(),
+      recordCompaction: vi.fn(),
+      getContextOptimizer: () => ({ optimizeMessages: (messages: any[]) => messages, nextTurn: vi.fn() }),
+      getTotalInputTokens: () => 0,
+      getTotalOutputTokens: () => 0,
+    } as any;
+
+    streamTextMock.mockReturnValueOnce({
+      fullStream: (async function* () {
+        yield { type: "text-delta", text: "Checking the repo root before writing." };
+        yield { type: "tool-input-start", toolName: "readFile" };
+        yield { type: "tool-call", toolName: "readFile", input: { path: "README.md" } };
+      })(),
+      usage: Promise.resolve({ inputTokens: 1, outputTokens: 1 }),
+    });
+
+    await runModelTurn({
+      app: app as any,
+      session,
+      text: "make a file",
+      activeModel: { provider: { id: "openai", name: "OpenAI", defaultModel: "gpt-5.4-mini", models: [] }, runtime: "sdk", model: {} as any, modelId: "gpt-5.4-mini" },
+      currentModelId: "gpt-5.4-mini",
+      smallModel: null,
+      smallModelId: "",
+      currentMode: "build",
+      systemPrompt: "system",
+      buildTools: () => ({ readFile: {} }),
+      hooks: { emit: () => {} },
+      lastToolCalls: [],
+      lastActivityTime: Date.now(),
+    });
+
+    expect(app.appendToLastMessage).not.toHaveBeenCalledWith("Checking the repo root before writing.");
+    expect(app.addToolCall).toHaveBeenCalledWith("readFile", "...");
+    expect(app.updateToolCallArgs).toHaveBeenCalledWith("readFile", "README.md", { path: "README.md" });
   });
 });

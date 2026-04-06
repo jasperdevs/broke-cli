@@ -240,7 +240,7 @@ export function renderHomeView(app: AppState, mainW: number, topHeight: number):
 }
 
 export function buildSidebarLines(app: AppState): string[] {
-  if (app.sidebarTreeOpen && !app.sidebarFileTree) app.sidebarFileTree = loadSidebarFileTree(app.cwd);
+  if (app.sidebarTreeOpen) app.sidebarFileTree = loadSidebarFileTree(app.cwd);
   return composeSidebarLines({
     width: app.screen.sidebarWidth,
     sessionName: app.sessionName,

@@ -70,7 +70,11 @@ export function getLiveTotalTokens(app: AppState): number {
 
 export function renderTokenSummaryParts(app: AppState): string[] {
   const total = app.getLiveTotalTokens();
-  return [`Σ ${fmtTokens(total)} session`];
+  return [
+    `${fmtTokens(total)} total`,
+    `${fmtTokens(app.getLiveInputTokens())} in`,
+    `${fmtTokens(app.getLiveOutputTokens())} out`,
+  ];
 }
 
 export function getModeAccent(app: AppState): string {
@@ -134,7 +138,7 @@ export function primeEscapeAbort(app: AppState): void {
     app.escTimeout = null;
     app.draw();
   }, 1500);
-  app.draw();
+  app.drawNow?.();
 }
 
 export function setContextUsage(app: AppState, tokens: number, limit: number): void {

@@ -90,6 +90,20 @@ describe("picker menus", () => {
       updateSetting("theme", originalTheme);
     }
   });
+
+  it("keeps pickers usable at the bottom of the list instead of dropping the cursor out of range", () => {
+    const app = new App() as any;
+    app.openItemPicker("Pick one", [{ id: "one", label: "First" }], () => {});
+    app.handleKey({ name: "down", char: "", ctrl: false, meta: false, shift: false });
+    expect(app.itemPicker.cursor).toBe(0);
+
+    app.openModelPicker(
+      [{ providerId: "openai", providerName: "OpenAI", modelId: "gpt-5.4-mini", active: false }],
+      () => {},
+    );
+    app.handleKey({ name: "down", char: "", ctrl: false, meta: false, shift: false });
+    expect(app.modelPicker.cursor).toBe(0);
+  });
 });
 
 describe("thinking preview", () => {

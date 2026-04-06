@@ -39,6 +39,13 @@ async function probeBaseUrl(baseUrl: string, path = "/models"): Promise<boolean>
   }
 }
 
+async function probeAny(baseUrl: string, paths: string[]): Promise<boolean> {
+  for (const path of paths) {
+    if (await probeBaseUrl(baseUrl, path)) return true;
+  }
+  return false;
+}
+
 export async function detectProviders(): Promise<DetectedProvider[]> {
   const results: DetectedProvider[] = [];
   const config = loadConfig();
@@ -91,10 +98,10 @@ export async function detectProviders(): Promise<DetectedProvider[]> {
       : probeBaseUrl(getBaseUrl("ollama") ?? "http://127.0.0.1:11434/v1", "/models").then((ok) => ok || probeLocal(11434, "/api/tags")),
     providerDisabled("lmstudio")
       ? Promise.resolve(false)
-      : probeBaseUrl(getBaseUrl("lmstudio") ?? "http://127.0.0.1:1234/v1"),
+      : probeAny(getBaseUrl("lmstudio") ?? "http://127.0.0.1:1234/v1", ["/models", "/lmstudio/models"]),
     providerDisabled("llamacpp")
       ? Promise.resolve(false)
-      : probeBaseUrl(getBaseUrl("llamacpp") ?? "http://127.0.0.1:8080/v1"),
+      : probeAny(getBaseUrl("llamacpp") ?? "http://127.0.0.1:8080/v1", ["/models"]).then((ok) => ok || probeAny((getBaseUrl("llamacpp") ?? "http://127.0.0.1:8080/v1").replace(/\/v1\/?$/, ""), ["/models", "/slots"])),
     providerDisabled("jan")
       ? Promise.resolve(false)
       : probeBaseUrl(getBaseUrl("jan") ?? "http://127.0.0.1:1337/v1"),

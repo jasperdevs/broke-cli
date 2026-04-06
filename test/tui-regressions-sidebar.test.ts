@@ -68,9 +68,19 @@ describe("sidebar scrolling", () => {
     app.messages = [{ role: "user", content: "hi" }];
     app.sidebarTreeOpen = true;
     app.sidebarFocused = true;
-    app.sidebarFileTree = [{ name: "src", isDir: true, children: Array.from({ length: 12 }, (_, i) => `file-${i}.ts`), depth: 0 }];
-    app.sidebarExpandedDirs.add("src");
-    app.sidebarExpandedDirs.add("src:all");
+    app.buildSidebarLines = () => [
+      "New Session",
+      "v0.0.1",
+      "",
+      "provider/model",
+      "",
+      "Directory",
+      "  ~/repo",
+      "",
+      "▾ Files",
+      "  ▾ src/",
+      ...Array.from({ length: 12 }, (_, i) => `    file-${i}.ts`),
+    ];
     const before = app.renderSidebar(12).map((line: string) => stripAnsi(line));
     app.scrollSidebar(4, 12);
     const after = app.renderSidebar(12).map((line: string) => stripAnsi(line));
@@ -112,10 +122,12 @@ describe("sidebar scrolling", () => {
     app.updateUsage(0.0021, 8_200, 621);
     const footer = app.renderSidebarFooter();
     const footerText = footer.map((line: string) => stripAnsi(line)).join("\n");
-    expect(footerText).toContain("Σ 8.8k session");
-    expect(footerText).toContain("live 120k");
+    expect(footerText).toContain("8.8k total");
+    expect(footerText).toContain("8.2k in");
+    expect(footerText).toContain("621 out");
+    expect(footerText).toContain("120k context");
     expect(footerText).toContain("94%");
-    expect(footerText).toContain("▕");
+    expect(footerText).toContain("[");
     expect(footerText).not.toContain("plan");
     updateSetting("showTokens", originalShowTokens);
   });

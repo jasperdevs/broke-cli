@@ -310,8 +310,10 @@ function handleAgentRunViewKey(app: AppState, key: Keypress): void {
 function handlePickerKey(app: AppState, key: Keypress): void {
   if (app.settingsPicker) {
     const filtered = app.getFilteredSettings();
-    if (key.name === "up") app.settingsPicker.cursor = Math.max(0, app.settingsPicker.cursor - 1);
-    else if (key.name === "down") app.settingsPicker.cursor = Math.min(filtered.length - 1, app.settingsPicker.cursor + 1);
+    if (key.name === "up") app.settingsPicker.cursor = app.clampMenuCursor(app.settingsPicker.cursor - 1, filtered.length);
+    else if (key.name === "down") app.settingsPicker.cursor = app.clampMenuCursor(app.settingsPicker.cursor + 1, filtered.length);
+    else if (key.name === "home") app.settingsPicker.cursor = 0;
+    else if (key.name === "end") app.settingsPicker.cursor = app.clampMenuCursor(filtered.length - 1, filtered.length);
     else if ((key.name === "return" || key.name === "enter") && !key.shift && !key.meta && !key.ctrl) app.toggleSettingEntry(app.settingsPicker.cursor);
     else if (key.name === "escape" || (key.ctrl && key.name === "c")) {
       app.settingsPicker = null;
@@ -330,8 +332,10 @@ function handlePickerKey(app: AppState, key: Keypress): void {
       return;
     }
     const filtered = app.getFilteredItems();
-    if (key.name === "up") app.itemPicker.cursor = Math.max(0, app.itemPicker.cursor - 1);
-    else if (key.name === "down") app.itemPicker.cursor = Math.min(filtered.length - 1, app.itemPicker.cursor + 1);
+    if (key.name === "up") app.itemPicker.cursor = app.clampMenuCursor(app.itemPicker.cursor - 1, filtered.length);
+    else if (key.name === "down") app.itemPicker.cursor = app.clampMenuCursor(app.itemPicker.cursor + 1, filtered.length);
+    else if (key.name === "home") app.itemPicker.cursor = 0;
+    else if (key.name === "end") app.itemPicker.cursor = app.clampMenuCursor(filtered.length - 1, filtered.length);
     else if ((key.name === "return" || key.name === "enter") && !key.shift && !key.meta && !key.ctrl) {
       app.selectItemEntry(app.itemPicker.cursor);
       return;
@@ -347,8 +351,10 @@ function handlePickerKey(app: AppState, key: Keypress): void {
   }
   if (app.modelPicker) {
     const filtered = app.getFilteredModels();
-    if (key.name === "up") app.modelPicker.cursor = Math.max(0, app.modelPicker.cursor - 1);
-    else if (key.name === "down") app.modelPicker.cursor = Math.min(filtered.length - 1, app.modelPicker.cursor + 1);
+    if (key.name === "up") app.modelPicker.cursor = app.clampMenuCursor(app.modelPicker.cursor - 1, filtered.length);
+    else if (key.name === "down") app.modelPicker.cursor = app.clampMenuCursor(app.modelPicker.cursor + 1, filtered.length);
+    else if (key.name === "home") app.modelPicker.cursor = 0;
+    else if (key.name === "end") app.modelPicker.cursor = app.clampMenuCursor(filtered.length - 1, filtered.length);
     else if (key.name === "tab") app.toggleModelScope();
     else if (key.name === "space") app.toggleModelPin(app.modelPicker.cursor);
     else if ((key.name === "return" || key.name === "enter") && !key.shift && !key.meta && !key.ctrl) {
@@ -367,8 +373,10 @@ function handlePickerKey(app: AppState, key: Keypress): void {
 }
 
 function handleFilePickerKey(app: AppState, key: Keypress): void {
-  if (key.name === "up") app.filePicker.cursor = Math.max(0, app.filePicker.cursor - 1);
-  else if (key.name === "down") app.filePicker.cursor = Math.min(app.filePicker.filtered.length - 1, app.filePicker.cursor + 1);
+  if (key.name === "up") app.filePicker.cursor = app.clampMenuCursor(app.filePicker.cursor - 1, app.filePicker.filtered.length);
+  else if (key.name === "down") app.filePicker.cursor = app.clampMenuCursor(app.filePicker.cursor + 1, app.filePicker.filtered.length);
+  else if (key.name === "home") app.filePicker.cursor = 0;
+  else if (key.name === "end") app.filePicker.cursor = app.clampMenuCursor(app.filePicker.filtered.length - 1, app.filePicker.filtered.length);
   else if (((key.name === "return" || key.name === "enter") && !key.shift && !key.meta && !key.ctrl) || key.name === "tab") {
     app.selectFileEntry(app.filePicker.cursor);
     return;

@@ -181,7 +181,7 @@ export function addToolCall(app: AppState, name: string, preview: string, args?:
   }
   app.invalidateMsgCache();
   app.scrollToBottom();
-  app.draw();
+  app.drawNow();
 }
 
 export function updateToolCallArgs(app: AppState, name: string, preview: string, args: unknown): void {
@@ -205,7 +205,7 @@ export function updateToolCallArgs(app: AppState, name: string, preview: string,
         app.messages[tc.messageIndex].content = block.join("\n");
       }
       app.invalidateMsgCache();
-      app.draw();
+      app.drawNow();
       return;
     }
   }
@@ -240,7 +240,7 @@ export function addToolResult(app: AppState, name: string, result: string, error
   }
   app.invalidateMsgCache();
   app.scrollToBottom();
-  app.draw();
+  app.drawNow();
 }
 
 export function setStreamTokens(app: AppState, tokens: number): void {
@@ -282,7 +282,7 @@ export function appendToolOutput(app: AppState, chunk: string): void {
       }
       app.invalidateMsgCache();
       app.scrollToBottom();
-      app.draw();
+      app.drawNow();
       return;
     }
   }

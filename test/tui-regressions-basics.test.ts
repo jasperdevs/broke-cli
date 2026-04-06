@@ -53,11 +53,11 @@ describe("message wrapping", () => {
 });
 
 describe("sidebar token summary", () => {
-  it("renders a single lifetime session total", () => {
+  it("renders total plus input and output counts", () => {
     const app = new App() as any;
     app.setContextUsage(132, 344_000);
     app.updateUsage(0.0016, 150, 60);
-    expect(app.renderTokenSummaryParts()).toEqual(["Σ 210 session"]);
+    expect(app.renderTokenSummaryParts()).toEqual(["210 total", "150 in", "60 out"]);
   });
 
   it("shows only lifetime totals plus current context usage in the sidebar footer", () => {
@@ -69,10 +69,12 @@ describe("sidebar token summary", () => {
     const footer = app.renderSidebarFooter().map((line: string) => stripAnsi(line)).join("\n");
     expect(footer).not.toContain("Session");
     expect(footer).not.toContain("Next request");
-    expect(footer).toContain("Σ 210 session");
-    expect(footer).toContain("live 132");
+    expect(footer).toContain("210 total");
+    expect(footer).toContain("150 in");
+    expect(footer).toContain("60 out");
+    expect(footer).toContain("132 context");
     expect(footer).toContain("<1%");
-    expect(footer).toContain("▕");
+    expect(footer).toContain("[");
     updateSetting("showTokens", originalShowTokens);
   });
 
@@ -85,10 +87,12 @@ describe("sidebar token summary", () => {
     app.setContextUsage(132_000, 344_000);
     app.updateUsage(0.0016, 150, 60);
     const footer = app.renderSidebarFooter().map((line: string) => stripAnsi(line));
-    expect(footer.some((line: string) => line.trim() === "Σ 210 session")).toBe(true);
-    expect(footer.some((line: string) => line.trim() === "live 132k")).toBe(true);
+    expect(footer.some((line: string) => line.trim() === "210 total")).toBe(true);
+    expect(footer.some((line: string) => line.trim() === "150 in")).toBe(true);
+    expect(footer.some((line: string) => line.trim() === "60 out")).toBe(true);
+    expect(footer.some((line: string) => line.trim() === "132k context")).toBe(true);
     expect(footer.some((line: string) => line.includes("38%"))).toBe(true);
-    expect(footer.some((line: string) => line.includes("▕"))).toBe(true);
+    expect(footer.some((line: string) => line.includes("["))).toBe(true);
     updateSetting("cavemanLevel", "off");
     updateSetting("showTokens", originalShowTokens);
   });
@@ -100,9 +104,9 @@ describe("sidebar token summary", () => {
     app.setContextUsage(822, 400_000);
     app.updateUsage(0.0016, 150, 60);
     const footer = app.renderSidebarFooter().map((line: string) => stripAnsi(line)).join("\n");
-    expect(footer).toContain("live 822");
+    expect(footer).toContain("822 context");
     expect(footer).toContain("<1%");
-    expect(footer).toContain("▕");
+    expect(footer).toContain("[");
     updateSetting("showTokens", originalShowTokens);
   });
 
@@ -134,7 +138,7 @@ describe("sidebar token summary", () => {
 describe("terminal cell width", () => {
   it("pads and decorates frame lines to the exact terminal width even with emoji and ANSI", () => {
     const app = new App() as any;
-    const raw = ` ${currentTheme().warning}🪨 ultra${"\x1b[0m"} | ${currentTheme().textMuted}Σ 210 session${"\x1b[0m"}`;
+    const raw = ` ${currentTheme().warning}🪨 ultra${"\x1b[0m"} | ${currentTheme().textMuted}total 210${"\x1b[0m"}`;
     const padded = app.padLine(raw, 18);
     const framed = app.decorateFrameLine(`${padded} ${app.getSidebarBorder()} ${app.padLine("Directory", 10)}`, 31);
     expect(visibleWidth(framed)).toBe(31);

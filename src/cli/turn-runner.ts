@@ -208,6 +208,8 @@ export async function runModelTurn(options: {
   clearTodo();
   let streamedText = "";
   let streamedReasoning = "";
+  let bufferedLeadText = "";
+  let sawToolActivity = false;
   getContextOptimizer().nextTurn();
 
   const canAutoRoute = !!smallModel
@@ -283,6 +285,12 @@ export async function runModelTurn(options: {
         streamedText = nextText;
         return;
       }
+      if ((policy.archetype === "edit" || policy.archetype === "bugfix") && !sawToolActivity) {
+        streamedText = nextText;
+        bufferedLeadText += delta;
+        scheduleStreamTokenUpdate();
+        return;
+      }
       app.appendToLastMessage(delta);
       streamedText = nextText;
       scheduleStreamTokenUpdate();
@@ -295,6 +303,9 @@ export async function runModelTurn(options: {
     onFinish: (usage: { inputTokens: number; outputTokens: number; cost: number }) => {
       flushStreamTokenUpdate();
       app.setThinkingRequested(false);
+      if (!sawToolActivity && bufferedLeadText.trim()) {
+        app.appendToLastMessage(bufferedLeadText);
+      }
       const content = app.getLastAssistantContent();
       if (content) {
       session.addMessage("assistant", content);
@@ -385,9 +396,11 @@ export async function runModelTurn(options: {
     }, {
       ...streamCallbacks,
       onToolCallStart: (name) => {
+        sawToolActivity = true;
         if (name !== "todoWrite") app.addToolCall(name, "...");
       },
       onToolCall: (name, args) => {
+        sawToolActivity = true;
         hooks.emit("on_tool_call", { name, args });
         nextToolCalls.push(name);
         if (name === "todoWrite") return;
