@@ -324,7 +324,7 @@ export class App {
       showTokens: settings.showTokens,
       statusParts,
       cost: settings.showCost && this.sessionCost > 0 ? fmtCost(this.animCost.get()) : undefined,
-      tokenParts: this.renderTokenSummaryParts().filter((part) => !part.startsWith("Σ ")),
+      tokenParts: this.renderTokenSummaryParts(),
       contextUsed: this.contextLimitTokens > 0 ? this.contextUsed : undefined,
       contextUsage: this.contextLimitTokens > 0 ? `${fmtTokens(this.contextTokenCount)}/${fmtTokens(this.contextLimitTokens)}` : undefined,
       colors: {
