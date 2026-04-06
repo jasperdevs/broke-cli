@@ -1,6 +1,3 @@
-// Force chalk color detection before any imports that use it (marked-terminal)
-process.env.FORCE_COLOR = "3";
-
 import { Command } from "commander";
 import { writeFileSync } from "fs";
 import { App } from "../src/tui/app.js";
@@ -15,7 +12,6 @@ import { renderMarkdown } from "../src/utils/markdown.js";
 import { checkBudget } from "../src/core/budget.js";
 import { getSettings, updateSetting, type Settings, type Mode } from "../src/core/config.js";
 import { compactMessages, getTotalContextTokens } from "../src/core/compact.js";
-import { listThemes, getTheme } from "../src/core/themes.js";
 import { undoLastCheckpoint } from "../src/core/git.js";
 import { listTemplates, loadTemplate } from "../src/core/templates.js";
 import { loadExtensions } from "../src/core/extensions.js";
@@ -127,17 +123,14 @@ program.action(async (opts) => {
         modelId = opts.model;
       }
     } else {
-      // Try to use last used model from settings
+      // Try to use last used model from settings — trust it even if provider
+      // wasn't detected (local server may be slow to start, key may still work)
       const lastModel = getSettings().lastModel;
       if (lastModel) {
         const parts = lastModel.split("/");
         if (parts.length === 2) {
-          // Check if provider still available
-          const provider = providers.find(p => p.id === parts[0]);
-          if (provider) {
-            providerId = parts[0];
-            modelId = parts[1];
-          }
+          providerId = parts[0];
+          modelId = parts[1];
         }
       }
       if (!providerId) {
@@ -205,7 +198,6 @@ program.action(async (opts) => {
           const pinnedModels = getSettings().scopedModels;
           const allOptions: Array<{ providerId: string; providerName: string; modelId: string; active: boolean }> = [];
           for (const prov of listProviders()) {
-            if (!detectedIds.has(prov.id)) continue;
             for (const m of prov.models) {
               allOptions.push({
                 providerId: prov.id,
@@ -217,9 +209,9 @@ program.action(async (opts) => {
           }
           // Sort: available providers first, then pinned models, then by provider/name
           allOptions.sort((a, b) => {
-            // Available first
-            const aAvail = providers.find(p => p.id === a.providerId)?.available ?? true;
-            const bAvail = providers.find(p => p.id === b.providerId)?.available ?? true;
+            // Available (detected) first
+            const aAvail = detectedIds.has(a.providerId);
+            const bAvail = detectedIds.has(b.providerId);
             if (aAvail && !bAvail) return -1;
             if (!aAvail && bAvail) return 1;
             // Then pinned
@@ -294,41 +286,29 @@ program.action(async (opts) => {
           });
           return;
         }
-        case "theme": {
-          const themes = listThemes();
-          const current = getSettings().theme;
-          const options = themes.map((t) => ({
-            providerId: t,
-            providerName: "",
-            modelId: t,
-            active: t === current,
-          }));
-          app.openModelPicker(options, (themeId) => {
-            getTheme(themeId); // validate it exists
-            updateSetting("theme", themeId);
-            app.addMessage("system", `Theme set to: ${themeId}`);
-          });
+        case "theme":
+          app.addMessage("system", "Themes have been removed.");
           return;
-        }
         case "compact": {
           if (!activeModel) {
             app.addMessage("system", "No model available for compaction.");
             return;
           }
-          app.addMessage("system", "Compacting context...");
           hooks.emit("on_message", { role: "user", content: text });
-    app.setStreaming(true);
           try {
             const chatMsgs = session.getChatMessages();
+            const ctxTokens = getTotalContextTokens(chatMsgs, systemPrompt);
+            app.setCompacting(true, ctxTokens);
             const compacted = await compactMessages(chatMsgs, activeModel.model);
             session.clear();
             for (const m of compacted) session.addMessage(m.role, m.content);
+            app.setCompacting(false);
             app.clearMessages();
             app.addMessage("system", `Context compacted: ${chatMsgs.length} messages -> ${compacted.length}`);
           } catch (err) {
+            app.setCompacting(false);
             app.addMessage("system", `Compact failed: ${(err as Error).message}`);
           }
-          app.setStreaming(false);
           return;
         }
         case "sessions": {
@@ -579,12 +559,15 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
 
     // Auto-compact if context > 80%
     if (ctxPct > 80 && chatMsgs.length > 8) {
-      app.addMessage("system", "Context getting large, auto-compacting...");
       try {
+        app.setCompacting(true, ctxTokens);
         const compacted = await compactMessages(chatMsgs, activeModel.model);
         session.clear();
         for (const m of compacted) session.addMessage(m.role, m.content);
+        app.setCompacting(false);
+        app.addMessage("system", `Auto-compacted: ${chatMsgs.length} -> ${compacted.length} messages`);
       } catch {
+        app.setCompacting(false);
         // Continue with full context if compact fails
       }
     }
@@ -618,15 +601,19 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
       {
         model: activeModel.model,
         modelId: currentModelId,
+        providerId: activeModel.provider.id,
         system: systemPrompt,
         messages: session.getChatMessages(),
-        // Pass tools to all models - some local models support function calling
         tools,
         abortSignal: abortController.signal,
+        enableThinking: getSettings().enableThinking,
       },
       {
         onText: (delta) => {
           app.appendToLastMessage(delta);
+          // Rough token estimate for display (1 token ~ 4 chars)
+          const lastMsg = app.getLastAssistantContent();
+          app.setStreamTokens(Math.round(lastMsg.length / 4));
         },
         onReasoning: (delta) => {
           app.appendThinking(delta);
@@ -635,6 +622,10 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
           const content = app.getLastAssistantContent();
           if (content) {
             session.addMessage("assistant", content);
+          } else {
+            // Model returned empty response
+            session.addMessage("assistant", "[empty response]");
+            app.addMessage("system", `${DIM}No response from model. Try again or switch models with /model.${RESET}`);
           }
           session.addUsage(usage.inputTokens, usage.outputTokens, usage.cost);
           app.updateCost(session.getTotalCost(), session.getTotalTokens());
@@ -645,53 +636,59 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
           let msg = err.message;
           const data = (err as any).data;
           if (data?.error?.message) msg = data.error.message;
+          // Make errors human-friendly
           if (msg.includes("insufficient permissions") || msg.includes("Missing scopes")) {
-            msg = `API key lacks permissions. Try /model to switch.`;
-          } else if (msg.includes("invalid_api_key") || msg.includes("Incorrect API key")) {
-            msg = `Invalid API key.`;
+            msg = `Your API key doesn't have access to this model. Try a different model with /model.`;
+          } else if (msg.includes("invalid_api_key") || msg.includes("Incorrect API key") || msg.includes("401")) {
+            msg = `Invalid API key for ${activeModel?.provider.name ?? "this provider"}. Check your key and try again.`;
+          } else if (msg.includes("Could not resolve") || msg.includes("ECONNREFUSED") || msg.includes("fetch failed")) {
+            msg = `Can't reach ${activeModel?.provider.name ?? "the provider"}. Check your connection or if the server is running.`;
+          } else if (msg.includes("429") || msg.includes("rate_limit")) {
+            msg = `Rate limited. Wait a moment and try again.`;
+          } else if (msg.includes("model_not_found") || msg.includes("does not exist") || msg.includes("not found")) {
+            msg = `Model "${currentModelId}" not available. Try /model to pick a different one.`;
+          } else if (msg.includes("overloaded") || msg.includes("503") || msg.includes("529")) {
+            msg = `${activeModel?.provider.name ?? "Provider"} is overloaded right now. Try again in a moment.`;
           }
-          if (msg.length > 200) msg = msg.slice(0, 197) + "...";
-          // Add a fake assistant reply so session stays valid (no consecutive user messages)
+          if (msg.length > 300) msg = msg.slice(0, 297) + "...";
           session.addMessage("assistant", `[error: ${msg}]`);
-          app.addMessage("system", `Error: ${msg}`);
           app.setStreaming(false);
+          app.addMessage("system", `${RED}${msg}${RESET}`);
           abortController = null;
         },
         onToolCall: (name, args) => {
           hooks.emit("on_tool_call", { name, args });
-          // Pretty format tool calls
           let preview = "";
           if (name === "writeFile" || name === "editFile") {
-            const path = (args as any)?.path ?? "?";
-            preview = path;
+            preview = (args as any)?.path ?? "?";
           } else if (name === "readFile" || name === "listFiles" || name === "grep") {
-            const path = (args as any)?.path ?? (args as any)?.pattern ?? "?";
-            preview = path;
+            preview = (args as any)?.path ?? (args as any)?.pattern ?? "?";
           } else if (name === "bash") {
             const cmd = (args as any)?.command ?? "?";
-            preview = cmd.length > 60 ? cmd.slice(0, 60) + "..." : cmd;
+            preview = cmd.length > 60 ? cmd.slice(0, 57) + "..." : cmd;
           } else {
-            preview = typeof args === "object" ? JSON.stringify(args).slice(0, 60) : String(args).slice(0, 60);
+            preview = typeof args === "object" ? JSON.stringify(args).slice(0, 50) : String(args).slice(0, 50);
           }
-          app.addMessage("system", `${GREEN}${name}${RESET} ${DIM}${preview}${RESET}`);
+          app.addToolCall(name, preview, args);
         },
         onToolResult: (_name, result) => {
           hooks.emit("on_tool_result", { name: _name, result });
-          const r = result as { success?: boolean; output?: string; error?: string };
+          const r = result as { success?: boolean; output?: string; error?: string; content?: string; matches?: unknown[]; files?: string[] };
+          let detail: string | undefined;
+          if (_name === "bash" && r.output) {
+            detail = r.output.slice(0, 200);
+          } else if (_name === "readFile" && r.content) {
+            const lineCount = r.content.split("\n").length;
+            detail = `${lineCount} lines`;
+          } else if (_name === "grep" && r.matches) {
+            detail = `${(r.matches as unknown[]).length} matches`;
+          } else if (_name === "listFiles" && r.files) {
+            detail = `${(r.files as string[]).length} files`;
+          }
           if (r.success === false && r.error) {
-            app.addMessage("system", `${RED}✗ ${r.error.slice(0, 100)}${RESET}`);
-          } else if (r.success && _name === "writeFile") {
-            app.addMessage("system", `${GREEN}✓ wrote file${RESET}`);
-          } else if (r.success && _name === "editFile") {
-            app.addMessage("system", `${GREEN}✓ edited file${RESET}`);
-          } else if (r.output) {
-            const lines = r.output.split("\n");
-            const preview = lines.length > 5
-              ? lines.slice(0, 5).join("\n") + `\n  ${DIM}... (${lines.length} lines)${RESET}`
-              : r.output;
-            app.addMessage("system", preview.slice(0, 500));
-          } else if (r.success) {
-            app.addMessage("system", `${GREEN}✓${RESET}`);
+            app.addToolResult(_name, r.error.slice(0, 80), true);
+          } else {
+            app.addToolResult(_name, "ok", false, detail);
           }
         },
         onAfterToolCall: () => {

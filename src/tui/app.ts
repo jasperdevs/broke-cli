@@ -1,7 +1,7 @@
 import { Screen } from "./screen.js";
 import { KeypressHandler, type Keypress } from "./keypress.js";
 import { InputWidget } from "./input.js";
-import { GRAY, RESET, BOLD, DIM, RED, WHITE, GREEN, bg, moveTo } from "../utils/ansi.js";
+import { GRAY, RESET, BOLD, DIM, RED, WHITE, GREEN, YELLOW, bg, moveTo } from "../utils/ansi.js";
 import { currentTheme, getPlanColor } from "../core/themes.js";
 import { execSync } from "child_process";
 import { matchesBinding, loadKeybindings } from "../core/keybindings.js";
@@ -44,10 +44,37 @@ function T(): string { return currentTheme().primary; }
 /** Shorthand for plan mode color (yellow/amber). */
 function P(): string { return getPlanColor(); }
 
+/** Format token count: 0, 142, 3.2k, 1.5M */
+function fmtTokens(n: number): string {
+  if (n < 1000) return `${n}`;
+  if (n < 100_000) return `${(n / 1000).toFixed(1)}k`;
+  if (n < 1_000_000) return `${Math.round(n / 1000)}k`;
+  return `${(n / 1_000_000).toFixed(1)}M`;
+}
+
+/** Format cost: $0.00, $0.0012, $1.23 */
+function fmtCost(c: number): string {
+  if (c === 0) return "$0.00";
+  if (c < 0.01) return `$${c.toFixed(4)}`;
+  return `$${c.toFixed(2)}`;
+}
+
+/** Bouncing dot animation: green dot slides across dim dots */
+function bounceDot(frame: number, len = 4): string {
+  // Bounce: 0,1,2,3,2,1,0,1,...
+  const cycle = (len - 1) * 2;
+  const pos = frame % cycle;
+  const idx = pos < len ? pos : cycle - pos;
+  let s = "";
+  for (let i = 0; i < len; i++) {
+    s += i === idx ? `${GREEN}\u2022${RESET}` : `${DIM}\u00B7${RESET}`;
+  }
+  return s;
+}
+
 const COMMANDS = [
   { name: "model", desc: "switch model" },
   { name: "settings", desc: "configure options" },
-  { name: "theme", desc: "switch theme" },
   { name: "compact", desc: "compress context" },
   { name: "sessions", desc: "recent sessions" },
   { name: "new", desc: "new session" },
@@ -85,16 +112,16 @@ export class App {
   private statusMessage: string | undefined;
   private detectedProviders: string[] = [];
   private cwd = process.cwd();
-  private modelPicker: { options: ModelOption[]; cursor: number } | null = null;
+  private modelPicker: { options: ModelOption[]; cursor: number; query: string } | null = null;
   private onModelSelect: ((providerId: string, modelId: string) => void) | null = null;
   private onModelPin: ((providerId: string, modelId: string, pinned: boolean) => void) | null = null;
-  private settingsPicker: { entries: SettingEntry[]; cursor: number } | null = null;
+  private settingsPicker: { entries: SettingEntry[]; cursor: number; query: string } | null = null;
   private onSettingToggle: ((key: string) => void) | null = null;
   private filePicker: { files: string[]; filtered: string[]; query: string; cursor: number } | null = null;
   private projectFiles: string[] | null = null;
   private fileContexts: Map<string, string> = new Map();
   private cmdSuggestionCursor = 0;
-  private itemPicker: { title: string; items: PickerItem[]; cursor: number } | null = null;
+  private itemPicker: { title: string; items: PickerItem[]; cursor: number; query: string } | null = null;
   private onItemSelect: ((id: string) => void) | null = null;
   private toolOutputCollapsed = false;
   private pendingImages: Array<{ mimeType: string; data: string }> = [];
@@ -105,6 +132,22 @@ export class App {
   private onModeChange: ((mode: Mode) => void) | null = null;
   private pendingMessages: Array<{ text: string; images?: Array<{ mimeType: string; data: string }> }> = [];
   private onPendingMessagesReady: (() => void) | null = null;
+  private streamStartTime = 0;
+  private streamTokens = 0;
+  private toolCallGroups: Array<{ name: string; preview: string; args?: unknown; resultDetail?: string; result?: string; error?: boolean }> = [];
+  private isCompacting = false;
+  private compactStartTime = 0;
+  private compactTokens = 0;
+
+  // Render throttling
+  private drawScheduled = false;
+  private lastDrawTime = 0;
+  private static readonly DRAW_THROTTLE_MS = 16; // ~60fps cap
+
+  // Message render cache (invalidated on message change or width change)
+  private msgCacheWidth = 0;
+  private msgCacheLen = 0;
+  private msgCacheLines: string[] | null = null;
 
   constructor() {
     this.screen = new Screen();
@@ -113,6 +156,11 @@ export class App {
       (key) => this.handleKey(key),
       (text) => this.handlePaste(text),
     );
+  }
+
+  /** Invalidate the message render cache */
+  private invalidateMsgCache(): void {
+    this.msgCacheLines = null;
   }
 
   setModel(provider: string, model: string): void {
@@ -151,9 +199,30 @@ export class App {
     this.isStreaming = streaming;
     if (!streaming) {
       this.thinkingBuffer = "";
+      // Collapse tool call groups into single summary message
+      if (this.toolCallGroups.length > 0) {
+        this.collapseToolCalls();
+      }
+      // Show completion message with elapsed time
+      if (this.streamStartTime > 0) {
+        const elapsed = Date.now() - this.streamStartTime;
+        const secs = Math.floor(elapsed / 1000);
+        if (secs >= 2) {
+          const mins = Math.floor(secs / 60);
+          const timeStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
+          const doneVerbs = ["Churned", "Cooked", "Brewed", "Hammered", "Crunched", "Wrapped up"];
+          const verb = doneVerbs[Math.floor(Math.random() * doneVerbs.length)];
+          this.messages.push({ role: "system", content: `${T()}\u2733${RESET} ${DIM}${verb} for ${timeStr}${RESET}` });
+          this.invalidateMsgCache();
+        }
+        this.streamStartTime = 0;
+      }
     }
     if (streaming) {
       this.spinnerFrame = 0;
+      this.streamStartTime = Date.now();
+      this.streamTokens = 0;
+      this.toolCallGroups = [];
       this.spinnerTimer = setInterval(() => {
         this.spinnerFrame++;
         this.draw();
@@ -162,6 +231,7 @@ export class App {
       clearInterval(this.spinnerTimer);
       this.spinnerTimer = null;
     }
+    this.invalidateMsgCache();
     this.draw();
   }
 
@@ -171,14 +241,14 @@ export class App {
 
   openModelPicker(options: ModelOption[], onSelect: (providerId: string, modelId: string) => void, onPin?: (providerId: string, modelId: string, pinned: boolean) => void, initialCursor?: number): void {
     const cursorIdx = initialCursor ?? options.findIndex((o) => o.active);
-    this.modelPicker = { options, cursor: cursorIdx >= 0 ? cursorIdx : 0 };
+    this.modelPicker = { options, cursor: cursorIdx >= 0 ? cursorIdx : 0, query: "" };
     this.onModelSelect = onSelect;
     this.onModelPin = onPin ?? null;
     this.draw();
   }
 
   openSettings(entries: SettingEntry[], onToggle: (key: string) => void): void {
-    this.settingsPicker = { entries, cursor: 0 };
+    this.settingsPicker = { entries, cursor: 0, query: "" };
     this.onSettingToggle = onToggle;
     this.draw();
   }
@@ -191,7 +261,7 @@ export class App {
   }
 
   openItemPicker(title: string, items: PickerItem[], onSelect: (id: string) => void): void {
-    this.itemPicker = { title, items, cursor: 0 };
+    this.itemPicker = { title, items, cursor: 0, query: "" };
     this.onItemSelect = onSelect;
     this.draw();
   }
@@ -199,12 +269,14 @@ export class App {
   clearMessages(): void {
     this.messages = [];
     this.scrollOffset = 0;
+    this.invalidateMsgCache();
     this.screen.forceRedraw([]);
     this.draw();
   }
 
   addMessage(role: "user" | "assistant" | "system", content: string, images?: Array<{ mimeType: string; data: string }>): void {
     this.messages.push({ role, content, images });
+    this.invalidateMsgCache();
     this.scrollToBottom();
     this.draw();
   }
@@ -216,6 +288,7 @@ export class App {
     } else {
       this.messages.push({ role: "assistant", content: text });
     }
+    this.invalidateMsgCache();
     this.scrollToBottom();
     this.draw();
   }
@@ -224,6 +297,69 @@ export class App {
     this.thinkingBuffer += delta;
     this.scrollToBottom();
     this.draw();
+  }
+
+  /** Track a tool call (shown inline during streaming, collapsed after) */
+  addToolCall(name: string, preview: string, args?: unknown): void {
+    this.toolCallGroups.push({ name, preview, args });
+    this.invalidateMsgCache();
+    this.scrollToBottom();
+    this.draw();
+  }
+
+  /** Track a tool result for the last tool call */
+  addToolResult(name: string, result: string, error?: boolean, resultDetail?: string): void {
+    // Find last matching tool call without a result
+    for (let i = this.toolCallGroups.length - 1; i >= 0; i--) {
+      if (this.toolCallGroups[i].name === name && !this.toolCallGroups[i].result) {
+        this.toolCallGroups[i].result = result;
+        this.toolCallGroups[i].error = error;
+        this.toolCallGroups[i].resultDetail = resultDetail;
+        break;
+      }
+    }
+    this.invalidateMsgCache();
+    this.scrollToBottom();
+    this.draw();
+  }
+
+  setStreamTokens(tokens: number): void {
+    this.streamTokens = tokens;
+  }
+
+  setCompacting(compacting: boolean, tokenCount?: number): void {
+    this.isCompacting = compacting;
+    if (compacting) {
+      this.compactStartTime = Date.now();
+      this.compactTokens = tokenCount ?? 0;
+      if (!this.spinnerTimer) {
+        this.spinnerFrame = 0;
+        this.spinnerTimer = setInterval(() => {
+          this.spinnerFrame++;
+          this.draw();
+        }, 150);
+      }
+    } else if (!this.isStreaming && this.spinnerTimer) {
+      clearInterval(this.spinnerTimer);
+      this.spinnerTimer = null;
+    }
+    this.draw();
+  }
+
+  /** Collapse tool calls into a summary message after streaming ends */
+  private collapseToolCalls(): void {
+    if (this.toolCallGroups.length === 0) return;
+
+    const maxW = this.screen.mainWidth - 4;
+    // Render each tool call as a block
+    for (const tc of this.toolCallGroups) {
+      const block = this.renderToolCallBlock(tc, maxW);
+      if (block.length > 0) {
+        this.messages.push({ role: "system", content: block.join("\n") });
+      }
+    }
+
+    this.toolCallGroups = [];
   }
 
   getLastAssistantContent(): string {
@@ -270,39 +406,84 @@ export class App {
 
   private getChatHeight(): number {
     const headerLines = this.screen.hasSidebar ? 0 : 1; // compact header when narrow
-    return this.screen.height - 2 - headerLines; // status(1) + input(1) + optional header
+    // sep(1) + input(1) + sep(1) + info(1) + optional status + optional header
+    const bottomBase = 4;
+    const statusExtra = this.statusMessage ? 1 : 0;
+    return this.screen.height - bottomBase - statusExtra - headerLines;
+  }
+
+  /** Filter model options by search query */
+  private getFilteredModels(): ModelOption[] {
+    if (!this.modelPicker) return [];
+    const q = this.modelPicker.query.toLowerCase();
+    if (!q) return this.modelPicker.options;
+    return this.modelPicker.options.filter(o =>
+      o.modelId.toLowerCase().includes(q) || o.providerName.toLowerCase().includes(q)
+    );
+  }
+
+  /** Filter settings by search query */
+  private getFilteredSettings(): SettingEntry[] {
+    if (!this.settingsPicker) return [];
+    const q = this.settingsPicker.query.toLowerCase();
+    if (!q) return this.settingsPicker.entries;
+    return this.settingsPicker.entries.filter(e =>
+      e.label.toLowerCase().includes(q) || e.description.toLowerCase().includes(q)
+    );
+  }
+
+  /** Filter items by search query */
+  private getFilteredItems(): PickerItem[] {
+    if (!this.itemPicker) return [];
+    const q = this.itemPicker.query.toLowerCase();
+    if (!q) return this.itemPicker.items;
+    return this.itemPicker.items.filter(i =>
+      i.label.toLowerCase().includes(q) || (i.detail ?? "").toLowerCase().includes(q)
+    );
   }
 
   private handleKey(key: Keypress): void {
-    // Settings picker
+    // Settings picker (searchable)
     if (this.settingsPicker) {
+      const filtered = this.getFilteredSettings();
       if (key.name === "up") {
         this.settingsPicker.cursor = Math.max(0, this.settingsPicker.cursor - 1);
         this.draw();
       } else if (key.name === "down") {
-        this.settingsPicker.cursor = Math.min(this.settingsPicker.entries.length - 1, this.settingsPicker.cursor + 1);
+        this.settingsPicker.cursor = Math.min(filtered.length - 1, this.settingsPicker.cursor + 1);
         this.draw();
       } else if (key.name === "return" || key.name === "space") {
-        const entry = this.settingsPicker.entries[this.settingsPicker.cursor];
+        const entry = filtered[this.settingsPicker.cursor];
         if (entry && this.onSettingToggle) this.onSettingToggle(entry.key);
         this.draw();
       } else if (key.name === "escape" || (key.ctrl && key.name === "c")) {
         this.settingsPicker = null;
         this.draw();
+      } else if (key.name === "backspace") {
+        if (this.settingsPicker.query.length > 0) {
+          this.settingsPicker.query = this.settingsPicker.query.slice(0, -1);
+          this.settingsPicker.cursor = 0;
+          this.draw();
+        }
+      } else if (key.char && !key.ctrl && !key.meta && key.char.length === 1) {
+        this.settingsPicker.query += key.char;
+        this.settingsPicker.cursor = 0;
+        this.draw();
       }
       return;
     }
 
-    // Item picker (sessions, themes, etc.)
+    // Item picker (searchable)
     if (this.itemPicker) {
+      const filtered = this.getFilteredItems();
       if (key.name === "up") {
         this.itemPicker.cursor = Math.max(0, this.itemPicker.cursor - 1);
         this.draw();
       } else if (key.name === "down") {
-        this.itemPicker.cursor = Math.min(this.itemPicker.items.length - 1, this.itemPicker.cursor + 1);
+        this.itemPicker.cursor = Math.min(filtered.length - 1, this.itemPicker.cursor + 1);
         this.draw();
       } else if (key.name === "return") {
-        const item = this.itemPicker.items[this.itemPicker.cursor];
+        const item = filtered[this.itemPicker.cursor];
         if (item && this.onItemSelect) {
           this.onItemSelect(item.id);
         }
@@ -311,35 +492,39 @@ export class App {
       } else if (key.name === "escape" || (key.ctrl && key.name === "c")) {
         this.itemPicker = null;
         this.draw();
+      } else if (key.name === "backspace") {
+        if (this.itemPicker.query.length > 0) {
+          this.itemPicker.query = this.itemPicker.query.slice(0, -1);
+          this.itemPicker.cursor = 0;
+          this.draw();
+        }
+      } else if (key.char && !key.ctrl && !key.meta && key.char.length === 1) {
+        this.itemPicker.query += key.char;
+        this.itemPicker.cursor = 0;
+        this.draw();
       }
       return;
     }
 
-    // Model picker intercepts all keys when open
+    // Model picker (searchable)
     if (this.modelPicker) {
+      const filtered = this.getFilteredModels();
       if (key.name === "up") {
         this.modelPicker.cursor = Math.max(0, this.modelPicker.cursor - 1);
         this.draw();
       } else if (key.name === "down") {
-        this.modelPicker.cursor = Math.min(this.modelPicker.options.length - 1, this.modelPicker.cursor + 1);
+        this.modelPicker.cursor = Math.min(filtered.length - 1, this.modelPicker.cursor + 1);
         this.draw();
-      } else if (key.name === "space") {
-        const opt = this.modelPicker.options[this.modelPicker.cursor];
+      } else if (key.name === "tab") {
+        // Tab to pin/unpin in model picker
+        const opt = filtered[this.modelPicker.cursor];
         if (opt) {
           opt.active = !opt.active;
           if (this.onModelPin) this.onModelPin(opt.providerId, opt.modelId, opt.active);
-          // Re-sort: starred models go to top
-          this.modelPicker.options.sort((a, b) => {
-            if (a.active && !b.active) return -1;
-            if (!a.active && b.active) return 1;
-            return 0;
-          });
-          // Keep cursor on the same item
-          this.modelPicker.cursor = this.modelPicker.options.indexOf(opt);
         }
         this.draw();
       } else if (key.name === "return") {
-        const selected = this.modelPicker.options[this.modelPicker.cursor];
+        const selected = filtered[this.modelPicker.cursor];
         this.modelPicker = null;
         if (selected && this.onModelSelect) {
           this.onModelSelect(selected.providerId, selected.modelId);
@@ -347,6 +532,16 @@ export class App {
         this.draw();
       } else if (key.name === "escape" || (key.ctrl && key.name === "c")) {
         this.modelPicker = null;
+        this.draw();
+      } else if (key.name === "backspace") {
+        if (this.modelPicker.query.length > 0) {
+          this.modelPicker.query = this.modelPicker.query.slice(0, -1);
+          this.modelPicker.cursor = 0;
+          this.draw();
+        }
+      } else if (key.char && !key.ctrl && !key.meta && key.char.length === 1) {
+        this.modelPicker.query += key.char;
+        this.modelPicker.cursor = 0;
         this.draw();
       }
       return;
@@ -402,6 +597,12 @@ export class App {
       return;
     }
 
+    // ESC to interrupt streaming
+    if (key.name === "escape" && this.isStreaming && this.onAbort) {
+      this.onAbort();
+      return;
+    }
+
     if (key.ctrl && key.name === "c") {
       if (this.isStreaming && this.onAbort) {
         this.onAbort();
@@ -451,7 +652,14 @@ export class App {
     }
 
     if (key.name === "pageup") { this.scrollOffset = Math.max(0, this.scrollOffset - 5); this.draw(); return; }
-    if (key.name === "pagedown") { this.scrollToBottom(); this.draw(); return; }
+    if (key.name === "pagedown") {
+      const chatHeight = this.getChatHeight();
+      const messageLines = this.renderMessages(this.screen.mainWidth - 2);
+      const maxScroll = Math.max(0, messageLines.length - chatHeight);
+      this.scrollOffset = Math.min(maxScroll, this.scrollOffset + 5);
+      this.draw();
+      return;
+    }
 
     // Command suggestion navigation when / is typed
     const inputText = this.input.getText();
@@ -586,14 +794,17 @@ export class App {
     return content.startsWith("> ") || content.startsWith("  ");
   }
 
-  /** Render messages as terminal lines */
-  private renderMessages(maxWidth: number): string[] {
+  /** Render static message lines (cached when unchanged) */
+  private renderStaticMessages(maxWidth: number): string[] {
+    // Return cache if valid
+    if (this.msgCacheLines && this.msgCacheWidth === maxWidth && this.msgCacheLen === this.messages.length) {
+      return this.msgCacheLines;
+    }
     const lines: string[] = [];
     let idx = 0;
     while (idx < this.messages.length) {
       const msg = this.messages[idx];
       if (msg.role === "user") {
-        // Build inline image tags with green background
         let content = msg.content;
         if (msg.images && msg.images.length > 0) {
           for (let i = 0; i < msg.images.length; i++) {
@@ -601,46 +812,183 @@ export class App {
             content += ` ${tag}`;
           }
         }
-        lines.push(`${BOLD}${WHITE}  > ${content}${RESET}`);
+        lines.push(`${bg(30, 30, 30)}${BOLD}${WHITE}  > ${content}${" ".repeat(Math.max(0, maxWidth - stripAnsi(content).length - 4))}${RESET}`);
+        lines.push("");
       } else if (msg.role === "assistant") {
-        // Always render markdown - even during streaming
         const rendered = renderMarkdown(msg.content);
         for (const cl of rendered.split("\n")) {
-          const visLen = stripAnsi(cl).length;
-          if (visLen <= maxWidth - 4) {
-            lines.push(`    ${cl}`);
-          } else {
-            // Simple wrap — just push the line as-is for now (ANSI-aware wrapping is complex)
-            lines.push(`    ${cl}`);
-          }
+          lines.push(`    ${cl}`);
+        }
+        if (idx + 1 < this.messages.length && this.messages[idx + 1].role === "user") {
+          lines.push("");
+          lines.push(`${DIM}  ${"─".repeat(Math.min(40, maxWidth - 4))}${RESET}`);
         }
       } else if (this.toolOutputCollapsed && this.isToolOutput(msg.content)) {
-        // Skip consecutive tool output system messages
         while (idx + 1 < this.messages.length
           && this.messages[idx + 1].role === "system"
           && this.isToolOutput(this.messages[idx + 1].content)) {
           idx++;
         }
         lines.push(`${DIM}  [tool output hidden]${RESET}`);
+      } else if (msg.content.includes("\x1b[")) {
+        // Pre-formatted content (tool blocks with ANSI) — render lines as-is
+        for (const cl of msg.content.split("\n")) {
+          lines.push(`  ${cl}`);
+        }
       } else {
         lines.push(`${DIM}  ${msg.content}${RESET}`);
       }
       lines.push("");
       idx++;
     }
-    // Thinking block (shown during streaming if model sends reasoning)
+    this.msgCacheLines = lines;
+    this.msgCacheWidth = maxWidth;
+    this.msgCacheLen = this.messages.length;
+    return lines;
+  }
+
+  /** Contextual tool action label */
+  private toolActionLabel(name: string, done: boolean): string {
+    const labels: Record<string, [string, string]> = {
+      readFile: ["Reading", "Read"],
+      listFiles: ["Listing", "Listed"],
+      grep: ["Searching", "Searched"],
+      writeFile: ["Writing", "Wrote"],
+      editFile: ["Editing", "Edited"],
+      bash: ["Running", "Ran"],
+    };
+    const pair = labels[name];
+    if (pair) return done ? pair[1] : pair[0];
+    return done ? name : `${name}`;
+  }
+
+  /** Render a tool call block with diff/detail */
+  private renderToolCallBlock(tc: typeof this.toolCallGroups[0], maxWidth: number): string[] {
+    const lines: string[] = [];
+    const done = !!tc.result;
+    const icon = tc.error ? `${RED}\u25CF${RESET}` : done ? `${GREEN}\u25CF${RESET}` : `${DIM}\u25CF${RESET}`;
+    const label = this.toolActionLabel(tc.name, done);
+    const titleLabel = tc.name === "editFile" ? "Update" : tc.name === "writeFile" ? "Write" : tc.name === "bash" ? "Bash" : label;
+
+    // Header line: ● Update(src/ai/stream.ts)
+    lines.push(`${icon} ${WHITE}${titleLabel}(${tc.preview})${RESET}`);
+
+    const a = tc.args as Record<string, string> | undefined;
+
+    if (tc.name === "editFile" && a?.old_string && a?.new_string) {
+      // Show diff with context
+      const oldLines = a.old_string.split("\n");
+      const newLines = a.new_string.split("\n");
+      const addedCount = newLines.length;
+      const removedCount = oldLines.length;
+      lines.push(`${DIM}  \u2514 Added ${addedCount} line${addedCount !== 1 ? "s" : ""}, removed ${removedCount} line${removedCount !== 1 ? "s" : ""}${RESET}`);
+
+      // Show removed lines (red bg), max 6 lines
+      const maxDiffLines = 6;
+      const showOld = oldLines.slice(0, maxDiffLines);
+      for (const l of showOld) {
+        lines.push(`${bg(80, 20, 20)}${RED} - ${l.slice(0, maxWidth - 6)}${RESET}`);
+      }
+      if (oldLines.length > maxDiffLines) {
+        lines.push(`${DIM}    ... +${oldLines.length - maxDiffLines} more removed${RESET}`);
+      }
+      // Show added lines (green bg), max 6 lines
+      const showNew = newLines.slice(0, maxDiffLines);
+      for (const l of showNew) {
+        lines.push(`${bg(20, 60, 20)}${GREEN} + ${l.slice(0, maxWidth - 6)}${RESET}`);
+      }
+      if (newLines.length > maxDiffLines) {
+        lines.push(`${DIM}    ... +${newLines.length - maxDiffLines} more added${RESET}`);
+      }
+    } else if (tc.name === "writeFile" && a?.content) {
+      const contentLines = a.content.split("\n");
+      lines.push(`${DIM}  \u2514 ${contentLines.length} line${contentLines.length !== 1 ? "s" : ""}${RESET}`);
+      const preview = contentLines.slice(0, 4);
+      for (const l of preview) {
+        lines.push(`${bg(20, 60, 20)}${GREEN} + ${l.slice(0, maxWidth - 6)}${RESET}`);
+      }
+      if (contentLines.length > 4) {
+        lines.push(`${DIM}    ... +${contentLines.length - 4} more lines${RESET}`);
+      }
+    } else if (tc.name === "bash") {
+      if (tc.resultDetail) {
+        const outLines = tc.resultDetail.split("\n").slice(0, 3);
+        for (const l of outLines) {
+          lines.push(`${DIM}  \u2514 ${l.slice(0, maxWidth - 6)}${RESET}`);
+        }
+      } else if (!done) {
+        lines.push(`${DIM}  \u2514 running...${RESET}`);
+      }
+    } else if (tc.name === "readFile" || tc.name === "listFiles" || tc.name === "grep") {
+      // Simple one-liner for read operations
+      if (tc.resultDetail) {
+        lines.push(`${DIM}  \u2514 ${tc.resultDetail.slice(0, maxWidth - 6)}${RESET}`);
+      }
+    }
+
+    // Show error if any
+    if (tc.error && tc.result) {
+      lines.push(`${RED}  \u2514 ${tc.result}${RESET}`);
+    }
+
+    return lines;
+  }
+
+  /** Render messages + dynamic overlays (tool calls, thinking, loading) */
+  private renderMessages(maxWidth: number): string[] {
+    const lines = [...this.renderStaticMessages(maxWidth)];
+
+    // In-progress tool calls during streaming
+    if (this.isStreaming && this.toolCallGroups.length > 0) {
+      for (const tc of this.toolCallGroups) {
+        const block = this.renderToolCallBlock(tc, maxWidth);
+        for (const l of block) lines.push(`  ${l}`);
+        lines.push("");
+      }
+    }
+
+    // Thinking block
     if (this.thinkingBuffer) {
-      const thinkLines = this.thinkingBuffer.split("\n").slice(-3); // show last 3 lines
-      lines.push(`${DIM}  thinking...${RESET}`);
+      const thinkLines = this.thinkingBuffer.split("\n").slice(-3);
+      lines.push(`${GRAY}  ${"─".repeat(Math.min(20, maxWidth - 6))}${RESET}`);
+      lines.push(`${GRAY}  thinking${RESET}`);
       for (const tl of thinkLines) {
-        lines.push(`${DIM}  ${tl.slice(0, maxWidth - 4)}${RESET}`);
+        lines.push(`${GRAY}  ${tl.slice(0, maxWidth - 4)}${RESET}`);
       }
       lines.push("");
     }
+
+    // Compacting indicator
+    if (this.isCompacting) {
+      const spinnerFrames = ["\u00B7", "\u25E6", "\u25CB", "\u25C9", "\u25CB", "\u25E6"];
+      const spinner = spinnerFrames[this.spinnerFrame % spinnerFrames.length];
+      const elapsed = Date.now() - this.compactStartTime;
+      const secs = Math.floor(elapsed / 1000);
+      const mins = Math.floor(secs / 60);
+      const timeStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
+      const tokenStr = this.compactTokens > 0 ? ` \u2191 ${fmtTokens(this.compactTokens)} tokens` : "";
+      lines.push(`  ${YELLOW}${spinner}${RESET} ${YELLOW}Compacting conversation...${RESET} ${DIM}(${timeStr}${tokenStr ? ` \u00B7${tokenStr}` : ""})${RESET}`);
+      lines.push("");
+    }
+
+    // Loading indicator
     if (this.isStreaming && !this.thinkingBuffer) {
-      const frames = ["\u280B", "\u2819", "\u2839", "\u2838", "\u283C", "\u2834", "\u2826", "\u2827", "\u2807", "\u280F"];
-      const frame = frames[this.spinnerFrame % frames.length];
-      lines.push(`${T()}  ${frame} ${RESET}${DIM}Working...${RESET}`);
+      const loadingMessages = [
+        "Thinking...", "Working on it...", "Processing...", "Generating...",
+        "Cooking something up...", "Connecting the dots...", "Crunching...",
+        "Putting it together...", "Brewing...", "Almost there...",
+        "Hammering away...", "Just a moment...", "Spinning gears...", "On it...",
+      ];
+      const spinnerFrames = ["\u00B7", "\u25E6", "\u25CB", "\u25C9", "\u25CB", "\u25E6"];
+      const spinner = spinnerFrames[this.spinnerFrame % spinnerFrames.length];
+      const msgIdx = Math.floor(this.spinnerFrame / 20) % loadingMessages.length;
+      const msg = loadingMessages[msgIdx];
+      const elapsed = Date.now() - this.streamStartTime;
+      const secs = Math.floor(elapsed / 1000);
+      const mins = Math.floor(secs / 60);
+      const timeStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
+      const tokenStr = this.streamTokens > 0 ? ` | ${fmtTokens(this.streamTokens)} tokens` : "";
+      lines.push(`  ${T()}${spinner}${RESET} ${this.shimmerText(msg, this.spinnerFrame)}  ${DIM}(${timeStr}${tokenStr})${RESET}`);
       lines.push("");
     }
     return lines;
@@ -650,13 +998,14 @@ export class App {
     const modeColor = this.mode === "plan" ? P() : T();
     const modeLabel = this.mode === "plan" ? "PLAN" : "BUILD";
     const model = `${T()}${this.providerName}/${this.modelName}${RESET}`;
-    const cost = `$${this.sessionCost.toFixed(4)}`;
-    const tokens = `${this.sessionTokens} tok`;
+    const liveTokens = this.isStreaming ? this.sessionTokens + this.streamTokens : this.sessionTokens;
+    const cost = fmtCost(this.sessionCost);
+    const tokens = `${fmtTokens(liveTokens)} tok`;
     const ctxColor = this.contextUsed > 90 ? RED : this.contextUsed > 70 ? "\x1b[33m" : DIM;
     const ctx = this.contextUsed > 0 ? ` ${ctxColor}${this.contextUsed}%${RESET}` : "";
-    const streaming = this.isStreaming ? ` ${modeColor}working${RESET}` : "";
     const git = this.gitBranch ? ` ${DIM}${this.gitBranch}${this.gitDirty ? "*" : ""}${RESET}` : "";
-    return ` ${modeColor}[${modeLabel}]${RESET} ${model} ${DIM}│${RESET} ${cost} ${tokens}${ctx}${streaming}${git}`;
+    const activity = this.isStreaming ? `${bounceDot(this.spinnerFrame)} ` : "";
+    return `${activity} ${modeColor}[${modeLabel}]${RESET} ${model} ${DIM}|${RESET} ${cost} ${tokens}${ctx}${git}`;
   }
 
   /** Render the sidebar content */
@@ -667,15 +1016,17 @@ export class App {
     // Mode indicator with separator
     const modeColor = this.mode === "plan" ? P() : T();
     const modeLabel = this.mode === "plan" ? "PLAN" : "BUILD";
-    lines.push(`${modeColor}▌ ${modeLabel}${RESET}`);
+    const sideActivity = this.isStreaming ? ` ${bounceDot(this.spinnerFrame)}` : "";
+    lines.push(`${modeColor}▌ ${modeLabel}${RESET}${sideActivity}`);
     lines.push(`${DIM}${"─".repeat(Math.max(1, w - 2))}${RESET}`);
 
     // Model
     lines.push(`${T()}${this.providerName}/${this.modelName}${RESET}`);
     lines.push("");
 
-    // Stats with subtle separator
-    lines.push(`${DIM}─${RESET} ${T()}$${this.sessionCost.toFixed(4)}${RESET} ${DIM}${this.sessionTokens} tok${RESET}`);
+    // Stats with subtle separator — real-time during streaming
+    const liveTokens = this.isStreaming ? this.sessionTokens + this.streamTokens : this.sessionTokens;
+    lines.push(`${DIM}─${RESET} ${T()}${fmtCost(this.sessionCost)}${RESET} ${DIM}${fmtTokens(liveTokens)} tok${RESET}`);
     if (this.contextUsed > 0) {
       const color = this.contextUsed > 90 ? RED : this.contextUsed > 70 ? "\x1b[33m" : DIM;
       lines.push(`   ${color}${this.contextUsed}% ctx${RESET}`);
@@ -728,7 +1079,24 @@ export class App {
     return line + " ".repeat(targetWidth - visible);
   }
 
+  /** Throttled draw — coalesces rapid calls to ~60fps */
   private draw(): void {
+    if (this.drawScheduled) return;
+    const now = Date.now();
+    const elapsed = now - this.lastDrawTime;
+    if (elapsed >= App.DRAW_THROTTLE_MS) {
+      this.drawImmediate();
+    } else {
+      this.drawScheduled = true;
+      setTimeout(() => {
+        this.drawScheduled = false;
+        this.drawImmediate();
+      }, App.DRAW_THROTTLE_MS - elapsed);
+    }
+  }
+
+  private drawImmediate(): void {
+    this.lastDrawTime = Date.now();
     const { height, width } = this.screen;
     const hasSidebar = this.screen.hasSidebar && this.messages.length > 0;
     const mainW = hasSidebar ? this.screen.mainWidth : width;
@@ -738,6 +1106,9 @@ export class App {
 
     // Build bottom section first to know how much space it takes
     const bottomLines: string[] = [];
+
+    // Separator above input
+    bottomLines.push(`${DIM}${"─".repeat(mainW)}${RESET}`);
 
     // Input line
     if (inputText) {
@@ -758,6 +1129,41 @@ export class App {
     } else {
       const suggestions = this.getCommandSuggestions();
       for (const s of suggestions) bottomLines.push(s);
+    }
+
+    // Separator below input/pickers
+    bottomLines.push(`${DIM}${"─".repeat(mainW)}${RESET}`);
+
+    // Info bar below input — contextual hints, width-aware collapse
+    {
+      // Priority order: interrupt > mode > queued > thinking > shortcuts
+      const parts: Array<{ text: string; plain: string; priority: number }> = [];
+      const modeColor = this.mode === "plan" ? P() : T();
+      const modeLabel = this.mode === "plan" ? "plan" : "build";
+      if (this.isStreaming) {
+        parts.push({ text: `${DIM}esc${RESET} ${DIM}interrupt${RESET}`, plain: "esc interrupt", priority: 0 });
+      }
+      parts.push({ text: `${modeColor}${modeLabel}${RESET}`, plain: modeLabel, priority: 1 });
+      if (this.pendingMessages.length > 0) {
+        parts.push({ text: `${P()}${this.pendingMessages.length} queued${RESET}`, plain: `${this.pendingMessages.length} queued`, priority: 2 });
+      }
+      const settings = getSettings();
+      if (settings.enableThinking) {
+        parts.push({ text: `${DIM}thinking${RESET}`, plain: "thinking", priority: 3 });
+      }
+      if (!this.isStreaming && !this.filePicker && !this.modelPicker && !this.settingsPicker && !this.itemPicker) {
+        parts.push({ text: `${DIM}tab${RESET} ${DIM}mode${RESET}`, plain: "tab mode", priority: 4 });
+        parts.push({ text: `${DIM}/${RESET} ${DIM}commands${RESET}`, plain: "/ commands", priority: 5 });
+      }
+      // Collapse from lowest priority until it fits
+      const sep = " | ";
+      let visible = [...parts];
+      while (visible.length > 1) {
+        const totalWidth = visible.reduce((s, p) => s + p.plain.length, 0) + (visible.length - 1) * sep.length + 2;
+        if (totalWidth <= mainW) break;
+        visible.pop(); // drop lowest priority (highest number)
+      }
+      bottomLines.push(` ${visible.map(p => p.text).join(`${DIM}${sep}${RESET}`)}`);
     }
 
     // Status bar — only show if there's a status message (errors, warnings)
@@ -789,6 +1195,10 @@ export class App {
 
       const chatH = topHeight - (showCompactHeader ? 1 : 0);
       const messageLines = this.renderMessages(mainW);
+      // Clamp scroll offset to prevent overflow
+      const maxScroll = Math.max(0, messageLines.length - chatH);
+      if (this.scrollOffset > maxScroll) this.scrollOffset = maxScroll;
+      if (this.scrollOffset < 0) this.scrollOffset = 0;
       const visible = messageLines.slice(this.scrollOffset, this.scrollOffset + chatH);
 
       if (hasSidebar) {
@@ -812,30 +1222,51 @@ export class App {
 
     this.screen.render(frameLines);
 
-    // Cursor on input line
-    const inputRow = topHeight + 1; // +1 because input is first line of bottomLines
+    // Cursor on input line (separator + input line = index 1 in bottomLines)
+    const inputRow = topHeight + 2; // +1 for separator, +1 for 1-based
     const inputCol = 4 + cursor;
     this.screen.setCursor(inputRow, inputCol);
   }
 
-private appendModelPicker(lines: string[], _maxTotal: number): void {
-    const picker = this.modelPicker!;
-    lines.push(` ${T()}${BOLD}Select model${RESET}`);
-    lines.push("");
+/** Shimmer effect — green wave sweeping across text */
+  private shimmerText(text: string, frame: number): string {
+    const period = text.length + 8;
+    const pos = (frame * 0.6) % period;
+    let result = "";
+    for (let i = 0; i < text.length; i++) {
+      const dist = Math.abs(i - pos);
+      const t = Math.max(0, 1 - dist / 4);
+      // Shimmer from dim green (30,100,30) to bright green (58,220,58)
+      const r = Math.round(30 + t * 28);
+      const g = Math.round(100 + t * 120);
+      const b = Math.round(30 + t * 28);
+      result += `\x1b[38;2;${r};${g};${b}m${text[i]}`;
+    }
+    return result + RESET;
+  }
 
-    // Group options by provider
+  private appendModelPicker(lines: string[], _maxTotal: number): void {
+    const picker = this.modelPicker!;
+    lines.push(` ${T()}${BOLD}Select model${RESET}${picker.query ? `  ${DIM}/${RESET}${picker.query}` : ""}`);
+
+    const filtered = this.getFilteredModels();
+    if (filtered.length === 0) {
+      lines.push(`  ${DIM}no matches${RESET}`);
+      lines.push("");
+      lines.push(` ${DIM}type to search, esc to close${RESET}`);
+      return;
+    }
+
+    // Group filtered options by provider
     const byProvider = new Map<string, ModelOption[]>();
-    for (const opt of picker.options) {
-      if (!byProvider.has(opt.providerName)) {
-        byProvider.set(opt.providerName, []);
-      }
+    for (const opt of filtered) {
+      if (!byProvider.has(opt.providerName)) byProvider.set(opt.providerName, []);
       byProvider.get(opt.providerName)!.push(opt);
     }
 
-    // Build flat list with headers
+    // Flat list with headers
     let currentIdx = 0;
     const flatList: Array<{ type: 'header' | 'model'; provider: string; option?: ModelOption; index: number }> = [];
-    
     for (const [provider, opts] of byProvider) {
       flatList.push({ type: 'header', provider, index: -1 });
       for (const opt of opts) {
@@ -843,7 +1274,6 @@ private appendModelPicker(lines: string[], _maxTotal: number): void {
       }
     }
 
-    // Find cursor position in flat list
     const cursorFlatIdx = flatList.findIndex(item => item.index === picker.cursor);
     const maxVisible = 12;
     let start = Math.max(0, cursorFlatIdx - Math.floor(maxVisible / 2));
@@ -853,19 +1283,17 @@ private appendModelPicker(lines: string[], _maxTotal: number): void {
     for (let i = start; i < end; i++) {
       const item = flatList[i];
       if (item.type === 'header') {
-        lines.push(` ${T()}${BOLD}${item.provider}${RESET}`);
+        lines.push(` ${DIM}${item.provider}${RESET}`);
       } else {
         const opt = item.option!;
         const isCursor = item.index === picker.cursor;
-        const isActive = opt.active;
+        const pin = opt.active ? ` ${T()}*${RESET}` : "";
         const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
-        const check = isActive ? ` ${T()}*${RESET}` : "";
         const nameCol = isCursor ? `${WHITE}${BOLD}` : T();
-        lines.push(`  ${arrow}${nameCol}${opt.modelId}${RESET}${check}`);
+        lines.push(`  ${arrow}${nameCol}${opt.modelId}${RESET}${pin}`);
       }
     }
-    lines.push("");
-    lines.push(` ${DIM}(${picker.cursor + 1}/${picker.options.length}) space to pin, enter to select${RESET}`);
+    lines.push(` ${DIM}(${Math.min(picker.cursor + 1, filtered.length)}/${filtered.length}) tab pin, enter select${RESET}`);
   }
 
   private appendFilePicker(lines: string[], maxTotal: number): void {
@@ -886,13 +1314,21 @@ private appendModelPicker(lines: string[], _maxTotal: number): void {
 
   private appendSettingsPicker(lines: string[], _maxTotal: number): void {
     const picker = this.settingsPicker!;
-    const maxVisible = 5;
+    lines.push(` ${T()}${BOLD}Settings${RESET}${picker.query ? `  ${DIM}/${RESET}${picker.query}` : ""}`);
+
+    const filtered = this.getFilteredSettings();
+    if (filtered.length === 0) {
+      lines.push(`  ${DIM}no matches${RESET}`);
+      return;
+    }
+
+    const maxVisible = 6;
     let start = Math.max(0, picker.cursor - Math.floor(maxVisible / 2));
-    if (start + maxVisible > picker.entries.length) start = Math.max(0, picker.entries.length - maxVisible);
-    const end = Math.min(start + maxVisible, picker.entries.length);
+    if (start + maxVisible > filtered.length) start = Math.max(0, filtered.length - maxVisible);
+    const end = Math.min(start + maxVisible, filtered.length);
 
     for (let i = start; i < end; i++) {
-      const e = picker.entries[i];
+      const e = filtered[i];
       const isCursor = i === picker.cursor;
       const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
       const nameCol = isCursor ? `${WHITE}${BOLD}` : T();
@@ -900,35 +1336,36 @@ private appendModelPicker(lines: string[], _maxTotal: number): void {
       const valColor = e.value === "true" ? T() : DIM;
       lines.push(` ${arrow}${nameCol}${e.label}${RESET}${pad}${valColor}${e.value}${RESET}`);
     }
-    lines.push(` ${DIM}(${picker.cursor + 1}/${picker.entries.length})${RESET}`);
 
-    const selected = picker.entries[picker.cursor];
+    const selected = filtered[picker.cursor];
     if (selected) {
-      lines.push("");
       lines.push(` ${DIM}${selected.description}${RESET}`);
-      lines.push(` ${DIM}Enter/Space to change${RESET}`);
     }
   }
 
   private appendItemPicker(lines: string[], _maxTotal: number): void {
     const picker = this.itemPicker!;
-    lines.push(` ${T()}${BOLD}${picker.title}${RESET}`);
-    lines.push("");
+    lines.push(` ${T()}${BOLD}${picker.title}${RESET}${picker.query ? `  ${DIM}/${RESET}${picker.query}` : ""}`);
+
+    const filtered = this.getFilteredItems();
+    if (filtered.length === 0) {
+      lines.push(`  ${DIM}no matches${RESET}`);
+      return;
+    }
 
     const maxVisible = 10;
     let start = Math.max(0, picker.cursor - Math.floor(maxVisible / 2));
-    if (start + maxVisible > picker.items.length) start = Math.max(0, picker.items.length - maxVisible);
-    const end = Math.min(start + maxVisible, picker.items.length);
+    if (start + maxVisible > filtered.length) start = Math.max(0, filtered.length - maxVisible);
+    const end = Math.min(start + maxVisible, filtered.length);
 
     for (let i = start; i < end; i++) {
-      const item = picker.items[i];
+      const item = filtered[i];
       const isCursor = i === picker.cursor;
       const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
       const labelCol = isCursor ? `${WHITE}${BOLD}` : T();
       lines.push(` ${arrow}${labelCol}${item.label}${RESET}${item.detail ? ` ${DIM}${item.detail}${RESET}` : ""}`);
     }
-    lines.push("");
-    lines.push(` ${DIM}(${picker.cursor + 1}/${picker.items.length}) Enter to select${RESET}`);
+    lines.push(` ${DIM}(${Math.min(picker.cursor + 1, filtered.length)}/${filtered.length}) enter to select${RESET}`);
   }
 
   private getCommandMatches(): typeof COMMANDS {
@@ -1046,7 +1483,7 @@ private appendModelPicker(lines: string[], _maxTotal: number): void {
 
     console.log("");
     console.log(`${T()}${BOLD} BrokeCLI${RESET} ${DIM}session ended${RESET}`);
-    console.log(`${DIM} $${this.sessionCost.toFixed(4)} | ${this.sessionTokens} tokens${RESET}`);
+    console.log(`${DIM} ${fmtCost(this.sessionCost)} | ${fmtTokens(this.sessionTokens)} tokens${RESET}`);
     console.log("");
     process.exit(0);
   }

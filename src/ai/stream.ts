@@ -16,10 +16,12 @@ export interface StreamCallbacks {
 export interface StreamOptions {
   model: LanguageModel;
   modelId: string;
+  providerId?: string;
   system: string;
   messages: Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }>;
   tools?: ToolSet;
   abortSignal?: AbortSignal;
+  enableThinking?: boolean;
 }
 
 export async function startStream(
@@ -45,6 +47,12 @@ export async function startStream(
       return { role: m.role, content: m.content };
     });
 
+    // Build provider options (e.g. thinking for Anthropic)
+    const providerOptions: Record<string, Record<string, Record<string, string>>> = {};
+    if (opts.enableThinking && opts.providerId === "anthropic") {
+      providerOptions.anthropic = { thinking: { type: "adaptive" } };
+    }
+
     const result = streamText({
       model: opts.model,
       system: opts.system,
@@ -52,7 +60,10 @@ export async function startStream(
       tools: opts.tools,
       stopWhen: opts.tools ? stepCountIs(10) : stepCountIs(1),
       abortSignal: opts.abortSignal,
-      onError: () => {},
+      providerOptions,
+      onError: ({ error }) => {
+        if (error instanceof Error) callbacks.onError(error);
+      },
       onStepFinish: (event) => {
         if (event.toolCalls) {
           for (const tc of event.toolCalls) {
@@ -70,31 +81,39 @@ export async function startStream(
     });
 
     // Use fullStream for reasoning + text + tool events
+    let streamFailed = false;
     try {
       for await (const part of result.fullStream) {
         if (part.type === "text-delta") {
-          callbacks.onText(part.text);
+          callbacks.onText((part as any).text ?? (part as any).delta ?? "");
         } else if (part.type === "reasoning-delta") {
-          callbacks.onReasoning(part.text);
+          callbacks.onReasoning((part as any).delta ?? (part as any).text ?? "");
         }
       }
     } catch (streamErr: unknown) {
-      // fullStream can throw mid-iteration — still try to get usage
-      if (streamErr instanceof Error && streamErr.name !== "AbortError") {
-        callbacks.onError(streamErr);
-        return;
-      }
+      if (streamErr instanceof Error && streamErr.name === "AbortError") return;
+      streamFailed = true;
+      callbacks.onError(streamErr instanceof Error ? streamErr : new Error(String(streamErr)));
     }
 
-    const usage = await result.usage;
-    const tokenUsage = calculateCost(
-      opts.modelId,
-      usage.inputTokens ?? 0,
-      usage.outputTokens ?? 0,
-    );
-    // Trigger after response callback for pending messages
-    callbacks.onAfterResponse?.();
-    callbacks.onFinish(tokenUsage);
+    // If stream failed, still try to get usage but don't block on it
+    try {
+      const usage = await result.usage;
+      const tokenUsage = calculateCost(
+        opts.modelId,
+        usage.inputTokens ?? 0,
+        usage.outputTokens ?? 0,
+      );
+      callbacks.onAfterResponse?.();
+      callbacks.onFinish(tokenUsage);
+    } catch {
+      // Usage unavailable after stream error — finish with zeros
+      if (!streamFailed) {
+        callbacks.onError(new Error("Stream ended unexpectedly"));
+      }
+      callbacks.onAfterResponse?.();
+      callbacks.onFinish(calculateCost(opts.modelId, 0, 0));
+    }
   } catch (err: unknown) {
     if (err instanceof Error && err.name === "AbortError") return;
     callbacks.onError(err instanceof Error ? err : new Error(String(err)));

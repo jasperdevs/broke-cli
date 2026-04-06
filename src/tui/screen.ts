@@ -1,7 +1,8 @@
 import {
   ALT_SCREEN_ON, ALT_SCREEN_OFF, CLEAR_SCREEN, CLEAR_LINE,
   CURSOR_HOME, CURSOR_HIDE, CURSOR_SHOW,
-  SYNC_START, SYNC_END, moveToRow, write, getTermSize,
+  SYNC_START, SYNC_END,
+  moveToRow, write, getTermSize,
 } from "../utils/ansi.js";
 
 /**
@@ -48,21 +49,25 @@ export class Screen {
   /**
    * Render a new frame. Only writes lines that changed.
    * Lines array should have exactly this.rows entries.
+   * Batches all writes into a single stdout.write for performance.
    */
   render(lines: string[]): void {
-    write(SYNC_START);
+    let buf = SYNC_START;
+    let changed = false;
 
     for (let i = 0; i < this.rows; i++) {
       const line = lines[i] ?? "";
       if (line !== this.prev[i]) {
-        write(moveToRow(i + 1));
-        write(CLEAR_LINE);
-        write(line);
+        buf += moveToRow(i + 1) + CLEAR_LINE + line;
+        this.prev[i] = line;
+        changed = true;
       }
     }
 
-    write(SYNC_END);
-    this.prev = [...lines];
+    buf += SYNC_END;
+    if (changed) write(buf);
+    // Truncate prev if lines array is shorter
+    if (this.prev.length > this.rows) this.prev.length = this.rows;
   }
 
   /** Force full redraw (e.g. after resize) */

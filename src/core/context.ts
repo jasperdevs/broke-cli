@@ -25,13 +25,12 @@ export function buildSystemPrompt(cwd: string, providerId?: string, mode?: Mode)
 
   // Core identity — provider-specific instructions
   parts.push(getProviderPrompt(providerId));
-  parts.push(`EXTREME BREVITY: Every token costs money. Be maximally concise.
-- Use short sentences. Delete unnecessary words.
-- No greetings, no "Here's the code:", no "As you can see"
-- No markdown unless explicitly asked
-- Code only: show the code, nothing else
-- Errors only: state the error, one line fix
-- One word answers when possible`);
+  parts.push(`Be concise but helpful. Keep responses short and focused.
+- Skip greetings and filler phrases
+- Use tools directly to make changes — don't just show code, write it
+- After making changes, briefly explain what you did and why
+- When fixing errors, state the issue and the fix
+- Use markdown for code blocks when explaining, but prefer tool use for actual changes`);
 
   // Environment info (like OpenCode does)
   let isGit = false;
@@ -74,10 +73,10 @@ ${tree}
 </tools>
 
 Guidelines:
-- Be concise
+- Be concise but always tell the user what you did after making changes
 - Use tools directly when asked to create, edit, or explore files
-- Do not ask for permission to make changes
-- Do not show code in responses - use the tools instead`);
+- Do not ask for permission to make changes — just do them
+- After completing work, give a brief summary of what changed and why`);
 
   // Global context
   for (const file of ["AGENTS.md", "SYSTEM.md"]) {
@@ -116,7 +115,7 @@ Guidelines:
 PLAN MODE: Read first. Plan: 1) step 2) step 3) step. Wait for confirmation.`);
   } else {
     parts.push(`
-BUILD MODE: Execute. No asking. Just do it.`);
+BUILD MODE: Make changes directly using tools. You can still answer questions and explain things when asked. After making file changes, briefly summarize what you did.`);
   }
 
   const prompt = parts.join("\n");

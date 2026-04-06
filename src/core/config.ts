@@ -10,7 +10,6 @@ export interface Settings {
   yoloMode: boolean;
   autoCompact: boolean;
   maxSessionCost: number;
-  theme: string;
   showTokens: boolean;
   showCost: boolean;
   autoSaveSessions: boolean;
@@ -26,7 +25,6 @@ export const DEFAULT_SETTINGS: Settings = {
   yoloMode: true,
   autoCompact: true,
   maxSessionCost: 0,
-  theme: "dark",
   showTokens: true,
   showCost: true,
   autoSaveSessions: true,
