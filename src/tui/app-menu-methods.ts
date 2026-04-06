@@ -67,14 +67,15 @@ export function getBottomLineCount(app: AppState, mainW: number, maxHeight: numb
 }
 
 export function getWrappedInputLines(app: AppState, text: string, width: number): string[] {
-  const usableWidth = Math.max(1, width - 2);
+  const padX = Math.max(0, getSettings().editorPaddingX | 0);
+  const usableWidth = Math.max(1, width - 2 - (padX * 2));
   const sourceLines = (text || "").split("\n");
   const wrapped: string[] = [];
   for (const line of sourceLines) {
     const lineParts = line.length === 0 ? [""] : wordWrap(line, usableWidth);
-    wrapped.push(...lineParts);
+    wrapped.push(...lineParts.map((part) => `${" ".repeat(padX)}${part}`));
   }
-  return wrapped.length > 0 ? wrapped : [""];
+  return wrapped.length > 0 ? wrapped : [" ".repeat(padX)];
 }
 
 export function getInputCursorLayout(app: AppState, text: string, cursor: number, width: number): { lines: string[]; row: number; col: number } {
@@ -139,6 +140,10 @@ export function getMenuPromptPrefix(_app: AppState, kind: MenuPromptKind): strin
     case "theme": return "/theme ";
     case "export": return "/export ";
     case "resume": return "/resume ";
+    case "session": return "/session ";
+    case "hotkeys": return "/hotkeys ";
+    case "tree": return "/tree ";
+    case "agents": return "/agents ";
     case "projects": return "/projects ";
     case "logout": return "/logout ";
   }

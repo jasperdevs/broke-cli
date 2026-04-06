@@ -283,8 +283,22 @@ describe("input editing", () => {
     app.addPendingMessage("next step", [], "followup");
     const output = app.renderMessages(50).map((line: string) => stripAnsi(line)).join("\n");
     expect(output).toContain("Composing...");
-    expect(output).toContain("Queued messages");
+    expect(output).toContain("Queued follow-up messages");
     expect(output).toContain("next step");
+  });
+
+  it("keeps shift-enter as a newline even when slash suggestions are visible", () => {
+    const app = new App() as any;
+    app.input.paste("/");
+    app.handleKey({ name: "return", char: "", ctrl: false, meta: false, shift: true });
+    expect(app.input.getText()).toBe("/\n");
+  });
+
+  it("treats linefeed as a newline instead of submit", () => {
+    const app = new App() as any;
+    app.input.paste("hello");
+    app.handleKey({ name: "linefeed", char: "\n", ctrl: false, meta: false, shift: false });
+    expect(app.input.getText()).toBe("hello\n");
   });
 
   it("restores the last queued message with Alt+Up and removes it from the queue", () => {
@@ -334,8 +348,31 @@ describe("budget inspector", () => {
     app.drawImmediate();
     expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("Budget Inspector");
     expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("esc back");
+    expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("SESSION");
     app.handleKey({ name: "escape", char: "", ctrl: false, meta: false, shift: false } as Keypress);
     expect(rendered.map((line) => stripAnsi(line)).join("\n")).not.toContain("Budget Inspector");
+  });
+});
+
+describe("agent task inspector", () => {
+  it("opens as a fullscreen mode with task details", () => {
+    const app = new App() as any;
+    let rendered: string[] = [];
+    app.screen = { height: 12, width: 60, hasSidebar: true, mainWidth: 38, sidebarWidth: 19, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
+    app.openAgentRunsView("Agent Tasks", [{
+      id: "run-1",
+      prompt: "Review the failing tests in session-manager",
+      status: "done",
+      result: "The regression is in continueRecent.",
+      detail: "model openai/gpt-5.4 · tools readFile,grep",
+      createdAt: Date.now(),
+    }]);
+    app.drawImmediate();
+    const output = rendered.map((line) => stripAnsi(line)).join("\n");
+    expect(output).toContain("Agent Tasks");
+    expect(output).toContain("esc back");
+    expect(output).toContain("Review the failing tests");
+    expect(output).toContain("continueRecent");
   });
 });
 

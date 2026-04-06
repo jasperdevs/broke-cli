@@ -24,7 +24,10 @@ describe("command aliases", () => {
     app.input.clear();
     app.input.paste("/");
     const all = app.getCommandMatches().map((entry: { name: string }) => entry.name);
-    expect(all).not.toContain("reload");
+    expect(all).toContain("reload");
+    expect(all).toContain("tree");
+    expect(all).toContain("hotkeys");
+    expect(all).toContain("session");
     expect(all).not.toContain("cost");
     expect(all).not.toContain("notify");
     expect(all).not.toContain("btw");

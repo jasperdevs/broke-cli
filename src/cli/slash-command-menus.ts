@@ -2,14 +2,16 @@ import { execSync } from "child_process";
 import { writeFileSync } from "fs";
 import { buildSystemPrompt, reloadContext } from "../core/context.js";
 import { clearCredentials, hasStoredCredentials, listAuthenticated } from "../core/auth.js";
-import { getProviderCredential, getSettings, loadConfig, updateProviderConfig, updateSetting, type Mode, type Settings } from "../core/config.js";
+import { getProviderCredential, getSettings, loadConfig, updateProviderConfig, updateSetting, type Mode, type Settings, type TreeFilterMode } from "../core/config.js";
 import { listProjects } from "../core/projects.js";
 import { listExtensions } from "../core/extensions.js";
 import { isToolAllowed, toggleExtensionEnabled, toggleToolPermission } from "../core/permissions.js";
 import { Session } from "../core/session.js";
 import { listThemes, setPreviewTheme } from "../core/themes.js";
 import { TOOL_NAMES } from "../tools/registry.js";
+import type { Keypress } from "../tui/keypress.js";
 import { buildHtmlExport, buildMarkdownExport, buildShareFilePath, formatRelativeMinutes, publishTranscriptShare } from "./exports.js";
+import { SessionManager } from "../core/session-manager.js";
 
 type AnyApp = any;
 type AnyHooks = any;
@@ -37,7 +39,15 @@ export function openSettingsMenu(args: { app: AnyApp; activeModel: any; currentM
       { key: "showCost", label: "Show cost", value: String(s.showCost), description: "Display cost in status bar" },
       { key: "maxSessionCost", label: "Max session cost", value: s.maxSessionCost === 0 ? "unlimited" : `$${s.maxSessionCost}`, description: "Maximum cost per session (0 = unlimited)" },
       { key: "notifyOnResponse", label: "Notify on response", value: String(s.notifyOnResponse), description: "Show a desktop notification when a response completes" },
+      { key: "quietStartup", label: "Quiet startup", value: String(s.quietStartup), description: "Hide startup inventory details" },
+      { key: "hideThinkingBlock", label: "Hide thinking block", value: String(s.hideThinkingBlock), description: "Hide streamed reasoning blocks in chat" },
       { key: "cavemanLevel", label: "Caveman mode", value: s.cavemanLevel ?? "off", description: "off / lite / auto / ultra — save output tokens (ctrl+y)" },
+      { key: "doubleEscapeAction", label: "Double-escape", value: s.doubleEscapeAction, description: "tree / fork / none" },
+      { key: "editorPaddingX", label: "Editor padding", value: String(s.editorPaddingX), description: "Horizontal input padding (0-3)" },
+      { key: "autocompleteMaxVisible", label: "Autocomplete size", value: String(s.autocompleteMaxVisible), description: "Visible command rows" },
+      { key: "showHardwareCursor", label: "Hardware cursor", value: String(s.showHardwareCursor), description: "Keep the terminal cursor visible while idle" },
+      { key: "terminal.showImages", label: "Show image tags", value: String(s.terminal.showImages), description: "Show pasted image markers in chat" },
+      { key: "images.blockImages", label: "Block images", value: String(s.images.blockImages), description: "Do not send pasted images to models" },
       { key: "autoLint", label: "Auto lint", value: String(s.autoLint), description: `Run ${s.lintCommand || "lint"} after model edits` },
       { key: "autoTest", label: "Auto test", value: String(s.autoTest), description: `Run ${s.testCommand || "tests"} after model edits` },
       { key: "autoFixValidation", label: "Auto-fix validation", value: String(s.autoFixValidation), description: "Send one automatic repair turn when lint/test fails" },
@@ -65,6 +75,20 @@ export function openSettingsMenu(args: { app: AnyApp; activeModel: any; currentM
       updateSetting("cavemanLevel", next);
       reloadContext();
       onSystemPromptChange(buildSystemPrompt(process.cwd(), activeModel?.provider?.id, currentMode, next));
+    } else if (key === "doubleEscapeAction") {
+      const levels: Array<Settings["doubleEscapeAction"]> = ["tree", "fork", "none"];
+      const next = levels[(levels.indexOf(s.doubleEscapeAction) + 1) % levels.length];
+      updateSetting("doubleEscapeAction", next);
+    } else if (key === "editorPaddingX") {
+      updateSetting("editorPaddingX", (s.editorPaddingX + 1) % 4);
+    } else if (key === "autocompleteMaxVisible") {
+      const cycle = [5, 8, 12];
+      const idx = cycle.indexOf(s.autocompleteMaxVisible);
+      updateSetting("autocompleteMaxVisible", cycle[(idx + 1) % cycle.length] ?? 5);
+    } else if (key === "terminal.showImages") {
+      updateSetting("terminal", { ...s.terminal, showImages: !s.terminal.showImages });
+    } else if (key === "images.blockImages") {
+      updateSetting("images", { ...s.images, blockImages: !s.images.blockImages });
     }
     app.updateSettings(buildEntries());
   });
@@ -202,6 +226,146 @@ export function openResumeMenu(args: { app: AnyApp; restText: string; onSessionR
     for (const msg of loaded.getMessages()) app.addMessage(msg.role, msg.content);
     app.updateUsage(loaded.getTotalCost(), loaded.getTotalInputTokens(), loaded.getTotalOutputTokens());
   }, { kind: "resume" });
+  return true;
+}
+
+export function openTreeMenu(args: {
+  app: AnyApp;
+  session: Session;
+  onSessionReplace?: (session: Session) => void;
+}): boolean {
+  const { app, session } = args;
+  let filterMode: TreeFilterMode = getSettings().treeFilterMode;
+  let showTimestamps = false;
+  const filterModes: TreeFilterMode[] = ["default", "no-tools", "user-only", "labeled-only", "all"];
+  const collapsed = new Set<string>();
+
+  const buildChildrenMap = () => {
+    const map = new Map<string, string[]>();
+    for (const entry of session.getTreeItems("all")) {
+      if (!entry.parentId) continue;
+      const bucket = map.get(entry.parentId) ?? [];
+      bucket.push(entry.id);
+      map.set(entry.parentId, bucket);
+    }
+    return map;
+  };
+  const childrenMap = buildChildrenMap();
+
+  const visibleEntries = () => {
+    const source = session.getTreeItems(filterMode);
+    const hidden = new Set<string>();
+    const byId = new Map(source.map((entry) => [entry.id, entry]));
+    for (const entry of source) {
+      let cursor = entry.parentId ? byId.get(entry.parentId) : undefined;
+      while (cursor) {
+        if (collapsed.has(cursor.id)) {
+          hidden.add(entry.id);
+          break;
+        }
+        cursor = cursor.parentId ? byId.get(cursor.parentId) : undefined;
+      }
+    }
+    return source.filter((entry) => !hidden.has(entry.id));
+  };
+
+  const buildItems = () => visibleEntries().map((entry) => {
+    const hasChildren = (childrenMap.get(entry.id)?.length ?? 0) > 0;
+    const branch = hasChildren ? (collapsed.has(entry.id) ? "▸" : "▾") : "•";
+    const active = entry.active ? " [active]" : "";
+    const label = entry.label ? ` · #${entry.label}` : "";
+    const summary = entry.content.split(/\r?\n/)[0]?.trim() || entry.role;
+    const indent = "  ".repeat(entry.depth);
+    const time = showTimestamps ? ` · ${formatRelativeMinutes(entry.timestamp)}` : "";
+    return {
+      id: entry.id,
+      label: `${indent}${branch} ${entry.role}${active}${label}`,
+      detail: `${summary.slice(0, 80)}${time}`,
+    };
+  });
+
+  const items = buildItems();
+  if (items.length === 0) {
+    app.addMessage("system", filterMode === "all" ? "No session tree yet." : `No tree items for filter "${filterMode}".`);
+    return false;
+  }
+
+  const refreshItems = (focusId?: string) => {
+    app.updateItemPickerItems?.(buildItems(), focusId);
+  };
+  const cycleFilter = () => {
+    filterMode = filterModes[(filterModes.indexOf(filterMode) + 1) % filterModes.length];
+    updateSetting("treeFilterMode", filterMode);
+    refreshItems();
+  };
+
+  app.openItemPicker("Session Tree", items, (entryId: string) => {
+    const result = session.navigateTo(entryId);
+    if (result.cancelled) return;
+    app.clearMessages();
+    for (const msg of session.getMessages()) app.addMessage(msg.role, msg.content);
+    app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
+    if (result.editorText) app.setDraft?.(result.editorText);
+  }, {
+    kind: "tree",
+    initialCursor: Math.max(0, items.findIndex((item) => item.id === session.getLeafId())),
+    onKey: (key: Keypress) => {
+      if (key.ctrl && key.name === "o") {
+        cycleFilter();
+        return true;
+      }
+      if (key.shift && key.name === "t") {
+        showTimestamps = !showTimestamps;
+        refreshItems();
+        return true;
+      }
+      if (key.shift && key.name === "l") {
+        const filtered = app.getFilteredItems?.() ?? buildItems();
+        const current = filtered[(app.itemPicker?.cursor ?? 0)];
+        if (!current) return true;
+        session.toggleLabel(current.id);
+        refreshItems(current.id);
+        return true;
+      }
+      if ((key.ctrl || key.meta) && ["left", "right"].includes(key.name)) {
+        const filtered = app.getFilteredItems?.() ?? buildItems();
+        const current = filtered[(app.itemPicker?.cursor ?? 0)];
+        if (!current) return true;
+        const entry = session.getTreeEntry(current.id);
+        if (!entry) return true;
+        const hasChildren = (childrenMap.get(entry.id)?.length ?? 0) > 0;
+        if (key.name === "right") {
+          if (collapsed.has(entry.id)) {
+            collapsed.delete(entry.id);
+            refreshItems(entry.id);
+          } else {
+            const children = childrenMap.get(entry.id) ?? [];
+            const nextChild = filtered.find((item: { id: string }) => children.includes(item.id));
+            if (nextChild) refreshItems(nextChild.id);
+          }
+          return true;
+        }
+        if (key.name === "left") {
+          if (hasChildren && !collapsed.has(entry.id)) {
+            collapsed.add(entry.id);
+            refreshItems(entry.id);
+          } else if (entry.parentId) {
+            refreshItems(entry.parentId);
+          }
+          return true;
+        }
+      }
+      if (key.name === "left" || key.name === "right") {
+        const filtered = app.getFilteredItems?.() ?? buildItems();
+        if (filtered.length === 0 || !app.itemPicker) return true;
+        const delta = key.name === "left" ? -10 : 10;
+        app.itemPicker.cursor = Math.max(0, Math.min(filtered.length - 1, app.itemPicker.cursor + delta));
+        return true;
+      }
+      return false;
+    },
+    secondaryHint: "ctrl+o filter · shift+l label · shift+t time · alt/ctrl+←/→ fold",
+  });
   return true;
 }
 

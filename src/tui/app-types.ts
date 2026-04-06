@@ -34,6 +34,22 @@ export interface BudgetView {
   scrollOffset: number;
 }
 
+export interface AgentRun {
+  id: string;
+  prompt: string;
+  status: "running" | "done" | "error";
+  result?: string;
+  detail?: string;
+  createdAt: number;
+}
+
+export interface AgentRunView {
+  title: string;
+  runs: AgentRun[];
+  selectedIndex: number;
+  scrollOffset: number;
+}
+
 export type PendingDelivery = "steering" | "followup";
 
 export type MenuPromptKind =
@@ -44,6 +60,10 @@ export type MenuPromptKind =
   | "theme"
   | "export"
   | "resume"
+  | "session"
+  | "hotkeys"
+  | "tree"
+  | "agents"
   | "projects"
   | "logout";
 

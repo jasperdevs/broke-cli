@@ -51,9 +51,9 @@ describe("session budget metrics", () => {
     expect(report.totalTokens).toBe(240);
     expect(report.toolExposureWaste).toBe(4);
     expect(report.freshThreadCarryForwards).toBe(1);
-    expect(dashboard).toContain("Session");
-    expect(dashboard).toContain("Bleed");
-    expect(dashboard).toContain("ctx 88/128k");
+    expect(dashboard).toContain("SESSION");
+    expect(dashboard).toContain("BLEED");
+    expect(dashboard).toContain("ctx                88/128k");
     expect(summary).toContain("cliffs 1");
     expect(summary).toContain("tool waste 4");
   });

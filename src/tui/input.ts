@@ -66,8 +66,10 @@ export class InputWidget {
       return "interrupt";
     }
 
-    // Shift+Enter / Alt+Enter / Ctrl+J — newline in input
-    if (((key.shift || key.meta) && (key.name === "return" || key.name === "enter")) || (key.ctrl && key.name === "j")) {
+    // Shift+Enter / Alt+Enter / Ctrl+Enter / Ctrl+J — newline in input
+    if (key.name === "linefeed"
+      || (((key.shift || key.meta) && (key.name === "return" || key.name === "enter" || key.name === "linefeed"))
+      || (key.ctrl && (key.name === "return" || key.name === "enter" || key.name === "linefeed" || key.name === "j")))) {
       this.text = this.text.slice(0, this.cursor) + "\n" + this.text.slice(this.cursor);
       this.cursor++;
       return "none";

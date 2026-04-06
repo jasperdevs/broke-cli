@@ -25,6 +25,8 @@ function createAppStub() {
       this.costReset = true;
     },
     setModel() {},
+    setSessionName() {},
+    setDraft() {},
     updateUsage() {},
     openModelPicker() {},
     openSettings() {},
@@ -45,6 +47,10 @@ function createAppStub() {
       return "";
     },
     openBudgetView() {},
+    openAgentRunsView() {},
+    getAgentRuns() {
+      return [];
+    },
   };
 }
 
@@ -62,6 +68,18 @@ afterEach(() => {
 });
 
 describe("slash command handling", () => {
+  it("supports tree labels and labeled-only filtering", () => {
+    const session = new Session(`test-tree-labels-${Date.now()}`);
+    session.addMessage("user", "first prompt");
+    session.addMessage("assistant", "first answer");
+    const entryId = session.getTreeItems("all")[0]?.id;
+    expect(entryId).toBeTruthy();
+    session.toggleLabel(entryId!);
+    const labeled = session.getTreeItems("labeled-only");
+    expect(labeled).toHaveLength(1);
+    expect(labeled[0].label).toBeTruthy();
+  });
+
   it("clears session and UI state for /clear", async () => {
     const app = createAppStub();
     const session = new Session(`test-clear-${Date.now()}`);
@@ -204,6 +222,38 @@ describe("slash command handling", () => {
     expect(capturedEntries.some((entry) => entry.key === "followUpMode")).toBe(false);
   });
 
+  it("opens /scoped-models in scoped mode", async () => {
+    const app = createAppStub();
+    let capturedScope: "all" | "scoped" | undefined;
+    app.openModelPicker = (_options: any, _onSelect: any, _onPin: any, _initialCursor: any, initialScope?: "all" | "scoped") => {
+      capturedScope = initialScope;
+    };
+
+    const result = await handleSlashCommand({
+      text: "/scoped-models",
+      app,
+      session: new Session(`test-scoped-models-${Date.now()}`),
+      activeModel: null,
+      currentModelId: "",
+      currentMode: "build",
+      systemPrompt: "sys",
+      providerRegistry: { createModel: () => ({ provider: { name: "Test", id: "test" } }) } as any,
+      buildVisibleModelOptions: () => [{ providerId: "test", providerName: "Test", modelId: "alpha", active: true, pinned: true }],
+      refreshProviderState: async () => [],
+      isSkippedPromptAnswer: () => false,
+      isValidHttpBaseUrl: () => true,
+      getContextOptimizer: () => ({ reset() {} }) as any,
+      onSessionReplace: () => {},
+      onModelChange: () => {},
+      onSystemPromptChange: () => {},
+      hooks: { emit() {} },
+      onProjectChange: () => {},
+    });
+
+    expect(result.handled).toBe(true);
+    expect(capturedScope).toBe("scoped");
+  });
+
   it("writes a standalone html share for /share", async () => {
     const app = createAppStub();
     const session = new Session(`test-share-${Date.now()}`);
@@ -294,9 +344,9 @@ describe("slash command handling", () => {
     session.recordIdleCacheCliff();
     session.recordCompaction({ freshThreadCarryForward: true });
 
-    let opened: { title: string; lines: string[] } | null = null;
-    app.openBudgetView = (title: string, lines: string[]) => {
-      opened = { title, lines };
+    let opened: { title: string; report: any } | null = null;
+    app.openBudgetView = (title: string, report: any) => {
+      opened = { title, report };
     };
 
     const result = await handleSlashCommand({
@@ -322,9 +372,9 @@ describe("slash command handling", () => {
 
     expect(result.handled).toBe(true);
     expect(opened?.title).toBe("Budget Inspector");
-    expect(opened?.lines.join("\n")).toContain("Budget");
-    expect(opened?.lines.join("\n")).toContain("idle cache cliffs");
-    expect(opened?.lines.join("\n")).toContain("carry-forwards    1");
+    expect(opened?.report.totalTokens).toBe(165);
+    expect(opened?.report.idleCacheCliffs).toBe(1);
+    expect(opened?.report.freshThreadCarryForwards).toBe(1);
   });
 
   it("reloads extensions immediately when toggled with enter", async () => {
@@ -442,6 +492,194 @@ describe("slash command handling", () => {
     expect(result.handled).toBe(true);
     expect(capturedItems.some((item) => item.label.includes("local session"))).toBe(true);
     expect(capturedItems.some((item) => item.label.includes("remote session"))).toBe(false);
+  });
+
+  it("opens a tree picker and navigates to the selected node", async () => {
+    const app = createAppStub();
+    let treeItems: Array<{ id: string; label: string; detail?: string }> = [];
+    let onSelect: ((id: string) => void) | null = null;
+    let draft = "";
+    app.openItemPicker = (_title: string, items: Array<{ id: string; label: string; detail?: string }>, nextOnSelect: (id: string) => void) => {
+      treeItems = items;
+      onSelect = nextOnSelect;
+    };
+    app.setDraft = (text: string) => {
+      draft = text;
+    };
+
+    const session = new Session(`test-tree-${Date.now()}`);
+    session.addMessage("user", "first prompt");
+    session.addMessage("assistant", "first answer");
+    session.addMessage("user", "second prompt");
+
+    const result = await handleSlashCommand({
+      text: "/tree",
+      app,
+      session,
+      activeModel: null,
+      currentModelId: "",
+      currentMode: "build",
+      systemPrompt: "sys",
+      providerRegistry: {} as any,
+      buildVisibleModelOptions: () => [],
+      refreshProviderState: async () => [],
+      isSkippedPromptAnswer: () => false,
+      isValidHttpBaseUrl: () => true,
+      getContextOptimizer: () => ({ reset() {} }) as any,
+      onSessionReplace: () => {},
+      onModelChange: () => {},
+      onSystemPromptChange: () => {},
+      hooks: { emit() {} },
+      onProjectChange: () => {},
+    });
+
+    expect(result.handled).toBe(true);
+    expect(treeItems.length).toBe(3);
+    onSelect?.(treeItems[2].id);
+    expect(draft).toBe("second prompt");
+  });
+
+  it("opens the agent task inspector for /agents", async () => {
+    const app = createAppStub();
+    let opened: { title: string; runs: any[] } | null = null;
+    app.getAgentRuns = () => [{
+      id: "run-1",
+      prompt: "Review the failing tests",
+      status: "done",
+      result: "Tests fail in session-manager",
+      detail: "model openai/gpt-5.4 · tools readFile,grep",
+      createdAt: Date.now(),
+    }];
+    app.openAgentRunsView = (title: string, runs: any[]) => {
+      opened = { title, runs };
+    };
+
+    const result = await handleSlashCommand({
+      text: "/agents",
+      app,
+      session: new Session(`test-agents-${Date.now()}`),
+      activeModel: null,
+      currentModelId: "",
+      currentMode: "build",
+      systemPrompt: "sys",
+      providerRegistry: {} as any,
+      buildVisibleModelOptions: () => [],
+      refreshProviderState: async () => [],
+      isSkippedPromptAnswer: () => false,
+      isValidHttpBaseUrl: () => true,
+      getContextOptimizer: () => ({ reset() {} }) as any,
+      onSessionReplace: () => {},
+      onModelChange: () => {},
+      onSystemPromptChange: () => {},
+      hooks: { emit() {} },
+      onProjectChange: () => {},
+    });
+
+    expect(result.handled).toBe(true);
+    expect(opened?.title).toBe("Agent Tasks");
+    expect(opened?.runs).toHaveLength(1);
+  });
+
+  it("opens a session info picker for /session", async () => {
+    const app = createAppStub();
+    let sessionItems: Array<{ id: string; label: string; detail?: string }> = [];
+    app.openItemPicker = (_title: string, items: Array<{ id: string; label: string; detail?: string }>) => {
+      sessionItems = items;
+    };
+    const session = new Session(`test-session-info-${Date.now()}`);
+    session.setName("Test Session");
+    session.addMessage("user", "hello");
+
+    const result = await handleSlashCommand({
+      text: "/session",
+      app,
+      session,
+      activeModel: null,
+      currentModelId: "",
+      currentMode: "build",
+      systemPrompt: "sys",
+      providerRegistry: {} as any,
+      buildVisibleModelOptions: () => [],
+      refreshProviderState: async () => [],
+      isSkippedPromptAnswer: () => false,
+      isValidHttpBaseUrl: () => true,
+      getContextOptimizer: () => ({ reset() {} }) as any,
+      onSessionReplace: () => {},
+      onModelChange: () => {},
+      onSystemPromptChange: () => {},
+      hooks: { emit() {} },
+      onProjectChange: () => {},
+    });
+
+    expect(result.handled).toBe(true);
+    expect(sessionItems.some((item) => item.label === "Test Session")).toBe(true);
+    expect(sessionItems.some((item) => item.detail === "session dir")).toBe(true);
+  });
+
+  it("opens a hotkeys picker for /hotkeys", async () => {
+    const app = createAppStub();
+    let hotkeyItems: Array<{ id: string; label: string; detail?: string }> = [];
+    app.openItemPicker = (_title: string, items: Array<{ id: string; label: string; detail?: string }>) => {
+      hotkeyItems = items;
+    };
+
+    const result = await handleSlashCommand({
+      text: "/hotkeys",
+      app,
+      session: new Session(`test-hotkeys-${Date.now()}`),
+      activeModel: null,
+      currentModelId: "",
+      currentMode: "build",
+      systemPrompt: "sys",
+      providerRegistry: {} as any,
+      buildVisibleModelOptions: () => [],
+      refreshProviderState: async () => [],
+      isSkippedPromptAnswer: () => false,
+      isValidHttpBaseUrl: () => true,
+      getContextOptimizer: () => ({ reset() {} }) as any,
+      onSessionReplace: () => {},
+      onModelChange: () => {},
+      onSystemPromptChange: () => {},
+      hooks: { emit() {} },
+      onProjectChange: () => {},
+    });
+
+    expect(result.handled).toBe(true);
+    expect(hotkeyItems.some((item) => item.detail === "send")).toBe(true);
+    expect(hotkeyItems.some((item) => item.detail === "newline")).toBe(true);
+  });
+
+  it("reloads extensions and provider state for /reload", async () => {
+    const app = createAppStub();
+    let reloaded = 0;
+    let refreshed = 0;
+    const result = await handleSlashCommand({
+      text: "/reload",
+      app,
+      session: new Session(`test-reload-${Date.now()}`),
+      activeModel: null,
+      currentModelId: "",
+      currentMode: "build",
+      systemPrompt: "sys",
+      providerRegistry: {} as any,
+      buildVisibleModelOptions: () => [],
+      refreshProviderState: async () => {
+        refreshed += 1;
+        return [];
+      },
+      isSkippedPromptAnswer: () => false,
+      isValidHttpBaseUrl: () => true,
+      getContextOptimizer: () => ({ reset() {} }) as any,
+      onSessionReplace: () => {},
+      onModelChange: () => {},
+      onSystemPromptChange: () => {},
+      hooks: { emit() {}, reload() { reloaded += 1; } },
+      onProjectChange: () => {},
+    });
+
+    expect(result.handled).toBe(true);
+    expect(reloaded).toBe(1);
+    expect(refreshed).toBe(1);
   });
 
   it("clears stored auth for /logout <provider>", async () => {

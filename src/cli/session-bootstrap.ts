@@ -3,7 +3,7 @@ import type { ModelHandle } from "../ai/providers.js";
 import { loadPricing } from "../ai/cost.js";
 import { getSmallModelId } from "../ai/router.js";
 import { buildSystemPrompt } from "../core/context.js";
-import { getSettings, updateSetting, type Mode } from "../core/config.js";
+import { getSettings, loadConfig, updateSetting, type Mode } from "../core/config.js";
 import type { Session } from "../core/session.js";
 import type { ProviderRegistry } from "../ai/provider-registry.js";
 
@@ -24,7 +24,7 @@ export interface BootstrapResult {
 }
 
 export async function bootstrapSession(options: {
-  opts: { broke?: boolean; model?: string };
+  opts: { broke?: boolean; model?: string; provider?: string };
   app: BootstrapApp;
   session: Session;
   providerRegistry: ProviderRegistry;
@@ -38,6 +38,10 @@ export async function bootstrapSession(options: {
   let providerId: string | undefined;
   let modelId: string | undefined;
 
+  if (opts.provider) {
+    providerId = opts.provider;
+  }
+
   if (opts.broke) {
     const def = pickDefault(providers);
     if (def) {
@@ -45,16 +49,20 @@ export async function bootstrapSession(options: {
       modelId = getSmallModelId(def.id);
     }
   } else if (opts.model) {
-    const slashIdx = opts.model.indexOf("/");
+    const modelArg = opts.model.split(":")[0];
+    const slashIdx = modelArg.indexOf("/");
     if (slashIdx > 0) {
-      providerId = opts.model.slice(0, slashIdx);
-      modelId = opts.model.slice(slashIdx + 1);
+      providerId = modelArg.slice(0, slashIdx);
+      modelId = modelArg.slice(slashIdx + 1);
     } else {
       const def = pickDefault(providers);
       providerId = def?.id ?? "openai";
-      modelId = opts.model;
+      modelId = modelArg;
     }
   } else {
+    const config = loadConfig();
+    if (config.defaultProvider) providerId = config.defaultProvider;
+    if (!modelId && config.defaultModel) modelId = config.defaultModel;
     const lastModel = getSettings().lastModel;
     if (lastModel) {
       const slashIdx = lastModel.indexOf("/");

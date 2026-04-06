@@ -3,6 +3,11 @@
   "version": "0.0.1",
   "description": "AI coding CLI that doesn't waste your money. Cost-aware model routing, token reduction, budget controls.",
   "type": "module",
+  "exports": {
+    ".": "./dist/sdk.mjs"
+  },
+  "main": "./dist/sdk.mjs",
+  "module": "./dist/sdk.mjs",
   "bin": {
     "brokecli": "dist/brokecli.mjs"
   },

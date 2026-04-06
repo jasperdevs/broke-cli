@@ -20,7 +20,7 @@ import { appStateCoreMethods } from "./app-state-core.js";
 import type { AppStateUiMethods } from "./app-state-ui.js";
 import { appStateUiMethods } from "./app-state-ui.js";
 import { AnimCounter, HOME_TIPS } from "./app-shared.js";
-import type { BudgetView, ChatMessage, ModelOption, PendingImage, PendingMessage, PickerItem, QuestionPrompt, SettingEntry, TodoItem } from "./app-types.js";
+import type { AgentRun, AgentRunView, BudgetView, ChatMessage, ModelOption, PendingImage, PendingMessage, PickerItem, QuestionPrompt, SettingEntry, TodoItem } from "./app-types.js";
 
 export interface App extends AppStateCoreMethods, AppStateUiMethods, AppMenuMethods, AppInputMethods, AppRenderMethods, AppDrawMethods {}
 
@@ -77,15 +77,17 @@ export class App {
     title: string;
     items: PickerItem[];
     cursor: number;
-    kind?: "model" | "settings" | "permissions" | "extensions" | "theme" | "export" | "resume" | "projects" | "logout";
+    kind?: "model" | "settings" | "permissions" | "extensions" | "theme" | "export" | "resume" | "session" | "hotkeys" | "tree" | "agents" | "projects" | "logout";
     previewHint?: string;
     onPreview?: (id: string) => void;
     onCancel?: () => void;
     onSecondaryAction?: (id: string) => void;
+    onKey?: (key: import("./keypress.js").Keypress) => boolean;
     secondaryHint?: string;
     closeOnSelect?: boolean;
   } | null = null;
   private budgetView: BudgetView | null = null;
+  private agentRunView: AgentRunView | null = null;
   private onItemSelect: ((id: string) => void) | null = null;
   private toolOutputCollapsed = false;
   private questionPrompt: QuestionPrompt | null = null;
@@ -101,10 +103,11 @@ export class App {
   private onThinkingChange: ((level: ThinkingLevel) => void) | null = null;
   private onCavemanChange: ((level: CavemanLevel) => void) | null = null;
   private pendingMessages: PendingMessage[] = [];
-  private onPendingMessagesReady: (() => void) | null = null;
+  private agentRuns: AgentRun[] = [];
+  private onPendingMessagesReady: ((delivery: "steering" | "followup") => void) | null = null;
   private streamStartTime = 0;
   private streamTokens = 0;
-  private toolCallGroups: Array<{ name: string; preview: string; args?: unknown; resultDetail?: string; result?: string; error?: boolean; expanded: boolean; streamOutput?: string }> = [];
+  private toolCallGroups: Array<{ name: string; preview: string; args?: unknown; resultDetail?: string; result?: string; error?: boolean; expanded: boolean; streamOutput?: string; messageIndex?: number }> = [];
   private allToolsExpanded = false;
   private isCompacting = false;
   private escPrimed = false;

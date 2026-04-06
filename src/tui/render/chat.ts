@@ -7,6 +7,7 @@ export interface ToolCallRenderGroup {
   error?: boolean;
   expanded: boolean;
   streamOutput?: string;
+  messageIndex?: number;
 }
 
 export interface TodoRenderItem {
@@ -18,6 +19,21 @@ export interface TodoRenderItem {
 export interface PendingRenderMessage {
   text: string;
   delivery: "steering" | "followup";
+}
+
+function compactPreview(text: string, maxLength = 88): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  return normalized.length <= maxLength ? normalized : `${normalized.slice(0, maxLength - 3)}...`;
+}
+
+function extractAgentPrompt(tc: ToolCallRenderGroup): string {
+  const args = tc.args as Record<string, unknown> | undefined;
+  const prompt = typeof args?.prompt === "string"
+    ? args.prompt
+    : typeof args?.task === "string"
+      ? args.task
+      : tc.preview;
+  return compactPreview(prompt || "Delegated task", 120);
 }
 
 function ensureOverlayGap(lines: string[]): void {
@@ -67,6 +83,7 @@ export function toolDescription(tc: ToolCallRenderGroup): string {
     case "webSearch": return `Searching web for "${a?.query ?? tc.preview}"`;
     case "webFetch": return `Fetching ${a?.url ?? tc.preview}`;
     case "askUser": return `Asking: ${a?.question ?? tc.preview}`;
+    case "agent": return "Task";
     case "todoWrite": return "Updating task list";
     default: return `${tc.name} ${tc.preview}`;
   }
@@ -97,7 +114,23 @@ export function renderToolCallBlock(options: {
     : done ? `${colors.muted}\u25CF${reset}`
     : (spinnerFrame % 2 === 0 ? `${colors.ok}\u25CF${reset}` : `${colors.accent2}\u25CF${reset}`);
 
-  lines.push(`  ${icon} ${done ? colors.muted : colors.text}${toolDescription(tc)}${running ? "..." : ""}${reset}`);
+  if (tc.name === "agent") {
+    const title = extractAgentPrompt(tc);
+    const stateLabel = tc.error ? "failed"
+      : done ? "done"
+      : "running";
+    lines.push(`  ${icon} ${colors.text}Agent task${reset}`);
+    for (const wrappedLine of renderPrefixedWrappedLines(`  ${branch} `, title, maxWidth)) {
+      lines.push(`${done ? colors.muted : colors.text}${wrappedLine}${reset}`);
+    }
+    lines.push(`${colors.muted}  ${branch} ${stateLabel}${reset}`);
+  } else {
+    lines.push(`  ${icon} ${done ? colors.muted : colors.text}${toolDescription(tc)}${running ? "..." : ""}${reset}`);
+  }
+
+  if (tc.name === "agent" && running) {
+    lines.push(`${colors.muted}  ${branch} preparing task${reset}`);
+  }
 
   const a = tc.args as Record<string, string> | undefined;
 
@@ -162,6 +195,20 @@ export function renderToolCallBlock(options: {
     } else if (tc.resultDetail) {
       for (const wrappedLine of renderPrefixedWrappedLines(`  ${branch} `, tc.resultDetail, maxWidth)) {
         lines.push(`${colors.muted}${wrappedLine}${reset}`);
+      }
+    }
+  }
+
+  if (tc.name === "agent" && done) {
+    if (tc.resultDetail) {
+      for (const wrappedLine of renderPrefixedWrappedLines(`  ${branch} `, tc.resultDetail, maxWidth)) {
+        lines.push(`${colors.muted}${wrappedLine}${reset}`);
+      }
+    }
+    if (!tc.error && tc.result) {
+      lines.push(`${colors.muted}  ${branch} result${reset}`);
+      for (const wrappedLine of renderPrefixedWrappedLines(`    `, tc.result, Math.max(8, maxWidth - 2))) {
+        lines.push(`${colors.text}${wrappedLine}${reset}`);
       }
     }
   }
@@ -306,10 +353,17 @@ export function renderMessageOverlays(options: {
 
   if (pendingMessages.length > 0) {
     ensureOverlayGap(lines);
-    lines.push(`  ${colors.dim}• Queued messages${colors.reset}`);
-    for (const item of pendingMessages.slice(-4)) {
+    const followUps = pendingMessages.filter((item) => item.delivery === "followup").length;
+    const steering = pendingMessages.length - followUps;
+    const label = followUps > 0 && steering === 0
+      ? "Queued follow-up messages"
+      : steering > 0 && followUps === 0
+        ? "Queued steering messages"
+        : "Queued messages";
+    lines.push(`  ${colors.dim}• ${label}${colors.reset}`);
+    for (const item of pendingMessages.slice(-6)) {
       const preview = item.text.replace(/\s+/g, " ").trim();
-      const marker = item.delivery === "followup" ? "↳" : "→";
+      const marker = "↳";
       for (const wrappedLine of wrapVisibleText(preview, Math.max(8, maxWidth - 8))) {
         lines.push(`  ${colors.dim}${marker} ${wrappedLine}${colors.reset}`);
       }

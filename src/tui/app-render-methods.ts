@@ -1,7 +1,13 @@
+import { existsSync } from "fs";
+import { join } from "path";
 import { BOX, BOLD, DIM, RESET } from "../utils/ansi.js";
 import { padVisible, visibleWidth } from "../utils/terminal-width.js";
 import { currentTheme } from "../core/themes.js";
 import { getSettings } from "../core/config.js";
+import { listExtensions } from "../core/extensions.js";
+import { listSkills } from "../core/skills.js";
+import { listTemplates } from "../core/templates.js";
+import { listInstalledPackages } from "../core/package-manager.js";
 import { renderAnsiColorGrid, parseMascotSvgGrid, resolveMascotPath, type RgbColor } from "./render/mascot.js";
 import { renderHomeBox as buildRenderHomeBox, renderHomeView as buildRenderHomeView } from "./render/home.js";
 import { renderStaticMessages as buildStaticMessages } from "./render/messages.js";
@@ -61,11 +67,12 @@ export function renderToolCallBlock(app: AppState, tc: typeof app.toolCallGroups
 }
 
 export function renderMessages(app: AppState, maxWidth: number): string[] {
+  const settings = getSettings();
   return renderMessageOverlays({
     staticLines: app.renderStaticMessages(maxWidth),
     maxWidth,
-    thinkingBuffer: app.thinkingBuffer,
-    thinkingRequested: app.thinkingRequested,
+    thinkingBuffer: settings.hideThinkingBlock ? "" : app.thinkingBuffer,
+    thinkingRequested: settings.hideThinkingBlock ? false : app.thinkingRequested,
     isStreaming: app.isStreaming,
     todoItems: app.todoItems,
     spinnerFrame: app.spinnerFrame,
@@ -205,13 +212,23 @@ export function renderHomeBox(app: AppState, width: number, title: string, body:
 }
 
 export function renderHomeView(app: AppState, mainW: number, topHeight: number): string[] {
+  const settings = getSettings();
+  const enabledExtensions = listExtensions().filter((entry) => entry.enabled).length;
+  const promptTemplates = listTemplates().length;
+  const skillCount = listSkills().length;
+  const packageCount = listInstalledPackages().length;
+  const inventoryDetails = settings.quietStartup ? [] : [
+    { label: "Providers", value: app.detectedProviders.length > 0 ? app.detectedProviders.join(", ") : "none" },
+    { label: "Resources", value: `${existsSync(join(process.cwd(), "AGENTS.md")) ? "AGENTS" : "no AGENTS"} · ${enabledExtensions} ext · ${skillCount} skills · ${promptTemplates} prompts · ${packageCount} pkg` },
+  ];
   return buildRenderHomeView({
     mainW,
     topHeight,
     fullMascot: app.renderMascotInline(),
     modelLabel: app.modelName === "none" ? "Pick one with /model" : `${app.providerName}/${app.modelName}`,
     appVersion: app.appVersion,
-    homeTip: app.homeTip,
+    homeTip: settings.quietStartup ? "" : app.homeTip,
+    inventoryDetails,
     formatShortCwd: (maxWidth) => app.formatShortCwd(maxWidth),
     wrapHomeDetail: (label, value, width) => app.wrapHomeDetail(label, value, width),
     renderHomeBox: (width, title, body) => app.renderHomeBox(width, title, body),

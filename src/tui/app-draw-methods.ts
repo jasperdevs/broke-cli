@@ -6,7 +6,7 @@ import { BOLD, DIM, RESET } from "../utils/ansi.js";
 import { truncateVisible, visibleWidth } from "../utils/terminal-width.js";
 import { getCommandMatches as findCommandMatches } from "./command-surface.js";
 import { fmtCost, fmtTokens, wordWrap } from "./render/formatting.js";
-import { APP_BG, ERR, MUTED, P, T, TXT, WARN } from "./app-shared.js";
+import { APP_BG, ERR, MUTED, OK, P, T, TXT, WARN } from "./app-shared.js";
 
 type AppState = any;
 
@@ -36,6 +36,10 @@ export function drawImmediate(app: AppState): void {
   app.keypress.setMouseTracking(app.shouldEnableMenuMouse());
   if (app.budgetView) {
     drawBudgetView(app);
+    return;
+  }
+  if (app.agentRunView) {
+    drawAgentRunsView(app);
     return;
   }
   const { height, width } = app.screen;
@@ -100,10 +104,75 @@ function drawBudgetView(app: AppState): void {
     const line = visible[i] ?? "";
     frame.push(app.padLine(line, width));
   }
-  while (frame.length < height - 1) frame.push("");
-  frame.push(`${DIM} ↑↓ scroll  pgup/pgdn  esc back${RESET}`);
+  while (frame.length < height) frame.push("");
   app.screen.render(frame.map((line) => app.decorateFrameLine(line, width)));
   app.screen.hideCursor();
+}
+
+function drawAgentRunsView(app: AppState): void {
+  const { width, height } = app.screen;
+  const separatorColor = app.getModeAccent();
+  const title = `${T()}${BOLD}${app.agentRunView.title}${RESET}`;
+  const listWidth = Math.min(38, Math.max(24, Math.floor(width * 0.36)));
+  const detailWidth = Math.max(20, width - listWidth - 3);
+  const rows = Math.max(1, height - 3);
+  const runs = app.agentRunView.runs;
+  const selectedIndex = Math.max(0, Math.min(runs.length - 1, app.agentRunView.selectedIndex));
+  app.agentRunView.selectedIndex = selectedIndex;
+  const maxScroll = Math.max(0, runs.length - rows);
+  if (selectedIndex < app.agentRunView.scrollOffset) app.agentRunView.scrollOffset = selectedIndex;
+  if (selectedIndex >= app.agentRunView.scrollOffset + rows) app.agentRunView.scrollOffset = Math.max(0, selectedIndex - rows + 1);
+  if (app.agentRunView.scrollOffset > maxScroll) app.agentRunView.scrollOffset = maxScroll;
+
+  const frame: string[] = [];
+  frame.push(`${separatorColor}${"─".repeat(width)}${RESET}`);
+  frame.push(` ${title}${" ".repeat(Math.max(1, width - 16 - visibleWidth(app.agentRunView.title)))}${DIM}esc back${RESET}`);
+
+  const visibleRuns = runs.slice(app.agentRunView.scrollOffset, app.agentRunView.scrollOffset + rows);
+  const selectedRun = runs[selectedIndex];
+  const detailLines = selectedRun
+    ? buildAgentRunDetail(app, selectedRun, detailWidth)
+    : [`${DIM}no agent runs yet${RESET}`];
+
+  for (let i = 0; i < rows; i++) {
+    const run = visibleRuns[i];
+    const absoluteIndex = app.agentRunView.scrollOffset + i;
+    const selected = absoluteIndex === selectedIndex;
+    const left = run ? app.padLine(renderAgentRunListItem(run, selected, listWidth), listWidth) : app.padLine("", listWidth);
+    const right = app.padLine(detailLines[i] ?? "", detailWidth);
+    frame.push(`${left} ${app.getSidebarBorder()} ${right}`);
+  }
+
+  while (frame.length < height) frame.push("");
+  app.screen.render(frame.map((line) => app.decorateFrameLine(line, width)));
+  app.screen.hideCursor();
+}
+
+function renderAgentRunListItem(run: { prompt: string; status: "running" | "done" | "error"; detail?: string }, selected: boolean, width: number): string {
+  const statusColor = run.status === "error" ? ERR() : run.status === "done" ? DIM : OK();
+  const arrow = selected ? `${T()}>${RESET}` : `${DIM} ${RESET}`;
+  const label = selected ? `${TXT()}${BOLD}Task${RESET}` : `${DIM}Task${RESET}`;
+  const prompt = truncateVisible(run.prompt.replace(/\s+/g, " ").trim() || "[empty]", Math.max(8, width - 10));
+  const detail = run.detail ? ` ${DIM}${truncateVisible(run.detail, Math.max(8, width - 8))}${RESET}` : "";
+  return `${arrow} ${label} ${statusColor}${truncateVisible(prompt, Math.max(8, width - 10))}${RESET}${detail}`;
+}
+
+function buildAgentRunDetail(app: AppState, run: { prompt: string; status: "running" | "done" | "error"; detail?: string; result?: string }, width: number): string[] {
+  const lines: string[] = [];
+  const statusColor = run.status === "error" ? ERR() : run.status === "done" ? OK() : T();
+  const header = `${statusColor}${BOLD}${run.status === "running" ? "Working" : run.status === "error" ? "Error" : "Done"}${RESET}`;
+  lines.push(`${header}${run.detail ? ` ${DIM}${run.detail}${RESET}` : ""}`);
+  lines.push("");
+  lines.push(`${DIM}Task${RESET}`);
+  for (const line of wordWrap(run.prompt.replace(/\s+/g, " ").trim(), Math.max(8, width))) lines.push(`${TXT()}${line}${RESET}`);
+  lines.push("");
+  lines.push(`${DIM}Result${RESET}`);
+  const body = (run.result ?? (run.status === "running" ? "Preparing prompt..." : "[empty]")).trim();
+  for (const rawLine of body.split(/\r?\n/)) {
+    const wrapped = wordWrap(rawLine || " ", Math.max(8, width));
+    for (const line of wrapped) lines.push(`${TXT()}${line}${RESET}`);
+  }
+  return lines;
 }
 
 function appendBottomMenus(app: AppState, bottomLines: string[], bottomMenuClicks: Array<{ lineIndex: number; action: () => void }>, height: number, mainW: number, separatorColor: string): void {
@@ -143,7 +212,7 @@ function appendBottomMenus(app: AppState, bottomLines: string[], bottomMenuClick
     return;
   }
 
-  const suggestions = app.buildMenuView(app.getCommandSuggestionEntries(), app.cmdSuggestionCursor, 5);
+  const suggestions = app.buildMenuView(app.getCommandSuggestionEntries(), app.cmdSuggestionCursor, Math.max(1, getSettings().autocompleteMaxVisible));
   if (suggestions.length > 0) bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
   for (const entry of suggestions) {
     if (entry.selectIndex !== undefined) app.registerMenuClickTarget(bottomMenuClicks, bottomLines, () => app.applyCommandSuggestion(entry.selectIndex!));
@@ -154,7 +223,14 @@ function appendBottomMenus(app: AppState, bottomLines: string[], bottomMenuClick
 function buildInfoBar(app: AppState, hasSidebar: boolean, mainW: number): string {
   const parts: Array<{ text: string; plain: string }> = [];
   if (app.ctrlCCount === 1) parts.push({ text: `${ERR()}Ctrl+C again to exit${RESET}`, plain: "Ctrl+C again to exit" });
-  else if (app.escPrimed) parts.push({ text: `${ERR()}Esc again to stop${RESET}`, plain: "Esc again to stop" });
+  else if (app.escPrimed) {
+    const escapeAction = !app.isStreaming && !app.hasPendingMessages() && app.input.getText().trim().length === 0
+      ? getSettings().doubleEscapeAction
+      : null;
+    if (escapeAction === "tree") parts.push({ text: `${ERR()}Esc again for tree${RESET}`, plain: "Esc again for tree" });
+    else if (escapeAction === "fork") parts.push({ text: `${ERR()}Esc again to fork${RESET}`, plain: "Esc again to fork" });
+    else parts.push({ text: `${ERR()}Esc again to stop${RESET}`, plain: "Esc again to stop" });
+  }
   if (app.isStreaming) parts.push({ text: `${DIM}esc${RESET} ${DIM}stop${RESET}`, plain: "esc stop" });
 
   const settings = getSettings();
@@ -164,6 +240,7 @@ function buildInfoBar(app: AppState, hasSidebar: boolean, mainW: number): string
   if (thinkLevel !== "off") parts.push({ text: `${T()}${thinkLevel}${RESET}`, plain: thinkLevel });
   const caveLevel = settings.cavemanLevel ?? "off";
   if (caveLevel !== "off") parts.push({ text: `🪨 ${WARN()}${caveLevel}${RESET}`, plain: `rock ${caveLevel}` });
+  if (app.getAgentRuns && app.getAgentRuns().length > 0) parts.push({ text: `${DIM}alt+a${RESET} ${DIM}agents${RESET}`, plain: "alt+a agents" });
 
   const liveTokens = app.getLiveTotalTokens();
   if ((settings.showCost && app.sessionCost > 0) || (settings.showTokens && !hasSidebar && liveTokens > 0)) {

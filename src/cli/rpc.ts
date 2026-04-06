@@ -6,7 +6,7 @@ import { buildSystemPrompt, resolveCavemanLevel } from "../core/context.js";
 import { Session } from "../core/session.js";
 import { getTools } from "../tools/registry.js";
 import { createAgentTool } from "../tools/subagent.js";
-import { getSettings, type Mode } from "../core/config.js";
+import { getSettings, setRuntimeProviderApiKey, type Mode } from "../core/config.js";
 import { getTurnPolicy } from "../core/turn-policy.js";
 import { loadPricing } from "../ai/cost.js";
 import { ProviderRegistry } from "../ai/provider-registry.js";
@@ -20,7 +20,7 @@ function canUseSdkTools(model: ModelHandle): boolean {
     && ["anthropic", "openai", "codex", "google", "mistral", "groq", "xai", "openrouter", "ollama", "lmstudio", "llamacpp", "jan", "vllm"].includes(model.provider.id);
 }
 
-export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts: { model?: string }): Promise<void> {
+export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts: { model?: string; provider?: string; apiKey?: string; systemPrompt?: string; appendSystemPrompt?: string }): Promise<void> {
   const rpcMode: Mode = getSettings().mode;
   let abortController: AbortController | null = null;
   const providerRegistry = new ProviderRegistry();
@@ -29,6 +29,10 @@ export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts:
 
   let providerId: string;
   let modelId: string | undefined;
+
+  if (opts.model?.includes(":")) {
+    opts.model = opts.model.split(":")[0];
+  }
 
   if (opts.model) {
     const parts = opts.model.split("/");
@@ -49,6 +53,8 @@ export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts:
     }
     providerId = def.id;
   }
+
+  if (opts.apiKey) setRuntimeProviderApiKey(providerId, opts.apiKey);
 
   let activeModel: ModelHandle;
   try {
@@ -136,12 +142,18 @@ export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts:
       },
     };
 
-    const systemPrompt = buildSystemPrompt(
+    const baseSystemPrompt = buildSystemPrompt(
       process.cwd(),
       providerId,
       rpcMode,
       resolveCavemanLevel(getSettings().cavemanLevel ?? "off", msg.content),
-    ) + `\n\nExecution scaffold (${policy.archetype}): ${policy.scaffold}`;
+    );
+    const systemPromptSeed = opts.systemPrompt
+      ? opts.systemPrompt
+      : opts.appendSystemPrompt
+        ? `${baseSystemPrompt}\n\n${opts.appendSystemPrompt}`
+        : baseSystemPrompt;
+    const systemPrompt = `${systemPromptSeed}\n\nExecution scaffold (${policy.archetype}): ${policy.scaffold}`;
 
     if (activeModel.runtime === "native-cli") {
       await startNativeStream(

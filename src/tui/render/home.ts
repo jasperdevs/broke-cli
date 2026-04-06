@@ -28,6 +28,7 @@ export function renderHomeView(options: {
   modelLabel: string;
   appVersion: string;
   homeTip: string;
+  inventoryDetails: Array<{ label: string; value: string }>;
   formatShortCwd: (maxWidth: number) => string;
   wrapHomeDetail: (label: string, value: string, width: number) => string[];
   renderHomeBox: (width: number, title: string, body: string[]) => string[];
@@ -36,7 +37,7 @@ export function renderHomeView(options: {
   bold: string;
   reset: string;
 }): string[] {
-  const { mainW, topHeight, fullMascot, modelLabel, appVersion, homeTip, formatShortCwd, wrapHomeDetail, renderHomeBox: buildHomeBox, titleColor, textColor, bold, reset } = options;
+  const { mainW, topHeight, fullMascot, modelLabel, appVersion, homeTip, inventoryDetails, formatShortCwd, wrapHomeDetail, renderHomeBox: buildHomeBox, titleColor, textColor, bold, reset } = options;
   if (topHeight < 8 || mainW < 24) {
     return Array.from({ length: Math.max(0, topHeight) }, () => "");
   }
@@ -61,6 +62,7 @@ export function renderHomeView(options: {
     `${textColor}${locationText}${reset}`,
     "",
     ...wrapHomeDetail("Model", modelLabel, rightWidth),
+    ...inventoryDetails.flatMap((detail) => wrapHomeDetail(detail.label, detail.value, rightWidth)),
     ...wrapHomeDetail("Tip", homeTip, rightWidth),
   ];
   const heroHeight = Math.max(mascotInline.length, heroText.length);

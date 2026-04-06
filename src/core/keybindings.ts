@@ -4,6 +4,7 @@ import { homedir } from "os";
 
 export interface Keybindings {
   modelPicker: string;
+  agentsView: string;
   abort: string;
   submit: string;
   newline: string;
@@ -16,6 +17,7 @@ export interface Keybindings {
 
 export const DEFAULT_KEYBINDINGS: Keybindings = {
   modelPicker: "ctrl+l",
+  agentsView: "alt+a",
   abort: "ctrl+c",
   submit: "return",
   newline: "shift+return",
@@ -42,6 +44,10 @@ export function loadKeybindings(): Keybindings {
     cached = { ...DEFAULT_KEYBINDINGS };
   }
   return cached!;
+}
+
+export function reloadKeybindings(): void {
+  cached = null;
 }
 
 export function getKeybinding(action: keyof Keybindings): string {

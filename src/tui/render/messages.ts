@@ -1,5 +1,6 @@
 import stripAnsi from "strip-ansi";
 import { renderMarkdown } from "../../utils/markdown.js";
+import { getSettings } from "../../core/config.js";
 
 export interface RenderChatMessage {
   role: "user" | "assistant" | "system";
@@ -44,7 +45,7 @@ export function renderStaticMessages(options: {
     const msg = messages[idx];
     if (msg.role === "user") {
       let content = msg.content;
-      if (msg.images && msg.images.length > 0) {
+      if (getSettings().terminal.showImages && msg.images && msg.images.length > 0) {
         for (let i = 0; i < msg.images.length; i++) {
           const tag = `${colors.imageTagBg}${bold}${colors.text}[IMAGE ${i + 1}]${reset}`;
           content += ` ${tag}`;

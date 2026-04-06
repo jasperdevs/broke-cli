@@ -15,6 +15,10 @@ export function handleKey(app: AppState, key: Keypress): void {
     handleBudgetViewKey(app, key);
     return;
   }
+  if (app.agentRunView) {
+    handleAgentRunViewKey(app, key);
+    return;
+  }
 
   if (app.isCompacting) {
     if (key.ctrl && key.name === "c") {
@@ -96,7 +100,7 @@ export function handleKey(app: AppState, key: Keypress): void {
     if (qp.options) {
       if (key.name === "up") qp.cursor = Math.max(0, qp.cursor - 1);
       else if (key.name === "down") qp.cursor = Math.min(qp.options.length - 1, qp.cursor + 1);
-      else if (key.name === "return") app.selectQuestionOption(qp.cursor);
+      else if ((key.name === "return" || key.name === "enter") && !key.shift && !key.meta && !key.ctrl) app.selectQuestionOption(qp.cursor);
       else if (key.name === "escape") {
         app.questionPrompt = null;
         app.addMessage("system", `${DIM}> [skipped]${RESET}`);
@@ -108,7 +112,7 @@ export function handleKey(app: AppState, key: Keypress): void {
       app.draw();
       return;
     }
-    if (key.name === "return") {
+    if ((key.name === "return" || key.name === "enter") && !key.shift && !key.meta && !key.ctrl) {
       const answer = qp.textInput.trim() || "[no answer]";
       app.questionPrompt = null;
       app.addMessage("system", `${DIM}> ${answer}${RESET}`);
@@ -152,6 +156,19 @@ export function handleKey(app: AppState, key: Keypress): void {
     return;
   }
 
+  if (key.name === "escape" && !app.isStreaming && !app.hasPendingMessages() && app.input.getText().trim().length === 0) {
+    const action = getSettings().doubleEscapeAction;
+    if (action !== "none") {
+      if (app.escPrimed) {
+        app.clearInterruptPrompt();
+        if (app.onSubmit) app.onSubmit(action === "tree" ? "/tree" : "/fork");
+      } else {
+        app.primeEscapeAbort();
+      }
+      return;
+    }
+  }
+
   if (key.name === "escape" && !app.isStreaming && app.hasPendingMessages() && app.input.getText().trim().length === 0) {
     app.clearPendingMessages();
     app.draw();
@@ -179,6 +196,10 @@ export function handleKey(app: AppState, key: Keypress): void {
   const bindings = loadKeybindings();
   if (matchesBinding(bindings.modelPicker, key)) {
     if (app.onSubmit) app.onSubmit("/model");
+    return;
+  }
+  if (matchesBinding(bindings.agentsView, key)) {
+    if (app.onSubmit) app.onSubmit("/agents");
     return;
   }
   if (matchesBinding(bindings.cycleScopedModel, key)) {
@@ -235,7 +256,7 @@ export function handleKey(app: AppState, key: Keypress): void {
         app.draw();
         return;
       }
-      if (key.name === "tab" || key.name === "return") {
+      if (key.name === "tab" || ((key.name === "return" || key.name === "enter") && !key.shift && !key.meta && !key.ctrl)) {
         app.applyCommandSuggestion(app.cmdSuggestionCursor, key.name === "return");
         return;
       }
@@ -295,12 +316,41 @@ function handleBudgetViewKey(app: AppState, key: Keypress): void {
   }
 }
 
+function handleAgentRunViewKey(app: AppState, key: Keypress): void {
+  const runCount = app.agentRunView.runs.length;
+  if (key.name === "escape" || key.name === "q" || (key.ctrl && key.name === "c")) {
+    app.closeAgentRunsView();
+    return;
+  }
+  if (runCount === 0) return;
+  if (key.name === "up") {
+    app.agentRunView.selectedIndex = Math.max(0, app.agentRunView.selectedIndex - 1);
+    app.draw();
+    return;
+  }
+  if (key.name === "down") {
+    app.agentRunView.selectedIndex = Math.min(runCount - 1, app.agentRunView.selectedIndex + 1);
+    app.draw();
+    return;
+  }
+  if (key.name === "home") {
+    app.agentRunView.selectedIndex = 0;
+    app.draw();
+    return;
+  }
+  if (key.name === "end") {
+    app.agentRunView.selectedIndex = runCount - 1;
+    app.draw();
+    return;
+  }
+}
+
 function handlePickerKey(app: AppState, key: Keypress): void {
   if (app.settingsPicker) {
     const filtered = app.getFilteredSettings();
     if (key.name === "up") app.settingsPicker.cursor = Math.max(0, app.settingsPicker.cursor - 1);
     else if (key.name === "down") app.settingsPicker.cursor = Math.min(filtered.length - 1, app.settingsPicker.cursor + 1);
-    else if (key.name === "return") app.toggleSettingEntry(app.settingsPicker.cursor);
+    else if ((key.name === "return" || key.name === "enter") && !key.shift && !key.meta && !key.ctrl) app.toggleSettingEntry(app.settingsPicker.cursor);
     else if (key.name === "escape" || (key.ctrl && key.name === "c")) {
       app.settingsPicker = null;
       app.input.clear();
@@ -313,10 +363,14 @@ function handlePickerKey(app: AppState, key: Keypress): void {
     return;
   }
   if (app.itemPicker) {
+    if (app.itemPicker.onKey?.(key)) {
+      app.draw();
+      return;
+    }
     const filtered = app.getFilteredItems();
     if (key.name === "up") app.itemPicker.cursor = Math.max(0, app.itemPicker.cursor - 1);
     else if (key.name === "down") app.itemPicker.cursor = Math.min(filtered.length - 1, app.itemPicker.cursor + 1);
-    else if (key.name === "return") {
+    else if ((key.name === "return" || key.name === "enter") && !key.shift && !key.meta && !key.ctrl) {
       app.selectItemEntry(app.itemPicker.cursor);
       return;
     } else if (key.name === "escape" || (key.ctrl && key.name === "c")) {
@@ -335,7 +389,7 @@ function handlePickerKey(app: AppState, key: Keypress): void {
     else if (key.name === "down") app.modelPicker.cursor = Math.min(filtered.length - 1, app.modelPicker.cursor + 1);
     else if (key.name === "tab") app.toggleModelScope();
     else if (key.name === "space") app.toggleModelPin(app.modelPicker.cursor);
-    else if (key.name === "return") {
+    else if ((key.name === "return" || key.name === "enter") && !key.shift && !key.meta && !key.ctrl) {
       app.selectModelEntry(app.modelPicker.cursor);
       return;
     } else if (key.name === "escape" || (key.ctrl && key.name === "c")) {
@@ -353,7 +407,7 @@ function handlePickerKey(app: AppState, key: Keypress): void {
 function handleFilePickerKey(app: AppState, key: Keypress): void {
   if (key.name === "up") app.filePicker.cursor = Math.max(0, app.filePicker.cursor - 1);
   else if (key.name === "down") app.filePicker.cursor = Math.min(app.filePicker.filtered.length - 1, app.filePicker.cursor + 1);
-  else if (key.name === "return" || key.name === "tab") {
+  else if (((key.name === "return" || key.name === "enter") && !key.shift && !key.meta && !key.ctrl) || key.name === "tab") {
     app.selectFileEntry(app.filePicker.cursor);
     return;
   } else if (key.name === "escape") {

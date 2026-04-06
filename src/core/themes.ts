@@ -1,5 +1,6 @@
 import { bg, fg } from "../utils/ansi.js";
 import { getSettings } from "./config.js";
+import { listThemeResources } from "./resources.js";
 import { THEME_PALETTES_A } from "./theme-palettes-a.js";
 import { THEME_PALETTES_B } from "./theme-palettes-b.js";
 import type { Theme, ThemePalette } from "./theme-types.js";
@@ -7,7 +8,13 @@ import type { Theme, ThemePalette } from "./theme-types.js";
 export type { Theme } from "./theme-types.js";
 
 const PALETTES: ThemePalette[] = [...THEME_PALETTES_A, ...THEME_PALETTES_B];
-const THEME_MAP = new Map<string, Theme>(PALETTES.map((palette) => [palette.key, toTheme(palette)]));
+function buildThemeMap(): Map<string, Theme> {
+  const map = new Map<string, Theme>(PALETTES.map((palette) => [palette.key, toTheme(palette)]));
+  for (const resource of listThemeResources()) {
+    map.set(resource.key, toTheme(resource.palette));
+  }
+  return map;
+}
 
 function toTheme(palette: ThemePalette): Theme {
   return {
@@ -38,11 +45,12 @@ function toTheme(palette: ThemePalette): Theme {
 let previewThemeKey: string | null = null;
 
 export function listThemes(): Theme[] {
-  return [...THEME_MAP.values()];
+  return [...buildThemeMap().values()];
 }
 
 export function getTheme(themeKey?: string | null): Theme {
-  return THEME_MAP.get(themeKey ?? "") ?? THEME_MAP.get("brokecli-dark")!;
+  const themeMap = buildThemeMap();
+  return themeMap.get(themeKey ?? "") ?? themeMap.get("brokecli-dark")!;
 }
 
 export function getThemeNames(): string[] {

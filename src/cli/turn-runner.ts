@@ -98,6 +98,7 @@ export async function runModelTurn(options: {
   const { app, session, text, images, activeModel, currentModelId, smallModel, smallModelId, currentMode, systemPrompt, buildTools, hooks, lastToolCalls, lastActivityTime, alreadyAddedUserMessage, repairDepth = 0 } = options;
   const getContextOptimizer = (): ReturnType<Session["getContextOptimizer"]> => session.getContextOptimizer();
   const settings = getSettings();
+  const effectiveImages = settings.images.blockImages ? undefined : images;
   const policy = getTurnPolicy(text, lastToolCalls);
 
   const idleMs = Date.now() - lastActivityTime;
@@ -155,8 +156,8 @@ export async function runModelTurn(options: {
         .join("\n\n");
       fullText = `${text}\n\n${contextBlock}`;
     }
-    app.addMessage("user", text, images);
-    session.addMessage("user", fullText, images);
+    app.addMessage("user", text, effectiveImages);
+    session.addMessage("user", fullText, effectiveImages);
   }
 
   app.setStreaming(true);
@@ -320,7 +321,8 @@ export async function runModelTurn(options: {
         nextToolCalls.push(name);
         if (name === "todoWrite") return;
         let preview = "";
-        if (name === "writeFile" || name === "editFile") preview = (args as any)?.path ?? "?";
+        if (name === "agent") preview = (args as any)?.prompt ?? (args as any)?.task ?? "";
+        else if (name === "writeFile" || name === "editFile") preview = (args as any)?.path ?? "?";
         else if (name === "readFile" || name === "listFiles" || name === "grep") preview = (args as any)?.path ?? (args as any)?.pattern ?? "?";
         else if (name === "bash") {
           const cmd = (args as any)?.command ?? "?";
@@ -341,6 +343,16 @@ export async function runModelTurn(options: {
           if (readPath) getContextOptimizer().trackFileRead(readPath, lineCount);
         } else if (_name === "grep" && r.matches) detail = `${(r.matches as unknown[]).length} matches`;
         else if (_name === "listFiles" && r.files) detail = `${(r.files as string[]).length} files`;
+        else if (_name === "agent") {
+          const agent = result as { success?: boolean; model?: string; toolsUsed?: string[]; result?: string; error?: string };
+          detail = [
+            agent.model ? `model ${agent.model}` : "",
+            agent.toolsUsed && agent.toolsUsed.length > 0 ? `tools ${agent.toolsUsed.join(", ")}` : "tools none",
+          ].filter(Boolean).join(" · ");
+          if (agent.success === false && agent.error) app.addToolResult(_name, agent.error.slice(0, 240), true, detail);
+          else app.addToolResult(_name, (agent.result ?? "[empty agent response]").slice(0, 4000), false, detail);
+          return;
+        }
         if (r.success === false && r.error) app.addToolResult(_name, r.error.slice(0, 80), true);
         else app.addToolResult(_name, "ok", false, detail);
       },

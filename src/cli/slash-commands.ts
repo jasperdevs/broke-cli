@@ -9,26 +9,32 @@ import { clearCredentials, hasStoredCredentials, listAuthenticated } from "../co
 import { getProviderCredential, getSettings, loadConfig, updateProviderConfig, updateSetting, type Settings, type Mode } from "../core/config.js";
 import { listProjects } from "../core/projects.js";
 import { listExtensions } from "../core/extensions.js";
+import { loadKeybindings, reloadKeybindings } from "../core/keybindings.js";
 import { isToolAllowed, toggleExtensionEnabled, toggleToolPermission } from "../core/permissions.js";
 import { Session } from "../core/session.js";
+import { listSkills, loadSkillPrompt } from "../core/skills.js";
 import { listTemplates, loadTemplate } from "../core/templates.js";
 import { undoLastCheckpoint } from "../core/git.js";
 import { formatRelativeMinutes } from "./exports.js";
 import { runConnectFlow } from "./connect-flow.js";
-import { handleLogoutMenu, openExportMenu, openExtensionsMenu, openPermissionsMenu, openProjectsMenu, openResumeMenu, openSettingsMenu, openThemeMenu, shareTranscript } from "./slash-command-menus.js";
+import { handleLogoutMenu, openExportMenu, openExtensionsMenu, openPermissionsMenu, openProjectsMenu, openResumeMenu, openSettingsMenu, openThemeMenu, openTreeMenu, shareTranscript } from "./slash-command-menus.js";
 import type { ModelOption, SettingEntry, PickerItem } from "../tui/app-types.js";
+import { SessionManager } from "../core/session-manager.js";
 
 interface SlashCommandApp {
   addMessage(role: "user" | "assistant" | "system", content: string): void;
   clearMessages(): void;
   resetCost(): void;
   setModel(provider: string, model: string): void;
+  setSessionName?(name: string): void;
+  setDraft?(text: string): void;
   updateUsage(cost: number, inputTokens: number, outputTokens: number): void;
   openModelPicker(
     options: ModelOption[],
     onSelect: (providerId: string, modelId: string) => void,
     onPin?: (providerId: string, modelId: string, pinned: boolean) => void,
     initialCursor?: number,
+    initialScope?: "all" | "scoped",
   ): void;
   openSettings(entries: SettingEntry[], onToggle: (key: string) => void): void;
   updateSettings(entries: SettingEntry[]): void;
@@ -44,9 +50,11 @@ interface SlashCommandApp {
       onSecondaryAction?: (id: string) => void;
       secondaryHint?: string;
       closeOnSelect?: boolean;
-      kind?: "permissions" | "extensions" | "theme" | "export" | "resume" | "projects" | "logout";
+      kind?: "permissions" | "extensions" | "theme" | "export" | "resume" | "session" | "hotkeys" | "projects" | "logout" | "tree" | "agents";
     },
   ): void;
+  openAgentRunsView?(title: string, runs: Array<{ id: string; prompt: string; status: "running" | "done" | "error"; result?: string; detail?: string; createdAt: number }>): void;
+  getAgentRuns?(): Array<{ id: string; prompt: string; status: "running" | "done" | "error"; result?: string; detail?: string; createdAt: number }>;
   stop(): void;
   cycleCavemanMode(): void;
   cycleThinkingMode(): void;
@@ -157,6 +165,30 @@ export async function handleSlashCommand(options: {
       }, 0);
       return { handled: true };
     }
+    case "scoped-models": {
+      const allOptions = buildVisibleModelOptions();
+      if (allOptions.length === 0) {
+        app.addMessage("system", "No connected providers found. Run /connect.");
+        return { handled: true };
+      }
+      app.openModelPicker(allOptions, (provId, modId) => {
+        try {
+          const nextModel = providerRegistry.createModel(provId, modId);
+          onModelChange(nextModel, modId);
+          app.setModel(nextModel.provider.name, modId);
+          session.setProviderModel(nextModel.provider.name, modId);
+          updateSetting("lastModel", `${provId}/${modId}`);
+        } catch (err) {
+          app.addMessage("system", `Failed: ${(err as Error).message}`);
+        }
+      }, (provId, modId, pinned) => {
+        const key = `${provId}/${modId}`;
+        const scoped = getSettings().scopedModels;
+        if (pinned && !scoped.includes(key)) updateSetting("scopedModels", [...scoped, key]);
+        else if (!pinned) updateSetting("scopedModels", scoped.filter((entry: string) => entry !== key));
+      }, 0, "scoped");
+      return { handled: true };
+    }
     case "settings": {
       openSettingsMenu({ app, activeModel, currentMode, onSystemPromptChange });
       return { handled: true };
@@ -201,6 +233,19 @@ export async function handleSlashCommand(options: {
       if (app.openBudgetView) app.openBudgetView("Budget Inspector", buildBudgetReport(session));
       else app.addMessage("system", renderBudgetDashboard({ report: buildBudgetReport(session), width: 100 }).join("\n"));
       return { handled: true };
+    case "tree": {
+      openTreeMenu({ app, session, onSessionReplace });
+      return { handled: true };
+    }
+    case "agents": {
+      const runs = app.getAgentRuns?.() ?? [];
+      if (runs.length === 0) {
+        app.addMessage("system", "No delegated agent tasks yet.");
+        return { handled: true };
+      }
+      app.openAgentRunsView?.("Agent Tasks", runs);
+      return { handled: true };
+    }
     case "fork": {
       const forked = session.fork();
       if (activeModel) forked.setProviderModel(activeModel.provider.name, currentModelId);
@@ -220,7 +265,76 @@ export async function handleSlashCommand(options: {
       return { handled: true };
     case "name": {
       const name = text.slice(6).trim();
-      app.addMessage("system", name ? `Session named: ${name}` : "Usage: /name <session name>");
+      if (!name) {
+        app.addMessage("system", "Usage: /name <session name>");
+        return { handled: true };
+      }
+      session.setName(name);
+      app.setSessionName?.(name);
+      return { handled: true };
+    }
+    case "session": {
+      const sessionDir = getSettings().sessionDir?.trim();
+      const sessionFile = SessionManager.open(session.getId(), sessionDir || undefined, session.getCwd()).getSessionFile() ?? "in-memory";
+      const items = [
+        { id: "name", label: session.getName(), detail: "name" },
+        { id: "id", label: session.getId(), detail: "id" },
+        { id: "model", label: `${session.getProvider() || activeModel?.provider.name || "---"}/${session.getModel() || currentModelId || "none"}`, detail: "model" },
+        { id: "cwd", label: session.getCwd(), detail: "directory" },
+        { id: "file", label: sessionFile, detail: "session file" },
+        { id: "created", label: formatRelativeMinutes(session.getCreatedAt()), detail: "created" },
+        { id: "updated", label: formatRelativeMinutes(session.getUpdatedAt()), detail: "updated" },
+        { id: "entries", label: String(session.getEntryCount()), detail: "entries" },
+        { id: "path", label: String(session.getActivePathLength()), detail: "active path" },
+        { id: "tokens", label: String(session.getTotalTokens()), detail: "total tokens" },
+        { id: "input", label: String(session.getTotalInputTokens()), detail: "input tokens" },
+        { id: "output", label: String(session.getTotalOutputTokens()), detail: "output tokens" },
+        { id: "cost", label: session.getTotalCost().toFixed(6), detail: "session cost" },
+        { id: "storage", label: getSettings().sessionDir?.trim() || "default", detail: "session dir" },
+        { id: "persist", label: String(getSettings().autoSaveSessions), detail: "auto-save" },
+      ];
+      app.openItemPicker("Session", items, () => {}, { kind: "session" });
+      return { handled: true };
+    }
+    case "hotkeys": {
+      const bindings = loadKeybindings();
+      const items = [
+        { id: "submit", label: bindings.submit, detail: "send" },
+        { id: "newline", label: bindings.newline, detail: "newline" },
+        { id: "abort", label: bindings.abort, detail: "abort/exit" },
+        { id: "modelPicker", label: bindings.modelPicker, detail: "model picker" },
+        { id: "agentsView", label: bindings.agentsView, detail: "agent tasks" },
+        { id: "toggleThinking", label: bindings.toggleThinking, detail: "thinking" },
+        { id: "cycleScopedModel", label: bindings.cycleScopedModel, detail: "pinned models" },
+        { id: "toggleMode", label: bindings.toggleMode, detail: "build/plan" },
+        { id: "deleteWord", label: bindings.deleteWord, detail: "delete word" },
+        { id: "deleteNextWord", label: bindings.deleteNextWord, detail: "delete next word" },
+      ];
+      app.openItemPicker("Hotkeys", items, () => {}, { kind: "hotkeys" });
+      return { handled: true };
+    }
+    case "reload": {
+      hooks.reload?.();
+      reloadKeybindings();
+      reloadContext();
+      await refreshProviderState(true);
+      return { handled: true };
+    }
+    case "changelog": {
+      try {
+        const raw = execSync("git log -n 8 --pretty=format:%h%x09%s", { encoding: "utf-8", cwd: process.cwd() }).trim();
+        const items = raw.split(/\r?\n/).filter(Boolean).map((line, index) => {
+          const [sha, ...rest] = line.split("\t");
+          return { id: `${index}`, label: rest.join(" ").trim(), detail: sha };
+        });
+        if (items.length === 0) {
+          app.addMessage("system", "No changelog entries found.");
+        } else {
+          app.openItemPicker("Recent Changes", items, () => {}, { kind: "hotkeys" });
+        }
+      } catch (err) {
+        app.addMessage("system", `Changelog failed: ${(err as Error).message}`);
+      }
       return { handled: true };
     }
     case "copy": {
@@ -273,20 +387,33 @@ export async function handleSlashCommand(options: {
       app.addMessage("system", `Templates:\n${lines.join("\n")}`);
       return { handled: true };
     }
+    case "skills": {
+      const skills = listSkills();
+      if (skills.length === 0) {
+        app.addMessage("system", "No skills found.");
+        return { handled: true };
+      }
+      const lines = skills.map((skill) => `  /skill:${skill.name}${skill.description ? ` -- ${skill.description}` : ""}`);
+      app.addMessage("system", `Skills:\n${lines.join("\n")}`);
+      return { handled: true };
+    }
     case "logout": {
       await handleLogoutMenu({ app, restText, activeModel, refreshProviderState });
       return { handled: true };
     }
+    case "quit":
     case "exit":
       app.stop();
       return { handled: true };
     default: {
+      const skillName = cmd.startsWith("skill:") ? cmd.slice("skill:".length) : cmd;
       const template = loadTemplate(cmd);
-      if (!template) {
+      const skill = (cmd.startsWith("skill:") || getSettings().enableSkillCommands) ? loadSkillPrompt(skillName) : null;
+      if (!template && !skill) {
         app.addMessage("system", `Unknown: /${cmd}`);
         return { handled: true };
       }
-      let content = template;
+      let content = template ?? skill ?? "";
       const fileContexts = app.getFileContexts();
       if (fileContexts.size > 0) {
         const contextBlock = [...fileContexts.entries()]

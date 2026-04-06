@@ -26,8 +26,12 @@ npm install -g @jasperdevs/brokecli
 
 - `/settings` toggle behavior and persistent preferences
 - `/connect` configure providers and local endpoints
+- `/logout` clear stored brokecli credentials
 - `/model` choose the main model
+- `/scoped-models` pin or unpin models for `Ctrl+P` cycling
 - `/resume` search and resume recent sessions in the current project
+- `/tree` browse the active session tree in place
+- `/session` inspect the active session file, tokens, and cost
 - `/projects` search and switch among recently used projects
 - `/share` publish a secret GitHub gist when a share token is present, otherwise create a local shareable HTML transcript
 - `/budget` inspect cache cliffs, auto-routing, tool waste, and other budget metrics
@@ -88,6 +92,29 @@ brokecli --rpc
 ```
 
 This uses JSON RPC over stdio and shares the same core runtime as the TUI path.
+
+Other non-interactive modes:
+
+```bash
+brokecli -p "explain this stack trace"
+brokecli --mode json "summarize this diff"
+```
+
+SDK/runtime entry points are exported from [`src/sdk.ts`](./src/sdk.ts), including `createAgentSessionRuntime()`, `runPrintMode()`, and `runJsonMode()`.
+
+## Packages
+
+Package management is built in:
+
+```bash
+brokecli install npm:@scope/pkg
+brokecli install git:https://github.com/org/pkg.git
+brokecli list
+brokecli update
+brokecli config
+```
+
+Packages can contribute extensions, skills, prompts, and themes from global or project scope.
 
 ## Local Model Support
 

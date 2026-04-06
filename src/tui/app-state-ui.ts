@@ -1,13 +1,21 @@
 import { getSettings, updateSetting, type CavemanLevel, type Mode, type ThinkingLevel } from "../core/config.js";
 import type { BudgetReport } from "../core/budget-insights.js";
 import { HOME_TIPS } from "./app-shared.js";
-import type { MenuPromptKind, ModelOption, PendingDelivery, PendingImage, PendingMessage, PickerItem, SettingEntry, TodoItem } from "./app-types.js";
+import type { AgentRun, AgentRunView, MenuPromptKind, ModelOption, PendingDelivery, PendingImage, PendingMessage, PickerItem, SettingEntry, TodoItem } from "./app-types.js";
+import type { Keypress } from "./keypress.js";
 
 type AppState = any;
 
-export function openModelPicker(app: AppState, options: ModelOption[], onSelect: (providerId: string, modelId: string) => void, onPin?: (providerId: string, modelId: string, pinned: boolean) => void, initialCursor?: number): void {
+export function openModelPicker(
+  app: AppState,
+  options: ModelOption[],
+  onSelect: (providerId: string, modelId: string) => void,
+  onPin?: (providerId: string, modelId: string, pinned: boolean) => void,
+  initialCursor?: number,
+  initialScope: "all" | "scoped" = "all",
+): void {
   const cursorIdx = initialCursor ?? options.findIndex((o) => o.active);
-  app.modelPicker = { options, cursor: cursorIdx >= 0 ? cursorIdx : 0, scope: "all" };
+  app.modelPicker = { options, cursor: cursorIdx >= 0 ? cursorIdx : 0, scope: initialScope };
   app.onModelSelect = onSelect;
   app.onModelPin = onPin ?? null;
   app.openMenuPrompt("model");
@@ -51,6 +59,7 @@ export function openItemPicker(
     onPreview?: (id: string) => void;
     onCancel?: () => void;
     onSecondaryAction?: (id: string) => void;
+    onKey?: (key: Keypress) => boolean;
     secondaryHint?: string;
     closeOnSelect?: boolean;
     kind?: MenuPromptKind;
@@ -66,6 +75,7 @@ export function openItemPicker(
     onPreview: options?.onPreview,
     onCancel: options?.onCancel,
     onSecondaryAction: options?.onSecondaryAction,
+    onKey: options?.onKey,
     secondaryHint: options?.secondaryHint,
     closeOnSelect: options?.closeOnSelect ?? true,
   };
@@ -84,6 +94,21 @@ export function closeBudgetView(app: AppState): void {
   app.drawNow();
 }
 
+export function openAgentRunsView(app: AppState, title: string, runs: AgentRun[]): void {
+  app.agentRunView = {
+    title,
+    runs,
+    selectedIndex: Math.max(0, runs.length - 1),
+    scrollOffset: 0,
+  };
+  app.drawNow();
+}
+
+export function closeAgentRunsView(app: AppState): void {
+  app.agentRunView = null;
+  app.drawNow();
+}
+
 export function clearMessages(app: AppState): void {
   app.messages = [];
   app.scrollOffset = 0;
@@ -91,6 +116,11 @@ export function clearMessages(app: AppState): void {
   app.invalidateMsgCache();
   app.screen.forceRedraw([]);
   app.draw();
+}
+
+export function setDraft(app: AppState, text: string): void {
+  app.input.setText(text);
+  app.drawNow();
 }
 
 export function addMessage(app: AppState, role: "user" | "assistant" | "system", content: string, images?: PendingImage[]): void {
@@ -132,17 +162,37 @@ export function updateTodo(app: AppState, items: TodoItem[]): void {
 }
 
 export function addToolCall(app: AppState, name: string, preview: string, args?: unknown): void {
+  if (name === "agent") {
+    app.agentRuns.push({
+      id: `${Date.now()}-${app.agentRuns.length}`,
+      prompt: preview,
+      status: "running",
+      createdAt: Date.now(),
+    });
+  }
   app.toolCallGroups.push({ name, preview, args, expanded: app.allToolsExpanded });
   const maxW = app.screen.mainWidth - 4;
   const tc = app.toolCallGroups[app.toolCallGroups.length - 1];
   const block = app.renderToolCallBlock(tc, maxW);
-  if (block.length > 0) app.messages.push({ role: "system", content: block.join("\n") });
+  if (block.length > 0) {
+    app.messages.push({ role: "system", content: block.join("\n") });
+    tc.messageIndex = app.messages.length - 1;
+  }
   app.invalidateMsgCache();
   app.scrollToBottom();
   app.draw();
 }
 
 export function updateToolCallArgs(app: AppState, name: string, preview: string, args: unknown): void {
+  if (name === "agent") {
+    for (let i = app.agentRuns.length - 1; i >= 0; i--) {
+      const run = app.agentRuns[i];
+      if (run.status === "running") {
+        run.prompt = preview;
+        break;
+      }
+    }
+  }
   for (let i = app.toolCallGroups.length - 1; i >= 0; i--) {
     const tc = app.toolCallGroups[i];
     if (tc.name === name && !tc.result) {
@@ -150,11 +200,8 @@ export function updateToolCallArgs(app: AppState, name: string, preview: string,
       tc.args = args;
       const maxW = app.screen.mainWidth - 4;
       const block = app.renderToolCallBlock(tc, maxW);
-      for (let j = app.messages.length - 1; j >= 0; j--) {
-        if (app.messages[j].role === "system" && app.messages[j].content.includes("...")) {
-          app.messages[j].content = block.join("\n");
-          break;
-        }
+      if (typeof tc.messageIndex === "number" && app.messages[tc.messageIndex]?.role === "system") {
+        app.messages[tc.messageIndex].content = block.join("\n");
       }
       app.invalidateMsgCache();
       app.draw();
@@ -165,6 +212,17 @@ export function updateToolCallArgs(app: AppState, name: string, preview: string,
 }
 
 export function addToolResult(app: AppState, name: string, result: string, error?: boolean, resultDetail?: string): void {
+  if (name === "agent") {
+    for (let i = app.agentRuns.length - 1; i >= 0; i--) {
+      const run = app.agentRuns[i];
+      if (run.status === "running") {
+        run.status = error ? "error" : "done";
+        run.result = result;
+        run.detail = resultDetail;
+        break;
+      }
+    }
+  }
   for (let i = app.toolCallGroups.length - 1; i >= 0; i--) {
     if (app.toolCallGroups[i].name === name && !app.toolCallGroups[i].result) {
       app.toolCallGroups[i].result = result;
@@ -172,11 +230,9 @@ export function addToolResult(app: AppState, name: string, result: string, error
       app.toolCallGroups[i].resultDetail = resultDetail;
       const maxW = app.screen.mainWidth - 4;
       const block = app.renderToolCallBlock(app.toolCallGroups[i], maxW);
-      for (let j = app.messages.length - 1; j >= 0; j--) {
-        if (app.messages[j].role === "system" && app.messages[j].content.includes(app.toolCallGroups[i].preview)) {
-          app.messages[j].content = block.join("\n");
-          break;
-        }
+      const messageIndex = app.toolCallGroups[i].messageIndex;
+      if (typeof messageIndex === "number" && app.messages[messageIndex]?.role === "system") {
+        app.messages[messageIndex].content = block.join("\n");
       }
       break;
     }
@@ -220,11 +276,8 @@ export function appendToolOutput(app: AppState, chunk: string): void {
       tc.streamOutput = (tc.streamOutput ?? "") + chunk;
       const maxW = app.screen.mainWidth - 4;
       const block = app.renderToolCallBlock(tc, maxW);
-      for (let j = app.messages.length - 1; j >= 0; j--) {
-        if (app.messages[j].role === "system" && app.messages[j].content.includes(tc.preview)) {
-          app.messages[j].content = block.join("\n");
-          break;
-        }
+      if (typeof tc.messageIndex === "number" && app.messages[tc.messageIndex]?.role === "system") {
+        app.messages[tc.messageIndex].content = block.join("\n");
       }
       app.invalidateMsgCache();
       app.scrollToBottom();
@@ -357,6 +410,10 @@ export function flushPendingMessages(app: AppState, delivery: PendingDelivery): 
   if (app.onPendingMessagesReady) app.onPendingMessagesReady(delivery);
 }
 
+export function getAgentRuns(app: AppState): AgentRun[] {
+  return [...app.agentRuns];
+}
+
 export function showQuestion(app: AppState, question: string, options?: string[]): Promise<string> {
   return new Promise((resolve) => {
     app.questionPrompt = {
@@ -374,14 +431,17 @@ export function onAbortRequest(app: AppState, handler: () => void): void { app.o
 export function onScopedModelCycle(app: AppState, handler: () => void): void { app.onCycleScopedModel = handler; }
 
 export interface AppStateUiMethods {
-  openModelPicker(options: ModelOption[], onSelect: (providerId: string, modelId: string) => void, onPin?: (providerId: string, modelId: string, pinned: boolean) => void, initialCursor?: number): void;
+  openModelPicker(options: ModelOption[], onSelect: (providerId: string, modelId: string) => void, onPin?: (providerId: string, modelId: string, pinned: boolean) => void, initialCursor?: number, initialScope?: "all" | "scoped"): void;
   openSettings(entries: SettingEntry[], onToggle: (key: string) => void): void;
   updateSettings(entries: SettingEntry[]): void;
   updateItemPickerItems(items: PickerItem[], focusId?: string): void;
-  openItemPicker(title: string, items: PickerItem[], onSelect: (id: string) => void, options?: { initialCursor?: number; previewHint?: string; onPreview?: (id: string) => void; onCancel?: () => void; onSecondaryAction?: (id: string) => void; secondaryHint?: string; closeOnSelect?: boolean; kind?: MenuPromptKind }): void;
+  openItemPicker(title: string, items: PickerItem[], onSelect: (id: string) => void, options?: { initialCursor?: number; previewHint?: string; onPreview?: (id: string) => void; onCancel?: () => void; onSecondaryAction?: (id: string) => void; onKey?: (key: Keypress) => boolean; secondaryHint?: string; closeOnSelect?: boolean; kind?: MenuPromptKind }): void;
   openBudgetView(title: string, report: BudgetReport): void;
   closeBudgetView(): void;
+  openAgentRunsView(title: string, runs: AgentRun[]): void;
+  closeAgentRunsView(): void;
   clearMessages(): void;
+  setDraft(text: string): void;
   addMessage(role: "user" | "assistant" | "system", content: string, images?: PendingImage[]): void;
   appendToLastMessage(text: string): void;
   appendThinking(delta: string): void;
@@ -415,20 +475,24 @@ export interface AppStateUiMethods {
   hasPendingMessages(delivery?: PendingDelivery): boolean;
   getPendingMessagesCount(delivery?: PendingDelivery): number;
   flushPendingMessages(delivery: PendingDelivery): void;
+  getAgentRuns(): AgentRun[];
   showQuestion(question: string, options?: string[]): Promise<string>;
   onAbortRequest(handler: () => void): void;
   onScopedModelCycle(handler: () => void): void;
 }
 
 export const appStateUiMethods: AppStateUiMethods = {
-  openModelPicker(this: AppState, options, onSelect, onPin, initialCursor) { return openModelPicker(this, options, onSelect, onPin, initialCursor); },
+  openModelPicker(this: AppState, options, onSelect, onPin, initialCursor, initialScope) { return openModelPicker(this, options, onSelect, onPin, initialCursor, initialScope); },
   openSettings(this: AppState, entries, onToggle) { return openSettings(this, entries, onToggle); },
   updateSettings(this: AppState, entries) { return updateSettings(this, entries); },
   updateItemPickerItems(this: AppState, items, focusId) { return updateItemPickerItems(this, items, focusId); },
   openItemPicker(this: AppState, title, items, onSelect, options) { return openItemPicker(this, title, items, onSelect, options); },
   openBudgetView(this: AppState, title, lines) { return openBudgetView(this, title, lines); },
   closeBudgetView(this: AppState) { return closeBudgetView(this); },
+  openAgentRunsView(this: AppState, title, runs) { return openAgentRunsView(this, title, runs); },
+  closeAgentRunsView(this: AppState) { return closeAgentRunsView(this); },
   clearMessages(this: AppState) { return clearMessages(this); },
+  setDraft(this: AppState, text) { return setDraft(this, text); },
   addMessage(this: AppState, role, content, images) { return addMessage(this, role, content, images); },
   appendToLastMessage(this: AppState, text) { return appendToLastMessage(this, text); },
   appendThinking(this: AppState, delta) { return appendThinking(this, delta); },
@@ -462,6 +526,7 @@ export const appStateUiMethods: AppStateUiMethods = {
   hasPendingMessages(this: AppState, delivery) { return hasPendingMessages(this, delivery); },
   getPendingMessagesCount(this: AppState, delivery) { return getPendingMessagesCount(this, delivery); },
   flushPendingMessages(this: AppState, delivery) { return flushPendingMessages(this, delivery); },
+  getAgentRuns(this: AppState) { return getAgentRuns(this); },
   showQuestion(this: AppState, question, options) { return showQuestion(this, question, options); },
   onAbortRequest(this: AppState, handler) { return onAbortRequest(this, handler); },
   onScopedModelCycle(this: AppState, handler) { return onScopedModelCycle(this, handler); },

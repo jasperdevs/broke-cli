@@ -1,10 +1,9 @@
+import { randomUUID } from "crypto";
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from "fs";
-import { join } from "path";
+import { isAbsolute, join, resolve } from "path";
 import { homedir } from "os";
 import { ContextOptimizer } from "./context-optimizer.js";
-import { getSettings } from "./config.js";
-
-const SESSIONS_DIR = join(homedir(), ".brokecli", "sessions");
+import { getSettings, type TreeFilterMode } from "./config.js";
 
 export interface Message {
   role: "user" | "assistant" | "system";
@@ -13,12 +12,28 @@ export interface Message {
   images?: Array<{ mimeType: string; data: string }>;
 }
 
+export interface SessionEntry extends Message {
+  id: string;
+  parentId: string | null;
+  label?: string;
+  labelTimestamp?: number;
+}
+
+export interface SessionTreeItem extends SessionEntry {
+  depth: number;
+  active: boolean;
+  hasChildren: boolean;
+}
+
 interface SessionData {
   id: string;
+  name?: string;
   cwd: string;
   provider: string;
   model: string;
-  messages: Message[];
+  messages?: Message[];
+  entries?: SessionEntry[];
+  leafId?: string | null;
   totalInputTokens: number;
   totalOutputTokens: number;
   totalCost: number;
@@ -39,9 +54,86 @@ export interface SessionBudgetMetrics {
   plannerCacheMisses: number;
 }
 
+function resolveSessionsDir(): string {
+  const configured = getSettings().sessionDir?.trim();
+  if (!configured) return join(homedir(), ".brokecli", "sessions");
+  return isAbsolute(configured) ? configured : resolve(process.cwd(), configured);
+}
+
+function makeEntry(message: Message, parentId: string | null): SessionEntry {
+  return { ...message, id: randomUUID(), parentId };
+}
+
+function entriesFromMessages(messages: Message[]): { entries: SessionEntry[]; leafId: string | null } {
+  const entries: SessionEntry[] = [];
+  let parentId: string | null = null;
+  for (const message of messages) {
+    const entry = makeEntry(message, parentId);
+    entries.push(entry);
+    parentId = entry.id;
+  }
+  return { entries, leafId: parentId };
+}
+
+function getEntryMap(entries: SessionEntry[]): Map<string, SessionEntry> {
+  return new Map(entries.map((entry) => [entry.id, entry]));
+}
+
+function getActiveEntries(entries: SessionEntry[], leafId: string | null): SessionEntry[] {
+  if (!leafId) return [];
+  const map = getEntryMap(entries);
+  const path: SessionEntry[] = [];
+  let cursor: string | null = leafId;
+  while (cursor) {
+    const entry = map.get(cursor);
+    if (!entry) break;
+    path.push(entry);
+    cursor = entry.parentId;
+  }
+  return path.reverse();
+}
+
+function buildChildrenMap(entries: SessionEntry[]): Map<string | null, SessionEntry[]> {
+  const children = new Map<string | null, SessionEntry[]>();
+  for (const entry of entries) {
+    const bucket = children.get(entry.parentId) ?? [];
+    bucket.push(entry);
+    children.set(entry.parentId, bucket);
+  }
+  for (const bucket of children.values()) {
+    bucket.sort((a, b) => a.timestamp - b.timestamp);
+  }
+  return children;
+}
+
+function matchesTreeFilter(entry: SessionEntry, mode: TreeFilterMode): boolean {
+  switch (mode) {
+    case "all":
+      return true;
+    case "user-only":
+      return entry.role === "user";
+    case "labeled-only":
+      return !!entry.label;
+    case "no-tools":
+    case "default":
+    default:
+      return entry.role !== "system";
+  }
+}
+
+function getMessagesForData(data: SessionData): Message[] {
+  if (data.entries) {
+    return getActiveEntries(data.entries, data.leafId ?? data.entries[data.entries.length - 1]?.id ?? null)
+      .map(({ id: _id, parentId: _parentId, label: _label, labelTimestamp: _labelTimestamp, ...message }) => message);
+  }
+  return data.messages ?? [];
+}
+
 export class Session {
   private id: string;
-  private messages: Message[] = [];
+  private name = "New Session";
+  private entries: SessionEntry[] = [];
+  private leafId: string | null = null;
   private totalInputTokens = 0;
   private totalOutputTokens = 0;
   private totalCost = 0;
@@ -63,10 +155,25 @@ export class Session {
   private readonly contextOptimizer = new ContextOptimizer();
 
   constructor(id?: string) {
-    this.id = id ?? new Date().toISOString().replace(/[:.]/g, "-");
+    this.id = id ?? `${new Date().toISOString().replace(/[:.]/g, "-")}-${randomUUID().slice(0, 8)}`;
   }
 
   getId(): string { return this.id; }
+  getName(): string { return this.name; }
+  setName(name: string): void {
+    this.name = name.trim() || "New Session";
+    this.save();
+  }
+  getCwd(): string { return this.cwd; }
+  getProvider(): string { return this.provider; }
+  getModel(): string { return this.model; }
+  getCreatedAt(): number { return this.createdAt; }
+  getUpdatedAt(): number {
+    return this.entries[this.entries.length - 1]?.timestamp ?? this.createdAt;
+  }
+  getEntryCount(): number { return this.entries.length; }
+  getActivePathLength(): number { return getActiveEntries(this.entries, this.leafId).length; }
+  getLeafId(): string | null { return this.leafId; }
 
   getContextOptimizer(): ContextOptimizer {
     return this.contextOptimizer;
@@ -78,18 +185,97 @@ export class Session {
   }
 
   addMessage(role: Message["role"], content: string, images?: Array<{ mimeType: string; data: string }>): void {
-    this.messages.push({ role, content, timestamp: Date.now(), images });
+    this.entries.push({
+      id: randomUUID(),
+      parentId: this.leafId,
+      role,
+      content,
+      timestamp: Date.now(),
+      images,
+    });
+    this.leafId = this.entries[this.entries.length - 1]?.id ?? null;
     this.save();
   }
 
   getMessages(): Message[] {
-    return this.messages;
+    return getActiveEntries(this.entries, this.leafId)
+      .map(({ id: _id, parentId: _parentId, label: _label, labelTimestamp: _labelTimestamp, ...message }) => message);
   }
 
   getChatMessages(): Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }> {
-    return this.messages
+    return this.getMessages()
       .filter((m) => m.role === "user" || m.role === "assistant")
       .map((m) => ({ role: m.role as "user" | "assistant", content: m.content, images: m.images }));
+  }
+
+  getTreeItems(filterMode: TreeFilterMode = "all"): SessionTreeItem[] {
+    const allItems: SessionTreeItem[] = [];
+    const children = buildChildrenMap(this.entries);
+    const activeIds = new Set(getActiveEntries(this.entries, this.leafId).map((entry) => entry.id));
+
+    const visit = (entry: SessionEntry, depth: number): void => {
+      const childEntries = [...(children.get(entry.id) ?? [])].sort((a, b) => {
+        const aActive = activeIds.has(a.id) ? 0 : 1;
+        const bActive = activeIds.has(b.id) ? 0 : 1;
+        return aActive - bActive || a.timestamp - b.timestamp;
+      });
+      allItems.push({
+        ...entry,
+        depth,
+        active: activeIds.has(entry.id),
+        hasChildren: childEntries.length > 0,
+      });
+      for (const child of childEntries) visit(child, depth + 1);
+    };
+
+    for (const root of children.get(null) ?? []) visit(root, 0);
+    if (filterMode === "all") return allItems;
+    if (filterMode === "labeled-only") return allItems.filter((item) => matchesTreeFilter(item, filterMode));
+
+    const byId = new Map(allItems.map((item) => [item.id, item]));
+    const visibleIds = new Set<string>();
+    for (const item of allItems) {
+      if (!matchesTreeFilter(item, filterMode) && !item.active) continue;
+      let cursor: SessionEntry | undefined = item;
+      while (cursor) {
+        visibleIds.add(cursor.id);
+        cursor = cursor.parentId ? byId.get(cursor.parentId) : undefined;
+      }
+    }
+    return allItems.filter((item) => visibleIds.has(item.id));
+  }
+
+  getTreeEntry(entryId: string): SessionEntry | undefined {
+    return this.entries.find((entry) => entry.id === entryId);
+  }
+
+  toggleLabel(entryId: string, label?: string): { labeled: boolean; value?: string } {
+    const entry = this.entries.find((candidate) => candidate.id === entryId);
+    if (!entry) return { labeled: false };
+    if (entry.label) {
+      delete entry.label;
+      delete entry.labelTimestamp;
+      this.save();
+      return { labeled: false };
+    }
+    const fallback = entry.content.split(/\r?\n/)[0]?.trim().slice(0, 80) || entry.role;
+    entry.label = (label?.trim() || fallback).trim();
+    entry.labelTimestamp = Date.now();
+    this.save();
+    return { labeled: true, value: entry.label };
+  }
+
+  navigateTo(targetId: string): { editorText?: string; cancelled: boolean } {
+    const target = this.entries.find((entry) => entry.id === targetId);
+    if (!target) return { cancelled: true };
+    if (target.role === "user") {
+      this.leafId = target.parentId;
+      this.save();
+      return { editorText: target.content, cancelled: false };
+    }
+    this.leafId = target.id;
+    this.save();
+    return { cancelled: false };
   }
 
   addUsage(inputTokens: number, outputTokens: number, cost: number): void {
@@ -116,12 +302,14 @@ export class Session {
   }
 
   replaceConversation(messages: Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }>): void {
-    this.messages = messages.map((message) => ({
+    const next = entriesFromMessages(messages.map((message) => ({
       role: message.role,
       content: message.content,
       images: message.images,
       timestamp: Date.now(),
-    }));
+    })));
+    this.entries = next.entries;
+    this.leafId = next.leafId;
     this.contextOptimizer.reset();
     this.save();
   }
@@ -152,7 +340,8 @@ export class Session {
   }
 
   clear(): void {
-    this.messages = [];
+    this.entries = [];
+    this.leafId = null;
     this.totalInputTokens = 0;
     this.totalOutputTokens = 0;
     this.totalCost = 0;
@@ -174,13 +363,17 @@ export class Session {
   private save(): void {
     if (!getSettings().autoSaveSessions) return;
     try {
-      mkdirSync(SESSIONS_DIR, { recursive: true });
+      const sessionsDir = resolveSessionsDir();
+      mkdirSync(sessionsDir, { recursive: true });
       const data: SessionData = {
         id: this.id,
+        name: this.name,
         cwd: this.cwd,
         provider: this.provider,
         model: this.model,
-        messages: this.messages,
+        messages: this.getMessages(),
+        entries: this.entries,
+        leafId: this.leafId,
         totalInputTokens: this.totalInputTokens,
         totalOutputTokens: this.totalOutputTokens,
         totalCost: this.totalCost,
@@ -188,7 +381,7 @@ export class Session {
         createdAt: this.createdAt,
         updatedAt: Date.now(),
       };
-      writeFileSync(join(SESSIONS_DIR, `${this.id}.json`), JSON.stringify(data), "utf-8");
+      writeFileSync(join(sessionsDir, `${this.id}.json`), JSON.stringify(data), "utf-8");
     } catch {
       // silently fail - sessions are optional
     }
@@ -196,11 +389,19 @@ export class Session {
 
   static load(id: string): Session | null {
     try {
-      const path = join(SESSIONS_DIR, `${id}.json`);
+      const path = join(resolveSessionsDir(), `${id}.json`);
       const raw = readFileSync(path, "utf-8");
       const data: SessionData = JSON.parse(raw);
       const session = new Session(data.id);
-      session.messages = data.messages;
+      session.name = data.name?.trim() || "New Session";
+      if (data.entries) {
+        session.entries = data.entries;
+        session.leafId = data.leafId ?? data.entries[data.entries.length - 1]?.id ?? null;
+      } else {
+        const converted = entriesFromMessages(data.messages ?? []);
+        session.entries = converted.entries;
+        session.leafId = converted.leafId;
+      }
       session.totalInputTokens = data.totalInputTokens;
       session.totalOutputTokens = data.totalOutputTokens;
       session.totalCost = data.totalCost;
@@ -218,10 +419,11 @@ export class Session {
     }
   }
 
-  /** Fork this session — creates a copy with a new ID, preserving full history */
   fork(): Session {
     const forked = new Session();
-    forked.messages = [...this.messages];
+      forked.entries = structuredClone(this.entries);
+      forked.name = `${this.name} (fork)`;
+      forked.leafId = this.leafId;
     forked.totalInputTokens = this.totalInputTokens;
     forked.totalOutputTokens = this.totalOutputTokens;
     forked.totalCost = this.totalCost;
@@ -236,21 +438,23 @@ export class Session {
   static listRecent(limit = 10, query = "", cwd?: string): Array<{ id: string; cwd: string; model: string; cost: number; updatedAt: number; messageCount: number; preview: string }> {
     if (!getSettings().autoSaveSessions) return [];
     try {
-      if (!existsSync(SESSIONS_DIR)) return [];
-      const files = readdirSync(SESSIONS_DIR).filter((f) => f.endsWith(".json"));
+      const sessionsDir = resolveSessionsDir();
+      if (!existsSync(sessionsDir)) return [];
+      const files = readdirSync(sessionsDir).filter((f) => f.endsWith(".json"));
       const normalized = query.trim().toLowerCase();
       const sessions = files.map((f) => {
         try {
-          const raw = readFileSync(join(SESSIONS_DIR, f), "utf-8");
+          const raw = readFileSync(join(sessionsDir, f), "utf-8");
           const data: SessionData = JSON.parse(raw);
-          const preview = data.messages.find((msg) => msg.role === "user")?.content?.split(/\r?\n/)[0]?.slice(0, 120) ?? "";
+          const messages = getMessagesForData(data);
+          const preview = messages.find((msg) => msg.role === "user")?.content?.split(/\r?\n/)[0]?.slice(0, 120) ?? "";
           return {
             id: data.id,
             cwd: data.cwd,
             model: `${data.provider}/${data.model}`,
             cost: data.totalCost,
             updatedAt: data.updatedAt,
-            messageCount: data.messages.length,
+            messageCount: messages.length,
             preview,
           };
         } catch {

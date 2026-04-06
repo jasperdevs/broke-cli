@@ -1,11 +1,56 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
-import { join } from "path";
+import { join, resolve } from "path";
 import { homedir } from "os";
 import { parse as parseJsonc } from "jsonc-parser";
 
 export type Mode = "build" | "plan";
-export type ThinkingLevel = "off" | "low" | "medium" | "high";
+export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
 export type CavemanLevel = "off" | "lite" | "auto" | "ultra";
+export type TreeFilterMode = "default" | "no-tools" | "user-only" | "labeled-only" | "all";
+export type QueueDeliveryMode = "one-at-a-time" | "all";
+export type TransportMode = "auto" | "sse" | "websocket";
+
+export interface PackageFilterSource {
+  source: string;
+  extensions?: string[];
+  skills?: string[];
+  prompts?: string[];
+  themes?: string[];
+}
+
+export type PackageSource = string | PackageFilterSource;
+
+export interface CompactionSettings {
+  enabled: boolean;
+  reserveTokens: number;
+  keepRecentTokens: number;
+}
+
+export interface BranchSummarySettings {
+  reserveTokens: number;
+  skipPrompt: boolean;
+}
+
+export interface RetrySettings {
+  enabled: boolean;
+  maxRetries: number;
+  baseDelayMs: number;
+  maxDelayMs: number;
+}
+
+export interface TerminalSettings {
+  showImages: boolean;
+  clearOnShrink: boolean;
+}
+
+export interface ImageSettings {
+  autoResize: boolean;
+  blockImages: boolean;
+}
+
+export interface MarkdownSettings {
+  codeBlockIndent: string;
+}
 
 export interface Settings {
   yoloMode: boolean;
@@ -33,6 +78,41 @@ export interface Settings {
   testCommand: string;
   deniedTools: string[];
   disabledExtensions: string[];
+  quietStartup: boolean;
+  collapseChangelog: boolean;
+  doubleEscapeAction: "tree" | "fork" | "none";
+  treeFilterMode: TreeFilterMode;
+  editorPaddingX: number;
+  autocompleteMaxVisible: number;
+  showHardwareCursor: boolean;
+  sessionDir: string;
+  defaultThinkingLevel: ThinkingLevel;
+  hideThinkingBlock: boolean;
+  thinkingBudgets: Partial<Record<Exclude<ThinkingLevel, "off">, number>>;
+  compaction: CompactionSettings;
+  branchSummary: BranchSummarySettings;
+  retry: RetrySettings;
+  steeringMode: QueueDeliveryMode;
+  followUpMode: QueueDeliveryMode;
+  transport: TransportMode;
+  terminal: TerminalSettings;
+  images: ImageSettings;
+  shellPath: string;
+  shellCommandPrefix: string;
+  npmCommand: string[];
+  enabledModels: string[];
+  markdown: MarkdownSettings;
+  packages: PackageSource[];
+  extensions: string[];
+  skills: string[];
+  prompts: string[];
+  themes: string[];
+  enableSkillCommands: boolean;
+  verboseStartup: boolean;
+  discoverExtensions: boolean;
+  discoverSkills: boolean;
+  discoverPrompts: boolean;
+  discoverThemes: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -61,6 +141,67 @@ export const DEFAULT_SETTINGS: Settings = {
   testCommand: "npm test",
   deniedTools: [],
   disabledExtensions: [],
+  quietStartup: false,
+  collapseChangelog: false,
+  doubleEscapeAction: "tree",
+  treeFilterMode: "default",
+  editorPaddingX: 0,
+  autocompleteMaxVisible: 5,
+  showHardwareCursor: false,
+  sessionDir: "",
+  defaultThinkingLevel: "off",
+  hideThinkingBlock: false,
+  thinkingBudgets: {
+    minimal: 1024,
+    low: 4096,
+    medium: 10240,
+    high: 32768,
+    xhigh: 65536,
+  },
+  compaction: {
+    enabled: true,
+    reserveTokens: 16384,
+    keepRecentTokens: 20000,
+  },
+  branchSummary: {
+    reserveTokens: 16384,
+    skipPrompt: false,
+  },
+  retry: {
+    enabled: true,
+    maxRetries: 3,
+    baseDelayMs: 2000,
+    maxDelayMs: 60000,
+  },
+  steeringMode: "one-at-a-time",
+  followUpMode: "one-at-a-time",
+  transport: "auto",
+  terminal: {
+    showImages: true,
+    clearOnShrink: false,
+  },
+  images: {
+    autoResize: true,
+    blockImages: false,
+  },
+  shellPath: "",
+  shellCommandPrefix: "",
+  npmCommand: [],
+  enabledModels: [],
+  markdown: {
+    codeBlockIndent: "  ",
+  },
+  packages: [],
+  extensions: [],
+  skills: [],
+  prompts: [],
+  themes: [],
+  enableSkillCommands: true,
+  verboseStartup: false,
+  discoverExtensions: true,
+  discoverSkills: true,
+  discoverPrompts: true,
+  discoverThemes: true,
 };
 
 export interface BrokeConfig {
@@ -83,40 +224,133 @@ export interface ProviderCredential {
 const CONFIG_DIR = join(homedir(), ".brokecli");
 const CONFIG_FILE = join(CONFIG_DIR, "config.json");
 
-let cached: BrokeConfig | null = null;
+let cachedGlobal: BrokeConfig | null = null;
+let cachedProject: { cwd: string; config: BrokeConfig } | null = null;
+let cachedMerged: BrokeConfig | null = null;
+let runtimeSettings: Partial<Settings> = {};
+const runtimeProviderApiKeys = new Map<string, string>();
+
+function mergeSettings(base: Partial<Settings> | undefined, override: Partial<Settings> | undefined): Partial<Settings> {
+  return {
+    ...(base ?? {}),
+    ...(override ?? {}),
+    thinkingBudgets: { ...(base?.thinkingBudgets ?? {}), ...(override?.thinkingBudgets ?? {}) },
+    compaction: { ...(base?.compaction ?? {}), ...(override?.compaction ?? {}) },
+    branchSummary: { ...(base?.branchSummary ?? {}), ...(override?.branchSummary ?? {}) },
+    retry: { ...(base?.retry ?? {}), ...(override?.retry ?? {}) },
+    terminal: { ...(base?.terminal ?? {}), ...(override?.terminal ?? {}) },
+    images: { ...(base?.images ?? {}), ...(override?.images ?? {}) },
+    markdown: { ...(base?.markdown ?? {}), ...(override?.markdown ?? {}) },
+  } as Partial<Settings>;
+}
+
+function mergeConfigs(base: BrokeConfig, override: BrokeConfig): BrokeConfig {
+  return {
+    ...base,
+    ...override,
+    budget: { ...(base.budget ?? {}), ...(override.budget ?? {}) },
+    providers: { ...(base.providers ?? {}), ...(override.providers ?? {}) },
+    modelContextLimits: { ...(base.modelContextLimits ?? {}), ...(override.modelContextLimits ?? {}) },
+    settings: mergeSettings(base.settings, override.settings),
+  };
+}
+
+function readConfigFile(path: string): BrokeConfig {
+  if (!existsSync(path)) return {};
+  try {
+    const raw = readFileSync(path, "utf-8");
+    return parseJsonc(raw) ?? {};
+  } catch {
+    return {};
+  }
+}
+
+function invalidateConfigCache(): void {
+  cachedGlobal = null;
+  cachedProject = null;
+  cachedMerged = null;
+}
+
+export function getGlobalConfigPath(): string {
+  return CONFIG_FILE;
+}
+
+export function getProjectConfigPath(cwd = process.cwd()): string {
+  return join(resolve(cwd, ".brokecli"), "config.json");
+}
+
+export function loadGlobalConfig(): BrokeConfig {
+  if (!cachedGlobal) cachedGlobal = readConfigFile(CONFIG_FILE);
+  return cachedGlobal;
+}
+
+export function loadProjectConfig(cwd = process.cwd()): BrokeConfig {
+  const projectFile = getProjectConfigPath(cwd);
+  if (cwd === process.cwd()) {
+    if (!cachedProject || cachedProject.cwd !== cwd) cachedProject = { cwd, config: readConfigFile(projectFile) };
+    return cachedProject.config;
+  }
+  return readConfigFile(projectFile);
+}
 
 export function loadConfig(): BrokeConfig {
-  if (cached) return cached;
-  if (existsSync(CONFIG_FILE)) {
-    try {
-      const raw = readFileSync(CONFIG_FILE, "utf-8");
-      cached = parseJsonc(raw) ?? {};
-    } catch {
-      cached = {};
-    }
-  } else {
-    cached = {};
+  if (!cachedMerged) {
+    cachedMerged = mergeConfigs(loadGlobalConfig(), loadProjectConfig());
   }
-  return cached!;
+  return cachedMerged;
 }
 
 export function getSettings(): Settings {
   const config = loadConfig();
-  return { ...DEFAULT_SETTINGS, ...config.settings };
+  const merged = {
+    ...DEFAULT_SETTINGS,
+    ...mergeSettings(DEFAULT_SETTINGS, config.settings),
+    ...runtimeSettings,
+    thinkingBudgets: { ...DEFAULT_SETTINGS.thinkingBudgets, ...config.settings?.thinkingBudgets, ...runtimeSettings.thinkingBudgets },
+    compaction: { ...DEFAULT_SETTINGS.compaction, ...config.settings?.compaction, ...runtimeSettings.compaction },
+    branchSummary: { ...DEFAULT_SETTINGS.branchSummary, ...config.settings?.branchSummary, ...runtimeSettings.branchSummary },
+    retry: { ...DEFAULT_SETTINGS.retry, ...config.settings?.retry, ...runtimeSettings.retry },
+    terminal: { ...DEFAULT_SETTINGS.terminal, ...config.settings?.terminal, ...runtimeSettings.terminal },
+    images: { ...DEFAULT_SETTINGS.images, ...config.settings?.images, ...runtimeSettings.images },
+    markdown: { ...DEFAULT_SETTINGS.markdown, ...config.settings?.markdown, ...runtimeSettings.markdown },
+  };
+  return merged as Settings;
 }
 
-export function updateSetting(key: keyof Settings, value: unknown): void {
-  const config = loadConfig();
+export function setRuntimeSettings(overrides: Partial<Settings>): void {
+  runtimeSettings = { ...runtimeSettings, ...overrides };
+}
+
+export function clearRuntimeSettings(): void {
+  runtimeSettings = {};
+  runtimeProviderApiKeys.clear();
+}
+
+export function updateSetting(key: keyof Settings, value: unknown, scope: "global" | "project" = "global"): void {
+  const config = scope === "project" ? loadProjectConfig() : loadGlobalConfig();
   if (!config.settings) config.settings = {};
   (config.settings as Record<string, unknown>)[key] = value;
-  cached = config;
-  saveConfig(config);
+  if (scope === "project") cachedProject = { cwd: process.cwd(), config };
+  else cachedGlobal = config;
+  cachedMerged = null;
+  saveConfig(config, scope);
 }
 
-function saveConfig(config: BrokeConfig): void {
+export function updateSettingsPatch(patch: Partial<Settings>, scope: "global" | "project" = "global"): void {
+  const config = scope === "project" ? loadProjectConfig() : loadGlobalConfig();
+  config.settings = mergeSettings(config.settings, patch);
+  if (scope === "project") cachedProject = { cwd: process.cwd(), config };
+  else cachedGlobal = config;
+  cachedMerged = null;
+  saveConfig(config, scope);
+}
+
+function saveConfig(config: BrokeConfig, scope: "global" | "project" = "global"): void {
   try {
-    mkdirSync(CONFIG_DIR, { recursive: true });
-    writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), "utf-8");
+    const configDir = scope === "project" ? resolve(process.cwd(), ".brokecli") : CONFIG_DIR;
+    const configFile = scope === "project" ? getProjectConfigPath() : CONFIG_FILE;
+    mkdirSync(configDir, { recursive: true });
+    writeFileSync(configFile, JSON.stringify(config, null, 2), "utf-8");
   } catch { /* silent */ }
 }
 
@@ -202,6 +436,8 @@ function readCodexCredential(): ProviderCredential {
 }
 
 export function getProviderCredential(provider: string): ProviderCredential {
+  const runtimeApiKey = runtimeProviderApiKeys.get(provider);
+  if (runtimeApiKey) return { kind: "api_key", value: runtimeApiKey, source: "runtime" };
   const config = loadConfig();
   const fromConfig = config.providers?.[provider]?.apiKey;
   if (fromConfig) return { kind: "api_key", value: fromConfig, source: "config" };
@@ -256,8 +492,9 @@ export function getBaseUrl(provider: string): string | undefined {
 export function updateProviderConfig(
   provider: string,
   updates: { apiKey?: string | null; baseUrl?: string | null; disabled?: boolean | null },
+  scope: "global" | "project" = "global",
 ): void {
-  const config = loadConfig();
+  const config = scope === "project" ? loadProjectConfig() : loadGlobalConfig();
   if (!config.providers) config.providers = {};
   const existing = { ...(config.providers[provider] ?? {}) };
 
@@ -277,11 +514,22 @@ export function updateProviderConfig(
   }
 
   config.providers[provider] = existing;
-  cached = config;
-  saveConfig(config);
+  if (scope === "project") cachedProject = { cwd: process.cwd(), config };
+  else cachedGlobal = config;
+  cachedMerged = null;
+  saveConfig(config, scope);
 }
 
 export function getModelContextLimitOverride(provider: string, model: string): number | undefined {
   const config = loadConfig();
   return config.modelContextLimits?.[`${provider}/${model}`] ?? config.modelContextLimits?.[model];
+}
+
+export function setRuntimeProviderApiKey(provider: string, apiKey: string | null): void {
+  if (!apiKey) runtimeProviderApiKeys.delete(provider);
+  else runtimeProviderApiKeys.set(provider, apiKey);
+}
+
+export function flushConfig(): void {
+  // synchronous writes already flushed
 }

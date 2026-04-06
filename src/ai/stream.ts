@@ -2,6 +2,7 @@ import { streamText, stepCountIs, type ToolSet } from "ai";
 import type { LanguageModel } from "ai";
 import { calculateCost, type TokenUsage } from "./cost.js";
 import { estimateConversationTokens, estimateTextTokens } from "./tokens.js";
+import { getSettings } from "../core/config.js";
 
 export interface StreamCallbacks {
   onText: (delta: string) => void;
@@ -56,17 +57,18 @@ export async function startStream(
     const estimatedInputTokens = estimateConversationTokens(opts.system, messages as Array<{ role: "user" | "assistant"; content: string | Array<{ type: "text"; text: string } | { type: "image"; image: string }> }>, opts.modelId);
     if (opts.enableThinking) {
       const level = opts.thinkingLevel || "low";
+      const budgets = getSettings().thinkingBudgets;
       if (opts.providerId === "anthropic") {
         // Anthropic: budget-based thinking
-        const budgets: Record<string, number> = { low: 5000, medium: 12000, high: 25000 };
-        providerOptions.anthropic = { thinking: { type: "enabled", budgetTokens: budgets[level] ?? 5000 } };
+        const budgetTokens = budgets[level as keyof typeof budgets] ?? (level === "minimal" ? 1024 : level === "low" ? 4096 : level === "medium" ? 10240 : level === "high" ? 32768 : 65536);
+        providerOptions.anthropic = { thinking: { type: "enabled", budgetTokens } };
       } else if (opts.providerId === "openai") {
         // OpenAI: reasoning_effort (low/medium/high map directly)
         providerOptions.openai = { reasoningEffort: { value: level } };
       } else if (opts.providerId === "google") {
         // Google: thinkingBudget
-        const budgets: Record<string, number> = { low: 4096, medium: 12000, high: 24000 };
-        providerOptions.google = { thinkingConfig: { thinkingBudget: budgets[level] ?? 4096 } };
+        const thinkingBudget = budgets[level as keyof typeof budgets] ?? (level === "minimal" ? 1024 : level === "low" ? 4096 : level === "medium" ? 10240 : level === "high" ? 32768 : 65536);
+        providerOptions.google = { thinkingConfig: { thinkingBudget } };
       }
     }
 

@@ -61,9 +61,17 @@ export class KeypressHandler {
         const s = typeof args[0] === "string" ? args[0] : (args[0] as Buffer).toString("utf-8");
         const specialEnterSequences: Record<string, Keypress> = {
           "\x1b[13;2u": { name: "return", char: "", ctrl: false, meta: false, shift: true },
+          "\x1b[10;2u": { name: "linefeed", char: "", ctrl: false, meta: false, shift: true },
+          "\x1b[13;2~": { name: "return", char: "", ctrl: false, meta: false, shift: true },
+          "\x1b[10;2~": { name: "linefeed", char: "", ctrl: false, meta: false, shift: true },
           "\x1b[27;2;13~": { name: "return", char: "", ctrl: false, meta: false, shift: true },
           "\x1b[27;13;2~": { name: "return", char: "", ctrl: false, meta: false, shift: true },
+          "\x1b[13;5u": { name: "return", char: "", ctrl: true, meta: false, shift: false },
+          "\x1b[10;5u": { name: "linefeed", char: "", ctrl: true, meta: false, shift: false },
+          "\x1b[13;5~": { name: "return", char: "", ctrl: true, meta: false, shift: false },
+          "\x1b[10;5~": { name: "linefeed", char: "", ctrl: true, meta: false, shift: false },
           "\x1b[13;3u": { name: "return", char: "", ctrl: false, meta: true, shift: false },
+          "\x1b[10;3u": { name: "linefeed", char: "", ctrl: false, meta: true, shift: false },
           "\x1b[27;3;13~": { name: "return", char: "", ctrl: false, meta: true, shift: false },
           "\x1b\r": { name: "return", char: "", ctrl: false, meta: true, shift: false },
           "\x1b[127;5u": { name: "backspace", char: "", ctrl: true, meta: false, shift: false },
@@ -139,6 +147,9 @@ export class KeypressHandler {
         meta: key.meta ?? false,
         shift: key.shift ?? false,
       };
+      if ((str === "\n" || str === "\r\n") && !kp.ctrl && !kp.meta) {
+        kp.name = "linefeed";
+      }
 
       this.onKey(kp);
     });

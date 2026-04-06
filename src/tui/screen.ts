@@ -4,6 +4,7 @@ import {
   SYNC_START, SYNC_END,
   moveTo, moveToRow, write, getTermSize,
 } from "../utils/ansi.js";
+import { getSettings } from "../core/config.js";
 
 /**
  * Screen — differential rendering engine.
@@ -41,7 +42,7 @@ export class Screen {
     write(CURSOR_HOME);
     write(CLEAR_SCREEN);
     write(CURSOR_BLOCK);
-    write(CURSOR_HIDE);
+    if (!getSettings().showHardwareCursor) write(CURSOR_HIDE);
     this.prev = [];
   }
 
@@ -62,7 +63,7 @@ export class Screen {
    * to prevent flicker. Always does a full write for reliability.
    */
   render(lines: string[]): void {
-    let buf = CURSOR_HIDE + SYNC_START;
+    let buf = `${getSettings().showHardwareCursor ? "" : CURSOR_HIDE}${SYNC_START}`;
     let dirty = false;
     for (let i = 0; i < this.rows; i++) {
       const next = lines[i] ?? "";
@@ -91,7 +92,7 @@ export class Screen {
 
   /** Hide the cursor (during streaming, pickers, etc.) */
   hideCursor(): void {
-    write(CURSOR_HIDE);
+    if (!getSettings().showHardwareCursor) write(CURSOR_HIDE);
   }
 
   /** Whether the terminal is wide enough for a sidebar */
