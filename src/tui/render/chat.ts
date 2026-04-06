@@ -132,7 +132,7 @@ export function renderMessageOverlays(options: {
   compactTokens: number;
   fmtTokens: (value: number) => string;
   sparkleSpinner: (frame: number, color?: string) => string;
-  shimmerText: (text: string, frame: number) => string;
+  shimmerText: (text: string, frame: number, color?: string) => string;
   colors: {
     accent: string;
     ok: string;
@@ -209,7 +209,7 @@ export function renderMessageOverlays(options: {
     const mins = Math.floor(secs / 60);
     const timeStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
     const tokenStr = compactTokens > 0 ? ` ↑ ${fmtTokens(compactTokens)} tokens` : "";
-    lines.push(`  ${sparkleSpinner(spinnerFrame, colors.warn)} ${shimmerText("Compacting conversation...", spinnerFrame)} ${colors.dim}(${timeStr}${tokenStr ? ` ·${tokenStr}` : ""})${colors.reset}`);
+    lines.push(`  ${sparkleSpinner(spinnerFrame, colors.warn)} ${shimmerText("Compacting conversation...", spinnerFrame, colors.warn)} ${colors.dim}(${timeStr}${tokenStr ? ` ·${tokenStr}` : ""})${colors.reset}`);
     lines.push("");
   }
 

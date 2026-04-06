@@ -195,7 +195,6 @@ const COMMANDS: CommandEntry[] = [
   { name: "editor", desc: "pick editor model for architect/editor" },
   { name: "theme", desc: "change color theme" },
   { name: "compact", desc: "compress context" },
-  { name: "repomap", desc: "show high-level repo map" },
   { name: "permissions", desc: "allow or block tools" },
   { name: "extensions", desc: "manage extension loading" },
   { name: "projects", desc: "switch or search recent projects" },
@@ -269,6 +268,7 @@ export class App {
     onCancel?: () => void;
     onSecondaryAction?: (id: string) => void;
     secondaryHint?: string;
+    closeOnSelect?: boolean;
   } | null = null;
   private onItemSelect: ((id: string) => void) | null = null;
   private toolOutputCollapsed = false;
@@ -600,6 +600,7 @@ export class App {
       onCancel?: () => void;
       onSecondaryAction?: (id: string) => void;
       secondaryHint?: string;
+      closeOnSelect?: boolean;
     },
   ): void {
     const cursor = this.clampMenuCursor(options?.initialCursor ?? 0, items.length);
@@ -613,6 +614,7 @@ export class App {
       onCancel: options?.onCancel,
       onSecondaryAction: options?.onSecondaryAction,
       secondaryHint: options?.secondaryHint,
+      closeOnSelect: options?.closeOnSelect ?? true,
     };
     this.onItemSelect = onSelect;
     this.drawNow();
@@ -901,25 +903,19 @@ export class App {
     if (this.filePicker) {
       count += 1;
       count += Math.min(this.getFilePickerEntries().length, Math.max(0, maxHeight - 4));
-      count += 1;
     } else if (this.itemPicker) {
       count += 1;
       count += 1;
       count += this.getItemPickerEntries().length === 0 ? 1 : Math.min(this.getItemPickerEntries().length, 10);
-      if (this.itemPicker.previewHint) count += 1;
-      if (this.itemPicker.secondaryHint) count += 1;
-      count += 1;
     } else if (this.settingsPicker) {
       const filtered = this.getSettingsPickerEntries();
       count += 1;
-      count += 1;
       count += filtered.length === 0 ? 1 : Math.min(filtered.length, 6);
-      if (filtered.length > 0) count += 2;
     } else if (this.modelPicker) {
       const filtered = this.getModelPickerEntries();
       count += 1;
       count += 1;
-      count += filtered.length === 0 ? 3 : Math.min(filtered.length, 12) + 2;
+      count += filtered.length === 0 ? 1 : Math.min(filtered.length, 12);
     } else {
       const suggestions = this.getCommandSuggestionEntries();
       if (suggestions.length > 0) count += 1;
@@ -1190,8 +1186,10 @@ export class App {
     const item = filtered[index];
     if (!item) return;
     this.itemPicker.cursor = index;
+    const closeOnSelect = this.itemPicker.closeOnSelect ?? true;
     if (this.onItemSelect) this.onItemSelect(item.id);
-    this.closeItemPicker(false);
+    if (closeOnSelect) this.closeItemPicker(false);
+    else this.draw();
   }
 
   private toggleModelPin(index: number): void {
@@ -1475,11 +1473,6 @@ export class App {
         this.selectItemEntry(this.itemPicker.cursor);
       } else if (key.name === "escape" || (key.ctrl && key.name === "c")) {
         this.closeItemPicker(true);
-      } else if (key.name === "tab") {
-        const item = filtered[this.itemPicker.cursor];
-        if (item && this.itemPicker.onSecondaryAction) {
-          this.itemPicker.onSecondaryAction(item.id);
-        }
       } else if (key.name === "backspace") {
         if (this.itemPicker.query.length > 0) {
           this.itemPicker.query = this.itemPicker.query.slice(0, -1);
@@ -2340,9 +2333,9 @@ export class App {
   }
 
   /** Shimmer effect — color wave sweeping across text */
-  private shimmerText(text: string, frame: number): string {
+  private shimmerText(text: string, frame: number, color = T()): string {
     // Parse theme color RGB for shimmer range
-    const themeCol = T();
+    const themeCol = color;
     const rgbMatch = themeCol.match(/38;2;(\d+);(\d+);(\d+)/);
     const tr = rgbMatch ? parseInt(rgbMatch[1]) : 58;
     const tg = rgbMatch ? parseInt(rgbMatch[2]) : 199;
@@ -2375,8 +2368,6 @@ export class App {
 
     if (this.getFilteredModels().length === 0) {
       lines.push(`  ${DIM}no matches${RESET}`);
-      lines.push(` ${DIM}tab scope (all/scoped)${RESET}`);
-      lines.push(` ${DIM}type to search, esc to close${RESET}`);
       return;
     }
 
@@ -2386,7 +2377,6 @@ export class App {
       }
       lines.push(entry.text);
     }
-    lines.push(` ${DIM}(${Math.min(picker.cursor + 1, this.getFilteredModels().length)}/${this.getFilteredModels().length}) tab scope, space pin, enter select${RESET}`);
   }
 
   private decorateFrameLine(line: string, targetWidth: number): string {
@@ -2413,7 +2403,6 @@ export class App {
     if (picker.filtered.length === 0) {
       lines.push(` ${DIM}  no matches${RESET}`);
     }
-    lines.push(` ${DIM}(${Math.min(picker.cursor + 1, picker.filtered.length)}/${picker.filtered.length} files)${RESET}`);
   }
 
   private appendSettingsPicker(lines: string[], _maxTotal: number, clickTargets: Array<{ lineIndex: number; action: () => void }>): void {
@@ -2432,12 +2421,6 @@ export class App {
       }
       lines.push(entry.text);
     }
-
-    const selected = filtered[picker.cursor];
-    if (selected) {
-      lines.push(` ${DIM}${selected.description}${RESET}`);
-    }
-    lines.push(` ${DIM}(${Math.min(picker.cursor + 1, filtered.length)}/${filtered.length}) enter to toggle${RESET}`);
   }
 
   private appendItemPicker(lines: string[], _maxTotal: number, clickTargets: Array<{ lineIndex: number; action: () => void }>): void {
@@ -2456,13 +2439,6 @@ export class App {
       }
       lines.push(entry.text);
     }
-    if (picker.previewHint) {
-      lines.push(` ${DIM}${picker.previewHint}${RESET}`);
-    }
-    if (picker.secondaryHint) {
-      lines.push(` ${DIM}${picker.secondaryHint}${RESET}`);
-    }
-    lines.push(` ${DIM}(${Math.min(picker.cursor + 1, filtered.length)}/${filtered.length}) enter to select${RESET}`);
   }
 
   private getCommandMatches(): typeof COMMANDS {

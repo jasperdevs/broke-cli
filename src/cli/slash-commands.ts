@@ -6,10 +6,9 @@ import { buildSystemPrompt, reloadContext } from "../core/context.js";
 import { compactMessages, getTotalContextTokens } from "../core/compact.js";
 import { clearCredentials, hasStoredCredentials, listAuthenticated } from "../core/auth.js";
 import { getProviderCredential, getSettings, loadConfig, updateProviderConfig, updateSetting, type Settings, type Mode } from "../core/config.js";
-import { buildRepoMap, formatRepoMap } from "../core/repo-map.js";
 import { listProjects } from "../core/projects.js";
 import { listExtensions } from "../core/extensions.js";
-import { isExtensionEnabled, isToolAllowed, toggleExtensionEnabled, toggleToolPermission } from "../core/permissions.js";
+import { isToolAllowed, toggleExtensionEnabled, toggleToolPermission } from "../core/permissions.js";
 import { Session } from "../core/session.js";
 import { listTemplates, loadTemplate } from "../core/templates.js";
 import { undoLastCheckpoint } from "../core/git.js";
@@ -63,6 +62,7 @@ interface SlashCommandApp {
       onCancel?: () => void;
       onSecondaryAction?: (id: string) => void;
       secondaryHint?: string;
+      closeOnSelect?: boolean;
     },
   ): void;
   stop(): void;
@@ -239,15 +239,6 @@ export async function handleSlashCommand(options: {
       });
       return { handled: true };
     }
-    case "repomap": {
-      const entries = buildRepoMap({ query: restText, maxFiles: 24, maxLinesPerFile: 6 });
-      if (entries.length === 0) {
-        app.addMessage("system", "Repo map is empty for this project.");
-        return { handled: true };
-      }
-      app.addMessage("system", formatRepoMap(entries));
-      return { handled: true };
-    }
     case "editor": {
       const options = buildVisibleModelOptions();
       if (options.length === 0) {
@@ -264,31 +255,19 @@ export async function handleSlashCommand(options: {
       const initialCursor = Math.max(0, items.findIndex((item) => item.id === current));
       app.openItemPicker("Editor model", items, (value) => {
         updateSetting("editorModel", value);
-        app.addMessage("system", value ? `Editor model set: ${value}` : "Editor model off.");
       }, { initialCursor });
       return { handled: true };
     }
     case "permissions": {
-      const items = TOOL_NAMES.map((name) => ({
+      const buildPermissionItems = () => TOOL_NAMES.map((name) => ({
         id: name,
         label: name,
         detail: isToolAllowed(name) ? "allowed" : "blocked",
       }));
-      app.openItemPicker("Tool permissions", items, (id) => {
-        const denied = toggleToolPermission(id);
-        app.addMessage("system", `${id}: ${denied ? "blocked" : "allowed"}`);
-      }, {
-        secondaryHint: "tab toggles allow/block",
-        onSecondaryAction: (id) => {
-          toggleToolPermission(id);
-          const nextItems = TOOL_NAMES.map((name) => ({
-            id: name,
-            label: name,
-            detail: isToolAllowed(name) ? "allowed" : "blocked",
-          }));
-          app.updateItemPickerItems?.(nextItems, id);
-        },
-      });
+      app.openItemPicker("Tool permissions", buildPermissionItems(), (id) => {
+        toggleToolPermission(id);
+        app.updateItemPickerItems?.(buildPermissionItems(), id);
+      }, { closeOnSelect: false });
       return { handled: true };
     }
     case "extensions": {
@@ -297,28 +276,16 @@ export async function handleSlashCommand(options: {
         app.addMessage("system", "No extensions found in ~/.brokecli/extensions.");
         return { handled: true };
       }
-      const items = extensions.map((entry) => ({
+      const buildExtensionItems = () => listExtensions().map((entry) => ({
         id: entry.id,
         label: entry.id,
         detail: entry.enabled ? "enabled" : "disabled",
       }));
-      app.openItemPicker("Extensions", items, (id) => {
-        const enabled = toggleExtensionEnabled(id);
+      app.openItemPicker("Extensions", buildExtensionItems(), (id) => {
+        toggleExtensionEnabled(id);
         hooks.reload?.();
-        app.addMessage("system", `${id}: ${enabled ? "enabled" : "disabled"}`);
-      }, {
-        secondaryHint: "tab toggles enable/disable",
-        onSecondaryAction: (id) => {
-          toggleExtensionEnabled(id);
-          hooks.reload?.();
-          const nextItems = listExtensions().map((entry) => ({
-            id: entry.id,
-            label: entry.id,
-            detail: isExtensionEnabled(entry.id) ? "enabled" : "disabled",
-          }));
-          app.updateItemPickerItems?.(nextItems, id);
-        },
-      });
+        app.updateItemPickerItems?.(buildExtensionItems(), id);
+      }, { closeOnSelect: false });
       return { handled: true };
     }
     case "theme": {
@@ -348,18 +315,8 @@ export async function handleSlashCommand(options: {
         updateSetting("theme", themeId);
       }, {
         initialCursor: currentIdx,
-        previewHint: "previewing highlighted theme · enter keeps it · esc goes back",
-        secondaryHint: "tab stars theme",
         onPreview: (themeId) => setPreviewTheme(themeId),
         onCancel: () => setPreviewTheme(null),
-        onSecondaryAction: (themeId) => {
-          const currentFavorites = getSettings().favoriteThemes ?? [];
-          const nextFavorites = currentFavorites.includes(themeId)
-            ? currentFavorites.filter((id) => id !== themeId)
-            : [...currentFavorites, themeId];
-          updateSetting("favoriteThemes", nextFavorites);
-          app.updateItemPickerItems?.(buildThemeItems(), themeId);
-        },
       });
       return { handled: true };
     }
@@ -460,6 +417,10 @@ export async function handleSlashCommand(options: {
     case "sessions":
     case "resume": {
       const cwd = process.cwd();
+      if (!getSettings().autoSaveSessions) {
+        app.addMessage("system", "Session history is off. Enable Auto-save sessions in /settings to use /resume.");
+        return { handled: true };
+      }
       const recent = Session.listRecent(20, restText, cwd);
       if (recent.length === 0) {
         app.addMessage("system", "No sessions for this directory.");
@@ -477,7 +438,6 @@ export async function handleSlashCommand(options: {
         app.clearMessages();
         for (const msg of loaded.getMessages()) app.addMessage(msg.role, msg.content);
         app.updateUsage(loaded.getTotalCost(), loaded.getTotalInputTokens(), loaded.getTotalOutputTokens());
-        app.addMessage("system", "Session resumed.");
       });
       return { handled: true };
     }
@@ -494,7 +454,6 @@ export async function handleSlashCommand(options: {
       }));
       app.openItemPicker("Projects", items, (cwd) => {
         onProjectChange(cwd);
-        app.addMessage("system", `Switched project: ${cwd}`);
       });
       return { handled: true };
     }

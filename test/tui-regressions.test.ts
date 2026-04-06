@@ -696,7 +696,7 @@ describe("picker menus", () => {
 
     const output = rendered.map((line) => stripAnsi(line)).join("\n");
     expect(output).toContain("Scope: all | scoped");
-    expect(output).toContain("tab scope");
+    expect(output).not.toContain("tab scope");
   });
 
   it("previews highlighted themes and restores the previous theme on escape", () => {
@@ -735,34 +735,6 @@ describe("picker menus", () => {
     }
   });
 
-  it("lets tab star themes in the item picker", () => {
-    const app = new App() as any;
-    const originalFavorites = getSettings().favoriteThemes ?? [];
-
-    try {
-      updateSetting("favoriteThemes", []);
-      app.openItemPicker(
-        "Theme",
-        [{ id: "codex", label: "Codex", detail: "dark" }],
-        () => {},
-        {
-          onSecondaryAction: (themeId: string) => {
-            const currentFavorites = getSettings().favoriteThemes ?? [];
-            updateSetting("favoriteThemes", [...currentFavorites, themeId]);
-            app.updateItemPickerItems([{ id: "codex", label: "Codex", detail: "★ dark" }], themeId);
-          },
-          secondaryHint: "tab stars theme",
-        },
-      );
-
-      app.handleKey({ name: "tab", char: "", ctrl: false, meta: false, shift: false });
-
-      expect(getSettings().favoriteThemes).toContain("codex");
-      expect(app.itemPicker.items[0].detail).toContain("★");
-    } finally {
-      updateSetting("favoriteThemes", originalFavorites);
-    }
-  });
 });
 
 describe("thinking preview", () => {

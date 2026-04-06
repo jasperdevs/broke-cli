@@ -3,11 +3,9 @@ import { bashTool } from "./bash.js";
 import { readFileTool, writeFileTool, editFileTool, listFilesTool, grepTool } from "./file-ops.js";
 import { webSearchTool, webFetchTool } from "./web.js";
 import { todoWriteTool } from "./todo.js";
-import { repoMapTool } from "./repo-map.js";
 import { isToolAllowed } from "../core/permissions.js";
 
 export const TOOL_NAMES = [
-  "repoMap",
   "bash",
   "readFile",
   "writeFile",
@@ -22,7 +20,6 @@ export const TOOL_NAMES = [
 /** All tools available to the agent */
 export function getTools(): ToolSet {
   const all: ToolSet = {
-    repoMap: repoMapTool,
     bash: bashTool,
     readFile: readFileTool,
     writeFile: writeFileTool,

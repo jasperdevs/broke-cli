@@ -168,36 +168,6 @@ describe("slash command handling", () => {
     expect(replaced?.getMessages().map((msg) => msg.content)).toEqual(["hello"]);
   });
 
-  it("shows a repo map from /repomap", async () => {
-    const app = createAppStub();
-    const session = new Session(`test-repomap-${Date.now()}`);
-
-    const result = await handleSlashCommand({
-      text: "/repomap session",
-      app,
-      session,
-      activeModel: null,
-      currentModelId: "",
-      currentMode: "build",
-      systemPrompt: "sys",
-      providerRegistry: {} as any,
-      buildVisibleModelOptions: () => [],
-      refreshProviderState: async () => [],
-      isSkippedPromptAnswer: () => false,
-      isValidHttpBaseUrl: () => true,
-      getContextOptimizer: () => ({ reset() {} }) as any,
-      onSessionReplace: () => {},
-      onModelChange: () => {},
-      onSystemPromptChange: () => {},
-      hooks: { emit() {} },
-      onProjectChange: () => {},
-    });
-
-    expect(result.handled).toBe(true);
-    expect(app.messages.some((entry) => entry.content.includes("## "))).toBe(true);
-    expect(app.messages.some((entry) => entry.content.toLowerCase().includes("session"))).toBe(true);
-  });
-
   it("keeps duplicate theme and editor controls out of /settings", async () => {
     const app = createAppStub();
     let capturedEntries: Array<{ key: string; label: string }> = [];
@@ -232,16 +202,16 @@ describe("slash command handling", () => {
     expect(capturedEntries.some((entry) => entry.key === "architectMode")).toBe(true);
   });
 
-  it("reloads extensions immediately when toggled", async () => {
+  it("reloads extensions immediately when toggled with enter", async () => {
     mkdirSync(extDir, { recursive: true });
     writeFileSync(extPath, "exports.register = () => {};", "utf-8");
 
     const app = createAppStub();
-    let pickerOptions: any;
     let reloaded = 0;
     let latestItems: Array<{ id: string; label: string; detail?: string }> = [];
-    app.openItemPicker = (_title: string, _items: any[], _onSelect: (id: string) => void, options?: any) => {
-      pickerOptions = options;
+    let onSelect: ((id: string) => void) | null = null;
+    app.openItemPicker = (_title: string, _items: any[], nextOnSelect: (id: string) => void) => {
+      onSelect = nextOnSelect;
     };
     app.updateItemPickerItems = (items: Array<{ id: string; label: string; detail?: string }>) => {
       latestItems = items;
@@ -268,10 +238,45 @@ describe("slash command handling", () => {
       onProjectChange: () => {},
     });
 
-    pickerOptions.onSecondaryAction("slash-test-extension");
+    onSelect?.("slash-test-extension");
 
     expect(reloaded).toBe(1);
     expect(latestItems.find((item) => item.id === "slash-test-extension")?.detail).toBe("disabled");
+  });
+
+  it("explains that /resume is unavailable when session persistence is off", async () => {
+    updateSetting("autoSaveSessions", false);
+
+    const app = createAppStub();
+    const session = new Session(`test-resume-disabled-${Date.now()}`);
+
+    try {
+      const result = await handleSlashCommand({
+        text: "/resume",
+        app,
+        session,
+        activeModel: null,
+        currentModelId: "",
+        currentMode: "build",
+        systemPrompt: "sys",
+        providerRegistry: {} as any,
+        buildVisibleModelOptions: () => [],
+        refreshProviderState: async () => [],
+        isSkippedPromptAnswer: () => false,
+        isValidHttpBaseUrl: () => true,
+        getContextOptimizer: () => ({ reset() {} }) as any,
+        onSessionReplace: () => {},
+        onModelChange: () => {},
+        onSystemPromptChange: () => {},
+        hooks: { emit() {} },
+        onProjectChange: () => {},
+      });
+
+      expect(result.handled).toBe(true);
+      expect(app.messages.some((entry) => entry.content.includes("Session history is off"))).toBe(true);
+    } finally {
+      updateSetting("autoSaveSessions", true);
+    }
   });
 
   it("clears stored auth for /logout <provider>", async () => {

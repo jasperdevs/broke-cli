@@ -14,6 +14,5 @@ describe("tool permissions", () => {
     expect("bash" in tools).toBe(false);
     expect("writeFile" in tools).toBe(false);
     expect("readFile" in tools).toBe(true);
-    expect("repoMap" in tools).toBe(true);
   });
 });

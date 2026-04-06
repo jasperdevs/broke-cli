@@ -17,7 +17,6 @@ npm install -g @jasperdevs/brokecli
 - TUI with sidebar, file tree, compact mode, home screen, theme picker, keybindings, and desktop notifications
 - Session persistence with `/resume`, `/fork`, transcript export, and per-project recall
 - Cost-aware routing, caveman compression, auto-compaction, and token/cost telemetry
-- Repo map exploration with `/repomap` and the `repoMap` tool
 - Architect/editor split mode using a planning model plus a separate editing model
 - Auto lint/test validation after edits, with optional one-pass auto-fix
 - Tool permission blocking and extension enable/disable controls
@@ -29,7 +28,6 @@ npm install -g @jasperdevs/brokecli
 - `/connect` configure providers and local endpoints
 - `/model` choose the main model
 - `/editor` choose the editor model for architect/editor mode
-- `/repomap` print a high-level repository map
 - `/resume` search and resume recent sessions in the current project
 - `/projects` search and switch among recently used projects
 - `/permissions` allow/block model tools
@@ -57,7 +55,6 @@ Config lives under `~/.brokecli/config.json`.
 
 The agent has first-class tools for:
 
-- repository map
 - bash
 - read file
 - write file
