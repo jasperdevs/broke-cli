@@ -8,7 +8,6 @@ import { existsSync, readFileSync } from "fs";
 import { matchesBinding, loadKeybindings } from "../core/keybindings.js";
 import { getSettings, updateSetting } from "../core/config.js";
 import type { Mode, ThinkingLevel, CavemanLevel } from "../core/config.js";
-import { Session } from "../core/session.js";
 import { dirname, join } from "path";
 import stripAnsi from "strip-ansi";
 import { renderMarkdown } from "../utils/markdown.js";
@@ -302,8 +301,10 @@ export class App {
   private hideCursorUntil = 0;
   private hideCursorTimer: NodeJS.Timeout | null = null;
   private activeMenuClickTargets = new Map<number, () => void>();
-  private homeRecentSessions: Array<{ id: string; cwd: string; model: string; cost: number; updatedAt: number; messageCount: number }> = Session.listRecent(5);
   private homeTip = HOME_TIPS[this.pickHomeTipIndex()];
+  private mascotPathCache: string | null | undefined = undefined;
+  private mascotGridCache = new Map<string, Array<Array<RgbColor | null>>>();
+  private mascotAnsiCache = new Map<string, string[]>();
   private readonly handleResize = (): void => {
     this.screen.forceRedraw([]);
     this.draw();
@@ -2056,7 +2057,6 @@ export class App {
   }
 
   private refreshHomeScreenData(): void {
-    this.homeRecentSessions = Session.listRecent(5);
     this.homeTip = HOME_TIPS[this.pickHomeTipIndex()];
   }
 
@@ -2091,13 +2091,17 @@ export class App {
   }
 
   private resolveMascotPath(): string | null {
+    if (this.mascotPathCache !== undefined) {
+      return this.mascotPathCache;
+    }
     const svgCandidates = [
       join(process.cwd(), "logos", "brokecli-face.svg"),
       join(APP_DIR, "..", "..", "logos", "brokecli-face.svg"),
       join(process.cwd(), "logos", "brokecli-square.svg"),
       join(APP_DIR, "..", "..", "logos", "brokecli-square.svg"),
     ];
-    return svgCandidates.find((candidate) => existsSync(candidate)) ?? null;
+    this.mascotPathCache = svgCandidates.find((candidate) => existsSync(candidate)) ?? null;
+    return this.mascotPathCache;
   }
 
   private parseSvgColor(fill: string | undefined, opacity: string | undefined): RgbColor | null {
@@ -2143,6 +2147,8 @@ export class App {
   }
 
   private parseMascotSvgGrid(path: string): Array<Array<RgbColor | null>> {
+    const cached = this.mascotGridCache.get(path);
+    if (cached) return cached;
     try {
       const svg = readFileSync(path, "utf-8");
       const viewBoxMatch = svg.match(/viewBox="0 0 (\d+(?:\.\d+)?) (\d+(?:\.\d+)?)"/i);
@@ -2171,6 +2177,7 @@ export class App {
           }
         }
       }
+      this.mascotGridCache.set(path, cells);
       return cells;
     } catch {
       return [];
@@ -2238,15 +2245,15 @@ export class App {
   private renderMascotBlock(): string[] {
     const path = this.resolveMascotPath();
     if (!path) return [];
-    const cells = this.parseMascotSvgGrid(path);
-    return this.renderAnsiColorGrid(cells);
+    const cached = this.mascotAnsiCache.get(path);
+    if (cached) return cached;
+    const rendered = this.renderAnsiColorGrid(this.parseMascotSvgGrid(path));
+    this.mascotAnsiCache.set(path, rendered);
+    return rendered;
   }
 
   private renderMascotInline(): string[] {
-    const path = this.resolveMascotPath();
-    if (!path) return [];
-    const cells = this.parseMascotSvgGrid(path);
-    return this.renderAnsiColorGrid(cells);
+    return this.renderMascotBlock();
   }
 
   private wrapHomeDetail(label: string, value: string, width: number): string[] {

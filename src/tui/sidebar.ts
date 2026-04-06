@@ -18,7 +18,16 @@ export interface SidebarFooterColors {
   error: string;
 }
 
+const fileTreeCache = new Map<string, { at: number; items: SidebarTreeItem[] }>();
+const FILE_TREE_CACHE_TTL_MS = 3000;
+
 export function loadSidebarFileTree(cwd: string): SidebarTreeItem[] {
+  const cached = fileTreeCache.get(cwd);
+  if (cached && Date.now() - cached.at < FILE_TREE_CACHE_TTL_MS) {
+    return cached.items;
+  }
+
+  let items: SidebarTreeItem[] = [];
   try {
     const files = execSync("git ls-files --others --cached --exclude-standard", { cwd, encoding: "utf-8", timeout: 2000 }).trim();
     const raw = files.split("\n").filter(Boolean);
@@ -34,7 +43,6 @@ export function loadSidebarFileTree(cwd: string): SidebarTreeItem[] {
         topFiles.push(f);
       }
     }
-    const items: SidebarTreeItem[] = [];
     for (const dir of [...dirContents.keys()].sort()) {
       const children = dirContents.get(dir)!.sort().map((child) => child.includes("/") ? child.split("/").pop()! : child);
       items.push({ name: dir, isDir: true, children, depth: 0 });
@@ -42,10 +50,9 @@ export function loadSidebarFileTree(cwd: string): SidebarTreeItem[] {
     for (const file of topFiles.sort()) {
       items.push({ name: file, isDir: false, depth: 0 });
     }
-    return items;
   } catch {
     try {
-      return readdirSync(cwd)
+      items = readdirSync(cwd)
         .filter((file) => !file.startsWith(".") && file !== "node_modules")
         .map((file) => ({
           name: file,
@@ -61,9 +68,11 @@ export function loadSidebarFileTree(cwd: string): SidebarTreeItem[] {
         }))
         .slice(0, 30);
     } catch {
-      return [];
+      items = [];
     }
   }
+  fileTreeCache.set(cwd, { at: Date.now(), items });
+  return items;
 }
 
 export function buildSidebarFooterLines(options: {

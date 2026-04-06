@@ -503,8 +503,8 @@ program.action(async (opts) => {
   let smallModelId = "";
   let lastToolCalls: string[] = [];
 
-  async function refreshProviderState(): Promise<void> {
-    providers = await providerRegistry.refresh();
+  async function refreshProviderState(force = false): Promise<void> {
+    providers = await providerRegistry.refresh(force);
     app.setDetectedProviders(providers.map((p) => p.name));
   }
 
@@ -535,7 +535,7 @@ program.action(async (opts) => {
 
     if (discoveredCredential.kind === "native_oauth") {
       updateProviderConfig(selectedProviderId, { disabled: false });
-      await refreshProviderState();
+      await refreshProviderState(true);
       if (providers.some((p) => p.id === selectedProviderId)) {
         app.addMessage("system", `Connected ${getNativeCliLabel(selectedProviderId)} using existing native login${discoveredCredential.source ? ` from ${discoveredCredential.source}` : ""}.`);
       } else {
@@ -579,7 +579,7 @@ program.action(async (opts) => {
         baseUrl = entered;
       }
       updateProviderConfig(selectedProviderId, { baseUrl, disabled: false });
-      await refreshProviderState();
+      await refreshProviderState(true);
       if (providers.some((p) => p.id === selectedProviderId)) {
         app.addMessage("system", `Connected ${info.name} at ${baseUrl}.`);
       } else {
@@ -590,7 +590,7 @@ program.action(async (opts) => {
 
     if (discoveredCredential.kind === "api_key") {
       updateProviderConfig(selectedProviderId, { disabled: false });
-      await refreshProviderState();
+      await refreshProviderState(true);
       app.addMessage("system", `Connected ${info.name} using existing credentials${discoveredCredential.source ? ` from ${discoveredCredential.source}` : ""}.`);
       return;
     }
@@ -601,7 +601,7 @@ program.action(async (opts) => {
       return;
     }
     updateProviderConfig(selectedProviderId, { apiKey, disabled: false });
-    await refreshProviderState();
+    await refreshProviderState(true);
     if (providers.some((p) => p.id === selectedProviderId)) {
       app.addMessage("system", `Connected ${info.name}.`);
     } else {
@@ -611,7 +611,7 @@ program.action(async (opts) => {
 
   const initPromise = (async () => {
     await loadPricing();
-    await refreshProviderState();
+    await refreshProviderState(true);
 
     let providerId: string | undefined;
     let modelId: string | undefined;
@@ -1174,6 +1174,21 @@ program.action(async (opts) => {
     const configuredCavemanLevel = getSettings().cavemanLevel ?? "off";
     const effectiveCavemanLevel = resolveCavemanLevel(configuredCavemanLevel, text);
     const turnSystemPrompt = buildSystemPrompt(process.cwd(), useModel.provider.id, currentMode, effectiveCavemanLevel);
+    let streamTokenFlushTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleStreamTokenUpdate = (): void => {
+      if (streamTokenFlushTimer) return;
+      streamTokenFlushTimer = setTimeout(() => {
+        streamTokenFlushTimer = null;
+        app.setStreamTokens(estimateTextTokens(streamedText + streamedReasoning, useModelId));
+      }, 80);
+    };
+    const flushStreamTokenUpdate = (): void => {
+      if (streamTokenFlushTimer) {
+        clearTimeout(streamTokenFlushTimer);
+        streamTokenFlushTimer = null;
+      }
+      app.setStreamTokens(estimateTextTokens(streamedText + streamedReasoning, useModelId));
+    };
 
     const streamCallbacks = {
       onText: (delta: string) => {
@@ -1184,14 +1199,15 @@ program.action(async (opts) => {
         }
         app.appendToLastMessage(delta);
         streamedText = nextText;
-        app.setStreamTokens(estimateTextTokens(streamedText + streamedReasoning, useModelId));
+        scheduleStreamTokenUpdate();
       },
       onReasoning: (delta: string) => {
         app.appendThinking(delta);
         streamedReasoning += delta;
-        app.setStreamTokens(estimateTextTokens(streamedText + streamedReasoning, useModelId));
+        scheduleStreamTokenUpdate();
       },
       onFinish: (usage: { inputTokens: number; outputTokens: number; cost: number }) => {
+        flushStreamTokenUpdate();
         const content = app.getLastAssistantContent();
         if (content) {
           session.addMessage("assistant", content);
@@ -1212,6 +1228,7 @@ program.action(async (opts) => {
         }
       },
       onError: (err: Error) => {
+        flushStreamTokenUpdate();
         let msg = err.message;
         const data = (err as any).data;
         if (data?.error?.message) msg = data.error.message;

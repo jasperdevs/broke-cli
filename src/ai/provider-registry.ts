@@ -34,16 +34,38 @@ function getNativeCliLabel(providerId: string): string {
 
 export class ProviderRegistry {
   private providers: Awaited<ReturnType<typeof detectProviders>> = [];
+  private refreshCacheAt = 0;
+  private refreshInFlight: Promise<Awaited<ReturnType<typeof detectProviders>>> | null = null;
+  private visibleModelOptionsCacheKey = "";
+  private visibleModelOptionsCache: VisibleModelOption[] = [];
+  private static readonly REFRESH_TTL_MS = 5000;
 
   getDetectedProviders(): Awaited<ReturnType<typeof detectProviders>> {
     return this.providers;
   }
 
-  async refresh(): Promise<Awaited<ReturnType<typeof detectProviders>>> {
-    this.providers = await detectProviders();
-    syncCloudProviderModelsFromCatalog();
-    await refreshLocalModels(this.providers.map((provider) => provider.id));
-    return this.providers;
+  async refresh(force = false): Promise<Awaited<ReturnType<typeof detectProviders>>> {
+    const now = Date.now();
+    if (!force && this.refreshCacheAt > 0 && now - this.refreshCacheAt < ProviderRegistry.REFRESH_TTL_MS) {
+      return this.providers;
+    }
+    if (!force && this.refreshInFlight) {
+      return this.refreshInFlight;
+    }
+    const refreshPromise = (async () => {
+      this.providers = await detectProviders();
+      syncCloudProviderModelsFromCatalog();
+      await refreshLocalModels(this.providers.map((provider) => provider.id));
+      this.refreshCacheAt = Date.now();
+      this.visibleModelOptionsCacheKey = "";
+      return this.providers;
+    })();
+    this.refreshInFlight = refreshPromise;
+    try {
+      return await refreshPromise;
+    } finally {
+      this.refreshInFlight = null;
+    }
   }
 
   getConnectStatus(providerId: string): string {
@@ -68,6 +90,16 @@ export class ProviderRegistry {
     currentModelId: string,
     pinnedModels: string[],
   ): VisibleModelOption[] {
+    const cacheKey = JSON.stringify({
+      providers: this.providers.map((provider) => provider.id),
+      activeProvider: activeModel?.provider.id ?? "",
+      currentModelId,
+      pinnedModels: [...pinnedModels].sort(),
+    });
+    if (cacheKey === this.visibleModelOptionsCacheKey) {
+      return this.visibleModelOptionsCache;
+    }
+
     const detectedIds = new Set(this.providers.map((provider) => provider.id));
     const currentKey = activeModel ? `${activeModel.provider.id}/${currentModelId}` : "";
     const options: VisibleModelOption[] = [];
@@ -101,6 +133,8 @@ export class ProviderRegistry {
       return a.modelId.localeCompare(b.modelId);
     });
 
+    this.visibleModelOptionsCacheKey = cacheKey;
+    this.visibleModelOptionsCache = options;
     return options;
   }
 
