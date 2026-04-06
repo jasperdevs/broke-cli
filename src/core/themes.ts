@@ -65,7 +65,12 @@ const monokai: Theme = {
   plan: fg(230, 219, 116),      // yellow for plan mode
 };
 
-const BUILTIN_THEMES: Record<string, Theme> = { dark, light, dracula, monokai };
+const BUILTIN_THEMES: Record<string, Theme> = {
+  "brokecli-dark": dark,
+  "brokecli-light": light,
+  dracula,
+  monokai,
+};
 
 /** Convert a hex color (#rrggbb) to an ANSI true-color fg sequence. */
 function hexToFg(hex: string): string {
