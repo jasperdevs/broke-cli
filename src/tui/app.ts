@@ -483,9 +483,8 @@ export class App {
       if (msg.role === "user") {
         lines.push(`${BOLD}${WHITE}  > ${msg.content}${RESET}`);
       } else if (msg.role === "assistant") {
-        const rendered = !this.isStreaming || msg !== this.messages[this.messages.length - 1]
-          ? renderMarkdown(msg.content)
-          : msg.content;
+        // Always render markdown - even during streaming
+        const rendered = renderMarkdown(msg.content);
         for (const cl of rendered.split("\n")) {
           const visLen = stripAnsi(cl).length;
           if (visLen <= maxWidth - 4) {
