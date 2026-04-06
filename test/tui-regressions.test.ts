@@ -769,6 +769,19 @@ describe("picker menus", () => {
 });
 
 describe("thinking preview", () => {
+  it("shows thinking immediately when requested even before reasoning text arrives", () => {
+    const app = new App() as any;
+
+    app.setStreaming(true);
+    app.setThinkingRequested(true);
+
+    const output = app.renderMessages(80).map((line: string) => stripAnsi(line)).join("\n");
+    expect(output).toContain("Thinking...");
+    expect(output).toContain("waiting for model reasoning");
+
+    app.setStreaming(false);
+  });
+
   it("persists the last thought block until the next user turn", () => {
     const app = new App() as any;
 

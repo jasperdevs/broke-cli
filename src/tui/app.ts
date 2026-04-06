@@ -111,6 +111,7 @@ export class App {
   private input: InputWidget;
   private messages: ChatMessage[] = [];
   private thinkingBuffer = "";
+  private thinkingRequested = false;
   private thinkingStartTime = 0;
   private thinkingDuration = 0;
   private todoItems: Array<{ id: string; text: string; status: "pending" | "in_progress" | "done" }> = [];
@@ -382,6 +383,7 @@ export class App {
   setStreaming(streaming: boolean): void {
     this.isStreaming = streaming;
     if (!streaming) {
+      this.thinkingRequested = false;
       // Capture thinking duration before clearing
       if (this.thinkingStartTime > 0) {
         this.thinkingDuration = Math.floor((Date.now() - this.thinkingStartTime) / 1000);
@@ -433,6 +435,17 @@ export class App {
     this.invalidateMsgCache();
     if (streaming) this.drawNow();
     else this.draw();
+  }
+
+  setThinkingRequested(requested: boolean): void {
+    this.thinkingRequested = requested;
+    if (requested && this.isStreaming && this.thinkingStartTime <= 0) {
+      this.thinkingStartTime = Date.now();
+    }
+    if (!requested && !this.thinkingBuffer) {
+      this.thinkingStartTime = 0;
+    }
+    this.draw();
   }
 
   setDetectedProviders(providers: string[]): void {
@@ -1690,6 +1703,7 @@ export class App {
       staticLines: this.renderStaticMessages(maxWidth),
       maxWidth,
       thinkingBuffer: this.thinkingBuffer,
+      thinkingRequested: this.thinkingRequested,
       isStreaming: this.isStreaming,
       todoItems: this.todoItems,
       spinnerFrame: this.spinnerFrame,

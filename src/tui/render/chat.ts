@@ -168,6 +168,7 @@ export function renderMessageOverlays(options: {
   staticLines: string[];
   maxWidth: number;
   thinkingBuffer: string;
+  thinkingRequested: boolean;
   isStreaming: boolean;
   todoItems: TodoRenderItem[];
   spinnerFrame: number;
@@ -195,6 +196,7 @@ export function renderMessageOverlays(options: {
     staticLines,
     maxWidth,
     thinkingBuffer,
+    thinkingRequested,
     isStreaming,
     todoItems,
     spinnerFrame,
@@ -213,10 +215,14 @@ export function renderMessageOverlays(options: {
 
   const lines = [...staticLines];
 
-  if (thinkingBuffer) {
+  if (thinkingBuffer || (isStreaming && thinkingRequested)) {
     const thinkLines = thinkingBuffer.split("\n").slice(-8);
     lines.push(`  ${colors.accent}${isStreaming ? "thinking" : "thought"}${colors.reset}`);
-    for (const line of thinkLines) lines.push(`  ${colors.dim}${line.slice(0, maxWidth - 4)}${colors.reset}`);
+    if (thinkLines.length > 0 && thinkLines.some((line) => line.length > 0)) {
+      for (const line of thinkLines) lines.push(`  ${colors.dim}${line.slice(0, maxWidth - 4)}${colors.reset}`);
+    } else if (isStreaming) {
+      lines.push(`  ${colors.dim}waiting for model reasoning…${colors.reset}`);
+    }
     lines.push("");
   }
 
@@ -273,7 +279,7 @@ export function renderMessageOverlays(options: {
     } else if (thinkingDuration > 0) {
       statParts.push(`thought for ${thinkingDuration}s`);
     }
-    const label = thinkingBuffer ? "Thinking..." : "Composing...";
+    const label = thinkingRequested ? "Thinking..." : "Composing...";
     lines.push(`  ${sparkleSpinner(spinnerFrame)} ${shimmerText(label, spinnerFrame)} ${colors.accent}(${statParts.join(" · ")})${colors.reset}`);
     lines.push("");
   }

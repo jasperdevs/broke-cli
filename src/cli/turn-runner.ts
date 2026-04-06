@@ -18,6 +18,12 @@ const SDK_TOOL_PROVIDER_IDS = new Set([
   "openrouter", "ollama", "lmstudio", "llamacpp", "jan", "vllm",
 ]);
 
+const THINK_TAG_PROVIDER_IDS = new Set(["ollama", "lmstudio", "llamacpp", "jan", "vllm"]);
+
+function shouldRequestThinkTags(model: ModelHandle, thinkingRequested: boolean): boolean {
+  return thinkingRequested && model.runtime === "sdk" && THINK_TAG_PROVIDER_IDS.has(model.provider.id);
+}
+
 function canUseSdkTools(model: ModelHandle): boolean {
   return model.runtime === "sdk" && !!model.model && SDK_TOOL_PROVIDER_IDS.has(model.provider.id);
 }
@@ -43,6 +49,7 @@ interface TurnRunnerApp {
   addMessage(role: "user" | "assistant" | "system", content: string, images?: Array<{ mimeType: string; data: string }>): void;
   appendToLastMessage(delta: string): void;
   appendThinking(delta: string): void;
+  setThinkingRequested(requested: boolean): void;
   getLastAssistantContent(): string;
   setStreaming(streaming: boolean): void;
   setStreamTokens(tokens: number): void;
@@ -145,12 +152,14 @@ export async function runModelTurn(options: {
   const useModelId = route === "small" && smallModel ? smallModelId : currentModelId;
   const executionModel = useModel;
   const executionModelId = useModelId;
+  const thinkingRequested = route === "main" ? getSettings().enableThinking : false;
   const nextToolCalls: string[] = [];
   const optimizedMessages = getContextOptimizer().optimizeMessages(session.getChatMessages());
   let abortController: AbortController | null = new AbortController();
 
   app.onAbortRequest(() => {
     abortController?.abort();
+    app.setThinkingRequested(false);
     app.setStreaming(false);
     app.addMessage("system", "Cancelled.");
     abortController = null;
@@ -158,6 +167,9 @@ export async function runModelTurn(options: {
 
   const effectiveCavemanLevel = resolveCavemanLevel(getSettings().cavemanLevel ?? "off", text);
   let turnSystemPrompt = buildSystemPrompt(process.cwd(), executionModel.provider.id, currentMode, effectiveCavemanLevel);
+  if (shouldRequestThinkTags(executionModel, thinkingRequested)) {
+    turnSystemPrompt += "\n\nFor local reasoning-capable models: if you support private reasoning output, emit it inside <think>...</think> before the final answer. If you do not support that format, ignore this instruction and answer normally.";
+  }
   let streamTokenFlushTimer: ReturnType<typeof setTimeout> | null = null;
   const scheduleStreamTokenUpdate = (): void => {
     if (streamTokenFlushTimer) return;
@@ -172,6 +184,7 @@ export async function runModelTurn(options: {
     app.setStreamTokens(estimateTextTokens(streamedText + streamedReasoning, executionModelId));
   };
 
+  app.setThinkingRequested(thinkingRequested);
   const streamCallbacks = {
     onText: (delta: string) => {
       const nextText = streamedText + delta;
@@ -190,6 +203,7 @@ export async function runModelTurn(options: {
     },
     onFinish: (usage: { inputTokens: number; outputTokens: number; cost: number }) => {
       flushStreamTokenUpdate();
+      app.setThinkingRequested(false);
       const content = app.getLastAssistantContent();
       if (content) {
         session.addMessage("assistant", content);
@@ -209,6 +223,7 @@ export async function runModelTurn(options: {
     },
     onError: (err: Error) => {
       flushStreamTokenUpdate();
+      app.setThinkingRequested(false);
       let msg = err.message;
       const data = (err as any).data;
       if (data?.error?.message) msg = data.error.message;
@@ -250,7 +265,7 @@ export async function runModelTurn(options: {
       messages: optimizedMessages,
       tools: canUseSdkTools(executionModel) ? tools as any : undefined,
       abortSignal: abortController.signal,
-      enableThinking: route === "main" ? getSettings().enableThinking : false,
+      enableThinking: thinkingRequested,
       thinkingLevel: getSettings().thinkingLevel || "low",
     }, {
       ...streamCallbacks,
