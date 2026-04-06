@@ -135,6 +135,31 @@ describe("sidebar token summary", () => {
   });
 });
 
+describe("menu counters", () => {
+  it("shows a count in the slash command suggestion menu", () => {
+    const app = new App() as any;
+    let rendered: string[] = [];
+    app.screen = { height: 16, width: 80, hasSidebar: false, mainWidth: 80, sidebarWidth: 0, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
+    app.input.setText("/");
+    app.drawImmediate();
+    const output = rendered.map((line) => stripAnsi(line)).join("\n");
+    expect(output).toContain("Commands (1/");
+  });
+
+  it("shows a count in item pickers", () => {
+    const app = new App() as any;
+    let rendered: string[] = [];
+    app.screen = { height: 16, width: 80, hasSidebar: false, mainWidth: 80, sidebarWidth: 0, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
+    app.openItemPicker("Projects", [
+      { id: "a", label: "Alpha" },
+      { id: "b", label: "Beta" },
+    ], () => {}, { kind: "projects" });
+    app.drawImmediate();
+    const output = rendered.map((line) => stripAnsi(line)).join("\n");
+    expect(output).toContain("Projects (1/2)");
+  });
+});
+
 describe("terminal cell width", () => {
   it("pads and decorates frame lines to the exact terminal width even with emoji and ANSI", () => {
     const app = new App() as any;

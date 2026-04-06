@@ -252,7 +252,8 @@ export function drawQuestionView(app: AppState): void {
   const bodyHeight = Math.max(1, height - 4);
   const lines: string[] = [];
   lines.push(`${separatorColor}${"─".repeat(width)}${RESET}`);
-  const headerLeft = `${T()}${BOLD}${view.title}${RESET}`;
+  const currentIndex = Math.min(view.questions.length + 1, Math.max(1, view.activeIndex + 1));
+  const headerLeft = `${T()}${BOLD}${view.title}${RESET} ${DIM}(${currentIndex}/${view.questions.length + 1})${RESET}`;
   const headerRight = `${DIM}esc cancel${RESET}`;
   const spacer = Math.max(1, innerWidth - visibleWidth(headerLeft) - visibleWidth(headerRight));
   lines.push(` ${headerLeft}${" ".repeat(spacer)}${headerRight}`);

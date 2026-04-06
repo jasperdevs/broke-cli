@@ -13,6 +13,10 @@ import { drawQuestionView } from "./question-view.js";
 
 type AppState = any;
 
+function renderMenuCount(current: number, total: number): string {
+  return `${DIM}(${current}/${total})${RESET}`;
+}
+
 export function draw(app: AppState): void {
   if (app.drawScheduled) return;
   const now = Date.now();
@@ -153,8 +157,10 @@ function drawAgentRunsView(app: AppState): void {
   if (app.agentRunView.scrollOffset > maxScroll) app.agentRunView.scrollOffset = maxScroll;
 
   const frame: string[] = [];
+  const count = renderMenuCount(runs.length === 0 ? 0 : selectedIndex + 1, runs.length);
   frame.push(`${separatorColor}${"─".repeat(width)}${RESET}`);
-  frame.push(` ${title}${" ".repeat(Math.max(1, width - 16 - visibleWidth(app.agentRunView.title)))}${DIM}esc back${RESET}`);
+  const headerRight = `${count} ${DIM}esc back${RESET}`;
+  frame.push(` ${title}${" ".repeat(Math.max(1, width - 2 - visibleWidth(title) - visibleWidth(headerRight)))}${headerRight}`);
 
   const visibleRuns = runs.slice(app.agentRunView.scrollOffset, app.agentRunView.scrollOffset + rows);
   const selectedRun = runs[selectedIndex];
@@ -225,8 +231,12 @@ function appendBottomMenus(app: AppState, bottomLines: string[], bottomMenuClick
     return;
   }
 
-  const suggestions = app.buildMenuView(app.getCommandSuggestionEntries(), app.cmdSuggestionCursor, Math.max(1, getSettings().autocompleteMaxVisible));
-  if (suggestions.length > 0) bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
+  const allSuggestions = app.getCommandSuggestionEntries();
+  const suggestions = app.buildMenuView(allSuggestions, app.cmdSuggestionCursor, Math.max(1, getSettings().autocompleteMaxVisible));
+  if (suggestions.length > 0) {
+    bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
+    bottomLines.push(` ${T()}${BOLD}Commands${RESET} ${renderMenuCount(Math.min(app.cmdSuggestionCursor, allSuggestions.length - 1) + 1, allSuggestions.length)}`);
+  }
   for (const entry of suggestions) {
     if (entry.selectIndex !== undefined) app.registerMenuClickTarget(bottomMenuClicks, bottomLines, () => app.applyCommandSuggestion(entry.selectIndex!));
     bottomLines.push(entry.text);
@@ -360,7 +370,8 @@ export function shimmerText(_app: AppState, text: string, frame: number, color =
 
 export function appendModelPicker(app: AppState, lines: string[], _maxTotal: number, clickTargets: Array<{ lineIndex: number; action: () => void }>): void {
   const picker = app.modelPicker!;
-  lines.push(` ${T()}${BOLD}Select model${RESET}`);
+  const total = app.getFilteredModels().length;
+  lines.push(` ${T()}${BOLD}Select model${RESET} ${renderMenuCount(total === 0 ? 0 : picker.cursor + 1, total)}`);
   const allLabel = picker.scope === "all" ? `${TXT()}${BOLD}all${RESET}` : `${MUTED()}all${RESET}`;
   const scopedLabel = picker.scope === "scoped" ? `${TXT()}${BOLD}pinned${RESET}` : `${MUTED()}pinned${RESET}`;
   lines.push(` ${DIM}Scope:${RESET} ${allLabel} ${DIM}|${RESET} ${scopedLabel}`);
@@ -386,6 +397,7 @@ export function decorateFrameLine(_app: AppState, line: string, targetWidth: num
 
 export function appendFilePicker(app: AppState, lines: string[], maxTotal: number, clickTargets: Array<{ lineIndex: number; action: () => void }>): void {
   const picker = app.filePicker!;
+  lines.push(` ${T()}${BOLD}Files${RESET} ${renderMenuCount(picker.filtered.length === 0 ? 0 : picker.cursor + 1, picker.filtered.length)}`);
   const maxItems = Math.max(1, maxTotal - 4);
   for (const entry of app.buildMenuView(app.getFilePickerEntries(), picker.cursor, maxItems)) {
     if (entry.selectIndex !== undefined) app.registerMenuClickTarget(clickTargets, lines, () => app.selectFileEntry(entry.selectIndex!));
@@ -396,8 +408,8 @@ export function appendFilePicker(app: AppState, lines: string[], maxTotal: numbe
 
 export function appendSettingsPicker(app: AppState, lines: string[], _maxTotal: number, clickTargets: Array<{ lineIndex: number; action: () => void }>): void {
   const picker = app.settingsPicker!;
-  lines.push(` ${T()}${BOLD}Settings${RESET}`);
   const filtered = app.getFilteredSettings();
+  lines.push(` ${T()}${BOLD}Settings${RESET} ${renderMenuCount(filtered.length === 0 ? 0 : picker.cursor + 1, filtered.length)}`);
   if (filtered.length === 0) {
     lines.push(`  ${DIM}no matches${RESET}`);
     return;
@@ -410,8 +422,8 @@ export function appendSettingsPicker(app: AppState, lines: string[], _maxTotal: 
 
 export function appendItemPicker(app: AppState, lines: string[], _maxTotal: number, clickTargets: Array<{ lineIndex: number; action: () => void }>): void {
   const picker = app.itemPicker!;
-  lines.push(` ${T()}${BOLD}${picker.title}${RESET}`);
   const filtered = app.getFilteredItems();
+  lines.push(` ${T()}${BOLD}${picker.title}${RESET} ${renderMenuCount(filtered.length === 0 ? 0 : picker.cursor + 1, filtered.length)}`);
   if (filtered.length === 0) {
     lines.push(`  ${DIM}no matches${RESET}`);
     return;
