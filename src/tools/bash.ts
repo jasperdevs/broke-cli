@@ -5,6 +5,7 @@ import { tmpdir } from "os";
 import { z } from "zod";
 import { tool } from "ai";
 import { assessCommand } from "../core/safety.js";
+import { filterCommandOutput, rewriteCommand } from "./command-filter.js";
 
 /** Max chars sent back to LLM context (~2000 tokens) */
 const MAX_OUTPUT_CHARS = 8000;
@@ -50,10 +51,11 @@ export const bashTool = tool({
       let stdout = "";
       let stderr = "";
       let killed = false;
+      const filteredCommand = rewriteCommand(command);
 
       // Use shell to support pipes, redirects, etc.
       const isWin = process.platform === "win32";
-      const proc = spawn(isWin ? "cmd" : "bash", isWin ? ["/c", command] : ["-c", command], {
+      const proc = spawn(isWin ? "cmd" : "bash", isWin ? ["/c", filteredCommand] : ["-c", filteredCommand], {
         cwd: process.cwd(),
         stdio: ["pipe", "pipe", "pipe"],
         env: process.env,
@@ -115,13 +117,14 @@ export const bashTool = tool({
           } catch { /* ignore temp file errors */ }
         }
 
-        const output = truncateOutput(stdout.trim());
-        const note = tempPath ? `\n[Full output: ${tempPath}]` : "";
+        const filtered = filterCommandOutput(command, stdout.trim(), stderr.trim(), code);
+        const output = truncateOutput(filtered.output.trim());
+        const note = !filtered.rawPath && tempPath ? `\n[Full output: ${tempPath}]` : "";
 
         if (code === 0 || code === null) {
           resolve({ success: true as const, output: output + note });
         } else {
-          let error = stderr.trim() || `Exit code ${code}`;
+          let error = filtered.error.trim() || `Exit code ${code}`;
           if (error.length > MAX_OUTPUT_CHARS) {
             error = error.slice(0, MAX_OUTPUT_CHARS) + "\n[truncated]";
           }

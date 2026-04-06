@@ -2,10 +2,10 @@ import { Command } from "commander";
 import { writeFileSync } from "fs";
 import { App } from "../src/tui/app.js";
 import { detectProviders, pickDefault } from "../src/ai/detect.js";
-import { createModel, listProviders, refreshLocalModels } from "../src/ai/providers.js";
+import { createModel, listProviders, refreshLocalModels, syncCloudProviderModelsFromCatalog } from "../src/ai/providers.js";
 import { startStream } from "../src/ai/stream.js";
-import { loadPricing } from "../src/ai/cost.js";
-import { buildSystemPrompt, reloadContext } from "../src/core/context.js";
+import { getContextLimit, loadPricing } from "../src/ai/cost.js";
+import { buildSystemPrompt, reloadContext, resolveCavemanLevel } from "../src/core/context.js";
 import { Session } from "../src/core/session.js";
 import { getTools } from "../src/tools/registry.js";
 import { createAskUserTool } from "../src/tools/ask.js";
@@ -21,6 +21,7 @@ import { loadExtensions } from "../src/core/extensions.js";
 import { RESET, DIM, RED, GREEN } from "../src/utils/ansi.js";
 import { routeMessage, getSmallModelId } from "../src/ai/router.js";
 import { optimizeMessages, nextTurn, resetOptimizer, trackFileRead, wasFileRead, buildDiffSummary } from "../src/core/context-optimizer.js";
+import { estimateTextTokens } from "../src/ai/tokens.js";
 
 const program = new Command()
   .name("brokecli")
@@ -70,6 +71,7 @@ program.action(async (opts) => {
 
   app.start();
   hooks.emit("on_session_start", { cwd: process.cwd() });
+  app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
 
   // Scoped model index for Ctrl+P cycling
   let scopedModelIndex = -1;
@@ -124,6 +126,7 @@ program.action(async (opts) => {
 
   const initPromise = (async () => {
     [, providers] = await Promise.all([loadPricing(), detectProviders()]);
+    syncCloudProviderModelsFromCatalog();
     app.setDetectedProviders(providers.map((p) => p.name));
     await refreshLocalModels(providers.map((p) => p.id));
 
@@ -363,7 +366,7 @@ program.action(async (opts) => {
           hooks.emit("on_message", { role: "user", content: text });
           try {
             const chatMsgs = session.getChatMessages();
-            const ctxTokens = getTotalContextTokens(chatMsgs, systemPrompt);
+            const ctxTokens = getTotalContextTokens(chatMsgs, systemPrompt, currentModelId);
             app.setCompacting(true, ctxTokens);
             const compacted = await compactMessages(chatMsgs, activeModel.model);
             session.clear();
@@ -642,8 +645,9 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
 
     // Context size tracking
     const chatMsgs = session.getChatMessages();
-    const ctxTokens = getTotalContextTokens(chatMsgs, systemPrompt);
-    const ctxPct = Math.min(100, Math.round((ctxTokens / 128000) * 100));
+    const ctxTokens = getTotalContextTokens(chatMsgs, systemPrompt, currentModelId);
+    const contextLimit = getContextLimit(currentModelId, activeModel?.provider.id) ?? 128000;
+    const ctxPct = Math.min(100, Math.round((ctxTokens / contextLimit) * 100));
     app.setContextUsed(ctxPct);
 
     // Auto-compact if context > 80%
@@ -678,7 +682,8 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
 
     app.setStreaming(true);
     clearTodo();
-    let streamCharCount = 0;
+    let streamedText = "";
+    let streamedReasoning = "";
     nextTurn();
 
     // Smart model routing — pick cheap model for simple tasks
@@ -700,27 +705,32 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
       abortController = null;
     });
 
+    const configuredCavemanLevel = getSettings().cavemanLevel ?? "off";
+    const effectiveCavemanLevel = resolveCavemanLevel(configuredCavemanLevel, text);
+    const turnSystemPrompt = buildSystemPrompt(process.cwd(), useModel.provider.id, currentMode, effectiveCavemanLevel);
+
     await startStream(
       {
         model: useModel.model,
         modelId: useModelId,
         providerId: useModel.provider.id,
-        system: systemPrompt,
+        system: turnSystemPrompt,
         messages: optimizedMessages,
         tools,
         abortSignal: abortController.signal,
         enableThinking: route === "main" ? getSettings().enableThinking : false,
         thinkingLevel: getSettings().thinkingLevel || "low",
-      },
+        },
       {
         onText: (delta) => {
           app.appendToLastMessage(delta);
-          streamCharCount += delta.length;
-          // Rough token estimate (1 token ~ 4 chars of output)
-          app.setStreamTokens(Math.round(streamCharCount / 4));
+          streamedText += delta;
+          app.setStreamTokens(estimateTextTokens(streamedText + streamedReasoning, useModelId));
         },
         onReasoning: (delta) => {
           app.appendThinking(delta);
+          streamedReasoning += delta;
+          app.setStreamTokens(estimateTextTokens(streamedText + streamedReasoning, useModelId));
         },
         onFinish: (usage) => {
           const content = app.getLastAssistantContent();
@@ -732,8 +742,8 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
             app.addMessage("system", `${DIM}No response from model. Try again or switch models with /model.${RESET}`);
           }
           session.addUsage(usage.inputTokens, usage.outputTokens, usage.cost);
-          app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
           app.setStreaming(false);
+          app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
           abortController = null;
           lastActivityTime = Date.now();
           // Desktop notification if enabled
@@ -848,6 +858,7 @@ async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts: any): 
   let abortController: AbortController | null = null;
 
   const [, providers] = await Promise.all([loadPricing(), detectProviders()]);
+  syncCloudProviderModelsFromCatalog();
   await refreshLocalModels(providers.map((p) => p.id));
 
   let providerId: string;
@@ -925,7 +936,7 @@ async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts: any): 
       {
         model: activeModel.model,
         modelId: currentModelId,
-        system: systemPrompt,
+        system: buildSystemPrompt(process.cwd(), providerId, rpcMode, resolveCavemanLevel(getSettings().cavemanLevel ?? "off", msg.content)),
         messages: session.getChatMessages(),
         tools: ["anthropic", "openai", "codex", "google", "mistral", "groq", "xai", "openrouter"].includes(activeModel.provider.id) ? tools : undefined,
         abortSignal: abortController.signal,

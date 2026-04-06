@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Session } from "../src/core/session.js";
+import { App } from "../src/tui/app.js";
 import { MOUSE_OFF, MOUSE_ON } from "../src/utils/ansi.js";
 
 describe("session token accounting", () => {
@@ -20,5 +21,18 @@ describe("mouse reporting mode", () => {
     expect(MOUSE_OFF).toContain("?1000l");
     expect(MOUSE_ON).not.toContain("?1002h");
     expect(MOUSE_OFF).not.toContain("?1002l");
+  });
+});
+
+describe("sidebar token summary", () => {
+  it("renders labeled input, output, and total counts", () => {
+    const app = new App() as any;
+    app.updateUsage(0.0016, 150, 60);
+
+    expect(app.renderTokenSummaryParts()).toEqual([
+      "↑ 150 in",
+      "↓ 60 out",
+      "Σ 210 total",
+    ]);
   });
 });

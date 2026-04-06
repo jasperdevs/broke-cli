@@ -135,6 +135,43 @@ export function reloadContext(): void {
   cachedPrompts.clear();
 }
 
+const SAFE_CAVEMAN_PATTERNS = [
+  /\b(readme|docs?|documentation|comment)\b/i,
+  /\btypo|spelling|rename\b/i,
+  /\b(env|environment)\s+var/i,
+];
+
+const CAUTION_CAVEMAN_PATTERNS = [
+  /\badd|update|change|implement\b/i,
+  /\bflag|setting|option|command|stage\b/i,
+  /\brefactor\b/i,
+];
+
+const DANGER_CAVEMAN_PATTERNS = [
+  /\bsecurity|auth|permission|secret|credential|xss|csrf|injection|exploit|vuln/i,
+  /\bdebug|investigat|root cause|repro|failing test|broken|doesn'?t work|why\b/i,
+  /\bperformance|benchmark|latency|memory leak|leak|regression/i,
+  /\barchitecture|design|migration|migrate|review\b/i,
+];
+
+export function resolveCavemanLevel(level: CavemanLevel, userMessage: string): CavemanLevel {
+  if (level === "off" || !userMessage.trim()) return level;
+
+  if (DANGER_CAVEMAN_PATTERNS.some((pattern) => pattern.test(userMessage))) {
+    return level === "lite" ? "lite" : "off";
+  }
+
+  if (SAFE_CAVEMAN_PATTERNS.some((pattern) => pattern.test(userMessage))) {
+    return level;
+  }
+
+  if (CAUTION_CAVEMAN_PATTERNS.some((pattern) => pattern.test(userMessage))) {
+    if (level === "ultra" || level === "full") return "lite";
+  }
+
+  return level;
+}
+
 function getCavemanPrompt(level: CavemanLevel): string {
   if (level === "lite") {
     return `<output-style>

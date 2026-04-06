@@ -5,6 +5,7 @@ import { createMistral } from "@ai-sdk/mistral";
 import { createXai } from "@ai-sdk/xai";
 import type { LanguageModel } from "ai";
 import { getApiKey, getBaseUrl } from "../core/config.js";
+import { getCatalogModelIds } from "./model-catalog.js";
 
 export interface ProviderInfo {
   id: string;
@@ -186,6 +187,28 @@ export function createModel(providerId: string, modelId?: string): { model: Lang
 
 export function getProviderInfo(id: string): ProviderInfo | undefined {
   return PROVIDERS[id];
+}
+
+export function syncCloudProviderModelsFromCatalog(): void {
+  const mappings: Array<{ providerId: string; catalogProviderId?: string }> = [
+    { providerId: "anthropic" },
+    { providerId: "openai" },
+    { providerId: "codex", catalogProviderId: "openai" },
+    { providerId: "google" },
+    { providerId: "mistral" },
+    { providerId: "groq" },
+    { providerId: "xai" },
+    { providerId: "openrouter" },
+  ];
+
+  for (const { providerId, catalogProviderId } of mappings) {
+    const modelIds = getCatalogModelIds(catalogProviderId ?? providerId);
+    if (!modelIds || modelIds.length === 0) continue;
+    PROVIDERS[providerId].models = modelIds.sort();
+    if (!PROVIDERS[providerId].models.includes(PROVIDERS[providerId].defaultModel)) {
+      PROVIDERS[providerId].defaultModel = PROVIDERS[providerId].models[0];
+    }
+  }
 }
 
 async function fetchUrl(url: string, timeoutMs = 2000): Promise<unknown> {

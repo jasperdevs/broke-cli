@@ -1,6 +1,7 @@
 import { streamText, stepCountIs, type ToolSet } from "ai";
 import type { LanguageModel } from "ai";
 import { calculateCost, type TokenUsage } from "./cost.js";
+import { estimateConversationTokens, estimateTextTokens } from "./tokens.js";
 
 export interface StreamCallbacks {
   onText: (delta: string) => void;
@@ -51,6 +52,7 @@ export async function startStream(
 
     // Build provider options (thinking/reasoning for supported providers)
     const providerOptions: Record<string, Record<string, Record<string, string | number>>> = {};
+    const estimatedInputTokens = estimateConversationTokens(opts.system, messages as Array<{ role: "user" | "assistant"; content: string | Array<{ type: "text"; text: string } | { type: "image"; image: string }> }>, opts.modelId);
     if (opts.enableThinking) {
       const level = opts.thinkingLevel || "low";
       if (opts.providerId === "anthropic") {
@@ -95,6 +97,8 @@ export async function startStream(
     let inThinkTag = false;
     let thinkBuffer = "";
     let streamFailed = false;
+    let emittedText = "";
+    let emittedReasoning = "";
     try {
       for await (const part of result.fullStream) {
         if (part.type === "text-delta") {
@@ -106,12 +110,15 @@ export async function startStream(
               const closeIdx = text.indexOf("</think>");
               if (closeIdx >= 0) {
                 // End of think block
-                callbacks.onReasoning(text.slice(0, closeIdx));
+                const reasoningChunk = text.slice(0, closeIdx);
+                emittedReasoning += reasoningChunk;
+                callbacks.onReasoning(reasoningChunk);
                 text = text.slice(closeIdx + 8); // skip "</think>"
                 inThinkTag = false;
                 thinkBuffer = "";
               } else {
                 // Still inside think block
+                emittedReasoning += text;
                 callbacks.onReasoning(text);
                 text = "";
               }
@@ -120,7 +127,9 @@ export async function startStream(
               if (openIdx >= 0) {
                 // Start of think block — emit text before it
                 if (openIdx > 0) {
-                  callbacks.onText(text.slice(0, openIdx));
+                  const textChunk = text.slice(0, openIdx);
+                  emittedText += textChunk;
+                  callbacks.onText(textChunk);
                 }
                 text = text.slice(openIdx + 7); // skip "<think>"
                 inThinkTag = true;
@@ -128,15 +137,19 @@ export async function startStream(
                 // Check for partial <think tag at end of chunk
                 const partialMatch = text.match(/<(?:t(?:h(?:i(?:n(?:k)?)?)?)?)?$/);
                 if (partialMatch) {
-                  callbacks.onText(text.slice(0, partialMatch.index));
+                  const textChunk = text.slice(0, partialMatch.index);
+                  emittedText += textChunk;
+                  callbacks.onText(textChunk);
                   thinkBuffer = partialMatch[0];
                   text = "";
                 } else {
                   // Flush any buffered partial tag that turned out to not be <think>
                   if (thinkBuffer) {
+                    emittedText += thinkBuffer;
                     callbacks.onText(thinkBuffer);
                     thinkBuffer = "";
                   }
+                  emittedText += text;
                   callbacks.onText(text);
                   text = "";
                 }
@@ -144,7 +157,9 @@ export async function startStream(
             }
           }
         } else if (part.type === "reasoning-delta") {
-          callbacks.onReasoning((part as any).delta ?? (part as any).text ?? "");
+          const reasoningChunk = (part as any).delta ?? (part as any).text ?? "";
+          emittedReasoning += reasoningChunk;
+          callbacks.onReasoning(reasoningChunk);
         } else if ((part as any).type === "tool-input-start") {
           // Show tool call immediately when model starts generating it
           const tc = part as any;
@@ -164,10 +179,12 @@ export async function startStream(
     // If stream failed, still try to get usage but don't block on it
     try {
       const usage = await result.usage;
+      const estimatedOutputTokens = estimateTextTokens(emittedText + emittedReasoning, opts.modelId);
       const tokenUsage = calculateCost(
         opts.modelId,
-        usage.inputTokens ?? 0,
-        usage.outputTokens ?? 0,
+        usage.inputTokens && usage.inputTokens > 0 ? usage.inputTokens : estimatedInputTokens,
+        usage.outputTokens && usage.outputTokens > 0 ? usage.outputTokens : estimatedOutputTokens,
+        opts.providerId,
       );
       callbacks.onAfterResponse?.();
       callbacks.onFinish(tokenUsage);
@@ -177,7 +194,12 @@ export async function startStream(
         callbacks.onError(new Error("Stream ended unexpectedly"));
       }
       callbacks.onAfterResponse?.();
-      callbacks.onFinish(calculateCost(opts.modelId, 0, 0));
+      callbacks.onFinish(calculateCost(
+        opts.modelId,
+        estimatedInputTokens,
+        estimateTextTokens(emittedText + emittedReasoning, opts.modelId),
+        opts.providerId,
+      ));
     }
   } catch (err: unknown) {
     if (err instanceof Error && err.name === "AbortError") return;

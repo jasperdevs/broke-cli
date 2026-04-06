@@ -325,7 +325,7 @@ export class App {
   }
 
   private getLiveOutputTokens(): number {
-    return this.animOutputTokens.getInt() + this.animStreamTokens.getInt();
+    return this.animOutputTokens.getInt() + (this.isStreaming ? this.animStreamTokens.getInt() : 0);
   }
 
   private getLiveTotalTokens(): number {
@@ -333,9 +333,12 @@ export class App {
   }
 
   private renderTokenSummaryParts(): string[] {
-    const parts = [`↑ ${fmtTokens(this.getLiveInputTokens())}`, `↓ ${fmtTokens(this.getLiveOutputTokens())}`];
+    const parts = [
+      `↑ ${fmtTokens(this.getLiveInputTokens())} in`,
+      `↓ ${fmtTokens(this.getLiveOutputTokens())} out`,
+    ];
     const total = this.getLiveTotalTokens();
-    if (total > 0) parts.push(`Σ ${fmtTokens(total)}`);
+    if (total > 0) parts.push(`Σ ${fmtTokens(total)} total`);
     return parts;
   }
 
@@ -390,6 +393,7 @@ export class App {
         this.invalidateMsgCache();
         this.streamStartTime = 0;
       }
+      this.animStreamTokens.reset();
     }
     if (streaming) {
       this.thinkingBuffer = "";

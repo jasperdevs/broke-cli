@@ -1,5 +1,6 @@
 import type { LanguageModel } from "ai";
 import { generateText } from "ai";
+import { estimateConversationTokens } from "../ai/tokens.js";
 
 const COMPACT_PROMPT = `Compress this conversation into a minimal context block for another AI to continue.
 
@@ -51,18 +52,16 @@ export async function compactMessages(
   }
 }
 
-export function estimateTokens(text: string): number {
-  // ~4 chars per token for English
-  return Math.ceil(text.length / 4);
-}
-
 export function getTotalContextTokens(
   messages: Array<{ role: string; content: string }>,
   systemPrompt: string,
+  modelId?: string,
 ): number {
-  let total = estimateTokens(systemPrompt);
-  for (const m of messages) {
-    total += estimateTokens(m.content) + 4; // 4 tokens overhead per message
-  }
-  return total;
+  return estimateConversationTokens(
+    systemPrompt,
+    messages
+      .filter((m): m is { role: "user" | "assistant"; content: string } => m.role === "user" || m.role === "assistant")
+      .map((m) => ({ role: m.role, content: m.content })),
+    modelId,
+  );
 }
