@@ -1062,11 +1062,18 @@ export class App {
             content += ` ${tag}`;
           }
         }
-        const visContentLen = stripAnsi(content).length;
         const availW = maxWidth - 4; // "  > " prefix
-        const truncContent = visContentLen > availW ? content.slice(0, availW) : content;
-        const padW = Math.max(0, maxWidth - stripAnsi(truncContent).length - 4);
-        lines.push(`${bg(30, 30, 30)}${BOLD}${WHITE}  > ${truncContent}${" ".repeat(padW)}${RESET}`);
+        const contentLines = content.split("\n");
+        for (let li = 0; li < contentLines.length; li++) {
+          const prefix = li === 0 ? "  > " : "    ";
+          const wrapped = wordWrap(contentLines[li], availW);
+          for (let wi = 0; wi < wrapped.length; wi++) {
+            const pfx = wi === 0 ? prefix : "    ";
+            const text = wrapped[wi];
+            const padW = Math.max(0, maxWidth - text.length - pfx.length);
+            lines.push(`${bg(30, 30, 30)}${BOLD}${WHITE}${pfx}${text}${" ".repeat(padW)}${RESET}`);
+          }
+        }
         lines.push("");
       } else if (msg.role === "assistant") {
         const rendered = renderMarkdown(msg.content);
