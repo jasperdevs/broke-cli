@@ -119,10 +119,10 @@ export function buildSidebarFooterLines(options: {
   }
 
   if (contextUsed !== undefined && contextUsage) {
-    const contextLabel = `${contextUsed}% prompt`;
     const contextColor = contextUsed > 90 ? colors.error : contextUsed > 70 ? colors.warning : colors.muted;
-    lines.push(`  ${contextColor}${contextLabel}${RESET}`);
-    lines.push(`  ${colors.muted}${contextUsage}${RESET}`);
+    lines.push(`${colors.text}Prompt${RESET}`);
+    lines.push(`  ${contextColor}${contextUsage}${RESET}`);
+    lines.push(`  ${contextColor}${contextUsed}% of limit${RESET}`);
   }
 
   return lines;

@@ -39,7 +39,7 @@ describe("sidebar token summary", () => {
     ]);
   });
 
-  it("omits the duplicate total line from the sidebar footer", () => {
+  it("shows the lifetime total line in the sidebar footer", () => {
     const app = new App() as any;
     app.setContextUsage(132, 344_000);
     app.updateUsage(0.0016, 150, 60);
@@ -47,7 +47,7 @@ describe("sidebar token summary", () => {
     const footer = app.renderSidebarFooter().map((line: string) => stripAnsi(line)).join("\n");
     expect(footer).toContain("↑ 150 in");
     expect(footer).toContain("↓ 60 out");
-    expect(footer).not.toContain("Σ 210 session");
+    expect(footer).toContain("Σ 210 session");
   });
 
   it("uses the rock indicator and wraps cost/context details instead of clipping", () => {
@@ -72,11 +72,12 @@ describe("sidebar token summary", () => {
     expect(footer[0]).toBe("");
     expect(footer.some((line: string) => line.includes("Session"))).toBe(true);
     expect(footer.some((line: string) => line.trim() === "$0.0016")).toBe(true);
+    expect(footer.some((line: string) => line.trim() === "Σ 210 session")).toBe(true);
+    expect(footer.some((line: string) => line.includes("Prompt"))).toBe(true);
     expect(footer.some((line: string) => line.trim() === "132k/344k")).toBe(true);
-    expect(footer.some((line: string) => line.includes("132k/344k"))).toBe(true);
-    expect(footer.some((line: string) => line.trim().includes("prompt"))).toBe(true);
-    expect(footer.findIndex((line: string) => line.includes("prompt"))).toBeLessThan(
-      footer.findIndex((line: string) => line.includes("132k/344k")),
+    expect(footer.some((line: string) => line.trim() === "38% of limit")).toBe(true);
+    expect(footer.findIndex((line: string) => line.includes("Prompt"))).toBeGreaterThan(
+      footer.findIndex((line: string) => line.includes("Σ 210 session")),
     );
 
     updateSetting("cavemanLevel", "off");
