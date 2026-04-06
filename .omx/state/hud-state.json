@@ -1,5 +1,5 @@
 {
-  "last_turn_at": "2026-04-06T09:53:36.542Z",
-  "turn_count": 3,
-  "last_agent_output": "Patched the TUI pass in [app.ts](/C:/Users/bunny/Downloads/broke-cli/src/tui/app.ts#L347), [input.ts"
+  "last_turn_at": "2026-04-06T15:05:02.298Z",
+  "turn_count": 98,
+  "last_agent_output": "Long-term chat memory is off now.\n\nI changed [session.ts](/C:/Users/bunny/Downloads/broke-cli/src/co"
 }

@@ -9,6 +9,7 @@ export type ExtensionHook = (event: { type: string; data: unknown }) => void | P
 export interface HookRegistry {
   on(event: string, callback: ExtensionHook): void;
   emit(event: string, data: unknown): Promise<void>;
+  reload(): void;
 }
 
 export interface ExtensionInfo {
@@ -18,8 +19,41 @@ export interface ExtensionInfo {
 
 function createHookRegistry(): HookRegistry {
   const hooks = new Map<string, ExtensionHook[]>();
+  const extDir = join(homedir(), ".brokecli", "extensions");
+  const require = createRequire(import.meta.url);
 
-  return {
+  function resetHooks(): void {
+    hooks.clear();
+  }
+
+  function registerExtensions(): void {
+    if (!existsSync(extDir)) return;
+
+    let files: string[];
+    try {
+      files = readdirSync(extDir).filter((f) => f.endsWith(".js"));
+    } catch {
+      return;
+    }
+
+    for (const file of files) {
+      const extensionId = file.replace(/\.js$/i, "");
+      if (!isExtensionEnabled(extensionId)) continue;
+      try {
+        const modulePath = join(extDir, file);
+        const resolvedPath = require.resolve(modulePath);
+        delete require.cache[resolvedPath];
+        const ext = require(modulePath);
+        if (typeof ext.register === "function") {
+          ext.register(registry);
+        }
+      } catch {
+        // Skip broken extensions silently
+      }
+    }
+  }
+
+  const registry: HookRegistry = {
     on(event: string, callback: ExtensionHook): void {
       const list = hooks.get(event) ?? [];
       list.push(callback);
@@ -37,38 +71,19 @@ function createHookRegistry(): HookRegistry {
         }
       }
     },
+
+    reload(): void {
+      resetHooks();
+      registerExtensions();
+    },
   };
+
+  registerExtensions();
+  return registry;
 }
 
 export function loadExtensions(): HookRegistry {
-  const registry = createHookRegistry();
-  const extDir = join(homedir(), ".brokecli", "extensions");
-
-  if (!existsSync(extDir)) return registry;
-
-  let files: string[];
-  try {
-    files = readdirSync(extDir).filter((f) => f.endsWith(".js"));
-  } catch {
-    return registry;
-  }
-
-  const require = createRequire(import.meta.url);
-
-  for (const file of files) {
-    const extensionId = file.replace(/\.js$/i, "");
-    if (!isExtensionEnabled(extensionId)) continue;
-    try {
-      const ext = require(join(extDir, file));
-      if (typeof ext.register === "function") {
-        ext.register(registry);
-      }
-    } catch {
-      // Skip broken extensions silently
-    }
-  }
-
-  return registry;
+  return createHookRegistry();
 }
 
 export function listExtensions(): ExtensionInfo[] {

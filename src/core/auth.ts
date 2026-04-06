@@ -53,6 +53,14 @@ export function clearCredentials(provider: string): void {
   writeAuthData(data);
 }
 
+export function hasStoredCredentials(provider: string): boolean {
+  const data = readAuthData();
+  const entry = data[provider];
+  if (!entry?.token) return false;
+  if (entry.expiresAt && Date.now() > entry.expiresAt) return false;
+  return true;
+}
+
 export function listAuthenticated(): string[] {
   const data = readAuthData();
   const authed = Object.keys(data).filter((p) => {

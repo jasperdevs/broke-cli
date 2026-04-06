@@ -4,7 +4,8 @@ import type { ModelHandle } from "../ai/providers.js";
 import type { ProviderRegistry } from "../ai/provider-registry.js";
 import { buildSystemPrompt, reloadContext } from "../core/context.js";
 import { compactMessages, getTotalContextTokens } from "../core/compact.js";
-import { getSettings, updateSetting, type Settings, type Mode } from "../core/config.js";
+import { clearCredentials, hasStoredCredentials, listAuthenticated } from "../core/auth.js";
+import { getProviderCredential, getSettings, loadConfig, updateProviderConfig, updateSetting, type Settings, type Mode } from "../core/config.js";
 import { buildRepoMap, formatRepoMap } from "../core/repo-map.js";
 import { listProjects } from "../core/projects.js";
 import { listExtensions } from "../core/extensions.js";
@@ -76,11 +77,19 @@ interface SlashCommandApp {
 
 interface ExtensionHooks {
   emit(event: string, payload: Record<string, unknown>): void;
+  reload?(): void;
 }
 
 export interface SlashCommandResult {
   handled: boolean;
   templateLoaded?: boolean;
+}
+
+function listLogoutTargets(): string[] {
+  const configuredProviders = Object.entries(loadConfig().providers ?? {})
+    .filter(([, entry]) => !!entry?.apiKey)
+    .map(([provider]) => provider);
+  return [...new Set([...configuredProviders, ...listAuthenticated()])].sort();
 }
 
 export async function handleSlashCommand(options: {
@@ -314,11 +323,13 @@ export async function handleSlashCommand(options: {
       }));
       app.openItemPicker("Extensions", items, (id) => {
         const enabled = toggleExtensionEnabled(id);
-        app.addMessage("system", `${id}: ${enabled ? "enabled" : "disabled"} (applies next launch)`);
+        hooks.reload?.();
+        app.addMessage("system", `${id}: ${enabled ? "enabled" : "disabled"}`);
       }, {
         secondaryHint: "tab toggles enable/disable",
         onSecondaryAction: (id) => {
           toggleExtensionEnabled(id);
+          hooks.reload?.();
           const nextItems = listExtensions().map((entry) => ({
             id: entry.id,
             label: entry.id,
@@ -519,9 +530,93 @@ export async function handleSlashCommand(options: {
       app.addMessage("system", `Templates:\n${lines.join("\n")}`);
       return { handled: true };
     }
-    case "logout":
-      app.addMessage("system", "OAuth login not yet implemented. Set API keys via environment variables: ANTHROPIC_API_KEY, OPENAI_API_KEY, etc.");
+    case "logout": {
+      const executeLogout = async (requestedTarget: string) => {
+        const normalized = requestedTarget.trim().toLowerCase();
+        const knownTargets = listLogoutTargets();
+        const targets = normalized === "all"
+          ? knownTargets
+          : normalized
+            ? [normalized]
+            : [];
+
+        if (targets.length === 0) {
+          app.addMessage("system", "No stored brokecli credentials found to clear.");
+          return;
+        }
+
+        const cleared: string[] = [];
+        const external: string[] = [];
+
+        for (const provider of targets) {
+          const credential = getProviderCredential(provider);
+          const hasStoredConfigKey = !!loadConfig().providers?.[provider]?.apiKey;
+          const hadStoredAuth = hasStoredCredentials(provider);
+
+          clearCredentials(provider);
+          if (hasStoredConfigKey) {
+            updateProviderConfig(provider, { apiKey: null });
+          }
+
+          if (credential.kind === "api_key" && (credential.source === "config" || credential.source === undefined)) {
+            cleared.push(provider);
+            continue;
+          }
+
+          if (credential.kind !== "none" && credential.source && credential.source !== "config") {
+            external.push(`${provider} (${credential.source})`);
+            continue;
+          }
+
+          if (hasStoredConfigKey || hadStoredAuth) {
+            cleared.push(provider);
+          }
+        }
+
+        if (normalized === "all" || (activeModel && targets.includes(activeModel.provider.id))) {
+          updateSetting("lastModel", "");
+        }
+
+        await refreshProviderState(true);
+
+        if (cleared.length > 0) {
+          app.addMessage("system", `Cleared stored brokecli auth for: ${cleared.join(", ")}`);
+        }
+        if (external.length > 0) {
+          app.addMessage("system", `External env/native auth still active: ${external.join(", ")}`);
+        }
+        if (cleared.length === 0 && external.length === 0) {
+          app.addMessage("system", "No stored brokecli credentials found to clear.");
+        }
+      };
+
+      if (restText) {
+        await executeLogout(restText);
+        return { handled: true };
+      }
+
+      const targets = listLogoutTargets();
+      if (targets.length === 0) {
+        app.addMessage("system", "No stored brokecli credentials found to clear.");
+        return { handled: true };
+      }
+
+      const items = [
+        { id: "all", label: "all", detail: `clear ${targets.length} stored provider entr${targets.length === 1 ? "y" : "ies"}` },
+        ...targets.map((provider) => {
+          const credential = getProviderCredential(provider);
+          return {
+            id: provider,
+            label: provider,
+            detail: credential.source ?? "stored auth",
+          };
+        }),
+      ];
+      app.openItemPicker("Logout", items, (id) => {
+        void executeLogout(id);
+      });
       return { handled: true };
+    }
     case "exit":
       app.stop();
       return { handled: true };

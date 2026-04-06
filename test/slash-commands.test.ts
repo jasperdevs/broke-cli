@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "fs";
+import { homedir } from "os";
 import { join } from "path";
 import { Session } from "../src/core/session.js";
 import { handleSlashCommand } from "../src/cli/slash-commands.js";
+import { getCredentials, saveCredentials } from "../src/core/auth.js";
+import { loadConfig, updateProviderConfig, updateSetting } from "../src/core/config.js";
 
 function createAppStub() {
   const messages: Array<{ role: "user" | "assistant" | "system"; content: string }> = [];
@@ -46,9 +49,15 @@ function createAppStub() {
 
 const localTemplateDir = join(process.cwd(), ".brokecli", "prompts");
 const templatePath = join(localTemplateDir, "slash-test-template.md");
+const configPath = join(homedir(), ".brokecli", "config.json");
+const authPath = join(homedir(), ".brokecli", "auth.json");
+const extDir = join(homedir(), ".brokecli", "extensions");
+const extPath = join(extDir, "slash-test-extension.js");
 
 afterEach(() => {
   if (existsSync(templatePath)) rmSync(templatePath, { force: true });
+  if (existsSync(extPath)) rmSync(extPath, { force: true });
+  updateSetting("disabledExtensions", (loadConfig().settings?.disabledExtensions ?? []).filter((entry) => entry !== "slash-test-extension"));
 });
 
 describe("slash command handling", () => {
@@ -187,5 +196,97 @@ describe("slash command handling", () => {
     expect(result.handled).toBe(true);
     expect(app.messages.some((entry) => entry.content.includes("## "))).toBe(true);
     expect(app.messages.some((entry) => entry.content.toLowerCase().includes("session"))).toBe(true);
+  });
+
+  it("reloads extensions immediately when toggled", async () => {
+    mkdirSync(extDir, { recursive: true });
+    writeFileSync(extPath, "exports.register = () => {};", "utf-8");
+
+    const app = createAppStub();
+    let pickerOptions: any;
+    let reloaded = 0;
+    let latestItems: Array<{ id: string; label: string; detail?: string }> = [];
+    app.openItemPicker = (_title: string, _items: any[], _onSelect: (id: string) => void, options?: any) => {
+      pickerOptions = options;
+    };
+    app.updateItemPickerItems = (items: Array<{ id: string; label: string; detail?: string }>) => {
+      latestItems = items;
+    };
+
+    await handleSlashCommand({
+      text: "/extensions",
+      app,
+      session: new Session(`test-extensions-${Date.now()}`),
+      activeModel: null,
+      currentModelId: "",
+      currentMode: "build",
+      systemPrompt: "sys",
+      providerRegistry: {} as any,
+      buildVisibleModelOptions: () => [],
+      refreshProviderState: async () => [],
+      isSkippedPromptAnswer: () => false,
+      isValidHttpBaseUrl: () => true,
+      getContextOptimizer: () => ({ reset() {} }) as any,
+      onSessionReplace: () => {},
+      onModelChange: () => {},
+      onSystemPromptChange: () => {},
+      hooks: { emit() {}, reload() { reloaded += 1; } },
+      onProjectChange: () => {},
+    });
+
+    pickerOptions.onSecondaryAction("slash-test-extension");
+
+    expect(reloaded).toBe(1);
+    expect(latestItems.find((item) => item.id === "slash-test-extension")?.detail).toBe("disabled");
+  });
+
+  it("clears stored auth for /logout <provider>", async () => {
+    const previousConfig = existsSync(configPath) ? readFileSync(configPath, "utf-8") : null;
+    const previousAuth = existsSync(authPath) ? readFileSync(authPath, "utf-8") : null;
+
+    try {
+      updateProviderConfig("openai", { apiKey: "sk-test-config-key" });
+      saveCredentials("openai", "test-auth-token");
+
+      const app = createAppStub();
+      const session = new Session(`test-logout-${Date.now()}`);
+
+      const result = await handleSlashCommand({
+        text: "/logout openai",
+        app,
+        session,
+        activeModel: null,
+        currentModelId: "",
+        currentMode: "build",
+        systemPrompt: "sys",
+        providerRegistry: {} as any,
+        buildVisibleModelOptions: () => [],
+        refreshProviderState: async () => [],
+        isSkippedPromptAnswer: () => false,
+        isValidHttpBaseUrl: () => true,
+        getContextOptimizer: () => ({ reset() {} }) as any,
+        onSessionReplace: () => {},
+        onModelChange: () => {},
+        onSystemPromptChange: () => {},
+        hooks: { emit() {} },
+        onProjectChange: () => {},
+      });
+
+      expect(result.handled).toBe(true);
+      expect(getCredentials("openai")).toBeNull();
+      expect(loadConfig().providers?.openai?.apiKey).toBeUndefined();
+      expect(app.messages.some((entry) => entry.content.includes("Cleared stored brokecli auth for: openai"))).toBe(true);
+    } finally {
+      if (previousConfig == null) {
+        if (existsSync(configPath)) unlinkSync(configPath);
+      } else {
+        writeFileSync(configPath, previousConfig, "utf-8");
+      }
+      if (previousAuth == null) {
+        if (existsSync(authPath)) unlinkSync(authPath);
+      } else {
+        writeFileSync(authPath, previousAuth, "utf-8");
+      }
+    }
   });
 });
