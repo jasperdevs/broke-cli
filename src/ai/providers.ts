@@ -5,7 +5,13 @@ import { createMistral } from "@ai-sdk/mistral";
 import { createXai } from "@ai-sdk/xai";
 import type { LanguageModel } from "ai";
 import { getApiKey, getBaseUrl, getProviderCredential } from "../core/config.js";
-import { getCatalogModelIds, getModelSpec } from "./model-catalog.js";
+import {
+  getCatalogModelIds,
+  getModelSpec,
+  getProviderDefaultModelId,
+  getProviderMaxVisibleModelCount,
+  getProviderPreferredDisplayModelIds,
+} from "./model-catalog.js";
 import { hasNativeCommand } from "./native-cli.js";
 
 export interface ProviderInfo {
@@ -41,35 +47,13 @@ const PROVIDER_POPULARITY: Record<string, number> = {
   vllm: 13,
 };
 
-const PREFERRED_MODELS: Record<string, string[]> = {
-  anthropic: ["claude-sonnet-4-6", "claude-haiku-4-5", "claude-opus-4-6"],
-  openai: ["gpt-5.2-codex", "gpt-5.4-mini", "gpt-5-mini", "gpt-5.4", "o4-mini", "o3", "gpt-4.1"],
-  codex: ["gpt-5.2-codex", "gpt-5.4-mini", "gpt-5-mini", "gpt-5.4", "o4-mini", "o3", "gpt-4.1"],
-  google: ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"],
-  mistral: ["codestral-latest", "mistral-small-latest", "mistral-medium-latest", "mistral-large-latest"],
-  groq: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "qwen-qwq-32b", "groq/compound-mini"],
-  xai: ["grok-code-fast-1", "grok-4-fast", "grok-3-mini", "grok-4"],
-  openrouter: ["openai/gpt-5.2-codex", "anthropic/claude-sonnet-4", "google/gemini-2.5-flash"],
-};
-
-const MAX_VISIBLE_MODELS: Record<string, number> = {
-  anthropic: 6,
-  openai: 8,
-  codex: 8,
-  google: 8,
-  mistral: 8,
-  groq: 8,
-  xai: 8,
-  openrouter: 6,
-};
-
 const LOCAL_PROVIDER_IDS = new Set(["ollama", "lmstudio", "llamacpp", "jan", "vllm"]);
 
 const PROVIDERS: Record<string, ProviderInfo> = {
   anthropic: {
     id: "anthropic",
     name: "Anthropic",
-    defaultModel: "claude-sonnet-4-6",
+    defaultModel: getProviderDefaultModelId("anthropic") ?? "claude-sonnet-4-6",
     models: [
       "claude-sonnet-4-6",
       "claude-haiku-4-5-20251001",
@@ -79,14 +63,14 @@ const PROVIDERS: Record<string, ProviderInfo> = {
   openai: {
     id: "openai",
     name: "OpenAI",
-    defaultModel: "gpt-4o-mini",
-    models: ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "gpt-4.1", "o3-mini"],
+    defaultModel: getProviderDefaultModelId("openai") ?? "gpt-5.4-mini",
+    models: [...getProviderPreferredDisplayModelIds("openai")],
   },
   codex: {
     id: "codex",
     name: "Codex",
-    defaultModel: "gpt-5-mini",
-    models: ["gpt-5-mini", "gpt-5.4-mini", "gpt-5.4", "o4-mini", "o3"],
+    defaultModel: getProviderDefaultModelId("codex") ?? "gpt-5-mini",
+    models: [...getProviderPreferredDisplayModelIds("codex")],
   },
   ollama: {
     id: "ollama",
@@ -121,8 +105,8 @@ const PROVIDERS: Record<string, ProviderInfo> = {
   google: {
     id: "google",
     name: "Google",
-    defaultModel: "gemini-2.5-flash",
-    models: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
+    defaultModel: getProviderDefaultModelId("google") ?? "gemini-2.5-flash",
+    models: [...getProviderPreferredDisplayModelIds("google")],
   },
   mistral: {
     id: "mistral",
@@ -145,8 +129,8 @@ const PROVIDERS: Record<string, ProviderInfo> = {
   openrouter: {
     id: "openrouter",
     name: "OpenRouter",
-    defaultModel: "anthropic/claude-sonnet-4",
-    models: ["anthropic/claude-sonnet-4", "openai/gpt-4o", "google/gemini-2.5-flash"],
+    defaultModel: getProviderDefaultModelId("openrouter") ?? "anthropic/claude-sonnet-4",
+    models: [...getProviderPreferredDisplayModelIds("openrouter")],
   },
 };
 
@@ -285,7 +269,7 @@ function getNormalizedModelGroup(modelId: string): string {
 function modelVisibilityScore(providerId: string, modelId: string): number {
   const lower = modelId.toLowerCase();
   let score = 0;
-  const preferred = PREFERRED_MODELS[providerId] ?? [];
+  const preferred = getProviderPreferredDisplayModelIds(providerId);
   const preferredIndex = preferred.indexOf(modelId);
   if (preferredIndex >= 0) score += 500 - preferredIndex * 20;
   if (lower.includes("codex")) score += 120;
@@ -350,7 +334,7 @@ export function filterModelIdsForDisplay(providerId: string, modelIds: string[],
     seenGroups.add(group);
   }
 
-  const maxVisible = MAX_VISIBLE_MODELS[providerId] ?? 10;
+  const maxVisible = getProviderMaxVisibleModelCount(providerId);
   const visible = selected.filter((modelId) => preserveSet.has(modelId));
   for (const modelId of selected) {
     if (visible.includes(modelId)) continue;
@@ -381,7 +365,7 @@ export function syncCloudProviderModelsFromCatalog(): void {
   for (const { providerId, catalogProviderId } of mappings) {
     const modelIds = getCatalogModelIds(catalogProviderId ?? providerId);
     if (!modelIds || modelIds.length === 0) continue;
-    const preferred = [...(PREFERRED_MODELS[providerId] ?? []), ...PROVIDERS[providerId].models];
+    const preferred = [...getProviderPreferredDisplayModelIds(providerId), ...PROVIDERS[providerId].models];
     PROVIDERS[providerId].models = filterModelIdsForDisplay(providerId, modelIds, preferred);
     if (!PROVIDERS[providerId].models.includes(PROVIDERS[providerId].defaultModel)) {
       PROVIDERS[providerId].defaultModel = PROVIDERS[providerId].models[0];

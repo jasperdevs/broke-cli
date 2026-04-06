@@ -9,17 +9,7 @@
  */
 
 import type { LanguageModel } from "ai";
-
-/** Known cheap models per provider */
-const SMALL_MODELS: Record<string, string> = {
-  anthropic: "claude-haiku-4-5-20251001",
-  openai: "gpt-4o-mini",
-  codex: "gpt-4o-mini",
-  google: "gemini-2.0-flash",
-  groq: "llama-3.1-8b-instant",
-  mistral: "mistral-small-latest",
-  xai: "grok-3-mini",
-};
+import { getProviderSmallModelId } from "./model-catalog.js";
 
 export interface RouterConfig {
   mainModel: LanguageModel;
@@ -84,5 +74,5 @@ export function routeMessage(
 
 /** Get the default small model ID for a provider */
 export function getSmallModelId(providerId: string): string | undefined {
-  return SMALL_MODELS[providerId];
+  return getProviderSmallModelId(providerId);
 }

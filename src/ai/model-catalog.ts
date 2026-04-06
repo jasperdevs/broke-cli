@@ -151,6 +151,63 @@ const providerAliases: Record<string, string> = {
   codex: "openai",
 };
 
+interface ProviderModelProfile {
+  defaultModel: string;
+  smallModel?: string;
+  preferredDisplay: string[];
+  maxVisible?: number;
+}
+
+const PROVIDER_MODEL_PROFILES: Record<string, ProviderModelProfile> = {
+  anthropic: {
+    defaultModel: "claude-sonnet-4-6",
+    smallModel: "claude-haiku-4-5-20251001",
+    preferredDisplay: ["claude-sonnet-4-6", "claude-haiku-4-5-20251001", "claude-opus-4-6"],
+    maxVisible: 6,
+  },
+  openai: {
+    defaultModel: "gpt-5.4-mini",
+    smallModel: "gpt-4o-mini",
+    preferredDisplay: ["gpt-5.2-codex", "gpt-5.4-mini", "gpt-5-mini", "gpt-5.4", "o4-mini", "o3", "gpt-4.1"],
+    maxVisible: 8,
+  },
+  codex: {
+    defaultModel: "gpt-5-mini",
+    smallModel: "gpt-5-mini",
+    preferredDisplay: ["gpt-5-mini", "gpt-5.4-mini", "gpt-5.4", "o4-mini", "o3"],
+    maxVisible: 8,
+  },
+  google: {
+    defaultModel: "gemini-2.5-flash",
+    smallModel: "gemini-2.0-flash",
+    preferredDisplay: ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"],
+    maxVisible: 8,
+  },
+  mistral: {
+    defaultModel: "mistral-small-latest",
+    smallModel: "mistral-small-latest",
+    preferredDisplay: ["codestral-latest", "mistral-small-latest", "mistral-medium-latest", "mistral-large-latest"],
+    maxVisible: 8,
+  },
+  groq: {
+    defaultModel: "llama-3.3-70b-versatile",
+    smallModel: "llama-3.1-8b-instant",
+    preferredDisplay: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "qwen-qwq-32b", "groq/compound-mini"],
+    maxVisible: 8,
+  },
+  xai: {
+    defaultModel: "grok-3-mini",
+    smallModel: "grok-3-mini",
+    preferredDisplay: ["grok-code-fast-1", "grok-4-fast", "grok-3-mini", "grok-4"],
+    maxVisible: 8,
+  },
+  openrouter: {
+    defaultModel: "anthropic/claude-sonnet-4",
+    preferredDisplay: ["openai/gpt-5.2-codex", "anthropic/claude-sonnet-4", "google/gemini-2.5-flash"],
+    maxVisible: 6,
+  },
+};
+
 let catalogCache: Catalog | null = null;
 let fallbackCatalog: Catalog | null = null;
 
@@ -241,6 +298,22 @@ export function getCatalogModelIds(providerId: string): string[] | null {
   const provider = getCatalog()[resolvedProviderId];
   if (!provider) return null;
   return Object.keys(provider.models);
+}
+
+export function getProviderDefaultModelId(providerId: string): string | undefined {
+  return PROVIDER_MODEL_PROFILES[providerId]?.defaultModel;
+}
+
+export function getProviderSmallModelId(providerId: string): string | undefined {
+  return PROVIDER_MODEL_PROFILES[providerId]?.smallModel;
+}
+
+export function getProviderPreferredDisplayModelIds(providerId: string): string[] {
+  return PROVIDER_MODEL_PROFILES[providerId]?.preferredDisplay ?? [];
+}
+
+export function getProviderMaxVisibleModelCount(providerId: string): number {
+  return PROVIDER_MODEL_PROFILES[providerId]?.maxVisible ?? 10;
 }
 
 export function getModelSpec(modelId: string, providerId?: string): ModelSpec | null {
