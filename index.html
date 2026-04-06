@@ -6,16 +6,88 @@
     <title>BrokeCLI - Your Wallet's New Best Friend (AKA: It's Always Empty)</title>
     <link rel="stylesheet" href="style.css">
     <style>
-        body { font-family: 'Comic Sans MS', cursive, sans-serif; background-color: #f0f8ff; color: #333; text-align: center; padding: 20px; }
-        .container { max-width: 800px; margin: 50px auto; background: #ffffff; padding: 40px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); border: 5px dashed #ff6b6b; }
-        h1 { color: #d9534f; font-size: 3.5em; margin-bottom: 10px; text-shadow: 2px 2px #ffe0e0; }
-        h2 { color: #5cb85c; font-size: 2em; margin-top: 0; }
-        p { font-size: 1.2em; line-height: 1.6; }
-        .cta-button { display: inline-block; background-color: #ff9800; color: white; padding: 15px 40px; text-decoration: none; border-radius: 30px; font-size: 1.5em; margin: 30px 0; transition: background-color 0.3s; box-shadow: 0 5px #e65100; }
-        .cta-button:hover { background-color: #ffc107; box-shadow: 0 3px #e65100; transform: translateY(2px); }
-        .features { display: flex; justify-content: space-around; margin-top: 40px; text-align: left; }
-        .feature-card { flex: 1; padding: 20px; margin: 0 15px; background: #fff0f0; border-radius: 10px; border-left: 5px solid #d9534f; }
-        .feature-card h3 { color: #d9534f; }
+    <style>
+        body { 
+            font-family: 'Consolas', 'Courier New', monospace; 
+            background-color: #000000; 
+            color: #00ff00; /* Classic green terminal text */
+            text-align: left; 
+            padding: 20px; 
+            font-size: 14px;
+        }
+        .container { 
+            max-width: 900px; 
+            margin: 0 auto; 
+            background: rgba(0, 0, 0, 0.6); /* Semi-transparent dark background for content area */
+            padding: 20px; 
+            border: 1px solid #006600; /* Subtle green border */
+            box-shadow: 0 0 15px rgba(0, 255, 0, 0.3); /* Green glow effect */
+        }
+        h1 { 
+            color: #ffffff; 
+            font-size: 2em; 
+            margin-bottom: 15px; 
+            text-shadow: 0 0 5px #00ff00;
+        }
+        h2 { 
+            color: #00aaff; /* A different color for subheadings, like blue */
+            font-size: 1.5em; 
+            margin-top: 15px; 
+            border-bottom: 1px dashed #006600;
+            padding-bottom: 5px;
+        }
+        p { 
+            font-size: 1em; 
+            line-height: 1.6; 
+            margin-bottom: 15px;
+        }
+        /* Simulate a command prompt line */
+        .prompt {
+            display: block;
+            margin-top: 25px;
+            font-size: 1.1em;
+        }
+        .prompt span:first-child {
+            color: #00ff00;
+            margin-right: 5px;
+        }
+        .cta-button { 
+            display: inline-block; 
+            background-color: transparent; /* Remove background */
+            color: #00ff00; 
+            padding: 10px 20px; 
+            text-decoration: underline; /* Underline instead of box */
+            border: 1px solid #006600;
+            border-radius: 0;
+            font-size: 1.1em;
+            cursor: pointer;
+            margin: 20px 0;
+            transition: background-color 0.2s, color 0.2s;
+        }
+        .cta-button:hover { 
+            background-color: #006600; 
+            color: #ffffff; 
+            text-decoration: none;
+        }
+        .features { 
+            display: flex; 
+            justify-content: space-around; 
+            margin-top: 30px; 
+            text-align: left;
+        }
+        .feature-card { 
+            flex: 1; 
+            padding: 15px; 
+            margin: 0 10px; 
+            background: rgba(0, 0, 0, 0.3); /* Darker background for cards */
+            border-left: 3px solid #008800;
+            border-radius: 0;
+        }
+        .feature-card h3 { 
+            color: #ffffff; 
+            margin-top: 0;
+        }
+    </style>
     </style>
 </head>
 <body>

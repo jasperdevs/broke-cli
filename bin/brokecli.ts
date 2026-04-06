@@ -588,6 +588,7 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
     }
 
     app.setStreaming(true);
+    let streamCharCount = 0;
 
     abortController = new AbortController();
     app.onAbortRequest(() => {

@@ -212,7 +212,7 @@ export class App {
           const timeStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
           const doneVerbs = ["Churned", "Cooked", "Brewed", "Hammered", "Crunched", "Wrapped up"];
           const verb = doneVerbs[Math.floor(Math.random() * doneVerbs.length)];
-          this.messages.push({ role: "system", content: `${T()}\u2733${RESET} ${DIM}${verb} for ${timeStr}${RESET}` });
+          this.messages.push({ role: "system", content: `${T()}\u25C9${RESET} ${DIM}${verb} for ${timeStr}${RESET}` });
           this.invalidateMsgCache();
         }
         this.streamStartTime = 0;
@@ -346,17 +346,36 @@ export class App {
     this.draw();
   }
 
-  /** Collapse tool calls into a summary message after streaming ends */
+  /** Collapse tool calls into a compact summary after streaming ends */
   private collapseToolCalls(): void {
     if (this.toolCallGroups.length === 0) return;
 
-    const maxW = this.screen.mainWidth - 4;
-    // Render each tool call as a block
+    // Compact one-line summary grouped by type
+    const reads: string[] = [];
+    const writes: string[] = [];
+    const edits: string[] = [];
+    const cmds: string[] = [];
+    const errors: string[] = [];
+
     for (const tc of this.toolCallGroups) {
-      const block = this.renderToolCallBlock(tc, maxW);
-      if (block.length > 0) {
-        this.messages.push({ role: "system", content: block.join("\n") });
+      if (tc.error && tc.result) { errors.push(tc.result); continue; }
+      switch (tc.name) {
+        case "readFile": case "listFiles": case "grep": reads.push(tc.preview); break;
+        case "writeFile": writes.push(tc.preview); break;
+        case "editFile": edits.push(tc.preview); break;
+        case "bash": cmds.push(tc.preview); break;
       }
+    }
+
+    const parts: string[] = [];
+    if (reads.length > 0) parts.push(`${DIM}read ${reads.length} file${reads.length > 1 ? "s" : ""}${RESET}`);
+    for (const w of writes) parts.push(`${GREEN}wrote${RESET} ${DIM}${w}${RESET}`);
+    for (const e of edits) parts.push(`${GREEN}edited${RESET} ${DIM}${e}${RESET}`);
+    for (const c of cmds) parts.push(`${DIM}ran${RESET} ${DIM}${c}${RESET}`);
+    for (const e of errors) parts.push(`${RED}${e}${RESET}`);
+
+    if (parts.length > 0) {
+      this.messages.push({ role: "system", content: parts.join("  ") });
     }
 
     this.toolCallGroups = [];
@@ -597,9 +616,22 @@ export class App {
       return;
     }
 
-    // ESC to interrupt streaming
+    // ESC to interrupt streaming (double-press)
     if (key.name === "escape" && this.isStreaming && this.onAbort) {
-      this.onAbort();
+      this.ctrlCCount++;
+      if (this.ctrlCCount >= 2) {
+        this.onAbort();
+        this.ctrlCCount = 0;
+        return;
+      }
+      this.statusMessage = `${RED}Press esc again to interrupt${RESET}`;
+      this.draw();
+      if (this.ctrlCTimeout) clearTimeout(this.ctrlCTimeout);
+      this.ctrlCTimeout = setTimeout(() => {
+        this.ctrlCCount = 0;
+        this.statusMessage = undefined;
+        this.draw();
+      }, 1500);
       return;
     }
 
@@ -816,8 +848,18 @@ export class App {
         lines.push("");
       } else if (msg.role === "assistant") {
         const rendered = renderMarkdown(msg.content);
+        const wrapW = maxWidth - 6; // 4 indent + 2 margin
         for (const cl of rendered.split("\n")) {
-          lines.push(`    ${cl}`);
+          const visLen = stripAnsi(cl).length;
+          if (visLen <= wrapW) {
+            lines.push(`    ${cl}`);
+          } else {
+            // Soft wrap long lines
+            const plain = stripAnsi(cl);
+            for (let i = 0; i < plain.length; i += wrapW) {
+              lines.push(`    ${plain.slice(i, i + wrapW)}`);
+            }
+          }
         }
         if (idx + 1 < this.messages.length && this.messages[idx + 1].role === "user") {
           lines.push("");
@@ -885,9 +927,12 @@ export class App {
 
       // Show removed lines (red bg), max 6 lines
       const maxDiffLines = 6;
+      const diffW = maxWidth - 4;
       const showOld = oldLines.slice(0, maxDiffLines);
       for (const l of showOld) {
-        lines.push(`${bg(80, 20, 20)}${RED} - ${l.slice(0, maxWidth - 6)}${RESET}`);
+        const text = ` - ${l}`.slice(0, diffW);
+        const pad = Math.max(0, diffW - text.length);
+        lines.push(`${bg(80, 20, 20)} ${text}${" ".repeat(pad)} ${RESET}`);
       }
       if (oldLines.length > maxDiffLines) {
         lines.push(`${DIM}    ... +${oldLines.length - maxDiffLines} more removed${RESET}`);
@@ -895,17 +940,22 @@ export class App {
       // Show added lines (green bg), max 6 lines
       const showNew = newLines.slice(0, maxDiffLines);
       for (const l of showNew) {
-        lines.push(`${bg(20, 60, 20)}${GREEN} + ${l.slice(0, maxWidth - 6)}${RESET}`);
+        const text = ` + ${l}`.slice(0, diffW);
+        const pad = Math.max(0, diffW - text.length);
+        lines.push(`${bg(20, 60, 20)} ${text}${" ".repeat(pad)} ${RESET}`);
       }
       if (newLines.length > maxDiffLines) {
         lines.push(`${DIM}    ... +${newLines.length - maxDiffLines} more added${RESET}`);
       }
     } else if (tc.name === "writeFile" && a?.content) {
       const contentLines = a.content.split("\n");
+      const diffW = maxWidth - 4;
       lines.push(`${DIM}  \u2514 ${contentLines.length} line${contentLines.length !== 1 ? "s" : ""}${RESET}`);
       const preview = contentLines.slice(0, 4);
       for (const l of preview) {
-        lines.push(`${bg(20, 60, 20)}${GREEN} + ${l.slice(0, maxWidth - 6)}${RESET}`);
+        const text = ` + ${l}`.slice(0, diffW);
+        const pad = Math.max(0, diffW - text.length);
+        lines.push(`${bg(20, 60, 20)} ${text}${" ".repeat(pad)} ${RESET}`);
       }
       if (contentLines.length > 4) {
         lines.push(`${DIM}    ... +${contentLines.length - 4} more lines${RESET}`);
@@ -971,8 +1021,10 @@ export class App {
       lines.push("");
     }
 
-    // Loading indicator
-    if (this.isStreaming && !this.thinkingBuffer) {
+    // Loading indicator — only show before model starts outputting text
+    const lastMsg = this.messages[this.messages.length - 1];
+    const hasOutput = lastMsg && lastMsg.role === "assistant" && lastMsg.content.length > 0;
+    if (this.isStreaming && !this.thinkingBuffer && !hasOutput) {
       const loadingMessages = [
         "Thinking...", "Working on it...", "Processing...", "Generating...",
         "Cooking something up...", "Connecting the dots...", "Crunching...",
@@ -1088,11 +1140,15 @@ export class App {
     // Separator above input
     bottomLines.push(`${DIM}${"─".repeat(mainW)}${RESET}`);
 
-    // Input line
-    if (inputText) {
-      bottomLines.push(`${T()} > ${RESET}${inputText}`);
+    // Input line(s) — support multi-line via shift+enter
+    if (inputText && inputText.includes("\n")) {
+      const inputLines = inputText.split("\n");
+      bottomLines.push(`${T()} > ${RESET}${inputLines[0]}`);
+      for (let i = 1; i < inputLines.length; i++) {
+        bottomLines.push(`${T()}   ${RESET}${inputLines[i]}`);
+      }
     } else {
-      bottomLines.push(`${T()} > ${RESET}`);
+      bottomLines.push(`${T()} > ${RESET}${inputText}`);
     }
 
     // Suggestions/picker appear BELOW input (like Pi)
@@ -1206,9 +1262,13 @@ export class App {
 
     this.screen.render(frameLines);
 
-    // Cursor on input line (separator + input line = index 1 in bottomLines)
-    const inputRow = topHeight + 2; // +1 for separator, +1 for 1-based
-    const inputCol = 4 + cursor;
+    // Cursor on input line — account for multi-line input
+    const textBeforeCursor = inputText.slice(0, cursor);
+    const cursorLineIdx = (textBeforeCursor.match(/\n/g) || []).length;
+    const lastNewline = textBeforeCursor.lastIndexOf("\n");
+    const colInLine = lastNewline >= 0 ? cursor - lastNewline - 1 : cursor;
+    const inputRow = topHeight + 2 + cursorLineIdx; // +1 separator, +1 for 1-based
+    const inputCol = (cursorLineIdx === 0 ? 4 : 4) + colInLine;
     this.screen.setCursor(inputRow, inputCol);
   }
 
