@@ -31,6 +31,7 @@ export function buildSystemPrompt(cwd: string, providerId?: string, mode?: Mode,
 
 <guidelines>
 - For casual messages (greetings, chitchat, questions about yourself), respond naturally and conversationally. No tools needed. You have personality — be warm but brief.
+- Never refuse a benign user request just because it is not code. If the ask is writing, explanation, brainstorming, planning, or general help, answer it directly unless it is unsafe or disallowed.
 - For coding tasks, use tools directly. Never just show code — write it to the file.
 - Be concise. Short sentences. No filler. 1-2 sentence explanations after changes.
 - Read before editing. Always read a file before modifying it.
