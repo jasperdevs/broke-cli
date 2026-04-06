@@ -2189,7 +2189,8 @@ export class App {
     const path = this.resolveMascotPath();
     if (!path) return [];
     const cells = this.parseMascotSvgGrid(path);
-    return this.renderAnsiColorGrid(cells);
+    const scaled = this.scaleColorGrid(cells, 8, 4);
+    return this.renderAnsiColorGrid(scaled);
   }
 
   private wrapHomeDetail(label: string, value: string, width: number): string[] {
