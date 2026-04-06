@@ -525,16 +525,16 @@ export class App {
   }
 
   private renderCompactHeader(): string {
+    const modeColor = this.mode === "plan" ? P() : T();
+    const modeLabel = this.mode === "plan" ? "PLAN" : "BUILD";
     const model = `${T()}${this.providerName}/${this.modelName}${RESET}`;
-    const cost = `${T()}$${this.sessionCost.toFixed(4)}${RESET}`;
-    const tokens = `${DIM}${this.sessionTokens} tok${RESET}`;
-    const sep = `${DIM} | ${RESET}`;
+    const cost = `$${this.sessionCost.toFixed(4)}`;
+    const tokens = `${this.sessionTokens} tok`;
     const ctxColor = this.contextUsed > 90 ? RED : this.contextUsed > 70 ? "\x1b[33m" : DIM;
-    const ctx = this.contextUsed > 0 ? `${sep}${ctxColor}${this.contextUsed}%${RESET}` : "";
-    const streaming = this.isStreaming ? `${sep}${T()}working${RESET}` : "";
-    const dirty = this.gitDirty ? " *" : "";
-    const git = this.gitBranch ? `${sep}${DIM}${this.gitBranch}${dirty}${RESET}` : "";
-    return ` ${model}${sep}${cost}${sep}${tokens}${ctx}${streaming}${git}`;
+    const ctx = this.contextUsed > 0 ? ` ${ctxColor}${this.contextUsed}%${RESET}` : "";
+    const streaming = this.isStreaming ? ` ${modeColor}working${RESET}` : "";
+    const git = this.gitBranch ? ` ${DIM}${this.gitBranch}${this.gitDirty ? "*" : ""}${RESET}` : "";
+    return ` ${modeColor}[${modeLabel}]${RESET} ${model} ${DIM}│${RESET} ${cost} ${tokens}${ctx}${streaming}${git}`;
   }
 
   /** Render the sidebar content */
@@ -542,50 +542,54 @@ export class App {
     const w = this.screen.sidebarWidth;
     const lines: string[] = [];
 
-    // Mode indicator (prominent at top)
+    // Mode indicator with separator
     const modeColor = this.mode === "plan" ? P() : T();
     const modeLabel = this.mode === "plan" ? "PLAN" : "BUILD";
-    lines.push(`${modeColor}${BOLD} ▶ ${modeLabel}${RESET}`);
+    lines.push(`${modeColor}▌ ${modeLabel}${RESET}`);
+    lines.push(`${DIM}${"─".repeat(Math.max(1, w - 2))}${RESET}`);
 
     // Model
-    lines.push(`${T()}${BOLD} ${this.providerName}/${this.modelName}${RESET}`);
+    lines.push(`${T()}${this.providerName}/${this.modelName}${RESET}`);
     lines.push("");
 
-    // Cost + tokens
-    lines.push(`${T()} $${this.sessionCost.toFixed(4)}${RESET} ${DIM}${this.sessionTokens} tok${RESET}`);
+    // Stats with subtle separator
+    lines.push(`${DIM}─${RESET} ${T()}$${this.sessionCost.toFixed(4)}${RESET} ${DIM}${this.sessionTokens} tok${RESET}`);
     if (this.contextUsed > 0) {
       const color = this.contextUsed > 90 ? RED : this.contextUsed > 70 ? "\x1b[33m" : DIM;
-      lines.push(`${color} ${this.contextUsed}% context${RESET}`);
+      lines.push(`   ${color}${this.contextUsed}% ctx${RESET}`);
     }
     lines.push("");
 
-    // Providers
+    // Providers (if detected)
     if (this.detectedProviders.length > 0) {
-      lines.push(`${DIM} providers${RESET}`);
-      for (const p of this.detectedProviders) {
-        lines.push(`${T()}  + ${RESET}${p}`);
+      lines.push(`${DIM}─${RESET} ${DIM}providers${RESET}`);
+      for (const p of this.detectedProviders.slice(0, 5)) {
+        lines.push(`   ${p}`);
+      }
+      if (this.detectedProviders.length > 5) {
+        lines.push(`   ${DIM}+${this.detectedProviders.length - 5} more${RESET}`);
       }
       lines.push("");
     }
 
-    // Working dir
-    const shortCwd = this.cwd.length > w - 3
-      ? "..." + this.cwd.slice(-(w - 6))
+    // Working directory with separator
+    lines.push(`${DIM}─${RESET}`);
+    const shortCwd = this.cwd.length > w - 4
+      ? "..." + this.cwd.slice(-(w - 7))
       : this.cwd;
-    lines.push(`${DIM} ${shortCwd}${RESET}`);
+    lines.push(` ${DIM}${shortCwd}${RESET}`);
 
     // Git branch
     if (this.gitBranch) {
-      const dirty = this.gitDirty ? " *" : "";
-      lines.push(`${DIM}  ${this.gitBranch}${dirty}${RESET}`);
+      lines.push(` ${DIM}${this.gitBranch}${this.gitDirty ? " *" : ""}${RESET}`);
     }
 
     // Fill remaining height
     const remaining = this.screen.height - 2 - lines.length;
     for (let i = 0; i < remaining; i++) lines.push("");
 
-    // Bottom hint
-    lines.push(`${DIM} /help${RESET}`);
+    // Bottom
+    lines.push(`${DIM}─${RESET} ${DIM}/help${RESET}`);
 
     return lines;
   }
@@ -660,12 +664,12 @@ export class App {
 
       if (hasSidebar) {
         const sidebarLines = this.renderSidebar();
-        const border = `${T()}|${RESET}`;
+        const border = `${DIM}│${RESET}`;
         for (let i = 0; i < chatH; i++) {
           const chatLine = this.padLine(visible[i] ?? "", mainW);
           const sidebarLine = sidebarLines[i] ?? "";
           const paddedSidebar = this.padLine(sidebarLine, this.screen.sidebarWidth);
-          frameLines.push(`${chatLine}${border}${paddedSidebar}`);
+          frameLines.push(`${chatLine} ${border} ${paddedSidebar}`);
         }
       } else {
         for (let i = 0; i < chatH; i++) {
