@@ -1455,21 +1455,34 @@ export class App {
         try {
           const files = execSync("git ls-files --others --cached --exclude-standard", { cwd: this.cwd, encoding: "utf-8", timeout: 2000 }).trim();
           const raw = files.split("\n").filter(Boolean);
-          // Build simple tree: show top-level dirs as folders, files flat
-          const dirs = new Set<string>();
+          // Build nested tree: show dirs with their contents indented
+          const tree: string[] = [];
+          const dirContents = new Map<string, string[]>();
           const topFiles: string[] = [];
           for (const f of raw) {
             const slash = f.indexOf("/");
             if (slash > 0) {
-              dirs.add(f.slice(0, slash));
+              const dir = f.slice(0, slash);
+              if (!dirContents.has(dir)) dirContents.set(dir, []);
+              dirContents.get(dir)!.push(f.slice(slash + 1));
             } else {
               topFiles.push(f);
             }
           }
-          this.sidebarFileTree = [
-            ...[...dirs].sort().map(d => `${d}/`),
-            ...topFiles.sort(),
-          ].slice(0, 30);
+          // Dirs first, then files
+          for (const dir of [...dirContents.keys()].sort()) {
+            tree.push(`${dir}/`);
+            const children = dirContents.get(dir)!.sort();
+            // Show up to 5 children per dir, collapse the rest
+            for (let i = 0; i < Math.min(children.length, 5); i++) {
+              // Show just the filename (strip subdirs for display)
+              const name = children[i].includes("/") ? children[i].split("/").pop()! : children[i];
+              tree.push(`  ${name}`);
+            }
+            if (children.length > 5) tree.push(`  +${children.length - 5} more`);
+          }
+          for (const f of topFiles.sort()) tree.push(f);
+          this.sidebarFileTree = tree.slice(0, 50);
         } catch {
           try {
             const { readdirSync, statSync } = require("fs");
