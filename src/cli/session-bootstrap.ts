@@ -1,5 +1,5 @@
 import { pickDefault, type DetectedProvider } from "../ai/detect.js";
-import type { ModelHandle } from "../ai/providers.js";
+import { resolveVisibleProviderModelId, shouldUseNativeProvider, type ModelHandle } from "../ai/providers.js";
 import { loadPricing } from "../ai/cost.js";
 import { getSmallModelId } from "../ai/router.js";
 import { buildSystemPrompt } from "../core/context.js";
@@ -37,6 +37,7 @@ export async function bootstrapSession(options: {
 
   let providerId: string | undefined;
   let modelId: string | undefined;
+  const explicitModelRequest = !!opts.model;
 
   if (opts.provider) {
     providerId = opts.provider;
@@ -89,8 +90,15 @@ export async function bootstrapSession(options: {
   }
 
   try {
-    const activeModel = providerRegistry.createModel(providerId!, modelId);
-    const currentModelId = modelId ?? activeModel.provider.defaultModel;
+    let resolvedModelId = modelId;
+    if (!explicitModelRequest && providerId && modelId) {
+      resolvedModelId = resolveVisibleProviderModelId(providerId, modelId);
+    }
+    if (!explicitModelRequest && providerId && resolvedModelId && shouldUseNativeProvider(providerId) && !providerRegistry.hasVisibleModel(providerId, resolvedModelId)) {
+      resolvedModelId = undefined;
+    }
+    const activeModel = providerRegistry.createModel(providerId!, resolvedModelId);
+    const currentModelId = resolvedModelId ?? activeModel.provider.defaultModel;
     const systemPrompt = buildSystemPrompt(process.cwd(), providerId!, currentMode, getSettings().cavemanLevel ?? "auto");
     app.setModel(activeModel.provider.name, currentModelId);
     app.setMode(currentMode);

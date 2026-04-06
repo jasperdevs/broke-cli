@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterModelIdsForDisplay } from "../src/ai/providers.js";
+import { filterModelIdsForDisplay, resolveVisibleProviderModelId, supportsProviderModel, syncCloudProviderModelsFromCatalog } from "../src/ai/providers.js";
 import { ProviderRegistry } from "../src/ai/provider-registry.js";
 
 describe("provider model filtering", () => {
@@ -66,5 +66,15 @@ describe("provider model filtering", () => {
     expect(providerIds.has("ollama")).toBe(true);
     expect(providerIds.has("lmstudio")).toBe(true);
     expect(providerIds.has("llamacpp")).toBe(true);
+  });
+
+  it("keeps Codex limited to its curated visible model set instead of importing broad OpenAI ids", () => {
+    syncCloudProviderModelsFromCatalog();
+    expect(supportsProviderModel("codex", "gpt-5-mini")).toBe(true);
+    expect(supportsProviderModel("codex", "gpt-4.1")).toBe(false);
+  });
+
+  it("falls back to the provider default when a restored model id is no longer visible", () => {
+    expect(resolveVisibleProviderModelId("codex", "gpt-4.1")).toBe("gpt-5-mini");
   });
 });

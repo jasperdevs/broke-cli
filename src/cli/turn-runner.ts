@@ -40,6 +40,18 @@ function looksLikeRawToolPayload(nextText: string): boolean {
     || /^(writeFile|editFile|readFile|listFiles|grep|bash)\s*\(/i.test(normalized);
 }
 
+function shouldSuppressPlanningNarration(nextText: string, policy: { archetype: string }): boolean {
+  if (policy.archetype !== "edit" && policy.archetype !== "bugfix") return false;
+  const normalized = nextText.trimStart().toLowerCase();
+  return normalized.startsWith("using ")
+    || normalized.startsWith("first step")
+    || normalized.startsWith("need ")
+    || normalized.startsWith("i'm checking")
+    || normalized.startsWith("i am checking")
+    || normalized.startsWith("design dir")
+    || normalized.startsWith("repo read next");
+}
+
 async function compactForModel(
   messages: Array<{ role: "user" | "assistant"; content: string }>,
   model: ModelHandle,
@@ -267,7 +279,7 @@ export async function runModelTurn(options: {
   const streamCallbacks = {
     onText: (delta: string) => {
       const nextText = streamedText + delta;
-      if (looksLikeRawToolPayload(nextText)) {
+      if (looksLikeRawToolPayload(nextText) || shouldSuppressPlanningNarration(nextText, policy)) {
         streamedText = nextText;
         return;
       }

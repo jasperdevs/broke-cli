@@ -6,6 +6,7 @@ import {
   getProviderPopularity,
   listProviders,
   refreshLocalModels,
+  supportsProviderModel,
   syncCloudProviderModelsFromCatalog,
   type ModelHandle,
 } from "./providers.js";
@@ -150,6 +151,10 @@ export class ProviderRegistry {
 
   createModel(providerId: string, modelId?: string): ModelHandle {
     return createModel(providerId, modelId);
+  }
+
+  hasVisibleModel(providerId: string, modelId: string): boolean {
+    return supportsProviderModel(providerId, modelId);
   }
 }
 

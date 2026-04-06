@@ -350,11 +350,23 @@ export function getDisplayModels(providerId: string, preserve: string[] = []): s
   return filterModelIdsForDisplay(providerId, provider.models, preserve);
 }
 
+export function supportsProviderModel(providerId: string, modelId: string): boolean {
+  const provider = PROVIDERS[providerId];
+  if (!provider) return false;
+  return provider.models.includes(modelId);
+}
+
+export function resolveVisibleProviderModelId(providerId: string, modelId?: string): string | undefined {
+  const provider = PROVIDERS[providerId];
+  if (!provider) return modelId;
+  if (!modelId || provider.models.includes(modelId)) return modelId;
+  return provider.defaultModel;
+}
+
 export function syncCloudProviderModelsFromCatalog(): void {
   const mappings: Array<{ providerId: string; catalogProviderId?: string }> = [
     { providerId: "anthropic" },
     { providerId: "openai" },
-    { providerId: "codex", catalogProviderId: "openai" },
     { providerId: "google" },
     { providerId: "mistral" },
     { providerId: "groq" },

@@ -303,6 +303,18 @@ describe("input editing", () => {
     expect(app.input.getText()).toBe("/\n");
   });
 
+  it("does not show an empty reasoning block when no reasoning text arrives", () => {
+    const app = new App() as any;
+    app.messages = [{ role: "assistant", content: "Reading files" }];
+    app.isStreaming = true;
+    app.setThinkingRequested(true);
+    app.streamStartTime = Date.now() - 1000;
+    const output = app.renderMessages(60).map((line: string) => stripAnsi(line)).join("\n");
+    expect(output).toContain("Thinking...");
+    expect(output).not.toContain("waiting for model reasoning");
+    expect(output).not.toContain("Reasoning\n");
+  });
+
   it("treats linefeed as a newline instead of submit", () => {
     const app = new App() as any;
     app.input.paste("hello");

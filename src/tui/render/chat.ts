@@ -274,18 +274,14 @@ export function renderMessageOverlays(options: {
 
   const lines = [...staticLines];
 
-  if (thinkingBuffer || (isStreaming && thinkingRequested)) {
+  if (thinkingBuffer) {
     ensureOverlayGap(lines);
     const thinkLines = thinkingBuffer.split("\n").slice(-8);
     lines.push(`  ${colors.dim}${isStreaming ? "Reasoning" : "Reasoned"}${colors.reset}`);
-    if (thinkLines.length > 0 && thinkLines.some((line) => line.length > 0)) {
-      for (const line of thinkLines) {
-        for (const wrappedLine of wrapVisibleText(line, Math.max(8, maxWidth - 4))) {
-          lines.push(`  ${colors.dim}${wrappedLine}${colors.reset}`);
-        }
+    for (const line of thinkLines) {
+      for (const wrappedLine of wrapVisibleText(line, Math.max(8, maxWidth - 4))) {
+        lines.push(`  ${colors.dim}${wrappedLine}${colors.reset}`);
       }
-    } else if (isStreaming) {
-      lines.push(`  ${colors.dim}waiting for model reasoning…${colors.reset}`);
     }
     lines.push("");
   }
@@ -340,11 +336,8 @@ export function renderMessageOverlays(options: {
     const mins = Math.floor(secs / 60);
     const statParts: string[] = [mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`];
     if (streamTokens > 0) statParts.push(`↓ ${fmtTokens(streamTokens)} tokens`);
-    if (thinkingStartTime > 0) {
-      const thinkSecs = Math.floor((Date.now() - thinkingStartTime) / 1000);
-      if (thinkSecs > 0) statParts.push(`thinking ${thinkSecs}s`);
-    } else if (thinkingDuration > 0) {
-      statParts.push(`thought for ${thinkingDuration}s`);
+    if (thinkingBuffer && thinkingDuration > 0 && !thinkingStartTime) {
+      statParts.push(`reasoned ${thinkingDuration}s`);
     }
     const label = thinkingRequested ? "Thinking..." : "Composing...";
     lines.push(`  ${sparkleSpinner(spinnerFrame)} ${shimmerText(label, spinnerFrame)} ${colors.accent}(${statParts.join(" · ")})${colors.reset}`);

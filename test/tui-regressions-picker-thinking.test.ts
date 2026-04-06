@@ -99,7 +99,8 @@ describe("thinking preview", () => {
     app.setThinkingRequested(true);
     const output = app.renderMessages(80).map((line: string) => stripAnsi(line)).join("\n");
     expect(output).toContain("Thinking...");
-    expect(output).toContain("waiting for model reasoning");
+    expect(output).not.toContain("waiting for model reasoning");
+    expect(output).not.toContain("Reasoning");
     app.setStreaming(false);
   });
 
