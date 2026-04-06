@@ -266,6 +266,7 @@ program.action(async (opts) => {
               { key: "showCost", label: "Show cost", value: String(s.showCost), description: "Display cost in status bar" },
               { key: "maxSessionCost", label: "Max session cost", value: s.maxSessionCost === 0 ? "unlimited" : `$${s.maxSessionCost}`, description: "Maximum cost per session (0 = unlimited)" },
               { key: "followUpMode", label: "Follow-up mode", value: followUpLabels[s.followUpMode] ?? s.followUpMode, description: "When to send queued messages while AI is working" },
+              { key: "notifyOnResponse", label: "Notify on response", value: String(s.notifyOnResponse), description: "Show a desktop notification when a response completes" },
             ];
           }
           app.openSettings(buildEntries(), (key) => {
@@ -632,6 +633,19 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
           app.updateCost(session.getTotalCost(), session.getTotalTokens());
           app.setStreaming(false);
           abortController = null;
+          // Desktop notification if enabled
+          if (getSettings().notifyOnResponse) {
+            try {
+              const { execSync: exec } = require("child_process");
+              if (process.platform === "win32") {
+                exec(`powershell -command "New-BurntToastNotification -Text 'BrokeCLI', 'Response complete' -ErrorAction SilentlyContinue; if ($?) {} else { [System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms') | Out-Null; [System.Windows.Forms.MessageBox]::Show('Response complete','BrokeCLI') }"`, { stdio: "ignore", timeout: 5000 });
+              } else if (process.platform === "darwin") {
+                exec(`osascript -e 'display notification "Response complete" with title "BrokeCLI"'`, { stdio: "ignore", timeout: 5000 });
+              } else {
+                exec(`notify-send "BrokeCLI" "Response complete"`, { stdio: "ignore", timeout: 5000 });
+              }
+            } catch { /* notification failed, ignore */ }
+          }
         },
         onError: (err) => {
           let msg = err.message;

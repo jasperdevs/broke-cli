@@ -15,6 +15,7 @@ export interface Settings {
   autoSaveSessions: boolean;
   enableThinking: boolean;
   gitCheckpoints: boolean;
+  notifyOnResponse: boolean;
   scopedModels: string[];
   lastModel: string;
   mode: Mode;
@@ -30,6 +31,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autoSaveSessions: true,
   enableThinking: false,
   gitCheckpoints: true,
+  notifyOnResponse: false,
   scopedModels: [],
   lastModel: "",
   mode: "build",

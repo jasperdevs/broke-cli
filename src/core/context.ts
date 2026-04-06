@@ -155,22 +155,21 @@ export function reloadContext(): void {
 function getProviderPrompt(providerId?: string): string {
   switch (providerId) {
     case "anthropic":
-      return `You are pi, a coding agent. Use the available tools to complete tasks.`;
+      return `You are a coding agent. Use the available tools to complete tasks.`;
 
     case "openai":
-    case "codex":
-      return `You are pi, a coding agent. Use tools to interact with files and execute commands.`;
+      return `You are a coding agent. Use tools to interact with files and execute commands.`;
 
     case "google":
-      return `You are pi, a coding agent. Call functions to read, write, edit files and run commands.`;
+      return `You are a coding agent. Call functions to read, write, edit files and run commands.`;
 
     case "mistral":
     case "groq":
     case "xai":
     case "openrouter":
-      return `You are pi, a coding agent. Use tools to make changes directly.`;
+      return `You are a coding agent. Use tools to make changes directly.`;
 
     default:
-      return `You are pi, a coding agent. Use available tools to complete tasks.`;
+      return `You are a coding agent. Use available tools to complete tasks.`;
   }
 }

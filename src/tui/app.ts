@@ -299,22 +299,39 @@ export class App {
     this.draw();
   }
 
-  /** Track a tool call (shown inline during streaming, collapsed after) */
+  /** Track a tool call — rendered inline immediately */
   addToolCall(name: string, preview: string, args?: unknown): void {
     this.toolCallGroups.push({ name, preview, args });
+    // Render inline as system message immediately
+    const maxW = this.screen.mainWidth - 4;
+    const tc = this.toolCallGroups[this.toolCallGroups.length - 1];
+    const block = this.renderToolCallBlock(tc, maxW);
+    if (block.length > 0) {
+      this.messages.push({ role: "system", content: block.join("\n") });
+    }
     this.invalidateMsgCache();
     this.scrollToBottom();
     this.draw();
   }
 
-  /** Track a tool result for the last tool call */
+  /** Track a tool result — update the inline message */
   addToolResult(name: string, result: string, error?: boolean, resultDetail?: string): void {
-    // Find last matching tool call without a result
+    // Update the tracking entry
     for (let i = this.toolCallGroups.length - 1; i >= 0; i--) {
       if (this.toolCallGroups[i].name === name && !this.toolCallGroups[i].result) {
         this.toolCallGroups[i].result = result;
         this.toolCallGroups[i].error = error;
         this.toolCallGroups[i].resultDetail = resultDetail;
+        // Update the corresponding inline message
+        const maxW = this.screen.mainWidth - 4;
+        const block = this.renderToolCallBlock(this.toolCallGroups[i], maxW);
+        // Find the matching system message (search from end)
+        for (let j = this.messages.length - 1; j >= 0; j--) {
+          if (this.messages[j].role === "system" && this.messages[j].content.includes(this.toolCallGroups[i].preview)) {
+            this.messages[j].content = block.join("\n");
+            break;
+          }
+        }
         break;
       }
     }
@@ -346,38 +363,8 @@ export class App {
     this.draw();
   }
 
-  /** Collapse tool calls into a compact summary after streaming ends */
+  /** Clear tool call tracking after streaming ends */
   private collapseToolCalls(): void {
-    if (this.toolCallGroups.length === 0) return;
-
-    // Compact one-line summary grouped by type
-    const reads: string[] = [];
-    const writes: string[] = [];
-    const edits: string[] = [];
-    const cmds: string[] = [];
-    const errors: string[] = [];
-
-    for (const tc of this.toolCallGroups) {
-      if (tc.error && tc.result) { errors.push(tc.result); continue; }
-      switch (tc.name) {
-        case "readFile": case "listFiles": case "grep": reads.push(tc.preview); break;
-        case "writeFile": writes.push(tc.preview); break;
-        case "editFile": edits.push(tc.preview); break;
-        case "bash": cmds.push(tc.preview); break;
-      }
-    }
-
-    const parts: string[] = [];
-    if (reads.length > 0) parts.push(`${DIM}read ${reads.length} file${reads.length > 1 ? "s" : ""}${RESET}`);
-    for (const w of writes) parts.push(`${GREEN}wrote${RESET} ${DIM}${w}${RESET}`);
-    for (const e of edits) parts.push(`${GREEN}edited${RESET} ${DIM}${e}${RESET}`);
-    for (const c of cmds) parts.push(`${DIM}ran${RESET} ${DIM}${c}${RESET}`);
-    for (const e of errors) parts.push(`${RED}${e}${RESET}`);
-
-    if (parts.length > 0) {
-      this.messages.push({ role: "system", content: parts.join("  ") });
-    }
-
     this.toolCallGroups = [];
   }
 
@@ -683,12 +670,19 @@ export class App {
       return;
     }
 
-    if (key.name === "pageup") { this.scrollOffset = Math.max(0, this.scrollOffset - 5); this.draw(); return; }
-    if (key.name === "pagedown") {
+    // Scroll: PageUp/Down or Ctrl+Up/Down
+    if (key.name === "pageup" || (key.ctrl && key.name === "up")) {
+      this.scrollOffset = Math.max(0, this.scrollOffset - 5);
+      this.invalidateMsgCache();
+      this.draw();
+      return;
+    }
+    if (key.name === "pagedown" || (key.ctrl && key.name === "down")) {
       const chatHeight = this.getChatHeight();
       const messageLines = this.renderMessages(this.screen.mainWidth - 2);
       const maxScroll = Math.max(0, messageLines.length - chatHeight);
       this.scrollOffset = Math.min(maxScroll, this.scrollOffset + 5);
+      this.invalidateMsgCache();
       this.draw();
       return;
     }
@@ -988,15 +982,6 @@ export class App {
   private renderMessages(maxWidth: number): string[] {
     const lines = [...this.renderStaticMessages(maxWidth)];
 
-    // In-progress tool calls during streaming
-    if (this.isStreaming && this.toolCallGroups.length > 0) {
-      for (const tc of this.toolCallGroups) {
-        const block = this.renderToolCallBlock(tc, maxWidth);
-        for (const l of block) lines.push(`  ${l}`);
-        lines.push("");
-      }
-    }
-
     // Thinking block
     if (this.thinkingBuffer) {
       const thinkLines = this.thinkingBuffer.split("\n").slice(-3);
@@ -1021,10 +1006,13 @@ export class App {
       lines.push("");
     }
 
-    // Loading indicator — only show before model starts outputting text
-    const lastMsg = this.messages[this.messages.length - 1];
-    const hasOutput = lastMsg && lastMsg.role === "assistant" && lastMsg.content.length > 0;
-    if (this.isStreaming && !this.thinkingBuffer && !hasOutput) {
+    // Loading indicator — only show before model starts outputting in this turn
+    let hasCurrentOutput = false;
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      if (this.messages[i].role === "user") break;
+      if (this.messages[i].role === "assistant" && this.messages[i].content.length > 0) { hasCurrentOutput = true; break; }
+    }
+    if (this.isStreaming && !this.thinkingBuffer && !hasCurrentOutput) {
       const loadingMessages = [
         "Thinking...", "Working on it...", "Processing...", "Generating...",
         "Cooking something up...", "Connecting the dots...", "Crunching...",

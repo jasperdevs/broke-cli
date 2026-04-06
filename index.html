@@ -3,97 +3,108 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BrokeCLI - Your Wallet's New Best Friend (AKA: It's Always Empty)</title>
+    <title>💸 BrokeCLI 💸 - Your Wallet's New Best Friend</title>
     <link rel="stylesheet" href="style.css">
     <style>
-    <style>
+        /* General Reset and Body Styling */
         body { 
             font-family: 'Consolas', 'Courier New', monospace; 
-            background-color: #000000; 
-            color: #00ff00; /* Classic green terminal text */
+            background-color: #0d0d0d; /* Slightly different dark background */
+            color: #00ff00; /* Classic bright green terminal text */
             text-align: left; 
             padding: 20px; 
-            font-size: 14px;
+            font-size: 16px;
+            line-height: 1.6;
         }
+        /* Main Container Styling */
         .container { 
             max-width: 900px; 
             margin: 0 auto; 
-            background: rgba(0, 0, 0, 0.6); /* Semi-transparent dark background for content area */
-            padding: 20px; 
-            border: 1px solid #006600; /* Subtle green border */
-            box-shadow: 0 0 15px rgba(0, 255, 0, 0.3); /* Green glow effect */
+            background: rgba(0, 0, 0, 0.7); /* Darker, more solid background */
+            padding: 30px; 
+            border: 2px solid #006600; /* Stronger green border */
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.4); /* Enhanced glow effect */
         }
+        /* Typography */
         h1 { 
             color: #ffffff; 
-            font-size: 2em; 
-            margin-bottom: 15px; 
-            text-shadow: 0 0 5px #00ff00;
+            font-size: 2.5em; 
+            margin-bottom: 10px; 
+            text-shadow: 0 0 8px #00ff00; /* Stronger title glow */
+            border-bottom: 1px dashed rgba(0, 255, 0, 0.3);
+            padding-bottom: 10px;
         }
         h2 { 
-            color: #00aaff; /* A different color for subheadings, like blue */
-            font-size: 1.5em; 
-            margin-top: 15px; 
-            border-bottom: 1px dashed #006600;
-            padding-bottom: 5px;
+            color: #00aaff; /* Bright blue for main subtitle */
+            font-size: 1.8em; 
+            margin-top: 20px; 
+            margin-bottom: 20px;
         }
         p { 
-            font-size: 1em; 
-            line-height: 1.6; 
-            margin-bottom: 15px;
+            margin-bottom: 1.2em;
         }
-        /* Simulate a command prompt line */
-        .prompt {
-            display: block;
-            margin-top: 25px;
-            font-size: 1.1em;
+        strong {
+            color: #ffff00; /* Yellow highlight for emphasis */
         }
-        .prompt span:first-child {
-            color: #00ff00;
-            margin-right: 5px;
-        }
+
+        /* Call To Action Button */
         .cta-button { 
             display: inline-block; 
-            background-color: transparent; /* Remove background */
+            background-color: transparent; 
             color: #00ff00; 
-            padding: 10px 20px; 
-            text-decoration: underline; /* Underline instead of box */
-            border: 1px solid #006600;
-            border-radius: 0;
-            font-size: 1.1em;
+            padding: 12px 25px; /* More padding */
+            text-decoration: none; /* Use none for links */
+            border: 2px solid #00ff00;
+            border-radius: 5px;
+            font-size: 1.2em;
             cursor: pointer;
-            margin: 20px 0;
-            transition: background-color 0.2s, color 0.2s;
+            margin: 30px 0;
+            transition: background-color 0.3s, color 0.3s, box-shadow 0.3s;
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
         }
         .cta-button:hover { 
-            background-color: #006600; 
+            background-color: #003300; /* Darker green on hover */
             color: #ffffff; 
-            text-decoration: none;
+            border-color: #ffffff;
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.8);
         }
+
+        /* Feature Cards Layout */
         .features { 
             display: flex; 
-            justify-content: space-around; 
-            margin-top: 30px; 
-            text-align: left;
+            gap: 20px; /* Use gap for spacing */
+            margin-top: 40px; 
         }
         .feature-card { 
             flex: 1; 
-            padding: 15px; 
-            margin: 0 10px; 
-            background: rgba(0, 0, 0, 0.3); /* Darker background for cards */
-            border-left: 3px solid #008800;
+            padding: 20px; 
+            background: rgba(0, 0, 0, 0.4); /* Slightly transparent card background */
+            border-left: 4px solid #008800;
             border-radius: 0;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
         }
         .feature-card h3 { 
             color: #ffffff; 
             margin-top: 0;
+            font-size: 1.4em;
         }
-    </style>
+        
+        /* Footer Disclaimer */
+        .disclaimer {
+            margin-top: 40px; 
+            padding-top: 15px;
+            border-top: 1px dashed rgba(0, 255, 0, 0.2);
+            font-style: italic; 
+            color: #777;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>💸 BrokeCLI 💸</h1>
         <h2>The CLI Tool Built for People Who Forgot to Pay Their Bills</h2>
+        
         <p>Are you tired of fancy, profitable tools? Do you prefer the thrill of a near-zero balance? Welcome to BrokeCLI! We're the command-line interface that speaks directly to your existential financial dread.</p>
         
         <p><strong>What does it do?</strong> It helps you manage your poverty with unmatched efficiency. Check your budget. See how much you can afford... nothing.</p>
@@ -103,7 +114,7 @@
         <div class="features">
             <div class="feature-card">
                 <h3>💰 Budgeting</h3>
-                <p>Tracks every single penny. Mostly to show you where the money *went* last Tuesday.</p>
+                <p>Tracks every single penny. Mostly to show you where the money <em>went</em> last Tuesday.</p>
             </div>
             <div class="feature-card">
                 <h3>📉 Status Checks</h3>
@@ -114,7 +125,8 @@
                 <p>Includes a built-in 'Accidental Spending' simulator for maximum dramatic effect.</p>
             </div>
         </div>
-        <p style="margin-top: 30px; font-style: italic; color: #777;">*Disclaimer: Using BrokeCLI does not guarantee financial solvency. Side effects may include sudden urges to sell things.</p>
+        
+        <p class="disclaimer">*Disclaimer: Using BrokeCLI does not guarantee financial solvency. Side effects may include sudden urges to sell things.</p>
     </div>
 </body>
 </html>
