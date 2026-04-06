@@ -130,6 +130,13 @@ export class App {
     this.draw();
   }
 
+  resetCost(): void {
+    this.sessionCost = 0;
+    this.sessionTokens = 0;
+    this.contextUsed = 0;
+    this.draw();
+  }
+
   setContextUsed(pct: number): void {
     this.contextUsed = pct;
     this.draw();

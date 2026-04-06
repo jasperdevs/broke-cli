@@ -181,6 +181,7 @@ program.action(async (opts) => {
         case "clear":
           session.clear();
           app.clearMessages();
+          app.resetCost();
           return;
         case "cost":
           app.addMessage("system", `$${session.getTotalCost().toFixed(4)} | ${session.getTotalTokens()} tokens`);
@@ -338,6 +339,8 @@ program.action(async (opts) => {
           session = new Session();
           if (activeModel) session.setProviderModel(activeModel.provider.name, currentModelId);
           app.clearMessages();
+          app.resetCost();
+          app.addMessage("system", "New session started. Use /clear to reset current session.");
           return;
         case "name": {
           const name = text.slice(6).trim();
