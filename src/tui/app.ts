@@ -139,7 +139,8 @@ export class App {
   private onPendingMessagesReady: (() => void) | null = null;
   private streamStartTime = 0;
   private streamTokens = 0;
-  private toolCallGroups: Array<{ name: string; preview: string; args?: unknown; resultDetail?: string; result?: string; error?: boolean }> = [];
+  private toolCallGroups: Array<{ name: string; preview: string; args?: unknown; resultDetail?: string; result?: string; error?: boolean; expanded: boolean; streamOutput?: string }> = [];
+  private allToolsExpanded = false;
   private isCompacting = false;
   private escPrimed = false;
   private compactStartTime = 0;
@@ -313,7 +314,7 @@ export class App {
 
   /** Track a tool call — rendered inline immediately */
   addToolCall(name: string, preview: string, args?: unknown): void {
-    this.toolCallGroups.push({ name, preview, args });
+    this.toolCallGroups.push({ name, preview, args, expanded: false });
     // Render inline as system message immediately
     const maxW = this.screen.mainWidth - 4;
     const tc = this.toolCallGroups[this.toolCallGroups.length - 1];
@@ -373,6 +374,29 @@ export class App {
       this.spinnerTimer = null;
     }
     this.draw();
+  }
+
+  /** Append streaming bash output to the latest running bash tool call */
+  appendToolOutput(chunk: string): void {
+    for (let i = this.toolCallGroups.length - 1; i >= 0; i--) {
+      const tc = this.toolCallGroups[i];
+      if (tc.name === "bash" && !tc.result) {
+        tc.streamOutput = (tc.streamOutput ?? "") + chunk;
+        // Update the corresponding inline message
+        const maxW = this.screen.mainWidth - 4;
+        const block = this.renderToolCallBlock(tc, maxW);
+        for (let j = this.messages.length - 1; j >= 0; j--) {
+          if (this.messages[j].role === "system" && this.messages[j].content.includes(tc.preview)) {
+            this.messages[j].content = block.join("\n");
+            break;
+          }
+        }
+        this.invalidateMsgCache();
+        this.scrollToBottom();
+        this.draw();
+        return;
+      }
+    }
   }
 
   /** Clear tool call tracking after streaming ends */
@@ -701,20 +725,9 @@ export class App {
       return;
     }
 
-    // ESC to interrupt streaming (double-press — first turns info bar red)
+    // ESC to interrupt streaming (single press)
     if (key.name === "escape" && this.isStreaming && this.onAbort) {
-      if (this.escPrimed) {
-        this.escPrimed = false;
-        this.onAbort();
-        return;
-      }
-      this.escPrimed = true;
-      this.draw();
-      if (this.ctrlCTimeout) clearTimeout(this.ctrlCTimeout);
-      this.ctrlCTimeout = setTimeout(() => {
-        this.escPrimed = false;
-        this.draw();
-      }, 1500);
+      this.onAbort();
       return;
     }
 
@@ -1093,13 +1106,12 @@ export class App {
   private renderMessages(maxWidth: number): string[] {
     const lines = [...this.renderStaticMessages(maxWidth)];
 
-    // Thinking block
+    // Thinking block — show reasoning as it streams in
     if (this.thinkingBuffer) {
       const thinkLines = this.thinkingBuffer.split("\n").slice(-3);
-      lines.push(`${GRAY}  ${"─".repeat(Math.min(20, maxWidth - 6))}${RESET}`);
-      lines.push(`${GRAY}  thinking${RESET}`);
+      lines.push(`  ${T()}thinking${RESET}`);
       for (const tl of thinkLines) {
-        lines.push(`${GRAY}  ${tl.slice(0, maxWidth - 4)}${RESET}`);
+        lines.push(`  ${DIM}${tl.slice(0, maxWidth - 4)}${RESET}`);
       }
       lines.push("");
     }
@@ -1117,20 +1129,19 @@ export class App {
       lines.push("");
     }
 
-    // Loading indicator — only show before model starts outputting in this turn
-    if (this.isStreaming && !this.thinkingBuffer) {
-      let hasCurrentOutput = false;
+    // Loading indicator — show while streaming and no text output yet
+    if (this.isStreaming) {
+      let hasTextOutput = false;
       for (let i = this.messages.length - 1; i >= 0; i--) {
         if (this.messages[i].role === "user") break;
-        if (this.messages[i].role === "assistant" && this.messages[i].content.length > 0) { hasCurrentOutput = true; break; }
+        if (this.messages[i].role === "assistant" && this.messages[i].content.length > 0) { hasTextOutput = true; break; }
       }
-      if (!hasCurrentOutput) {
+      if (!hasTextOutput && !this.thinkingBuffer) {
         const elapsed = Date.now() - this.streamStartTime;
         const secs = Math.floor(elapsed / 1000);
         const mins = Math.floor(secs / 60);
         const timeStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
-        const tokenStr = this.streamTokens > 0 ? ` | ${fmtTokens(this.streamTokens)} tokens` : "";
-        lines.push(`  ${T()}\u25CB${RESET} ${T()}Thinking...${RESET}  ${DIM}(${timeStr}${tokenStr})${RESET}`);
+        lines.push(`  ${bounceDot(this.spinnerFrame)} ${DIM}${timeStr}${RESET}`);
         lines.push("");
       }
     }
@@ -1353,11 +1364,7 @@ export class App {
       const modeColor = this.mode === "plan" ? P() : T();
       const modeLabel = this.mode === "plan" ? "plan" : "build";
       if (this.isStreaming) {
-        if (this.escPrimed) {
-          parts.push({ text: `${RED}esc again to interrupt${RESET}`, plain: "esc again to interrupt", priority: 0 });
-        } else {
-          parts.push({ text: `${DIM}esc${RESET} ${DIM}interrupt${RESET}`, plain: "esc interrupt", priority: 0 });
-        }
+        parts.push({ text: `${DIM}esc${RESET} ${DIM}stop${RESET}`, plain: "esc stop", priority: 0 });
       }
       parts.push({ text: `${modeColor}${modeLabel}${RESET} ${DIM}(shift+tab)${RESET}`, plain: `${modeLabel} (shift+tab)`, priority: 1 });
       if (this.pendingMessages.length > 0) {

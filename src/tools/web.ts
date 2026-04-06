@@ -2,7 +2,7 @@ import { z } from "zod";
 import { tool } from "ai";
 
 export const webSearchTool = tool({
-  description: "Search the web for current information. Use when the user asks about recent events, documentation, or anything you're unsure about.",
+  description: "Search the web via DuckDuckGo. Use for: current docs, recent events, API references, things you don't know. Do NOT search for things you already know or can find in the codebase with grep.",
   inputSchema: z.object({
     query: z.string().describe("Search query"),
   }),
@@ -41,7 +41,7 @@ export const webSearchTool = tool({
 });
 
 export const webFetchTool = tool({
-  description: "Fetch the text content of a URL. Use for reading documentation pages, API docs, or any web page.",
+  description: "Fetch and read a web page's text content. HTML is stripped automatically. Use for: reading docs, API references, or specific URLs the user provides. Truncated at ~2000 tokens.",
   inputSchema: z.object({
     url: z.string().describe("URL to fetch"),
   }),

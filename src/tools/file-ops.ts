@@ -11,11 +11,11 @@ const MAX_READ_CHARS = 8000;
 const MAX_GREP_MATCHES = 30;
 
 export const readFileTool = tool({
-  description: "Read the contents of a file. Returns first ~2000 tokens. Use offset/limit for large files.",
+  description: "Read file contents. Always read before editing. Use offset/limit for files over 500 lines. Output is truncated at ~2000 tokens.",
   inputSchema: z.object({
-    path: z.string().describe("Path to the file to read"),
+    path: z.string().describe("File path (relative or absolute)"),
     offset: z.number().optional().describe("Start line (0-based)"),
-    limit: z.number().optional().describe("Max lines to read"),
+    limit: z.number().optional().describe("Max lines to return"),
   }),
   execute: async ({ path, offset, limit }) => {
     try {
@@ -50,10 +50,10 @@ export const readFileTool = tool({
 });
 
 export const writeFileTool = tool({
-  description: "Write content to a file, creating it if it doesn't exist",
+  description: "Create a new file or completely overwrite an existing one. For targeted changes to existing files, use editFile instead. Always readFile first if the file already exists.",
   inputSchema: z.object({
-    path: z.string().describe("Path to the file to write"),
-    content: z.string().describe("Content to write"),
+    path: z.string().describe("File path to write"),
+    content: z.string().describe("Complete file content"),
   }),
   execute: async ({ path, content }) => {
     const risk = assessFileWrite(path);
@@ -71,11 +71,11 @@ export const writeFileTool = tool({
 });
 
 export const editFileTool = tool({
-  description: "Replace a specific string in a file with new content",
+  description: "Replace an exact string in a file with new content. The old_string must match EXACTLY (including whitespace/indentation). Include enough surrounding lines to make old_string unique. Preferred over writeFile for changes to existing files.",
   inputSchema: z.object({
-    path: z.string().describe("Path to the file to edit"),
-    old_string: z.string().describe("The exact string to find and replace"),
-    new_string: z.string().describe("The replacement string"),
+    path: z.string().describe("File path to edit"),
+    old_string: z.string().describe("Exact existing text to find (must be unique in the file)"),
+    new_string: z.string().describe("Replacement text"),
   }),
   execute: async ({ path, old_string, new_string }) => {
     createCheckpoint();
@@ -94,9 +94,9 @@ export const editFileTool = tool({
 });
 
 export const listFilesTool = tool({
-  description: "List files in a directory",
+  description: "List files and directories recursively. Use as a first step when exploring unfamiliar code. Skips hidden files and node_modules. Returns up to 200 entries.",
   inputSchema: z.object({
-    path: z.string().describe("Directory path to list").default("."),
+    path: z.string().describe("Directory to list (default: current dir)").default("."),
     maxDepth: z.number().optional().describe("Max recursion depth (default 3)"),
   }),
   execute: async ({ path: dir, maxDepth }) => {
@@ -127,11 +127,11 @@ export const listFilesTool = tool({
 });
 
 export const grepTool = tool({
-  description: "Search for a pattern in files under a directory",
+  description: "Search file contents with regex. Use to find function definitions, imports, usages, or any text pattern across the codebase. Returns matching lines with file paths and line numbers. Max 30 matches.",
   inputSchema: z.object({
-    pattern: z.string().describe("Regex pattern to search for"),
-    path: z.string().describe("Directory to search in").default("."),
-    include: z.string().optional().describe("File glob to include (e.g. '*.ts')"),
+    pattern: z.string().describe("Regex pattern (case-insensitive)"),
+    path: z.string().describe("Directory to search (default: current dir)").default("."),
+    include: z.string().optional().describe("File extension filter (e.g. '*.ts', '*.py')"),
   }),
   execute: async ({ pattern, path: dir, include }) => {
     const regex = new RegExp(pattern, "i");

@@ -78,11 +78,6 @@ export async function startStream(
         if (error instanceof Error) callbacks.onError(error);
       },
       onStepFinish: (event) => {
-        if (event.toolCalls) {
-          for (const tc of event.toolCalls) {
-            callbacks.onToolCall?.(tc.toolName, tc.input);
-          }
-        }
         if (event.toolResults) {
           for (const tr of event.toolResults) {
             callbacks.onToolResult?.(tr.toolName, tr.output);
@@ -94,6 +89,7 @@ export async function startStream(
     });
 
     // Use fullStream for reasoning + text + tool events
+    // Tool calls are caught here in real-time (not waiting for onStepFinish)
     // Local models embed thinking in <think>...</think> tags in text stream
     let inThinkTag = false;
     let thinkBuffer = "";
@@ -148,6 +144,10 @@ export async function startStream(
           }
         } else if (part.type === "reasoning-delta") {
           callbacks.onReasoning((part as any).delta ?? (part as any).text ?? "");
+        } else if (part.type === "tool-call") {
+          // Show tool calls immediately as they stream in (not waiting for onStepFinish)
+          const tc = part as any;
+          callbacks.onToolCall?.(tc.toolName, tc.input);
         }
       }
     } catch (streamErr: unknown) {
