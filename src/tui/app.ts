@@ -995,79 +995,57 @@ export class App {
   }
 
   private renderCompactHeader(): string {
-    const modeColor = this.mode === "plan" ? P() : T();
-    const modeLabel = this.mode === "plan" ? "PLAN" : "BUILD";
     const model = `${T()}${this.providerName}/${this.modelName}${RESET}`;
-    const liveTokens = this.isStreaming ? this.sessionTokens + this.streamTokens : this.sessionTokens;
-    const cost = fmtCost(this.sessionCost);
-    const tokens = `${fmtTokens(liveTokens)} tok`;
-    const ctxColor = this.contextUsed > 90 ? RED : this.contextUsed > 70 ? "\x1b[33m" : DIM;
-    const ctx = this.contextUsed > 0 ? ` ${ctxColor}${this.contextUsed}%${RESET}` : "";
     const git = this.gitBranch ? ` ${DIM}${this.gitBranch}${this.gitDirty ? "*" : ""}${RESET}` : "";
     const activity = this.isStreaming ? `${bounceDot(this.spinnerFrame)} ` : "";
-    return `${activity} ${modeColor}[${modeLabel}]${RESET} ${model} ${DIM}|${RESET} ${cost} ${tokens}${ctx}${git}`;
+    return `${activity} ${model}${git}`;
   }
 
   /** Render the sidebar content */
   private renderSidebar(): string[] {
     const w = this.screen.sidebarWidth;
     const lines: string[] = [];
-
-    // Mode indicator with separator
-    const modeColor = this.mode === "plan" ? P() : T();
-    const modeLabel = this.mode === "plan" ? "PLAN" : "BUILD";
     const sideActivity = this.isStreaming ? ` ${bounceDot(this.spinnerFrame)}` : "";
-    lines.push(`${modeColor}▌ ${modeLabel}${RESET}${sideActivity}`);
-    lines.push(`${DIM}${"─".repeat(Math.max(1, w - 2))}${RESET}`);
 
     // Model
-    lines.push(`${T()}${this.providerName}/${this.modelName}${RESET}`);
+    lines.push(`${T()}${this.providerName}/${this.modelName}${RESET}${sideActivity}`);
+    lines.push(`${DIM}${"─".repeat(Math.max(1, w - 2))}${RESET}`);
     lines.push("");
 
-    // Stats with subtle separator — real-time during streaming
-    const liveTokens = this.isStreaming ? this.sessionTokens + this.streamTokens : this.sessionTokens;
-    lines.push(`${DIM}─${RESET} ${T()}${fmtCost(this.sessionCost)}${RESET} ${DIM}${fmtTokens(liveTokens)} tok${RESET}`);
-    if (this.contextUsed > 0) {
-      const color = this.contextUsed > 90 ? RED : this.contextUsed > 70 ? "\x1b[33m" : DIM;
-      lines.push(`   ${color}${this.contextUsed}% ctx${RESET}`);
-    }
-    // Pending messages indicator
-    if (this.pendingMessages.length > 0) {
-      const pendingCount = this.pendingMessages.length;
-      lines.push(`   ${P()}${pendingCount} queued${RESET}`);
-    }
-    lines.push("");
-
-    // Providers (if detected)
+    // Providers
     if (this.detectedProviders.length > 0) {
-      lines.push(`${DIM}─${RESET} ${DIM}providers${RESET}`);
+      lines.push(`${DIM}providers${RESET}`);
+      lines.push("");
       for (const p of this.detectedProviders.slice(0, 5)) {
-        lines.push(`   ${p}`);
+        lines.push(`  ${p}`);
       }
       if (this.detectedProviders.length > 5) {
-        lines.push(`   ${DIM}+${this.detectedProviders.length - 5} more${RESET}`);
+        lines.push(`  ${DIM}+${this.detectedProviders.length - 5} more${RESET}`);
       }
+      lines.push("");
+      lines.push(`${DIM}${"─".repeat(Math.max(1, w - 2))}${RESET}`);
       lines.push("");
     }
 
-    // Working directory with separator
-    lines.push(`${DIM}─${RESET}`);
+    // Working directory
+    lines.push(`${DIM}directory${RESET}`);
+    lines.push("");
     const shortCwd = this.cwd.length > w - 4
       ? "..." + this.cwd.slice(-(w - 7))
       : this.cwd;
-    lines.push(` ${DIM}${shortCwd}${RESET}`);
-
-    // Git branch
+    lines.push(`  ${DIM}${shortCwd}${RESET}`);
     if (this.gitBranch) {
-      lines.push(` ${DIM}${this.gitBranch}${this.gitDirty ? " *" : ""}${RESET}`);
+      lines.push(`  ${DIM}${this.gitBranch}${this.gitDirty ? " *" : ""}${RESET}`);
     }
 
     // Fill remaining height
-    const remaining = this.screen.height - 2 - lines.length;
+    const bottomLines = 4; // separator + buffer
+    const remaining = this.screen.height - bottomLines - lines.length;
     for (let i = 0; i < remaining; i++) lines.push("");
 
     // Bottom
-    lines.push(`${DIM}─${RESET} ${DIM}/help${RESET}`);
+    lines.push(`${DIM}${"─".repeat(Math.max(1, w - 2))}${RESET}`);
+    lines.push(`${DIM}/help  /model  /settings${RESET}`);
 
     return lines;
   }
@@ -1134,16 +1112,15 @@ export class App {
     // Separator below input/pickers
     bottomLines.push(`${DIM}${"─".repeat(mainW)}${RESET}`);
 
-    // Info bar below input — contextual hints, width-aware collapse
+    // Info bar below input — contextual status + hints
     {
-      // Priority order: interrupt > mode > queued > thinking > shortcuts
       const parts: Array<{ text: string; plain: string; priority: number }> = [];
       const modeColor = this.mode === "plan" ? P() : T();
       const modeLabel = this.mode === "plan" ? "plan" : "build";
       if (this.isStreaming) {
         parts.push({ text: `${DIM}esc${RESET} ${DIM}interrupt${RESET}`, plain: "esc interrupt", priority: 0 });
       }
-      parts.push({ text: `${modeColor}${modeLabel}${RESET}`, plain: modeLabel, priority: 1 });
+      parts.push({ text: `${modeColor}${modeLabel}${RESET} ${DIM}(shift+tab)${RESET}`, plain: `${modeLabel} (shift+tab)`, priority: 1 });
       if (this.pendingMessages.length > 0) {
         parts.push({ text: `${P()}${this.pendingMessages.length} queued${RESET}`, plain: `${this.pendingMessages.length} queued`, priority: 2 });
       }
@@ -1151,9 +1128,16 @@ export class App {
       if (settings.enableThinking) {
         parts.push({ text: `${DIM}thinking${RESET}`, plain: "thinking", priority: 3 });
       }
-      if (!this.isStreaming && !this.filePicker && !this.modelPicker && !this.settingsPicker && !this.itemPicker) {
-        parts.push({ text: `${DIM}tab${RESET} ${DIM}mode${RESET}`, plain: "tab mode", priority: 4 });
-        parts.push({ text: `${DIM}/${RESET} ${DIM}commands${RESET}`, plain: "/ commands", priority: 5 });
+      // Cost/tokens/context in bottom bar
+      const liveTokens = this.isStreaming ? this.sessionTokens + this.streamTokens : this.sessionTokens;
+      if (this.sessionCost > 0 || liveTokens > 0) {
+        const costStr = fmtCost(this.sessionCost);
+        const tokStr = fmtTokens(liveTokens);
+        parts.push({ text: `${DIM}${costStr} ${tokStr} tok${RESET}`, plain: `${costStr} ${tokStr} tok`, priority: 4 });
+      }
+      if (this.contextUsed > 0) {
+        const ctxColor = this.contextUsed > 90 ? RED : this.contextUsed > 70 ? "\x1b[33m" : DIM;
+        parts.push({ text: `${ctxColor}${this.contextUsed}% ctx${RESET}`, plain: `${this.contextUsed}% ctx`, priority: 5 });
       }
       // Collapse from lowest priority until it fits
       const sep = " | ";
@@ -1161,7 +1145,7 @@ export class App {
       while (visible.length > 1) {
         const totalWidth = visible.reduce((s, p) => s + p.plain.length, 0) + (visible.length - 1) * sep.length + 2;
         if (totalWidth <= mainW) break;
-        visible.pop(); // drop lowest priority (highest number)
+        visible.pop();
       }
       bottomLines.push(` ${visible.map(p => p.text).join(`${DIM}${sep}${RESET}`)}`);
     }

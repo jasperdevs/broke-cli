@@ -611,9 +611,9 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
       {
         onText: (delta) => {
           app.appendToLastMessage(delta);
-          // Rough token estimate for display (1 token ~ 4 chars)
-          const lastMsg = app.getLastAssistantContent();
-          app.setStreamTokens(Math.round(lastMsg.length / 4));
+          streamCharCount += delta.length;
+          // Rough token estimate (1 token ~ 4 chars of output)
+          app.setStreamTokens(Math.round(streamCharCount / 4));
         },
         onReasoning: (delta) => {
           app.appendThinking(delta);
