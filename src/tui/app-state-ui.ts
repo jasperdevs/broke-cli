@@ -1,8 +1,9 @@
 import { getSettings, updateSetting, type CavemanLevel, type Mode, type ThinkingLevel } from "../core/config.js";
 import type { BudgetReport } from "../core/budget-insights.js";
 import { HOME_TIPS } from "./app-shared.js";
-import type { AgentRun, AgentRunView, MenuPromptKind, ModelOption, PendingDelivery, PendingImage, PendingMessage, PickerItem, SettingEntry, TodoItem } from "./app-types.js";
+import type { AgentRun, AgentRunView, MenuPromptKind, ModelOption, PendingDelivery, PendingImage, PendingMessage, PickerItem, QuestionRequest, QuestionResult, SettingEntry, TodoItem } from "./app-types.js";
 import type { Keypress } from "./keypress.js";
+import { showQuestion, showQuestionnaire } from "./question-state.js";
 
 type AppState = any;
 
@@ -414,19 +415,6 @@ export function getAgentRuns(app: AppState): AgentRun[] {
   return [...app.agentRuns];
 }
 
-export function showQuestion(app: AppState, question: string, options?: string[]): Promise<string> {
-  return new Promise((resolve) => {
-    app.questionPrompt = {
-      question,
-      options: options && options.length > 0 ? options : undefined,
-      cursor: 0,
-      textInput: "",
-      resolve,
-    };
-    app.drawNow();
-  });
-}
-
 export function onAbortRequest(app: AppState, handler: () => void): void { app.onAbort = handler; }
 export function onScopedModelCycle(app: AppState, handler: () => void): void { app.onCycleScopedModel = handler; }
 
@@ -477,6 +465,7 @@ export interface AppStateUiMethods {
   flushPendingMessages(delivery: PendingDelivery): void;
   getAgentRuns(): AgentRun[];
   showQuestion(question: string, options?: string[]): Promise<string>;
+  showQuestionnaire(request: QuestionRequest): Promise<QuestionResult>;
   onAbortRequest(handler: () => void): void;
   onScopedModelCycle(handler: () => void): void;
 }
@@ -528,6 +517,7 @@ export const appStateUiMethods: AppStateUiMethods = {
   flushPendingMessages(this: AppState, delivery) { return flushPendingMessages(this, delivery); },
   getAgentRuns(this: AppState) { return getAgentRuns(this); },
   showQuestion(this: AppState, question, options) { return showQuestion(this, question, options); },
+  showQuestionnaire(this: AppState, request) { return showQuestionnaire(this, request); },
   onAbortRequest(this: AppState, handler) { return onAbortRequest(this, handler); },
   onScopedModelCycle(this: AppState, handler) { return onScopedModelCycle(this, handler); },
 };

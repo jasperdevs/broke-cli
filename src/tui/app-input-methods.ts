@@ -7,6 +7,7 @@ import { matchesBinding, loadKeybindings } from "../core/keybindings.js";
 import { getSettings } from "../core/config.js";
 import { DIM, RESET } from "../utils/ansi.js";
 import { T } from "./app-shared.js";
+import { handleQuestionViewKey } from "./question-view.js";
 
 type AppState = any;
 
@@ -95,43 +96,8 @@ export function handleKey(app: AppState, key: Keypress): void {
     return;
   }
 
-  if (app.questionPrompt) {
-    const qp = app.questionPrompt;
-    if (qp.options) {
-      if (key.name === "up") qp.cursor = Math.max(0, qp.cursor - 1);
-      else if (key.name === "down") qp.cursor = Math.min(qp.options.length - 1, qp.cursor + 1);
-      else if ((key.name === "return" || key.name === "enter") && !key.shift && !key.meta && !key.ctrl) app.selectQuestionOption(qp.cursor);
-      else if (key.name === "escape") {
-        app.questionPrompt = null;
-        app.addMessage("system", `${DIM}> [skipped]${RESET}`);
-        app.invalidateMsgCache();
-        app.drawNow();
-        qp.resolve("[user skipped]");
-        return;
-      }
-      app.draw();
-      return;
-    }
-    if ((key.name === "return" || key.name === "enter") && !key.shift && !key.meta && !key.ctrl) {
-      const answer = qp.textInput.trim() || "[no answer]";
-      app.questionPrompt = null;
-      app.addMessage("system", `${DIM}> ${answer}${RESET}`);
-      app.invalidateMsgCache();
-      app.drawNow();
-      qp.resolve(answer);
-    } else if (key.name === "escape") {
-      app.questionPrompt = null;
-      app.addMessage("system", `${DIM}> [skipped]${RESET}`);
-      app.invalidateMsgCache();
-      app.drawNow();
-      qp.resolve("[user skipped]");
-    } else if (key.name === "backspace") {
-      if (qp.textInput.length > 0) qp.textInput = qp.textInput.slice(0, -1);
-      app.draw();
-    } else if (key.char && !key.ctrl && !key.meta && key.char.length === 1) {
-      qp.textInput += key.char;
-      app.draw();
-    }
+  if (app.questionView) {
+    handleQuestionViewKey(app, key);
     return;
   }
 

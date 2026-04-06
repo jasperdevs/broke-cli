@@ -30,14 +30,6 @@ export function getBottomLineCount(app: AppState, mainW: number, maxHeight: numb
   count += 1;
   count += app.getWrappedInputLines(app.input.getText(), mainW).length;
 
-  if (app.questionPrompt) {
-    count += 1;
-    count += 1;
-    count += app.questionPrompt.options
-      ? app.getQuestionOptionEntries().length
-      : app.getWrappedInputLines(app.questionPrompt.textInput, mainW).length;
-  }
-
   if (app.filePicker) {
     count += 1;
     count += Math.min(app.getFilePickerEntries().length, Math.max(0, maxHeight - 4));
@@ -223,16 +215,6 @@ export function registerMenuClickTarget(_app: AppState, targets: Array<{ lineInd
   targets.push({ lineIndex: lines.length, action });
 }
 
-export function getQuestionOptionEntries(app: AppState): MenuEntry[] {
-  if (!app.questionPrompt?.options) return [];
-  return app.questionPrompt.options.map((option: string, i: number) => {
-    const isCursor = i === app.questionPrompt.cursor;
-    const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
-    const color = isCursor ? `${TXT()}${BOLD}` : DIM;
-    return { text: ` ${arrow}${color}${option}${RESET}`, selectIndex: i };
-  });
-}
-
 export function getFilePickerEntries(app: AppState): MenuEntry[] {
   if (!app.filePicker) return [];
   return app.filePicker.filtered.map((file: string, i: number) => {
@@ -310,10 +292,6 @@ export function scrollSidebar(app: AppState, delta: number, visibleHeight: numbe
 }
 
 export function scrollActiveMenu(app: AppState, delta: number): boolean {
-  if (app.questionPrompt?.options) {
-    app.questionPrompt.cursor = app.clampMenuCursor(app.questionPrompt.cursor + delta, app.questionPrompt.options.length);
-    return true;
-  }
   if (app.settingsPicker) {
     app.settingsPicker.cursor = app.clampMenuCursor(app.settingsPicker.cursor + delta, app.getFilteredSettings().length);
     return true;
@@ -337,19 +315,6 @@ export function scrollActiveMenu(app: AppState, delta: number): boolean {
     return true;
   }
   return false;
-}
-
-export function selectQuestionOption(app: AppState, index: number): void {
-  if (!app.questionPrompt?.options) return;
-  const answer = app.questionPrompt.options[index];
-  if (!answer) return;
-  const qp = app.questionPrompt;
-  qp.cursor = index;
-  app.questionPrompt = null;
-  app.addMessage("system", `${DIM}> ${answer}${RESET}`);
-  app.invalidateMsgCache();
-  app.drawNow();
-  qp.resolve(answer);
 }
 
 export function toggleSettingEntry(app: AppState, index: number): void {

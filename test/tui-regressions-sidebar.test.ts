@@ -124,7 +124,7 @@ describe("wrapped input layout", () => {
     expect(layout.row).toBeGreaterThan(0);
   });
 
-  it("renders the input without the old left gutter and expands for wrapped question input", () => {
+  it("renders the input without the old left gutter and keeps question prompts out of the bottom overlay", async () => {
     const app = new App() as any;
     app.messages = [{ role: "user", content: "hello" }];
     app.input.paste("test");
@@ -133,8 +133,11 @@ describe("wrapped input layout", () => {
     app.drawImmediate();
     const inputLine = rendered.find((line) => stripAnsi(line).trimEnd() === "test");
     expect(stripAnsi(inputLine!).trimEnd()).toBe("test");
-    app.questionPrompt = { question: "Base URL", cursor: 0, textInput: "http://127.0.0.1:8080/v1/chat/completions/really/long/path", resolve: () => {} };
-    expect(app.getBottomLineCount(20, 20)).toBeGreaterThan(6);
+    const before = app.getBottomLineCount(20, 20);
+    const pending = app.showQuestion("Base URL");
+    expect(app.getBottomLineCount(20, 20)).toBe(before);
+    app.handleKey({ name: "escape", char: "", ctrl: false, meta: false, shift: false });
+    await expect(pending).resolves.toBe("[user skipped]");
   });
 
   it("keeps the cursor on the real input row when the sidebar footer is taller than the prompt area", () => {

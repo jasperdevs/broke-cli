@@ -7,6 +7,7 @@ import { truncateVisible, visibleWidth } from "../utils/terminal-width.js";
 import { getCommandMatches as findCommandMatches } from "./command-surface.js";
 import { fmtCost, fmtTokens, wordWrap } from "./render/formatting.js";
 import { APP_BG, ERR, MUTED, OK, P, T, TXT, WARN } from "./app-shared.js";
+import { drawQuestionView } from "./question-view.js";
 
 type AppState = any;
 
@@ -42,6 +43,10 @@ export function drawImmediate(app: AppState): void {
     drawAgentRunsView(app);
     return;
   }
+  if (app.questionView) {
+    drawQuestionView(app);
+    return;
+  }
   const { height, width } = app.screen;
   const hasSidebar = app.shouldShowSidebar();
   const mainW = hasSidebar ? app.screen.mainWidth : width;
@@ -72,7 +77,7 @@ export function drawImmediate(app: AppState): void {
   });
   app.screen.render(frameLines.map((line) => app.decorateFrameLine(line, width)));
 
-  if (app.isStreaming || app.isCompacting || app.modelPicker || app.settingsPicker || app.itemPicker || app.questionPrompt || Date.now() < app.hideCursorUntil) {
+  if (app.isStreaming || app.isCompacting || app.modelPicker || app.settingsPicker || app.itemPicker || Date.now() < app.hideCursorUntil) {
     app.screen.hideCursor();
     return;
   }
@@ -176,21 +181,6 @@ function buildAgentRunDetail(app: AppState, run: { prompt: string; status: "runn
 }
 
 function appendBottomMenus(app: AppState, bottomLines: string[], bottomMenuClicks: Array<{ lineIndex: number; action: () => void }>, height: number, mainW: number, separatorColor: string): void {
-  if (app.questionPrompt) {
-    const qp = app.questionPrompt;
-    bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
-    bottomLines.push(` ${T()}?${RESET} ${TXT()}${BOLD}${qp.question}${RESET}`);
-    if (qp.options) {
-      for (const entry of app.buildMenuView(app.getQuestionOptionEntries(), qp.cursor, 8)) {
-        if (entry.selectIndex !== undefined) app.registerMenuClickTarget(bottomMenuClicks, bottomLines, () => app.selectQuestionOption(entry.selectIndex!));
-        bottomLines.push(entry.text);
-      }
-    } else {
-      for (const line of app.getWrappedInputLines(qp.textInput, mainW)) bottomLines.push(`  ${line}`);
-    }
-    return;
-  }
-
   if (app.filePicker) {
     bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
     app.appendFilePicker(bottomLines, height, bottomMenuClicks);

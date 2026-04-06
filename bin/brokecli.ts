@@ -398,7 +398,7 @@ program.action(async (promptParts, opts) => {
         }),
       },
     }),
-    askUser: createAskUserTool((q, opts) => app.showQuestion(q, opts)),
+    askUser: createAskUserTool((request) => app.showQuestionnaire(request)),
   });
 
   // Wire bash streaming output to UI

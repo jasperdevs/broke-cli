@@ -15,7 +15,6 @@ import {
   getMenuFilterQuery,
   getMenuPromptPrefix,
   getModelPickerEntries,
-  getQuestionOptionEntries,
   getSettingsPickerEntries,
   getSidebarBorder,
   getSidebarMaxScroll,
@@ -32,7 +31,6 @@ import {
   selectFileEntry,
   selectItemEntry,
   selectModelEntry,
-  selectQuestionOption,
   shouldEnableMenuMouse,
   toggleModelPin,
   toggleModelScope,
@@ -65,7 +63,6 @@ export interface AppMenuMethods {
   clampMenuCursor(cursor: number, itemCount: number): number;
   buildMenuView(entries: MenuEntry[], cursor: number, maxVisible: number): MenuEntry[];
   registerMenuClickTarget(targets: Array<{ lineIndex: number; action: () => void }>, lines: string[], action: () => void): void;
-  getQuestionOptionEntries(): MenuEntry[];
   getFilePickerEntries(): MenuEntry[];
   getSettingsPickerEntries(): MenuEntry[];
   getItemPickerEntries(): MenuEntry[];
@@ -73,7 +70,6 @@ export interface AppMenuMethods {
   getCommandSuggestionEntries(): MenuEntry[];
   scrollSidebar(delta: number, visibleHeight: number): void;
   scrollActiveMenu(delta: number): boolean;
-  selectQuestionOption(index: number): void;
   toggleSettingEntry(index: number): void;
   selectItemEntry(index: number): void;
   toggleModelPin(index: number): void;
@@ -107,7 +103,6 @@ export const appMenuMethods: AppMenuMethods = {
   clampMenuCursor(this: AppState, cursor: number, itemCount: number) { return clampMenuCursor(this, cursor, itemCount); },
   buildMenuView(this: AppState, entries: MenuEntry[], cursor: number, maxVisible: number) { return buildMenuView(this, entries, cursor, maxVisible); },
   registerMenuClickTarget(this: AppState, targets: Array<{ lineIndex: number; action: () => void }>, lines: string[], action: () => void) { return registerMenuClickTarget(this, targets, lines, action); },
-  getQuestionOptionEntries(this: AppState) { return getQuestionOptionEntries(this); },
   getFilePickerEntries(this: AppState) { return getFilePickerEntries(this); },
   getSettingsPickerEntries(this: AppState) { return getSettingsPickerEntries(this); },
   getItemPickerEntries(this: AppState) { return getItemPickerEntries(this); },
@@ -115,7 +110,6 @@ export const appMenuMethods: AppMenuMethods = {
   getCommandSuggestionEntries(this: AppState) { return getCommandSuggestionEntries(this); },
   scrollSidebar(this: AppState, delta: number, visibleHeight: number) { return scrollSidebar(this, delta, visibleHeight); },
   scrollActiveMenu(this: AppState, delta: number) { return scrollActiveMenu(this, delta); },
-  selectQuestionOption(this: AppState, index: number) { return selectQuestionOption(this, index); },
   toggleSettingEntry(this: AppState, index: number) { return toggleSettingEntry(this, index); },
   selectItemEntry(this: AppState, index: number) { return selectItemEntry(this, index); },
   toggleModelPin(this: AppState, index: number) { return toggleModelPin(this, index); },

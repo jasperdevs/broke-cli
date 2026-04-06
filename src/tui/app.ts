@@ -20,7 +20,7 @@ import { appStateCoreMethods } from "./app-state-core.js";
 import type { AppStateUiMethods } from "./app-state-ui.js";
 import { appStateUiMethods } from "./app-state-ui.js";
 import { AnimCounter, HOME_TIPS } from "./app-shared.js";
-import type { AgentRun, AgentRunView, BudgetView, ChatMessage, ModelOption, PendingImage, PendingMessage, PickerItem, QuestionPrompt, SettingEntry, TodoItem } from "./app-types.js";
+import type { AgentRun, AgentRunView, BudgetView, ChatMessage, ModelOption, PendingImage, PendingMessage, PickerItem, QuestionView, SettingEntry, TodoItem } from "./app-types.js";
 
 export interface App extends AppStateCoreMethods, AppStateUiMethods, AppMenuMethods, AppInputMethods, AppRenderMethods, AppDrawMethods {}
 
@@ -90,7 +90,7 @@ export class App {
   private agentRunView: AgentRunView | null = null;
   private onItemSelect: ((id: string) => void) | null = null;
   private toolOutputCollapsed = false;
-  private questionPrompt: QuestionPrompt | null = null;
+  private questionView: QuestionView | null = null;
   private pendingImages: PendingImage[] = [];
   private gitBranch = "";
   private gitDirty = false;
