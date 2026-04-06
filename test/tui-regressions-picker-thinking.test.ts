@@ -5,6 +5,24 @@ import { getSettings, updateSetting } from "../src/core/config.js";
 import stripAnsi from "strip-ansi";
 
 describe("picker menus", () => {
+  it("pushes chat upward when a menu opens instead of overlaying the last messages", () => {
+    const app = new App() as any;
+    app.messages = Array.from({ length: 18 }, (_, i) => ({ role: "assistant", content: `line ${i}` }));
+    let rendered: string[] = [];
+    app.screen = { height: 16, width: 60, hasSidebar: false, mainWidth: 60, sidebarWidth: 20, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
+    app.scrollToBottom();
+    app.drawImmediate();
+    const before = rendered.map((line) => stripAnsi(line));
+    expect(before.join("\n")).toContain("line 17");
+
+    app.openItemPicker("Pick one", [{ id: "one", label: "First" }, { id: "two", label: "Second" }, { id: "three", label: "Third" }], () => {});
+    app.drawImmediate();
+    const after = rendered.map((line) => stripAnsi(line));
+    const menuStart = after.findIndex((line) => line.includes("Pick one"));
+    expect(menuStart).toBeGreaterThan(0);
+    expect(after.slice(0, menuStart).join("\n")).toContain("line 17");
+  });
+
   it("scrolls through long file menus with the mouse wheel", () => {
     const app = new App() as any;
     app.messages = [{ role: "user", content: "hello" }];

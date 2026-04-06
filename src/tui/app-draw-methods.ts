@@ -222,9 +222,14 @@ function buildFrameLines(app: AppState, opts: { height: number; width: number; m
     if (showCompactHeader) frameLines.push(app.renderCompactHeader());
     const chatH = Math.max(1, mainTopHeight - (showCompactHeader ? 1 : 0));
     const messageLines = app.renderMessages(mainW);
+    const previousChatHeight = app.lastChatHeight || chatH;
+    const previousMaxScroll = Math.max(0, messageLines.length - previousChatHeight);
+    const wasBottomAnchored = app.scrollOffset >= Math.max(0, previousMaxScroll - 1);
     const maxScroll = Math.max(0, messageLines.length - chatH);
+    if (wasBottomAnchored) app.scrollOffset = maxScroll;
     if (app.scrollOffset > maxScroll) app.scrollOffset = maxScroll;
     if (app.scrollOffset < 0) app.scrollOffset = 0;
+    app.lastChatHeight = chatH;
     const visibleMsgs = messageLines.slice(app.scrollOffset, app.scrollOffset + chatH);
     mergeMainAndSidebar(app, frameLines, visibleMsgs, [], mainW, hasSidebar, sidebarTopHeight, showCompactHeader);
     while (frameLines.length < mainTopHeight) {

@@ -57,6 +57,7 @@ export class App {
   private ctrlCCount = 0;
   private ctrlCTimeout: ReturnType<typeof setTimeout> | null = null;
   private scrollOffset = 0;
+  private lastChatHeight = 0;
   private onSubmit: ((text: string) => void) | null = null;
   private onAbort: (() => void) | null = null;
   private running = false;
