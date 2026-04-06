@@ -431,7 +431,8 @@ export class App {
       this.spinnerTimer = null;
     }
     this.invalidateMsgCache();
-    this.draw();
+    if (streaming) this.drawNow();
+    else this.draw();
   }
 
   setDetectedProviders(providers: string[]): void {
@@ -815,7 +816,7 @@ export class App {
   }
 
   private getWrappedInputLines(text: string, width: number): string[] {
-    const usableWidth = Math.max(1, width - 4);
+    const usableWidth = Math.max(1, width - 2);
     const sourceLines = (text || "").split("\n");
     const wrapped: string[] = [];
     for (const line of sourceLines) {
@@ -2123,14 +2124,15 @@ export class App {
       bottomLines.push(` ${this.statusMessage}`);
     }
 
-    // Build the full frame — MUST have exactly `height` lines
+    // Build the full frame — the main pane should reserve space only for the prompt area.
+    // The sidebar footer stays independently bottom-aligned so it never lifts the input.
     const frameLines: string[] = [];
-    const reservedBottom = hasSidebar ? Math.max(bottomLines.length, footerLines.length) : bottomLines.length;
-    const footerPad = reservedBottom - footerLines.length;
-    const bottomPad = reservedBottom - bottomLines.length;
-    const topHeight = Math.max(0, height - reservedBottom);
+    const mainBottomHeight = bottomLines.length;
+    const mainTopHeight = Math.max(0, height - mainBottomHeight);
+    const sidebarFooterHeight = hasSidebar ? footerLines.length : 0;
+    const sidebarTopHeight = hasSidebar ? Math.max(0, height - sidebarFooterHeight) : 0;
     this.activeMenuClickTargets = new Map(
-      bottomMenuClicks.map(({ lineIndex, action }) => [topHeight + bottomPad + lineIndex + 1, action]),
+      bottomMenuClicks.map(({ lineIndex, action }) => [mainTopHeight + lineIndex + 1, action]),
     );
 
     // Compact header when no sidebar
@@ -2138,11 +2140,12 @@ export class App {
 
     if (isHome) {
       if (showCompactHeader) frameLines.push(this.renderCompactHeader());
-      const homeLines = this.renderHomeView(mainW, Math.max(0, topHeight - (showCompactHeader ? 1 : 0)));
+      const homeLines = this.renderHomeView(mainW, Math.max(0, mainTopHeight - (showCompactHeader ? 1 : 0)));
       if (hasSidebar) {
-        const sidebarLines = this.renderSidebar(homeLines.length);
+        const sidebarLines = this.renderSidebar(Math.max(0, sidebarTopHeight - (showCompactHeader ? 1 : 0)));
         const border = this.getSidebarBorder();
-        for (let i = 0; i < homeLines.length; i++) {
+        const rowCount = Math.max(homeLines.length, sidebarLines.length);
+        for (let i = 0; i < rowCount; i++) {
           const homeLine = this.padLine(homeLines[i] ?? "", mainW);
           const sidebarLine = this.padLine(sidebarLines[i] ?? "", this.screen.sidebarWidth);
           frameLines.push(`${homeLine} ${border} ${sidebarLine}`);
@@ -2150,11 +2153,11 @@ export class App {
       } else {
         frameLines.push(...homeLines);
       }
-      while (frameLines.length < topHeight) frameLines.push("");
+      while (frameLines.length < mainTopHeight) frameLines.push("");
     } else {
       if (showCompactHeader) frameLines.push(this.renderCompactHeader());
 
-      const chatH = Math.max(1, topHeight - (showCompactHeader ? 1 : 0));
+      const chatH = Math.max(1, mainTopHeight - (showCompactHeader ? 1 : 0));
       const messageLines = this.renderMessages(mainW);
       const maxScroll = Math.max(0, messageLines.length - chatH);
       if (this.scrollOffset > maxScroll) this.scrollOffset = maxScroll;
@@ -2162,9 +2165,10 @@ export class App {
       const visibleMsgs = messageLines.slice(this.scrollOffset, this.scrollOffset + chatH);
 
       if (hasSidebar) {
-        const sidebarLines = this.renderSidebar(chatH);
+        const sidebarLines = this.renderSidebar(Math.max(1, sidebarTopHeight - (showCompactHeader ? 1 : 0)));
         const border = this.getSidebarBorder();
-        for (let i = 0; i < chatH; i++) {
+        const rowCount = Math.max(chatH, sidebarLines.length);
+        for (let i = 0; i < rowCount; i++) {
           const chatLine = this.padLine(visibleMsgs[i] ?? "", mainW);
           const sidebarLine = sidebarLines[i] ?? "";
           const paddedSidebar = this.padLine(sidebarLine, this.screen.sidebarWidth);
@@ -2177,13 +2181,17 @@ export class App {
       }
     }
 
-    // Append bottom lines — extend sidebar border through them
+    // Append bottom lines — sidebar footer is independently bottom-aligned.
     if (hasSidebar) {
       const border = this.getSidebarBorder();
       const sideW = this.screen.sidebarWidth;
-      for (let i = 0; i < reservedBottom; i++) {
-        const mainLine = i >= bottomPad ? bottomLines[i - bottomPad] ?? "" : "";
-        const footerLine = i >= footerPad ? footerLines[i - footerPad] ?? "" : "";
+      while (frameLines.length < mainTopHeight) {
+        frameLines.push(`${this.padLine("", mainW)} ${border} ${this.padLine("", sideW)}`);
+      }
+      for (let i = 0; i < mainBottomHeight; i++) {
+        const row = frameLines.length;
+        const footerLine = row >= sidebarTopHeight ? footerLines[row - sidebarTopHeight] ?? "" : "";
+        const mainLine = bottomLines[i] ?? "";
         const padded = this.padLine(mainLine, mainW);
         frameLines.push(`${padded} ${border} ${this.padLine(footerLine, sideW)}`);
       }
@@ -2208,7 +2216,7 @@ export class App {
     }
 
     // Cursor on input line — account for multi-line input
-    const inputRow = Math.min(height, topHeight + bottomPad + 2 + inputLayout.row); // +1 separator, +1 for 1-based
+    const inputRow = Math.min(height, mainTopHeight + 2 + inputLayout.row); // +1 separator, +1 for 1-based
     const inputCol = Math.min(width, 1 + inputLayout.col);
     this.screen.setCursor(inputRow, inputCol);
   }

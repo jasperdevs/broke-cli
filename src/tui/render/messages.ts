@@ -7,6 +7,19 @@ export interface RenderChatMessage {
   images?: Array<{ mimeType: string; data: string }>;
 }
 
+function wrapVisibleText(text: string, width: number, wordWrap: (text: string, width: number) => string[]): string[] {
+  const wrapped: string[] = [];
+  for (const line of text.split("\n")) {
+    wrapped.push(...wordWrap(line, width));
+  }
+  return wrapped.length > 0 ? wrapped : [""];
+}
+
+function extractAnsiPrefix(line: string): string {
+  const match = line.match(/^((?:\x1b\[[0-9;?]*[ -/]*[@-~])*)/);
+  return match?.[1] ?? "";
+}
+
 export function renderStaticMessages(options: {
   messages: RenderChatMessage[];
   maxWidth: number;
@@ -52,8 +65,14 @@ export function renderStaticMessages(options: {
       const wrapW = maxWidth - 4;
       for (const cl of rendered.split("\n")) {
         const plain = stripAnsi(cl);
-        if (plain.length <= wrapW) lines.push(`  ${cl}`);
-        else for (const wl of wordWrap(plain, wrapW)) lines.push(`  ${wl}`);
+        if (plain.length <= wrapW) {
+          lines.push(`  ${cl}`);
+          continue;
+        }
+        const prefix = extractAnsiPrefix(cl);
+        for (const wrappedLine of wordWrap(plain, wrapW)) {
+          lines.push(`  ${prefix}${wrappedLine}${reset}`);
+        }
       }
       if (idx + 1 < messages.length && messages[idx + 1].role === "user") {
         lines.push("");
@@ -65,22 +84,25 @@ export function renderStaticMessages(options: {
     } else if (msg.content.includes("\x1b[")) {
       const wrapW = maxWidth - 4;
       for (const cl of msg.content.split("\n")) {
-        const visLen = stripAnsi(cl).length;
-        if (visLen <= wrapW) lines.push(`  ${cl}`);
-        else {
-          const plain = stripAnsi(cl);
-          const colorPrefix = cl.slice(0, cl.indexOf(plain[0]));
-          for (let i = 0; i < plain.length; i += wrapW) lines.push(`  ${i === 0 ? colorPrefix : ""}${plain.slice(i, i + wrapW)}${reset}`);
+        const plain = stripAnsi(cl);
+        if (plain.length <= wrapW) {
+          lines.push(`  ${cl}`);
+          continue;
+        }
+        const colorPrefix = extractAnsiPrefix(cl);
+        for (const wrappedLine of wordWrap(plain, wrapW)) {
+          lines.push(`  ${colorPrefix}${wrappedLine}${reset}`);
         }
       }
     } else {
       const wrapW = maxWidth - 4;
-      const plain = msg.content;
-      if (plain.length <= wrapW) lines.push(`${colors.muted}  ${plain}${reset}`);
-      else for (let i = 0; i < plain.length; i += wrapW) lines.push(`${colors.muted}  ${plain.slice(i, i + wrapW)}${reset}`);
+      for (const wrappedLine of wrapVisibleText(msg.content, wrapW, wordWrap)) {
+        lines.push(`${colors.muted}  ${wrappedLine}${reset}`);
+      }
     }
     lines.push("");
     idx++;
   }
+  while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
   return lines;
 }

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { Session } from "../src/core/session.js";
 import { App } from "../src/tui/app.js";
+import { renderStaticMessages } from "../src/tui/render/messages.js";
+import { wordWrap } from "../src/tui/render/formatting.js";
 import { MOUSE_OFF, MOUSE_ON } from "../src/utils/ansi.js";
 import { currentTheme, getPlanColor, listThemes, setPreviewTheme } from "../src/core/themes.js";
 import { getSettings, updateSetting } from "../src/core/config.js";
@@ -23,6 +25,32 @@ describe("mouse reporting mode", () => {
   it("keeps mouse tracking disabled so terminal text selection stays native", () => {
     expect(MOUSE_ON).toBe("");
     expect(MOUSE_OFF).toBe("");
+  });
+});
+
+describe("message wrapping", () => {
+  it("wraps system output without chopping ordinary words mid-line", () => {
+    const lines = renderStaticMessages({
+      messages: [{ role: "system", content: "warning: in the working copy of index.html LF will be replaced by CRLF the next time Git touches it" }],
+      maxWidth: 32,
+      toolOutputCollapsed: false,
+      isToolOutput: () => false,
+      wordWrap,
+      colors: {
+        imageTagBg: "",
+        userBg: "",
+        userText: "",
+        border: "",
+        muted: "",
+        text: "",
+      },
+      reset: "",
+      bold: "",
+    }).map((line) => stripAnsi(line));
+
+    expect(lines.join("\n")).toContain("working");
+    expect(lines.join("\n")).toContain("replaced");
+    expect(lines.join("\n")).not.toContain("wor\nking");
   });
 });
 
@@ -579,7 +607,8 @@ describe("wrapped input layout", () => {
 
       const rowText = stripAnsi(rendered[cursorRow - 1] ?? "");
       expect(rowText).not.toMatch(/^─+$/);
-      expect(cursorRow).toBeGreaterThanOrEqual(rendered.length - 3);
+      expect(cursorRow).toBeGreaterThanOrEqual(rendered.length - 2);
+      expect(stripAnsi(rendered[Math.max(0, cursorRow - 2)] ?? "").trimStart().startsWith("─")).toBe(true);
     } finally {
       updateSetting("showTokens", original.showTokens);
       updateSetting("showCost", original.showCost);

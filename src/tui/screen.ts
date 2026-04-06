@@ -1,5 +1,5 @@
 import {
-  ALT_SCREEN_ON, ALT_SCREEN_OFF, CLEAR_SCREEN, CLEAR_LINE,
+  CLEAR_SCREEN, CLEAR_LINE,
   CURSOR_HOME, CURSOR_HIDE, CURSOR_SHOW, CURSOR_BLOCK, CURSOR_DEFAULT,
   SYNC_START, SYNC_END,
   moveTo, moveToRow, write, getTermSize,
@@ -32,13 +32,12 @@ export class Screen {
   get height(): number { return this.rows; }
   get width(): number { return this.cols; }
 
-  /** Enter fullscreen mode */
+  /** Enter screen mode without switching to the alternate buffer so selection stays native. */
   enter(): void {
     if (!this.resizeAttached) {
       process.stdout.on("resize", this.handleResize);
       this.resizeAttached = true;
     }
-    write(ALT_SCREEN_ON);
     write(CURSOR_HOME);
     write(CLEAR_SCREEN);
     write(CURSOR_BLOCK);
@@ -50,7 +49,6 @@ export class Screen {
   exit(): void {
     write(CURSOR_DEFAULT);
     write(CURSOR_SHOW);
-    write(ALT_SCREEN_OFF);
   }
 
   dispose(): void {

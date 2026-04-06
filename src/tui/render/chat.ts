@@ -15,6 +15,36 @@ export interface TodoRenderItem {
   status: "pending" | "in_progress" | "done";
 }
 
+function wrapVisibleText(text: string, width: number): string[] {
+  if (width <= 0) return [text];
+  const parts = text.split(/([ \t]+|[\\/._:-]+)/);
+  const lines: string[] = [];
+  let current = "";
+
+  for (const part of parts) {
+    if (!part) continue;
+    if (current.length + part.length <= width) {
+      current += part;
+      continue;
+    }
+    if (current.trim().length > 0) {
+      lines.push(current.trimEnd());
+      current = /^[ \t]+$/.test(part) ? "" : part.trimStart();
+      continue;
+    }
+    lines.push(part.slice(0, width));
+    current = part.slice(width);
+  }
+
+  if (current.length > 0) lines.push(current.trimEnd());
+  return lines.length > 0 ? lines : [""];
+}
+
+function renderPrefixedWrappedLines(prefix: string, text: string, width: number): string[] {
+  const available = Math.max(8, width - prefix.length);
+  return wrapVisibleText(text, available).map((line) => `${prefix}${line}`);
+}
+
 export function toolDescription(tc: ToolCallRenderGroup): string {
   const a = tc.args as Record<string, string> | undefined;
   switch (tc.name) {
@@ -64,7 +94,11 @@ export function renderToolCallBlock(options: {
   if (tc.name === "bash" && running && tc.streamOutput) {
     const outLines = tc.streamOutput.split("\n").filter((line) => line.trim());
     const tail = outLines.slice(-5);
-    for (const line of tail) lines.push(`${colors.muted}  ${branch} ${line.slice(0, maxWidth - 6)}${reset}`);
+    for (const line of tail) {
+      for (const wrappedLine of renderPrefixedWrappedLines(`  ${branch} `, line, maxWidth)) {
+        lines.push(`${colors.muted}${wrappedLine}${reset}`);
+      }
+    }
     if (outLines.length > 5) lines.push(`${colors.muted}  ${branch} ... +${outLines.length - 5} lines${reset}`);
   }
 
@@ -101,18 +135,32 @@ export function renderToolCallBlock(options: {
       if (tc.expanded) {
         const showLines = outLines.slice(-20);
         if (outLines.length > 20) lines.push(`${colors.muted}    ... ${outLines.length - 20} earlier lines${reset}`);
-        for (const line of showLines) lines.push(`${colors.muted}  ${branch} ${line.slice(0, maxWidth - 6)}${reset}`);
+        for (const line of showLines) {
+          for (const wrappedLine of renderPrefixedWrappedLines(`  ${branch} `, line, maxWidth)) {
+            lines.push(`${colors.muted}${wrappedLine}${reset}`);
+          }
+        }
       } else {
         const tail = outLines.slice(-3);
-        for (const line of tail) lines.push(`${colors.muted}  ${branch} ${line.slice(0, maxWidth - 6)}${reset}`);
+        for (const line of tail) {
+          for (const wrappedLine of renderPrefixedWrappedLines(`  ${branch} `, line, maxWidth)) {
+            lines.push(`${colors.muted}${wrappedLine}${reset}`);
+          }
+        }
         if (outLines.length > 3) lines.push(`${colors.muted}  ${branch} ... +${outLines.length - 3} lines (ctrl+o to expand)${reset}`);
       }
     } else if (tc.resultDetail) {
-      lines.push(`${colors.muted}  ${branch} ${tc.resultDetail.slice(0, maxWidth - 6)}${reset}`);
+      for (const wrappedLine of renderPrefixedWrappedLines(`  ${branch} `, tc.resultDetail, maxWidth)) {
+        lines.push(`${colors.muted}${wrappedLine}${reset}`);
+      }
     }
   }
 
-  if (tc.error && tc.result) lines.push(`${colors.error}  ${branch} ${tc.result}${reset}`);
+  if (tc.error && tc.result) {
+    for (const wrappedLine of renderPrefixedWrappedLines(`  ${branch} `, tc.result, maxWidth)) {
+      lines.push(`${colors.error}${wrappedLine}${reset}`);
+    }
+  }
   return lines;
 }
 
@@ -230,5 +278,6 @@ export function renderMessageOverlays(options: {
     lines.push("");
   }
 
+  while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
   return lines;
 }
