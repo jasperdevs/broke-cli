@@ -223,9 +223,13 @@ export function renderMessageOverlays(options: {
   if (thinkingBuffer || (isStreaming && thinkingRequested)) {
     ensureOverlayGap(lines);
     const thinkLines = thinkingBuffer.split("\n").slice(-8);
-    lines.push(`  ${colors.accent}${isStreaming ? "thinking" : "thought"}${colors.reset}`);
+    lines.push(`  ${colors.dim}${isStreaming ? "Reasoning" : "Reasoned"}${colors.reset}`);
     if (thinkLines.length > 0 && thinkLines.some((line) => line.length > 0)) {
-      for (const line of thinkLines) lines.push(`  ${colors.dim}${line.slice(0, maxWidth - 4)}${colors.reset}`);
+      for (const line of thinkLines) {
+        for (const wrappedLine of wrapVisibleText(line, Math.max(8, maxWidth - 4))) {
+          lines.push(`  ${colors.dim}${wrappedLine}${colors.reset}`);
+        }
+      }
     } else if (isStreaming) {
       lines.push(`  ${colors.dim}waiting for model reasoning…${colors.reset}`);
     }

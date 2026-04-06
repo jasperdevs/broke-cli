@@ -101,10 +101,10 @@ describe("sidebar token summary", () => {
     expect(footer.some((line: string) => line.includes("Session"))).toBe(true);
     expect(footer.some((line: string) => line.trim() === "$0.0016")).toBe(true);
     expect(footer.some((line: string) => line.trim() === "Σ 210 session")).toBe(true);
-    expect(footer.some((line: string) => line.includes("Prompt"))).toBe(true);
+    expect(footer.some((line: string) => line.includes("Context"))).toBe(true);
     expect(footer.some((line: string) => line.trim() === "132k/344k")).toBe(true);
     expect(footer.some((line: string) => line.trim() === "38% of limit")).toBe(true);
-    expect(footer.findIndex((line: string) => line.includes("Prompt"))).toBeGreaterThan(
+    expect(footer.findIndex((line: string) => line.includes("Context"))).toBeGreaterThan(
       footer.findIndex((line: string) => line.includes("Σ 210 session")),
     );
 
@@ -245,6 +245,45 @@ describe("startup home view", () => {
 });
 
 describe("input editing", () => {
+  it("uses the normal prompt box as the filter input for settings menus", () => {
+    const app = new App() as any;
+    app.openSettings([
+      { key: "autoSaveSessions", label: "Auto-save sessions", value: "true", description: "Save history" },
+      { key: "showTokens", label: "Show tokens", value: "true", description: "Show token counts" },
+    ], () => {});
+
+    expect(app.input.getText()).toBe("/settings ");
+
+    app.handleKey({ name: "s", char: "s", ctrl: false, meta: false, shift: false });
+
+    expect(app.input.getText()).toBe("/settings s");
+    expect(app.getFilteredSettings().map((entry: any) => entry.key)).toEqual(["autoSaveSessions", "showTokens"]);
+
+    app.handleKey({ name: "backspace", char: "", ctrl: false, meta: false, shift: false });
+    app.handleKey({ name: "backspace", char: "", ctrl: false, meta: false, shift: false });
+
+    expect(app.input.getText()).toBe("/settings ");
+  });
+
+  it("uses the normal prompt box as the filter input for picker menus", () => {
+    const app = new App() as any;
+    app.openItemPicker("Theme", [
+      { id: "brokecli-dark", label: "BrokeCLI Dark", detail: "dark" },
+      { id: "brokecli-light", label: "BrokeCLI Light", detail: "light" },
+    ], () => {}, { kind: "theme" });
+
+    expect(app.input.getText()).toBe("/theme ");
+
+    app.handleKey({ name: "l", char: "l", ctrl: false, meta: false, shift: false });
+    app.handleKey({ name: "i", char: "i", ctrl: false, meta: false, shift: false });
+    app.handleKey({ name: "g", char: "g", ctrl: false, meta: false, shift: false });
+    app.handleKey({ name: "h", char: "h", ctrl: false, meta: false, shift: false });
+    app.handleKey({ name: "t", char: "t", ctrl: false, meta: false, shift: false });
+
+    expect(app.input.getText()).toBe("/theme light");
+    expect(app.getFilteredItems().map((item: any) => item.id)).toEqual(["brokecli-light"]);
+  });
+
   it("does not persist plan/build mode when Shift+Tab toggles it", () => {
     const originalMode = getSettings().mode;
     const app = new App() as any;
@@ -290,6 +329,35 @@ describe("input editing", () => {
     app.input.handleKey({ name: "tab", char: "\t", ctrl: false, meta: false, shift: false });
 
     expect(app.input.getText()).toBe("hello");
+  });
+});
+
+describe("theme rendering", () => {
+  it("applies theme text color to assistant markdown on light themes", () => {
+    setPreviewTheme("brokecli-light");
+    try {
+      const lines = renderStaticMessages({
+        messages: [{ role: "assistant", content: "Plain assistant text" }],
+        maxWidth: 40,
+        toolOutputCollapsed: false,
+        isToolOutput: () => false,
+        wordWrap,
+        colors: {
+          imageTagBg: "",
+          userBg: "",
+          userText: "",
+          border: "",
+          muted: currentTheme().textMuted,
+          text: currentTheme().text,
+        },
+        reset: "\u001b[0m",
+        bold: "\u001b[1m",
+      });
+
+      expect(lines.join("\n")).toContain(currentTheme().text);
+    } finally {
+      setPreviewTheme(null);
+    }
   });
 });
 
@@ -799,7 +867,7 @@ describe("thinking preview", () => {
     app.appendThinking("first pass");
     app.setStreaming(false);
 
-    expect(app.renderMessages(80).map((line: string) => stripAnsi(line)).join("\n")).toContain("thought");
+    expect(app.renderMessages(80).map((line: string) => stripAnsi(line)).join("\n")).toContain("Reasoned");
 
     app.addMessage("user", "next");
     expect(app.renderMessages(80).map((line: string) => stripAnsi(line)).join("\n")).not.toContain("thought");

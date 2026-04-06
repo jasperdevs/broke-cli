@@ -48,6 +48,17 @@ export interface PickerItem {
   detail?: string;
 }
 
+type MenuPromptKind =
+  | "model"
+  | "settings"
+  | "permissions"
+  | "extensions"
+  | "theme"
+  | "export"
+  | "resume"
+  | "projects"
+  | "logout";
+
 interface MenuEntry {
   text: string;
   selectIndex?: number;
@@ -136,10 +147,10 @@ export class App {
   private statusMessage: string | undefined;
   private detectedProviders: string[] = [];
   private cwd = process.cwd();
-  private modelPicker: { options: ModelOption[]; cursor: number; query: string; scope: "all" | "scoped" } | null = null;
+  private modelPicker: { options: ModelOption[]; cursor: number; scope: "all" | "scoped" } | null = null;
   private onModelSelect: ((providerId: string, modelId: string) => void) | null = null;
   private onModelPin: ((providerId: string, modelId: string, pinned: boolean) => void) | null = null;
-  private settingsPicker: { entries: SettingEntry[]; cursor: number; query: string } | null = null;
+  private settingsPicker: { entries: SettingEntry[]; cursor: number } | null = null;
   private onSettingToggle: ((key: string) => void) | null = null;
   private filePicker: { files: string[]; filtered: string[]; query: string; cursor: number } | null = null;
   private projectFiles: string[] | null = null;
@@ -149,7 +160,7 @@ export class App {
     title: string;
     items: PickerItem[];
     cursor: number;
-    query: string;
+    kind?: MenuPromptKind;
     previewHint?: string;
     onPreview?: (id: string) => void;
     onCancel?: () => void;
@@ -458,15 +469,17 @@ export class App {
 
   openModelPicker(options: ModelOption[], onSelect: (providerId: string, modelId: string) => void, onPin?: (providerId: string, modelId: string, pinned: boolean) => void, initialCursor?: number): void {
     const cursorIdx = initialCursor ?? options.findIndex((o) => o.active);
-    this.modelPicker = { options, cursor: cursorIdx >= 0 ? cursorIdx : 0, query: "", scope: "all" };
+    this.modelPicker = { options, cursor: cursorIdx >= 0 ? cursorIdx : 0, scope: "all" };
     this.onModelSelect = onSelect;
     this.onModelPin = onPin ?? null;
+    this.openMenuPrompt("model");
     this.drawNow();
   }
 
   openSettings(entries: SettingEntry[], onToggle: (key: string) => void): void {
-    this.settingsPicker = { entries, cursor: 0, query: "" };
+    this.settingsPicker = { entries, cursor: 0 };
     this.onSettingToggle = onToggle;
+    this.openMenuPrompt("settings");
     this.drawNow();
   }
 
@@ -501,6 +514,7 @@ export class App {
       onSecondaryAction?: (id: string) => void;
       secondaryHint?: string;
       closeOnSelect?: boolean;
+      kind?: MenuPromptKind;
     },
   ): void {
     const cursor = this.clampMenuCursor(options?.initialCursor ?? 0, items.length);
@@ -508,7 +522,7 @@ export class App {
       title,
       items,
       cursor,
-      query: "",
+      kind: options?.kind,
       previewHint: options?.previewHint,
       onPreview: options?.onPreview,
       onCancel: options?.onCancel,
@@ -517,6 +531,7 @@ export class App {
       closeOnSelect: options?.closeOnSelect ?? true,
     };
     this.onItemSelect = onSelect;
+    if (options?.kind) this.openMenuPrompt(options.kind);
     this.drawNow();
   }
 
@@ -857,7 +872,7 @@ export class App {
     const pool = this.modelPicker.scope === "scoped"
       ? this.modelPicker.options.filter((option) => option.active)
       : this.modelPicker.options;
-    const q = this.modelPicker.query.toLowerCase();
+    const q = this.getMenuFilterQuery().toLowerCase();
     if (!q) return pool;
     return pool.filter(o =>
       o.modelId.toLowerCase().includes(q) || o.providerName.toLowerCase().includes(q)
@@ -874,7 +889,7 @@ export class App {
   /** Filter settings by search query */
   private getFilteredSettings(): SettingEntry[] {
     if (!this.settingsPicker) return [];
-    const q = this.settingsPicker.query.toLowerCase();
+    const q = this.getMenuFilterQuery().toLowerCase();
     if (!q) return this.settingsPicker.entries;
     return this.settingsPicker.entries.filter(e =>
       e.label.toLowerCase().includes(q) || e.description.toLowerCase().includes(q)
@@ -884,7 +899,7 @@ export class App {
   /** Filter items by search query */
   private getFilteredItems(): PickerItem[] {
     if (!this.itemPicker) return [];
-    const q = this.itemPicker.query.toLowerCase();
+    const q = this.getMenuFilterQuery().toLowerCase();
     if (!q) return this.itemPicker.items;
     return this.itemPicker.items.filter(i =>
       i.label.toLowerCase().includes(q) || (i.detail ?? "").toLowerCase().includes(q)
@@ -901,7 +916,77 @@ export class App {
   private closeItemPicker(revertPreview = false): void {
     if (revertPreview) this.itemPicker?.onCancel?.();
     this.itemPicker = null;
+    this.input.clear();
     this.drawNow();
+  }
+
+  private getMenuPromptPrefix(kind: MenuPromptKind): string {
+    switch (kind) {
+      case "model": return "/model ";
+      case "settings": return "/settings ";
+      case "permissions": return "/permissions ";
+      case "extensions": return "/extensions ";
+      case "theme": return "/theme ";
+      case "export": return "/export ";
+      case "resume": return "/resume ";
+      case "projects": return "/projects ";
+      case "logout": return "/logout ";
+    }
+  }
+
+  private getActiveMenuPromptKind(): MenuPromptKind | null {
+    if (this.settingsPicker) return "settings";
+    if (this.modelPicker) return "model";
+    if (this.itemPicker?.kind) return this.itemPicker.kind;
+    return null;
+  }
+
+  private openMenuPrompt(kind: MenuPromptKind): void {
+    this.input.setText(this.getMenuPromptPrefix(kind));
+  }
+
+  private getMenuFilterQuery(): string {
+    const kind = this.getActiveMenuPromptKind();
+    if (!kind) return "";
+    const prefix = this.getMenuPromptPrefix(kind);
+    const text = this.input.getText();
+    return text.startsWith(prefix) ? text.slice(prefix.length).trimStart() : "";
+  }
+
+  private handleMenuPromptKey(key: Keypress): boolean {
+    const kind = this.getActiveMenuPromptKind();
+    if (!kind) return false;
+    const prefix = this.getMenuPromptPrefix(kind);
+    const before = this.input.getText();
+    const beforeQuery = before.startsWith(prefix) ? before.slice(prefix.length) : "";
+    const beforeCursor = this.input.getCursor();
+    const beforeQueryCursor = Math.max(0, beforeCursor - prefix.length);
+    const editableKey = key.name === "backspace"
+      || key.name === "delete"
+      || key.name === "left"
+      || key.name === "right"
+      || key.name === "home"
+      || key.name === "end"
+      || (key.ctrl && (key.name === "a" || key.name === "e" || key.name === "u" || key.name === "w" || key.name === "h"))
+      || (!!key.char && !key.ctrl && !key.meta && key.char.length === 1);
+    if (!editableKey) return false;
+
+    this.input.handleKey(key);
+
+    let text = this.input.getText();
+    if (!text.startsWith(prefix)) {
+      text = prefix + beforeQuery;
+      this.input.setText(text);
+      this.input.setCursor(prefix.length + beforeQueryCursor);
+      return true;
+    }
+    if (text.length < prefix.length) {
+      this.input.setText(prefix);
+    }
+    if (this.input.getCursor() < prefix.length) {
+      this.input.setCursor(prefix.length);
+    }
+    return true;
   }
 
   private getSidebarMaxScroll(visibleHeight: number): number {
@@ -1110,6 +1195,7 @@ export class App {
     if (!selected) return;
     this.modelPicker.cursor = index;
     this.modelPicker = null;
+    this.input.clear();
     if (this.onModelSelect) {
       this.onModelSelect(selected.providerId, selected.modelId);
     }
@@ -1343,15 +1429,9 @@ export class App {
         this.toggleSettingEntry(this.settingsPicker.cursor);
       } else if (key.name === "escape" || (key.ctrl && key.name === "c")) {
         this.settingsPicker = null;
+        this.input.clear();
         this.drawNow();
-      } else if (key.name === "backspace") {
-        if (this.settingsPicker.query.length > 0) {
-          this.settingsPicker.query = this.settingsPicker.query.slice(0, -1);
-          this.settingsPicker.cursor = 0;
-          this.draw();
-        }
-      } else if (key.char && !key.ctrl && !key.meta && key.char.length === 1) {
-        this.settingsPicker.query += key.char;
+      } else if (this.handleMenuPromptKey(key)) {
         this.settingsPicker.cursor = 0;
         this.draw();
       }
@@ -1373,15 +1453,7 @@ export class App {
         this.selectItemEntry(this.itemPicker.cursor);
       } else if (key.name === "escape" || (key.ctrl && key.name === "c")) {
         this.closeItemPicker(true);
-      } else if (key.name === "backspace") {
-        if (this.itemPicker.query.length > 0) {
-          this.itemPicker.query = this.itemPicker.query.slice(0, -1);
-          this.itemPicker.cursor = 0;
-          this.previewCurrentItem();
-          this.draw();
-        }
-      } else if (key.char && !key.ctrl && !key.meta && key.char.length === 1) {
-        this.itemPicker.query += key.char;
+      } else if (this.handleMenuPromptKey(key)) {
         this.itemPicker.cursor = 0;
         this.previewCurrentItem();
         this.draw();
@@ -1406,15 +1478,9 @@ export class App {
         this.selectModelEntry(this.modelPicker.cursor);
       } else if (key.name === "escape" || (key.ctrl && key.name === "c")) {
         this.modelPicker = null;
+        this.input.clear();
         this.drawNow();
-      } else if (key.name === "backspace") {
-        if (this.modelPicker.query.length > 0) {
-          this.modelPicker.query = this.modelPicker.query.slice(0, -1);
-          this.modelPicker.cursor = 0;
-          this.draw();
-        }
-      } else if (key.char && !key.ctrl && !key.meta && key.char.length === 1) {
-        this.modelPicker.query += key.char;
+      } else if (this.handleMenuPromptKey(key)) {
         this.modelPicker.cursor = 0;
         this.draw();
       }
@@ -2271,7 +2337,7 @@ export class App {
 
   private appendModelPicker(lines: string[], _maxTotal: number, clickTargets: Array<{ lineIndex: number; action: () => void }>): void {
     const picker = this.modelPicker!;
-    lines.push(` ${T()}${BOLD}Select model${RESET}${picker.query ? `  ${DIM}/${RESET}${picker.query}` : ""}`);
+    lines.push(` ${T()}${BOLD}Select model${RESET}`);
     const allLabel = picker.scope === "all" ? `${TXT()}${BOLD}all${RESET}` : `${MUTED()}all${RESET}`;
     const scopedLabel = picker.scope === "scoped" ? `${TXT()}${BOLD}scoped${RESET}` : `${MUTED()}scoped${RESET}`;
     lines.push(` ${DIM}Scope:${RESET} ${allLabel} ${DIM}|${RESET} ${scopedLabel}`);
@@ -2317,7 +2383,7 @@ export class App {
 
   private appendSettingsPicker(lines: string[], _maxTotal: number, clickTargets: Array<{ lineIndex: number; action: () => void }>): void {
     const picker = this.settingsPicker!;
-    lines.push(` ${T()}${BOLD}Settings${RESET}${picker.query ? `  ${DIM}/${RESET}${picker.query}` : ""}`);
+    lines.push(` ${T()}${BOLD}Settings${RESET}`);
 
     const filtered = this.getFilteredSettings();
     if (filtered.length === 0) {
@@ -2335,7 +2401,7 @@ export class App {
 
   private appendItemPicker(lines: string[], _maxTotal: number, clickTargets: Array<{ lineIndex: number; action: () => void }>): void {
     const picker = this.itemPicker!;
-    lines.push(` ${T()}${BOLD}${picker.title}${RESET}${picker.query ? `  ${DIM}/${RESET}${picker.query}` : ""}`);
+    lines.push(` ${T()}${BOLD}${picker.title}${RESET}`);
 
     const filtered = this.getFilteredItems();
     if (filtered.length === 0) {

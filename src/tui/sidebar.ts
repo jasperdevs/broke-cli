@@ -126,7 +126,7 @@ export function buildSidebarFooterLines(options: {
 
   if (contextUsed !== undefined && contextUsage) {
     const contextColor = contextUsed > 90 ? colors.error : contextUsed > 70 ? colors.warning : colors.muted;
-    lines.push(`${colors.text}Prompt${RESET}`);
+    lines.push(`${colors.text}Context${RESET}`);
     lines.push(`  ${contextColor}${contextUsage}${RESET}`);
     lines.push(`  ${contextColor}${formatContextPercent(contextUsed)}${RESET}`);
   }

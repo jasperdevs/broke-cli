@@ -65,13 +65,15 @@ export function renderStaticMessages(options: {
       const wrapW = maxWidth - 4;
       for (const cl of rendered.split("\n")) {
         const plain = stripAnsi(cl);
+        const themedPrefix = `${colors.text}`;
+        const themedLine = cl.includes(reset) ? cl.replaceAll(reset, `${reset}${colors.text}`) : cl;
         if (plain.length <= wrapW) {
-          lines.push(`  ${cl}`);
+          lines.push(`  ${themedPrefix}${themedLine}${reset}`);
           continue;
         }
         const prefix = extractAnsiPrefix(cl);
         for (const wrappedLine of wordWrap(plain, wrapW)) {
-          lines.push(`  ${prefix}${wrappedLine}${reset}`);
+          lines.push(`  ${themedPrefix}${prefix}${wrappedLine}${reset}`);
         }
       }
       if (idx + 1 < messages.length && messages[idx + 1].role === "user") {

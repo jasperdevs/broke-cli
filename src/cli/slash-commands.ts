@@ -63,6 +63,7 @@ interface SlashCommandApp {
       onSecondaryAction?: (id: string) => void;
       secondaryHint?: string;
       closeOnSelect?: boolean;
+      kind?: "permissions" | "extensions" | "theme" | "export" | "resume" | "projects" | "logout";
     },
   ): void;
   stop(): void;
@@ -247,7 +248,7 @@ export async function handleSlashCommand(options: {
       app.openItemPicker("Tool permissions", buildPermissionItems(), (id) => {
         toggleToolPermission(id);
         app.updateItemPickerItems?.(buildPermissionItems(), id);
-      }, { closeOnSelect: false });
+      }, { closeOnSelect: false, kind: "permissions" });
       return { handled: true };
     }
     case "extensions": {
@@ -265,7 +266,7 @@ export async function handleSlashCommand(options: {
         toggleExtensionEnabled(id);
         hooks.reload?.();
         app.updateItemPickerItems?.(buildExtensionItems(), id);
-      }, { closeOnSelect: false });
+      }, { closeOnSelect: false, kind: "extensions" });
       return { handled: true };
     }
     case "theme": {
@@ -295,6 +296,7 @@ export async function handleSlashCommand(options: {
         updateSetting("theme", themeId);
       }, {
         initialCursor: currentIdx,
+        kind: "theme",
         onPreview: (themeId) => setPreviewTheme(themeId),
         onCancel: () => setPreviewTheme(null),
       });
@@ -391,7 +393,7 @@ export async function handleSlashCommand(options: {
         } catch (err) {
           app.addMessage("system", `Export failed: ${(err as Error).message}`);
         }
-      });
+      }, { kind: "export" });
       return { handled: true };
     }
     case "share": {
@@ -450,7 +452,7 @@ export async function handleSlashCommand(options: {
         app.clearMessages();
         for (const msg of loaded.getMessages()) app.addMessage(msg.role, msg.content);
         app.updateUsage(loaded.getTotalCost(), loaded.getTotalInputTokens(), loaded.getTotalOutputTokens());
-      });
+      }, { kind: "resume" });
       return { handled: true };
     }
     case "projects": {
@@ -466,7 +468,7 @@ export async function handleSlashCommand(options: {
       }));
       app.openItemPicker("Projects", items, (cwd) => {
         onProjectChange(cwd);
-      });
+      }, { kind: "projects" });
       return { handled: true };
     }
     case "undo":
@@ -566,7 +568,7 @@ export async function handleSlashCommand(options: {
       ];
       app.openItemPicker("Logout", items, (id) => {
         void executeLogout(id);
-      });
+      }, { kind: "logout" });
       return { handled: true };
     }
     case "exit":

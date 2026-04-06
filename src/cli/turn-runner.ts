@@ -171,7 +171,7 @@ export async function runModelTurn(options: {
   const effectiveCavemanLevel = resolveCavemanLevel(getSettings().cavemanLevel ?? "off", text);
   let turnSystemPrompt = buildSystemPrompt(process.cwd(), executionModel.provider.id, currentMode, effectiveCavemanLevel);
   if (shouldRequestThinkTags(executionModel, thinkingRequested)) {
-    turnSystemPrompt += "\n\nFor local reasoning-capable models: if you support private reasoning output, emit it inside <think>...</think> before the final answer. If you do not support that format, ignore this instruction and answer normally.";
+    turnSystemPrompt += "\n\nFor local reasoning-capable models: emit a short plain-text reasoning summary inside <think>...</think> before the final answer. Keep it visible, concise, and directly about the current request. If you do not support that format, ignore this instruction and answer normally.";
   }
   let streamTokenFlushTimer: ReturnType<typeof setTimeout> | null = null;
   const scheduleStreamTokenUpdate = (): void => {

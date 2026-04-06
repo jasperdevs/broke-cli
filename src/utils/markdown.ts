@@ -144,7 +144,7 @@ function renderBlock(token: Token, indent = ""): string[] {
       // Split long lines for readability
       const paraLines = text.split("\n");
       for (const l of paraLines) {
-        lines.push(`${indent}${l}`);
+        lines.push(`${indent}${TXT()}${l}${RESET}`);
       }
       lines.push("");
       break;
@@ -179,7 +179,7 @@ function renderBlock(token: Token, indent = ""): string[] {
       for (const child of inner) {
         const childLines = renderBlock(child, "");
         for (const cl of childLines) {
-          lines.push(`${indent}${MUTED()}│${RESET} ${ITALIC}${cl}${RESET}`);
+          lines.push(`${indent}${MUTED()}│${RESET} ${ITALIC}${TXT()}${cl}${RESET}`);
         }
       }
       lines.push("");
@@ -293,11 +293,11 @@ function renderBlock(token: Token, indent = ""): string[] {
     default:
       // Fallback — render raw text
       if (token.tokens) {
-        lines.push(`${indent}${renderInline(token.tokens)}`);
+        lines.push(`${indent}${TXT()}${renderInline(token.tokens)}${RESET}`);
       } else if (token.text) {
-        lines.push(`${indent}${token.text}`);
+        lines.push(`${indent}${TXT()}${token.text}${RESET}`);
       } else if (token.raw) {
-        lines.push(`${indent}${token.raw}`);
+        lines.push(`${indent}${TXT()}${token.raw}${RESET}`);
       }
       break;
   }

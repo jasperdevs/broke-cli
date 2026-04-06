@@ -17,9 +17,14 @@ export class InputWidget {
   getCursor(): number { return this.cursor; }
 
   /** Replace input text while preserving a valid cursor */
-  setText(text: string): void {
+  setText(text: string, placeCursorAtEnd = true): void {
     this.text = text;
-    this.cursor = Math.min(this.cursor, this.text.length);
+    this.cursor = placeCursorAtEnd ? this.text.length : Math.min(this.cursor, this.text.length);
+  }
+
+  /** Set cursor position directly, clamped to valid range */
+  setCursor(cursor: number): void {
+    this.cursor = Math.max(0, Math.min(cursor, this.text.length));
   }
 
   /** Clear input */
