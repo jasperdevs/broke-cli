@@ -98,7 +98,7 @@ export function renderSidebarFooter(app: AppState): string[] {
     statusParts,
     tokenParts: app.renderTokenSummaryParts(),
     contextUsed: app.contextLimitTokens > 0 ? app.contextUsed : undefined,
-    contextUsage: app.contextLimitTokens > 0 ? `${fmtTokens(app.contextTokenCount)}/${fmtTokens(app.contextLimitTokens)}` : undefined,
+    contextTokens: app.contextLimitTokens > 0 ? fmtTokens(app.contextTokenCount) : undefined,
     colors: {
       accent: app.getModeAccent(),
       muted: MUTED(),

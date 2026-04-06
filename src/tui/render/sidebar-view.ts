@@ -7,7 +7,7 @@ export function buildSidebarFooter(options: {
   statusParts: string[];
   tokenParts: string[];
   contextUsed?: number;
-  contextUsage?: string;
+  contextTokens?: string;
   colors: {
     accent: string;
     muted: string;
@@ -16,14 +16,14 @@ export function buildSidebarFooter(options: {
     error: string;
   };
 }): string[] {
-  const { showTokens, width, statusParts, tokenParts, contextUsed, contextUsage, colors } = options;
+  const { showTokens, width, statusParts, tokenParts, contextUsed, contextTokens, colors } = options;
   if (!showTokens) return [];
   const footer = buildSidebarFooterLines({
     width,
     statusParts,
     tokenParts,
     contextUsed,
-    contextUsage,
+    contextTokens,
     colors,
   });
   return footer.length > 0 ? ["", ...footer] : footer;

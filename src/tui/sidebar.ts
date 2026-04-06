@@ -86,19 +86,19 @@ export function buildSidebarFooterLines(options: {
   statusParts: string[];
   tokenParts: string[];
   contextUsed?: number;
-  contextUsage?: string;
+  contextTokens?: string;
   colors: SidebarFooterColors;
 }): string[] {
-  const { tokenParts, contextUsed, contextUsage, colors } = options;
+  const { tokenParts, contextUsed, contextTokens, colors } = options;
   const lines: string[] = [];
 
   for (const part of tokenParts) {
     lines.push(`${colors.muted}${part}${RESET}`);
   }
 
-  if (contextUsed !== undefined && contextUsage) {
+  if (contextUsed !== undefined && contextTokens) {
     const contextColor = contextUsed > 90 ? colors.error : contextUsed > 70 ? colors.warning : colors.muted;
-    lines.push(`${contextColor}live ${contextUsage}${RESET}`);
+    lines.push(`${contextColor}live ${contextTokens}${RESET}`);
     lines.push(`${contextColor}${formatContextPercent(contextUsed)}${RESET}`);
   }
 

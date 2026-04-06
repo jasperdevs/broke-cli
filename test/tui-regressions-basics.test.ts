@@ -61,6 +61,8 @@ describe("sidebar token summary", () => {
   });
 
   it("shows only lifetime totals plus current context usage in the sidebar footer", () => {
+    const originalShowTokens = getSettings().showTokens;
+    updateSetting("showTokens", true);
     const app = new App() as any;
     app.setContextUsage(132, 344_000);
     app.updateUsage(0.0016, 150, 60);
@@ -70,11 +72,14 @@ describe("sidebar token summary", () => {
     expect(footer).toContain("Σ 210 session");
     expect(footer).toContain("↑ 150 in");
     expect(footer).toContain("↓ 60 out");
-    expect(footer).toContain("live 132/344k");
+    expect(footer).toContain("live 132");
     expect(footer).toContain("<1% of limit");
+    updateSetting("showTokens", originalShowTokens);
   });
 
   it("keeps the token region to totals plus explicitly labeled context", () => {
+    const originalShowTokens = getSettings().showTokens;
+    updateSetting("showTokens", true);
     const app = new App() as any;
     app.screen = { sidebarWidth: 12, width: 80, height: 24, hasSidebar: true, mainWidth: 61, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
     updateSetting("cavemanLevel", "ultra");
@@ -84,18 +89,22 @@ describe("sidebar token summary", () => {
     expect(footer.some((line: string) => line.trim() === "Σ 210 session")).toBe(true);
     expect(footer.some((line: string) => line.trim() === "↑ 150 in")).toBe(true);
     expect(footer.some((line: string) => line.trim() === "↓ 60 out")).toBe(true);
-    expect(footer.some((line: string) => line.trim() === "live 132k/344k")).toBe(true);
+    expect(footer.some((line: string) => line.trim() === "live 132k")).toBe(true);
     expect(footer.some((line: string) => line.trim() === "38% of limit")).toBe(true);
     updateSetting("cavemanLevel", "off");
+    updateSetting("showTokens", originalShowTokens);
   });
 
   it("shows less-than-one-percent prompt usage instead of rounding down to zero", () => {
+    const originalShowTokens = getSettings().showTokens;
+    updateSetting("showTokens", true);
     const app = new App() as any;
     app.setContextUsage(822, 400_000);
     app.updateUsage(0.0016, 150, 60);
     const footer = app.renderSidebarFooter().map((line: string) => stripAnsi(line)).join("\n");
-    expect(footer).toContain("live 822/400k");
+    expect(footer).toContain("live 822");
     expect(footer).toContain("<1% of limit");
+    updateSetting("showTokens", originalShowTokens);
   });
 
   it("keeps mode, thinking, and caveman badges in the bottom bar even with a sidebar", () => {

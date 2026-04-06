@@ -83,6 +83,8 @@ describe("sidebar scrolling", () => {
   });
 
   it("handles transcript and sidebar wheel behavior while keeping the sidebar footer token-only", () => {
+    const originalShowTokens = getSettings().showTokens;
+    updateSetting("showTokens", true);
     const app = new App() as any;
     app.messages = Array.from({ length: 30 }, (_, i) => ({ role: "user", content: `msg ${i}` }));
     app.scrollOffset = 6;
@@ -111,8 +113,9 @@ describe("sidebar scrolling", () => {
     const footer = app.renderSidebarFooter();
     const footerText = footer.map((line: string) => stripAnsi(line)).join("\n");
     expect(footerText).toContain("Σ 8.8k session");
-    expect(footerText).toContain("live 120k/128k");
+    expect(footerText).toContain("live 120k");
     expect(footerText).not.toContain("plan");
+    updateSetting("showTokens", originalShowTokens);
   });
 });
 
