@@ -53,11 +53,11 @@ describe("message wrapping", () => {
 });
 
 describe("sidebar token summary", () => {
-  it("renders labeled input, output, and total counts", () => {
+  it("renders a single lifetime session total", () => {
     const app = new App() as any;
     app.setContextUsage(132, 344_000);
     app.updateUsage(0.0016, 150, 60);
-    expect(app.renderTokenSummaryParts()).toEqual(["Σ 210 session", "↑ 150 in", "↓ 60 out"]);
+    expect(app.renderTokenSummaryParts()).toEqual(["Σ 210 session"]);
   });
 
   it("shows only lifetime totals plus current context usage in the sidebar footer", () => {
@@ -70,8 +70,6 @@ describe("sidebar token summary", () => {
     expect(footer).not.toContain("Session");
     expect(footer).not.toContain("Next request");
     expect(footer).toContain("Σ 210 session");
-    expect(footer).toContain("↑ 150 in");
-    expect(footer).toContain("↓ 60 out");
     expect(footer).toContain("live 132");
     expect(footer).toContain("<1%");
     expect(footer).toContain("▕");
@@ -88,8 +86,6 @@ describe("sidebar token summary", () => {
     app.updateUsage(0.0016, 150, 60);
     const footer = app.renderSidebarFooter().map((line: string) => stripAnsi(line));
     expect(footer.some((line: string) => line.trim() === "Σ 210 session")).toBe(true);
-    expect(footer.some((line: string) => line.trim() === "↑ 150 in")).toBe(true);
-    expect(footer.some((line: string) => line.trim() === "↓ 60 out")).toBe(true);
     expect(footer.some((line: string) => line.trim() === "live 132k")).toBe(true);
     expect(footer.some((line: string) => line.includes("38%"))).toBe(true);
     expect(footer.some((line: string) => line.includes("▕"))).toBe(true);
@@ -110,7 +106,7 @@ describe("sidebar token summary", () => {
     updateSetting("showTokens", originalShowTokens);
   });
 
-  it("keeps mode, thinking, and caveman badges in the bottom bar even with a sidebar", () => {
+  it("keeps mode, thinking, and caveman badges in the bottom bar when the main footer owns status", () => {
     const app = new App() as any;
     const settings = getSettings();
     const original = { thinkingLevel: settings.thinkingLevel, enableThinking: settings.enableThinking, cavemanLevel: settings.cavemanLevel };
@@ -120,7 +116,7 @@ describe("sidebar token summary", () => {
       updateSetting("cavemanLevel", "ultra");
       app.messages = [{ role: "user", content: "hello" }];
       let rendered: string[] = [];
-      app.screen = { height: 16, width: 80, hasSidebar: true, mainWidth: 57, sidebarWidth: 22, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
+      app.screen = { height: 16, width: 80, hasSidebar: false, mainWidth: 80, sidebarWidth: 0, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
       app.drawImmediate();
       const output = rendered.map((line) => stripAnsi(line)).join("\n");
       expect(output).toContain("build");

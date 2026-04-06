@@ -70,12 +70,7 @@ export function getLiveTotalTokens(app: AppState): number {
 
 export function renderTokenSummaryParts(app: AppState): string[] {
   const total = app.getLiveTotalTokens();
-  const parts = [
-    `Σ ${fmtTokens(total)} session`,
-    `↑ ${fmtTokens(app.getLiveInputTokens())} in`,
-    `↓ ${fmtTokens(app.getLiveOutputTokens())} out`,
-  ];
-  return parts;
+  return [`Σ ${fmtTokens(total)} session`];
 }
 
 export function getModeAccent(app: AppState): string {
