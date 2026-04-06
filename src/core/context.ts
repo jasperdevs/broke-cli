@@ -41,9 +41,13 @@ Date: ${new Date().toDateString()}
 
   // Project file tree (like OpenCode includes)
   try {
-    const tree = isGit
-      ? execSync("git ls-files --others --cached --exclude-standard | head -100", { cwd, encoding: "utf-8", timeout: 3000 }).trim()
-      : listProjectFiles(cwd, 100);
+    let tree: string;
+    if (isGit) {
+      const files = execSync("git ls-files --others --cached --exclude-standard", { cwd, encoding: "utf-8", timeout: 3000 }).trim();
+      tree = files.split("\n").slice(0, 100).join("\n");
+    } else {
+      tree = listProjectFiles(cwd, 100);
+    }
     if (tree) {
       parts.push(`
 <project>
