@@ -185,6 +185,7 @@ program.action(async (opts) => {
           return;
         case "model": {
           const detectedIds = new Set(providers.map((p) => p.id));
+          const pinnedModels = getSettings().scopedModels;
           const allOptions: Array<{ providerId: string; providerName: string; modelId: string; active: boolean }> = [];
           for (const prov of listProviders()) {
             if (!detectedIds.has(prov.id)) continue;
@@ -193,14 +194,23 @@ program.action(async (opts) => {
                 providerId: prov.id,
                 providerName: prov.name,
                 modelId: m,
-                active: activeModel !== null && activeModel.provider.id === prov.id && m === currentModelId,
+                active: pinnedModels.includes(`${prov.id}/${m}`),
               });
             }
           }
+          // Sort: pinned models first, then by provider, then by model name
+          allOptions.sort((a, b) => {
+            if (a.active && !b.active) return -1;
+            if (!a.active && b.active) return 1;
+            if (a.providerId !== b.providerId) return a.providerId.localeCompare(b.providerId);
+            return a.modelId.localeCompare(b.modelId);
+          });
           if (allOptions.length === 0) {
             app.addMessage("system", "No providers detected. Set ANTHROPIC_API_KEY or OPENAI_API_KEY.");
             return;
           }
+          // Put cursor on current model
+          const cursorIdx = allOptions.findIndex(opt => opt.providerId === activeModel?.provider?.id && opt.modelId === currentModelId);
           app.openModelPicker(allOptions, (provId, modId) => {
             try {
               activeModel = createModel(provId, modId);
@@ -221,7 +231,7 @@ program.action(async (opts) => {
             } else if (!pinned) {
               updateSetting("scopedModels", scoped.filter((s: string) => s !== key));
             }
-          });
+          }, cursorIdx >= 0 ? cursorIdx : 0);
           return;
         }
         case "settings": {

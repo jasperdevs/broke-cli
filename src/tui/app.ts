@@ -149,9 +149,9 @@ export class App {
     this.detectedProviders = providers;
   }
 
-  openModelPicker(options: ModelOption[], onSelect: (providerId: string, modelId: string) => void, onPin?: (providerId: string, modelId: string, pinned: boolean) => void): void {
-    const activeIdx = options.findIndex((o) => o.active);
-    this.modelPicker = { options, cursor: activeIdx >= 0 ? activeIdx : 0 };
+  openModelPicker(options: ModelOption[], onSelect: (providerId: string, modelId: string) => void, onPin?: (providerId: string, modelId: string, pinned: boolean) => void, initialCursor?: number): void {
+    const cursorIdx = initialCursor ?? options.findIndex((o) => o.active);
+    this.modelPicker = { options, cursor: cursorIdx >= 0 ? cursorIdx : 0 };
     this.onModelSelect = onSelect;
     this.onModelPin = onPin ?? null;
     this.draw();
