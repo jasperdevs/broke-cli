@@ -764,9 +764,15 @@ export class App {
       return;
     }
 
-    // Ctrl+O — toggle tool output collapse
+    // Ctrl+O — toggle all tool output expanded/collapsed
     if (key.ctrl && key.name === "o") {
-      this.toolOutputCollapsed = !this.toolOutputCollapsed;
+      this.allToolsExpanded = !this.allToolsExpanded;
+      this.toolOutputCollapsed = !this.allToolsExpanded;
+      // Update all current tool calls
+      for (const tc of this.toolCallGroups) {
+        tc.expanded = this.allToolsExpanded;
+      }
+      this.invalidateMsgCache();
       this.draw();
       return;
     }
