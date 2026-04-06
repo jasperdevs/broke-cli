@@ -76,6 +76,7 @@ describe("slash command handling", () => {
       onModelChange: () => {},
       onSystemPromptChange: () => {},
       hooks: { emit() {} },
+      onProjectChange: () => {},
     });
 
     expect(result.handled).toBe(true);
@@ -111,6 +112,7 @@ describe("slash command handling", () => {
       onModelChange: () => {},
       onSystemPromptChange: () => {},
       hooks: { emit() {} },
+      onProjectChange: () => {},
     });
 
     expect(result.handled).toBe(false);
@@ -148,11 +150,42 @@ describe("slash command handling", () => {
       onModelChange: () => {},
       onSystemPromptChange: () => {},
       hooks: { emit() {} },
+      onProjectChange: () => {},
     });
 
     expect(result.handled).toBe(true);
     expect(replaced).not.toBeNull();
     expect(replaced?.getId()).not.toBe(session.getId());
     expect(replaced?.getMessages().map((msg) => msg.content)).toEqual(["hello"]);
+  });
+
+  it("shows a repo map from /repomap", async () => {
+    const app = createAppStub();
+    const session = new Session(`test-repomap-${Date.now()}`);
+
+    const result = await handleSlashCommand({
+      text: "/repomap session",
+      app,
+      session,
+      activeModel: null,
+      currentModelId: "",
+      currentMode: "build",
+      systemPrompt: "sys",
+      providerRegistry: {} as any,
+      buildVisibleModelOptions: () => [],
+      refreshProviderState: async () => [],
+      isSkippedPromptAnswer: () => false,
+      isValidHttpBaseUrl: () => true,
+      getContextOptimizer: () => ({ reset() {} }) as any,
+      onSessionReplace: () => {},
+      onModelChange: () => {},
+      onSystemPromptChange: () => {},
+      hooks: { emit() {} },
+      onProjectChange: () => {},
+    });
+
+    expect(result.handled).toBe(true);
+    expect(app.messages.some((entry) => entry.content.includes("## "))).toBe(true);
+    expect(app.messages.some((entry) => entry.content.toLowerCase().includes("session"))).toBe(true);
   });
 });

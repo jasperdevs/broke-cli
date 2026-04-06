@@ -55,6 +55,7 @@ export function buildSystemPrompt(cwd: string, providerId?: string, mode?: Mode,
   // Per-tool guidelines — compact version when caveman is aggressive
   if (cavemanLevel === "ultra") {
     parts.push(`<tool-tips>
+repoMap: high-level repo map. Use before deep reads.
 bash: tests/builds/git/install. No cat/sed/grep. 30s timeout.
 readFile: offset/limit for large files. Max 500 lines.
 editFile: EXACT match old_string. Enough context for uniqueness.
@@ -66,6 +67,7 @@ todoWrite: Task checklist for 3+ step work.
 </tool-tips>`);
   } else {
     parts.push(`<tool-tips>
+repoMap: Build a high-level file/symbol map before detailed reads in unfamiliar code.
 bash: Use for running tests, builds, git commands, installing packages. Prefer tools over bash for file operations (don't cat/sed/grep via bash). Commands timeout at 30s by default.
 readFile: Use offset/limit for large files — don't read entire files over 500 lines.
 editFile: old_string must be an EXACT match of existing text. Include enough surrounding context to be unique. Prefer this over writeFile for changes.

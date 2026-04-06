@@ -192,8 +192,13 @@ const COMMANDS: CommandEntry[] = [
   { name: "settings", desc: "configure options", sortPriority: -1 },
   { name: "connect", desc: "connect provider", aliases: ["login"] },
   { name: "model", desc: "switch model", hotkey: "ctrl+l" },
+  { name: "editor", desc: "pick editor model for architect/editor" },
   { name: "theme", desc: "change color theme" },
   { name: "compact", desc: "compress context" },
+  { name: "repomap", desc: "show high-level repo map" },
+  { name: "permissions", desc: "allow or block tools" },
+  { name: "extensions", desc: "manage extension loading" },
+  { name: "projects", desc: "switch or search recent projects" },
   { name: "resume", desc: "resume session (sessions)", aliases: ["sessions"] },
   { name: "name", desc: "name this session" },
   { name: "export", desc: "export or copy transcript" },
@@ -817,6 +822,16 @@ export class App {
 
   setMode(mode: Mode): void {
     this.mode = mode;
+    this.draw();
+  }
+
+  setCwd(cwd: string): void {
+    this.cwd = cwd;
+    this.projectFiles = null;
+    this.fileContexts.clear();
+    this.sidebarFileTree = null;
+    this.sidebarExpandedDirs.clear();
+    this.homeTip = HOME_TIPS[this.pickHomeTipIndex()];
     this.draw();
   }
 

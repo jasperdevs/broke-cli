@@ -5,6 +5,7 @@ import type { DetectedProvider } from "../src/ai/detect.js";
 import type { ModelHandle } from "../src/ai/providers.js";
 import { buildSystemPrompt, reloadContext } from "../src/core/context.js";
 import { Session } from "../src/core/session.js";
+import { touchProject } from "../src/core/projects.js";
 import { getTools } from "../src/tools/registry.js";
 import { createAskUserTool } from "../src/tools/ask.js";
 import { setBashOutputCallback } from "../src/tools/bash.js";
@@ -163,10 +164,10 @@ program.action(async (opts) => {
     systemPrompt = boot.systemPrompt;
   })();
 
-  const tools = {
+  const buildTools = () => ({
     ...getTools(),
     askUser: createAskUserTool((q, opts) => app.showQuestion(q, opts)),
-  };
+  });
 
   // Wire bash streaming output to UI
   setBashOutputCallback((chunk) => {
@@ -224,6 +225,25 @@ program.action(async (opts) => {
           systemPrompt = nextSystemPrompt;
         },
         hooks,
+        onProjectChange: (cwd) => {
+          process.chdir(cwd);
+          app.setCwd(cwd);
+          const recent = Session.listRecent(1, "", cwd);
+          if (recent.length > 0) {
+            const loaded = Session.load(recent[0].id);
+            if (loaded) {
+              session = loaded;
+              app.clearMessages();
+              for (const msg of loaded.getMessages()) app.addMessage(msg.role, msg.content);
+              app.updateUsage(loaded.getTotalCost(), loaded.getTotalInputTokens(), loaded.getTotalOutputTokens());
+            }
+          } else {
+            session = new Session();
+            app.clearMessages();
+            app.resetCost();
+          }
+          systemPrompt = buildSystemPrompt(process.cwd(), activeModel?.provider?.id, currentMode, getSettings().cavemanLevel ?? "off");
+        },
       });
       if (slashResult.templateLoaded) {
         templateLoaded = true;
@@ -272,6 +292,24 @@ program.action(async (opts) => {
       app.addMessage("system", "No provider configured. Run /connect.");
       return;
     }
+    let editorModel: ModelHandle | null = null;
+    let editorModelId = "";
+    const editorSetting = getSettings().editorModel.trim();
+    if (editorSetting) {
+      const slashIdx = editorSetting.indexOf("/");
+      if (slashIdx > 0) {
+        const providerId = editorSetting.slice(0, slashIdx);
+        const modelId = editorSetting.slice(slashIdx + 1);
+        try {
+          editorModel = providerRegistry.createModel(providerId, modelId);
+          editorModelId = modelId;
+        } catch {
+          editorModel = null;
+          editorModelId = "";
+        }
+      }
+    }
+    touchProject(process.cwd(), session.getId(), text);
     const turnResult = await runModelTurn({
       app,
       session,
@@ -281,9 +319,11 @@ program.action(async (opts) => {
       currentModelId,
       smallModel,
       smallModelId,
+      editorModel,
+      editorModelId,
       currentMode,
       systemPrompt,
-      tools,
+      tools: buildTools(),
       hooks,
       lastToolCalls,
       lastActivityTime,

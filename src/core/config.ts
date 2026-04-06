@@ -28,6 +28,15 @@ export interface Settings {
   followUpMode: FollowUpMode;
   cavemanLevel: CavemanLevel;
   theme: string;
+  architectMode: boolean;
+  editorModel: string;
+  autoLint: boolean;
+  autoTest: boolean;
+  autoFixValidation: boolean;
+  lintCommand: string;
+  testCommand: string;
+  deniedTools: string[];
+  disabledExtensions: string[];
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -50,6 +59,15 @@ export const DEFAULT_SETTINGS: Settings = {
   followUpMode: "after_response",
   cavemanLevel: "off",
   theme: "brokecli-dark",
+  architectMode: false,
+  editorModel: "",
+  autoLint: false,
+  autoTest: false,
+  autoFixValidation: false,
+  lintCommand: "npm run lint",
+  testCommand: "npm test",
+  deniedTools: [],
+  disabledExtensions: [],
 };
 
 export interface BrokeConfig {

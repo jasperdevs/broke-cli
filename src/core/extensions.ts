@@ -2,12 +2,18 @@ import { join } from "path";
 import { homedir } from "os";
 import { readdirSync, existsSync } from "fs";
 import { createRequire } from "module";
+import { isExtensionEnabled } from "./permissions.js";
 
 export type ExtensionHook = (event: { type: string; data: unknown }) => void | Promise<void>;
 
 export interface HookRegistry {
   on(event: string, callback: ExtensionHook): void;
   emit(event: string, data: unknown): Promise<void>;
+}
+
+export interface ExtensionInfo {
+  id: string;
+  enabled: boolean;
 }
 
 function createHookRegistry(): HookRegistry {
@@ -50,6 +56,8 @@ export function loadExtensions(): HookRegistry {
   const require = createRequire(import.meta.url);
 
   for (const file of files) {
+    const extensionId = file.replace(/\.js$/i, "");
+    if (!isExtensionEnabled(extensionId)) continue;
     try {
       const ext = require(join(extDir, file));
       if (typeof ext.register === "function") {
@@ -61,4 +69,20 @@ export function loadExtensions(): HookRegistry {
   }
 
   return registry;
+}
+
+export function listExtensions(): ExtensionInfo[] {
+  const extDir = join(homedir(), ".brokecli", "extensions");
+  if (!existsSync(extDir)) return [];
+  try {
+    return readdirSync(extDir)
+      .filter((file) => file.endsWith(".js"))
+      .map((file) => {
+        const id = file.replace(/\.js$/i, "");
+        return { id, enabled: isExtensionEnabled(id) };
+      })
+      .sort((a, b) => a.id.localeCompare(b.id));
+  } catch {
+    return [];
+  }
 }

@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from 
 import { join } from "path";
 import { homedir } from "os";
 import { ContextOptimizer } from "./context-optimizer.js";
+import { getSettings } from "./config.js";
 
 const SESSIONS_DIR = join(homedir(), ".brokecli", "sessions");
 
@@ -100,6 +101,7 @@ export class Session {
   }
 
   private save(): void {
+    if (!getSettings().autoSaveSessions) return;
     try {
       mkdirSync(SESSIONS_DIR, { recursive: true });
       const data: SessionData = {
@@ -155,14 +157,16 @@ export class Session {
     return forked;
   }
 
-  static listRecent(limit = 10): Array<{ id: string; cwd: string; model: string; cost: number; updatedAt: number; messageCount: number }> {
+  static listRecent(limit = 10, query = "", cwd?: string): Array<{ id: string; cwd: string; model: string; cost: number; updatedAt: number; messageCount: number; preview: string }> {
     try {
       if (!existsSync(SESSIONS_DIR)) return [];
       const files = readdirSync(SESSIONS_DIR).filter((f) => f.endsWith(".json"));
+      const normalized = query.trim().toLowerCase();
       const sessions = files.map((f) => {
         try {
           const raw = readFileSync(join(SESSIONS_DIR, f), "utf-8");
           const data: SessionData = JSON.parse(raw);
+          const preview = data.messages.find((msg) => msg.role === "user")?.content?.split(/\r?\n/)[0]?.slice(0, 120) ?? "";
           return {
             id: data.id,
             cwd: data.cwd,
@@ -170,13 +174,23 @@ export class Session {
             cost: data.totalCost,
             updatedAt: data.updatedAt,
             messageCount: data.messages.length,
+            preview,
           };
         } catch {
           return null;
         }
-      }).filter(Boolean) as Array<{ id: string; cwd: string; model: string; cost: number; updatedAt: number; messageCount: number }>;
+      }).filter(Boolean) as Array<{ id: string; cwd: string; model: string; cost: number; updatedAt: number; messageCount: number; preview: string }>;
 
-      return sessions.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, limit);
+      return sessions
+        .filter((entry) => !cwd || entry.cwd === cwd)
+        .filter((entry) => {
+          if (!normalized) return true;
+          return entry.cwd.toLowerCase().includes(normalized)
+            || entry.model.toLowerCase().includes(normalized)
+            || entry.preview.toLowerCase().includes(normalized);
+        })
+        .sort((a, b) => b.updatedAt - a.updatedAt)
+        .slice(0, limit);
     } catch {
       return [];
     }

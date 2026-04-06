@@ -12,6 +12,8 @@ import { clearTodo } from "../tools/todo.js";
 import { DIM, RED, RESET } from "../utils/ansi.js";
 import type { Session } from "../core/session.js";
 import { sendResponseNotification } from "./notify.js";
+import { buildArchitectPlan } from "./architect.js";
+import { runValidationSuite } from "./auto-validate.js";
 
 const SDK_TOOL_PROVIDER_IDS = new Set([
   "anthropic", "openai", "codex", "google", "mistral", "groq", "xai",
@@ -72,6 +74,8 @@ export async function runModelTurn(options: {
   currentModelId: string;
   smallModel: ModelHandle | null;
   smallModelId: string;
+  editorModel?: ModelHandle | null;
+  editorModelId?: string;
   currentMode: Mode;
   systemPrompt: string;
   tools: Record<string, unknown>;
@@ -79,8 +83,9 @@ export async function runModelTurn(options: {
   lastToolCalls: string[];
   lastActivityTime: number;
   alreadyAddedUserMessage?: boolean;
+  repairDepth?: number;
 }): Promise<{ lastToolCalls: string[]; lastActivityTime: number }> {
-  const { app, session, text, images, activeModel, currentModelId, smallModel, smallModelId, currentMode, systemPrompt, tools, hooks, lastToolCalls, lastActivityTime, alreadyAddedUserMessage } = options;
+  const { app, session, text, images, activeModel, currentModelId, smallModel, smallModelId, editorModel = null, editorModelId = "", currentMode, systemPrompt, tools, hooks, lastToolCalls, lastActivityTime, alreadyAddedUserMessage, repairDepth = 0 } = options;
   const getContextOptimizer = (): ReturnType<Session["getContextOptimizer"]> => session.getContextOptimizer();
 
   const idleMs = Date.now() - lastActivityTime;
@@ -142,6 +147,9 @@ export async function runModelTurn(options: {
     : "main" as const;
   const useModel = route === "small" && smallModel ? smallModel : activeModel;
   const useModelId = route === "small" && smallModel ? smallModelId : currentModelId;
+  const dualModelEnabled = getSettings().architectMode && !!editorModel && !!editorModelId;
+  const executionModel = dualModelEnabled ? editorModel! : useModel;
+  const executionModelId = dualModelEnabled ? editorModelId : useModelId;
   const nextToolCalls: string[] = [];
   const optimizedMessages = getContextOptimizer().optimizeMessages(session.getChatMessages());
   let abortController: AbortController | null = new AbortController();
@@ -154,19 +162,37 @@ export async function runModelTurn(options: {
   });
 
   const effectiveCavemanLevel = resolveCavemanLevel(getSettings().cavemanLevel ?? "off", text);
-  const turnSystemPrompt = buildSystemPrompt(process.cwd(), useModel.provider.id, currentMode, effectiveCavemanLevel);
+  let turnSystemPrompt = buildSystemPrompt(process.cwd(), executionModel.provider.id, currentMode, effectiveCavemanLevel);
+  if (dualModelEnabled) {
+    const architectPlan = await buildArchitectPlan({
+      architectModel: useModel,
+      editorModel: executionModel,
+      systemPrompt: turnSystemPrompt,
+      messages: optimizedMessages,
+      userText: text,
+    });
+    if (architectPlan) {
+      app.setStatus(`${DIM}architected by ${useModel.provider.name}/${useModelId} -> editor ${executionModel.provider.name}/${executionModelId}${RESET}`);
+      turnSystemPrompt = `${turnSystemPrompt}
+
+ARCHITECT PLAN
+${architectPlan}
+
+Follow the plan where it helps, but prefer correct edits over blindly following it.`;
+    }
+  }
   let streamTokenFlushTimer: ReturnType<typeof setTimeout> | null = null;
   const scheduleStreamTokenUpdate = (): void => {
     if (streamTokenFlushTimer) return;
     streamTokenFlushTimer = setTimeout(() => {
       streamTokenFlushTimer = null;
-      app.setStreamTokens(estimateTextTokens(streamedText + streamedReasoning, useModelId));
+      app.setStreamTokens(estimateTextTokens(streamedText + streamedReasoning, executionModelId));
     }, 80);
   };
   const flushStreamTokenUpdate = (): void => {
     if (streamTokenFlushTimer) clearTimeout(streamTokenFlushTimer);
     streamTokenFlushTimer = null;
-    app.setStreamTokens(estimateTextTokens(streamedText + streamedReasoning, useModelId));
+    app.setStreamTokens(estimateTextTokens(streamedText + streamedReasoning, executionModelId));
   };
 
   const streamCallbacks = {
@@ -226,10 +252,10 @@ export async function runModelTurn(options: {
     },
   };
 
-  if (useModel.runtime === "native-cli") {
+  if (executionModel.runtime === "native-cli") {
     await startNativeStream({
-      providerId: useModel.provider.id as "anthropic" | "codex",
-      modelId: useModelId,
+      providerId: executionModel.provider.id as "anthropic" | "codex",
+      modelId: executionModelId,
       system: turnSystemPrompt,
       messages: optimizedMessages,
       abortSignal: abortController.signal,
@@ -240,12 +266,12 @@ export async function runModelTurn(options: {
     }, streamCallbacks);
   } else {
     await startStream({
-      model: useModel.model!,
-      modelId: useModelId,
-      providerId: useModel.provider.id,
+      model: executionModel.model!,
+      modelId: executionModelId,
+      providerId: executionModel.provider.id,
       system: turnSystemPrompt,
       messages: optimizedMessages,
-      tools: canUseSdkTools(useModel) ? tools as any : undefined,
+      tools: canUseSdkTools(executionModel) ? tools as any : undefined,
       abortSignal: abortController.signal,
       enableThinking: route === "main" ? getSettings().enableThinking : false,
       thinkingLevel: getSettings().thinkingLevel || "low",
@@ -287,6 +313,33 @@ export async function runModelTurn(options: {
         if (getSettings().followUpMode === "after_tool" && app.hasPendingMessages()) app.flushPendingMessages();
       },
     });
+  }
+
+  const validation = runValidationSuite(nextToolCalls.some((name) => name === "writeFile" || name === "editFile"));
+  if (validation.attempted) {
+    app.addMessage("system", validation.report);
+    if (validation.failed && getSettings().autoFixValidation && repairDepth < 1) {
+      app.addMessage("system", `${DIM}Validation failed — attempting one repair pass.${RESET}`);
+      return runModelTurn({
+        ...options,
+        text: `Fix the validation failures from the last edit. Here is the validation output:\n\n${validation.report}`,
+        images: undefined,
+        activeModel,
+        currentModelId,
+        smallModel,
+        smallModelId,
+        editorModel,
+        editorModelId,
+        currentMode,
+        systemPrompt,
+        tools,
+        hooks,
+        lastToolCalls: nextToolCalls,
+        lastActivityTime: nextActivityTime,
+        alreadyAddedUserMessage: false,
+        repairDepth: repairDepth + 1,
+      });
+    }
   }
 
   return { lastToolCalls: nextToolCalls, lastActivityTime: nextActivityTime };

@@ -5,12 +5,17 @@ import type { ProviderRegistry } from "../ai/provider-registry.js";
 import { buildSystemPrompt, reloadContext } from "../core/context.js";
 import { compactMessages, getTotalContextTokens } from "../core/compact.js";
 import { getSettings, updateSetting, type Settings, type Mode } from "../core/config.js";
+import { buildRepoMap, formatRepoMap } from "../core/repo-map.js";
+import { listProjects } from "../core/projects.js";
+import { listExtensions } from "../core/extensions.js";
+import { isExtensionEnabled, isToolAllowed, toggleExtensionEnabled, toggleToolPermission } from "../core/permissions.js";
 import { Session } from "../core/session.js";
 import { listTemplates, loadTemplate } from "../core/templates.js";
 import { undoLastCheckpoint } from "../core/git.js";
 import { listThemes, setPreviewTheme } from "../core/themes.js";
 import { buildHtmlExport, buildMarkdownExport, formatRelativeMinutes } from "./exports.js";
 import { runConnectFlow } from "./connect-flow.js";
+import { TOOL_NAMES } from "../tools/registry.js";
 
 interface ModelOption {
   providerId: string;
@@ -96,6 +101,7 @@ export async function handleSlashCommand(options: {
   onModelChange: (model: ModelHandle, modelId: string) => void;
   onSystemPromptChange: (systemPrompt: string) => void;
   hooks: ExtensionHooks;
+  onProjectChange: (cwd: string) => void;
 }): Promise<SlashCommandResult> {
   const {
     text,
@@ -115,9 +121,11 @@ export async function handleSlashCommand(options: {
     onModelChange,
     onSystemPromptChange,
     hooks,
+    onProjectChange,
   } = options;
 
-  const [cmd] = text.slice(1).split(" ");
+  const [cmd, ...restParts] = text.slice(1).split(" ");
+  const restText = restParts.join(" ").trim();
 
   switch (cmd) {
     case "help":
@@ -187,6 +195,11 @@ export async function handleSlashCommand(options: {
           { key: "notifyOnResponse", label: "Notify on response", value: String(s.notifyOnResponse), description: "Show a desktop notification when a response completes" },
           { key: "theme", label: "Theme", value: s.theme, description: "Switch the full terminal color theme" },
           { key: "cavemanLevel", label: "Caveman mode", value: s.cavemanLevel ?? "off", description: "off / lite / auto / ultra — save output tokens (ctrl+y)" },
+          { key: "architectMode", label: "Architect/editor", value: String(s.architectMode), description: "Use current model to plan edits before the editor model applies them" },
+          { key: "editorModel", label: "Editor model", value: s.editorModel || "off", description: "Model used for file-edit execution when architect/editor mode is on" },
+          { key: "autoLint", label: "Auto lint", value: String(s.autoLint), description: `Run ${s.lintCommand || "lint"} after model edits` },
+          { key: "autoTest", label: "Auto test", value: String(s.autoTest), description: `Run ${s.testCommand || "tests"} after model edits` },
+          { key: "autoFixValidation", label: "Auto-fix validation", value: String(s.autoFixValidation), description: "Send one automatic repair turn when lint/test fails" },
         ];
       }
 
@@ -218,8 +231,101 @@ export async function handleSlashCommand(options: {
           updateSetting("cavemanLevel", next);
           reloadContext();
           onSystemPromptChange(buildSystemPrompt(process.cwd(), activeModel?.provider?.id, currentMode, next));
+        } else if (key === "editorModel") {
+          const options = buildVisibleModelOptions();
+          const items = options.map((option) => ({
+            id: `${option.providerId}/${option.modelId}`,
+            label: `${option.providerName}/${option.modelId}`,
+            detail: option.active ? "pinned" : undefined,
+          }));
+          items.unshift({ id: "", label: "off", detail: "use the main model for editing" });
+          app.openItemPicker("Editor model", items, (value) => {
+            updateSetting("editorModel", value);
+            app.updateSettings(buildEntries());
+          });
+          return;
         }
         app.updateSettings(buildEntries());
+      });
+      return { handled: true };
+    }
+    case "repomap": {
+      const entries = buildRepoMap({ query: restText, maxFiles: 24, maxLinesPerFile: 6 });
+      if (entries.length === 0) {
+        app.addMessage("system", "Repo map is empty for this project.");
+        return { handled: true };
+      }
+      app.addMessage("system", formatRepoMap(entries));
+      return { handled: true };
+    }
+    case "editor": {
+      const options = buildVisibleModelOptions();
+      if (options.length === 0) {
+        app.addMessage("system", "No models available. Run /connect.");
+        return { handled: true };
+      }
+      const items = options.map((option) => ({
+        id: `${option.providerId}/${option.modelId}`,
+        label: `${option.providerName}/${option.modelId}`,
+        detail: option.active ? "pinned" : undefined,
+      }));
+      items.unshift({ id: "", label: "off", detail: "disable architect/editor split" });
+      const current = getSettings().editorModel;
+      const initialCursor = Math.max(0, items.findIndex((item) => item.id === current));
+      app.openItemPicker("Editor model", items, (value) => {
+        updateSetting("editorModel", value);
+        app.addMessage("system", value ? `Editor model set: ${value}` : "Editor model off.");
+      }, { initialCursor });
+      return { handled: true };
+    }
+    case "permissions": {
+      const items = TOOL_NAMES.map((name) => ({
+        id: name,
+        label: name,
+        detail: isToolAllowed(name) ? "allowed" : "blocked",
+      }));
+      app.openItemPicker("Tool permissions", items, (id) => {
+        const denied = toggleToolPermission(id);
+        app.addMessage("system", `${id}: ${denied ? "blocked" : "allowed"}`);
+      }, {
+        secondaryHint: "tab toggles allow/block",
+        onSecondaryAction: (id) => {
+          toggleToolPermission(id);
+          const nextItems = TOOL_NAMES.map((name) => ({
+            id: name,
+            label: name,
+            detail: isToolAllowed(name) ? "allowed" : "blocked",
+          }));
+          app.updateItemPickerItems?.(nextItems, id);
+        },
+      });
+      return { handled: true };
+    }
+    case "extensions": {
+      const extensions = listExtensions();
+      if (extensions.length === 0) {
+        app.addMessage("system", "No extensions found in ~/.brokecli/extensions.");
+        return { handled: true };
+      }
+      const items = extensions.map((entry) => ({
+        id: entry.id,
+        label: entry.id,
+        detail: entry.enabled ? "enabled" : "disabled",
+      }));
+      app.openItemPicker("Extensions", items, (id) => {
+        const enabled = toggleExtensionEnabled(id);
+        app.addMessage("system", `${id}: ${enabled ? "enabled" : "disabled"} (applies next launch)`);
+      }, {
+        secondaryHint: "tab toggles enable/disable",
+        onSecondaryAction: (id) => {
+          toggleExtensionEnabled(id);
+          const nextItems = listExtensions().map((entry) => ({
+            id: entry.id,
+            label: entry.id,
+            detail: isExtensionEnabled(entry.id) ? "enabled" : "disabled",
+          }));
+          app.updateItemPickerItems?.(nextItems, id);
+        },
       });
       return { handled: true };
     }
@@ -362,15 +468,15 @@ export async function handleSlashCommand(options: {
     case "sessions":
     case "resume": {
       const cwd = process.cwd();
-      const recent = Session.listRecent(10).filter((entry) => entry.cwd === cwd);
+      const recent = Session.listRecent(20, restText, cwd);
       if (recent.length === 0) {
         app.addMessage("system", "No sessions for this directory.");
         return { handled: true };
       }
       const items = recent.map((entry) => ({
         id: entry.id,
-        label: entry.model || "unknown",
-        detail: `${entry.messageCount} msgs · ${formatRelativeMinutes(entry.updatedAt)}`,
+        label: entry.preview || entry.model || "unknown",
+        detail: `${entry.model || "unknown"} · ${entry.messageCount} msgs · ${formatRelativeMinutes(entry.updatedAt)}`,
       }));
       app.openItemPicker("Resume Session", items, (sessionId) => {
         const loaded = Session.load(sessionId);
@@ -380,6 +486,23 @@ export async function handleSlashCommand(options: {
         for (const msg of loaded.getMessages()) app.addMessage(msg.role, msg.content);
         app.updateUsage(loaded.getTotalCost(), loaded.getTotalInputTokens(), loaded.getTotalOutputTokens());
         app.addMessage("system", "Session resumed.");
+      });
+      return { handled: true };
+    }
+    case "projects": {
+      const projects = listProjects(20, restText);
+      if (projects.length === 0) {
+        app.addMessage("system", "No saved projects yet.");
+        return { handled: true };
+      }
+      const items = projects.map((entry) => ({
+        id: entry.cwd,
+        label: entry.cwd,
+        detail: `${entry.lastInstruction.slice(0, 60)} · ${formatRelativeMinutes(entry.lastAccessed)}`,
+      }));
+      app.openItemPicker("Projects", items, (cwd) => {
+        onProjectChange(cwd);
+        app.addMessage("system", `Switched project: ${cwd}`);
       });
       return { handled: true };
     }
