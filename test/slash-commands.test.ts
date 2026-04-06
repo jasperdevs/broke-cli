@@ -198,6 +198,40 @@ describe("slash command handling", () => {
     expect(app.messages.some((entry) => entry.content.toLowerCase().includes("session"))).toBe(true);
   });
 
+  it("keeps duplicate theme and editor controls out of /settings", async () => {
+    const app = createAppStub();
+    let capturedEntries: Array<{ key: string; label: string }> = [];
+    app.openSettings = (entries: Array<{ key: string; label: string }>) => {
+      capturedEntries = entries;
+    };
+
+    const result = await handleSlashCommand({
+      text: "/settings",
+      app,
+      session: new Session(`test-settings-${Date.now()}`),
+      activeModel: null,
+      currentModelId: "",
+      currentMode: "build",
+      systemPrompt: "sys",
+      providerRegistry: {} as any,
+      buildVisibleModelOptions: () => [],
+      refreshProviderState: async () => [],
+      isSkippedPromptAnswer: () => false,
+      isValidHttpBaseUrl: () => true,
+      getContextOptimizer: () => ({ reset() {} }) as any,
+      onSessionReplace: () => {},
+      onModelChange: () => {},
+      onSystemPromptChange: () => {},
+      hooks: { emit() {} },
+      onProjectChange: () => {},
+    });
+
+    expect(result.handled).toBe(true);
+    expect(capturedEntries.some((entry) => entry.key === "theme")).toBe(false);
+    expect(capturedEntries.some((entry) => entry.key === "editorModel")).toBe(false);
+    expect(capturedEntries.some((entry) => entry.key === "architectMode")).toBe(true);
+  });
+
   it("reloads extensions immediately when toggled", async () => {
     mkdirSync(extDir, { recursive: true });
     writeFileSync(extPath, "exports.register = () => {};", "utf-8");

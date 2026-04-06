@@ -202,10 +202,8 @@ export async function handleSlashCommand(options: {
           { key: "maxSessionCost", label: "Max session cost", value: s.maxSessionCost === 0 ? "unlimited" : `$${s.maxSessionCost}`, description: "Maximum cost per session (0 = unlimited)" },
           { key: "followUpMode", label: "Follow-up mode", value: followUpLabels[s.followUpMode] ?? s.followUpMode, description: "When to send queued messages while AI is working" },
           { key: "notifyOnResponse", label: "Notify on response", value: String(s.notifyOnResponse), description: "Show a desktop notification when a response completes" },
-          { key: "theme", label: "Theme", value: s.theme, description: "Switch the full terminal color theme" },
           { key: "cavemanLevel", label: "Caveman mode", value: s.cavemanLevel ?? "off", description: "off / lite / auto / ultra — save output tokens (ctrl+y)" },
-          { key: "architectMode", label: "Architect/editor", value: String(s.architectMode), description: "Use current model to plan edits before the editor model applies them" },
-          { key: "editorModel", label: "Editor model", value: s.editorModel || "off", description: "Model used for file-edit execution when architect/editor mode is on" },
+          { key: "architectMode", label: "Architect mode", value: String(s.architectMode), description: "Draft an edit plan before the /editor model applies file edits" },
           { key: "autoLint", label: "Auto lint", value: String(s.autoLint), description: `Run ${s.lintCommand || "lint"} after model edits` },
           { key: "autoTest", label: "Auto test", value: String(s.autoTest), description: `Run ${s.testCommand || "tests"} after model edits` },
           { key: "autoFixValidation", label: "Auto-fix validation", value: String(s.autoFixValidation), description: "Send one automatic repair turn when lint/test fails" },
@@ -229,10 +227,6 @@ export async function handleSlashCommand(options: {
         } else if (key === "followUpMode") {
           const modes: Array<"immediate" | "after_tool" | "after_response"> = ["immediate", "after_tool", "after_response"];
           updateSetting("followUpMode", modes[(modes.indexOf(s.followUpMode) + 1) % modes.length]);
-        } else if (key === "theme") {
-          const themes = listThemes();
-          const currentIdx = Math.max(0, themes.findIndex((theme) => theme.key === s.theme));
-          updateSetting("theme", themes[(currentIdx + 1) % themes.length].key);
         } else if (key === "cavemanLevel") {
           const levels = ["off", "lite", "auto", "ultra"] as const;
           const current = s.cavemanLevel ?? "off";
@@ -240,19 +234,6 @@ export async function handleSlashCommand(options: {
           updateSetting("cavemanLevel", next);
           reloadContext();
           onSystemPromptChange(buildSystemPrompt(process.cwd(), activeModel?.provider?.id, currentMode, next));
-        } else if (key === "editorModel") {
-          const options = buildVisibleModelOptions();
-          const items = options.map((option) => ({
-            id: `${option.providerId}/${option.modelId}`,
-            label: `${option.providerName}/${option.modelId}`,
-            detail: option.active ? "pinned" : undefined,
-          }));
-          items.unshift({ id: "", label: "off", detail: "use the main model for editing" });
-          app.openItemPicker("Editor model", items, (value) => {
-            updateSetting("editorModel", value);
-            app.updateSettings(buildEntries());
-          });
-          return;
         }
         app.updateSettings(buildEntries());
       });
