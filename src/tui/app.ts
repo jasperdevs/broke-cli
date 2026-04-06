@@ -145,6 +145,7 @@ export class App {
   private compactStartTime = 0;
   private compactTokens = 0;
   private sidebarFileTree: string[] | null = null;
+  private sidebarTreeOpen = true;
 
   // Render throttling
   private drawScheduled = false;
@@ -757,6 +758,19 @@ export class App {
       return;
     }
 
+    // Mouse click — handle sidebar clicks
+    if (key.name === "click" && key.char) {
+      const [colStr, rowStr] = key.char.split(",");
+      const col = parseInt(colStr, 10);
+      const hasSB = this.screen.hasSidebar && this.messages.length > 0 && !getSettings().hideSidebar;
+      if (hasSB && col > this.screen.mainWidth) {
+        // Clicked in sidebar — toggle file tree
+        this.sidebarTreeOpen = !this.sidebarTreeOpen;
+        this.draw();
+      }
+      return;
+    }
+
     // Shift+Tab — toggle between build and plan mode
     if (key.shift && key.name === "tab") {
       this.mode = this.mode === "build" ? "plan" : "build";
@@ -1175,30 +1189,60 @@ export class App {
     }
     lines.push("");
 
-    // File tree
-    lines.push(`${WHITE}Files${RESET}`);
-    if (!this.sidebarFileTree) {
-      try {
-        const files = execSync("git ls-files --others --cached --exclude-standard", { cwd: this.cwd, encoding: "utf-8", timeout: 2000 }).trim();
-        this.sidebarFileTree = files.split("\n").filter(Boolean).slice(0, 30);
-      } catch {
+    // File tree (collapsible)
+    const treeArrow = this.sidebarTreeOpen ? "\u25BC" : "\u25B6";
+    lines.push(`${WHITE}${treeArrow} Files${RESET}`);
+    if (this.sidebarTreeOpen) {
+      if (!this.sidebarFileTree) {
         try {
-          const { readdirSync } = require("fs");
-          this.sidebarFileTree = readdirSync(this.cwd).filter((f: string) => !f.startsWith(".") && f !== "node_modules").slice(0, 20);
+          const files = execSync("git ls-files --others --cached --exclude-standard", { cwd: this.cwd, encoding: "utf-8", timeout: 2000 }).trim();
+          const raw = files.split("\n").filter(Boolean);
+          // Build simple tree: show top-level dirs as folders, files flat
+          const dirs = new Set<string>();
+          const topFiles: string[] = [];
+          for (const f of raw) {
+            const slash = f.indexOf("/");
+            if (slash > 0) {
+              dirs.add(f.slice(0, slash));
+            } else {
+              topFiles.push(f);
+            }
+          }
+          this.sidebarFileTree = [
+            ...[...dirs].sort().map(d => `${d}/`),
+            ...topFiles.sort(),
+          ].slice(0, 30);
         } catch {
-          this.sidebarFileTree = [];
+          try {
+            const { readdirSync, statSync } = require("fs");
+            const { join } = require("path");
+            this.sidebarFileTree = readdirSync(this.cwd)
+              .filter((f: string) => !f.startsWith(".") && f !== "node_modules")
+              .map((f: string) => {
+                try { return statSync(join(this.cwd, f)).isDirectory() ? `${f}/` : f; }
+                catch { return f; }
+              })
+              .slice(0, 20);
+          } catch {
+            this.sidebarFileTree = [];
+          }
         }
       }
-    }
-    const tree = this.sidebarFileTree ?? [];
-    const maxTreeLines = Math.min(tree.length, 12);
-    for (let i = 0; i < maxTreeLines; i++) {
-      const f = tree[i];
-      const display = f.length > w - 4 ? f.slice(-(w - 5)) : f;
-      lines.push(`  ${DIM}${display}${RESET}`);
-    }
-    if (tree.length > 12) {
-      lines.push(`  ${DIM}+${tree.length - 12} more${RESET}`);
+      const tree = this.sidebarFileTree ?? [];
+      const maxTreeLines = Math.min(tree.length, 12);
+      for (let i = 0; i < maxTreeLines; i++) {
+        const f = tree[i];
+        const isDir = f.endsWith("/");
+        const display = f.length > w - 4 ? f.slice(-(w - 5)) : f;
+        if (isDir) {
+          lines.push(`  ${T()}${display}${RESET}`);
+        } else {
+          lines.push(`  ${DIM}${display}${RESET}`);
+        }
+      }
+      if (tree.length > 12) {
+        lines.push(`  ${DIM}+${tree.length - 12} more${RESET}`);
+      }
     }
 
     return lines;
