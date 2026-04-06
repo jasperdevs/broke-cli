@@ -199,19 +199,24 @@ program.action(async (opts) => {
               });
             }
           }
-          // Sort: pinned models first, then by provider, then by model name
+          // Sort: available providers first, then pinned models, then by provider/name
           allOptions.sort((a, b) => {
+            // Available first
+            const aAvail = providers.find(p => p.id === a.providerId)?.available ?? true;
+            const bAvail = providers.find(p => p.id === b.providerId)?.available ?? true;
+            if (aAvail && !bAvail) return -1;
+            if (!aAvail && bAvail) return 1;
+            // Then pinned
             if (a.active && !b.active) return -1;
             if (!a.active && b.active) return 1;
+            // Then by provider, then model
             if (a.providerId !== b.providerId) return a.providerId.localeCompare(b.providerId);
             return a.modelId.localeCompare(b.modelId);
           });
           if (allOptions.length === 0) {
-            app.addMessage("system", "No providers detected. Set ANTHROPIC_API_KEY or OPENAI_API_KEY.");
+            app.addMessage("system", "No providers found. Run /login or set API keys.");
             return;
           }
-          // Put cursor on current model
-          const cursorIdx = allOptions.findIndex(opt => opt.providerId === activeModel?.provider?.id && opt.modelId === currentModelId);
           app.openModelPicker(allOptions, (provId, modId) => {
             try {
               activeModel = createModel(provId, modId);
@@ -232,7 +237,7 @@ program.action(async (opts) => {
             } else if (!pinned) {
               updateSetting("scopedModels", scoped.filter((s: string) => s !== key));
             }
-          }, cursorIdx >= 0 ? cursorIdx : 0);
+          }, 0); // Start at top of list
           return;
         }
         case "settings": {
