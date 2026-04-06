@@ -2126,50 +2126,6 @@ export class App {
     return lines;
   }
 
-  private renderBrailleColorGrid(grid: Array<Array<RgbColor | null>>): string[] {
-    const lines: string[] = [];
-    const fg = (color: RgbColor): string => `\x1b[38;2;${color.r};${color.g};${color.b}m`;
-    const dotBits = [
-      [0x01, 0x08],
-      [0x02, 0x10],
-      [0x04, 0x20],
-      [0x40, 0x80],
-    ];
-    const height = grid.length;
-    const width = grid[0]?.length ?? 0;
-
-    for (let row = 0; row < height; row += 4) {
-      let line = "";
-      for (let col = 0; col < width; col += 2) {
-        let pattern = 0;
-        const colors: RgbColor[] = [];
-        for (let dy = 0; dy < 4; dy++) {
-          for (let dx = 0; dx < 2; dx++) {
-            const color = grid[row + dy]?.[col + dx] ?? null;
-            if (!color) continue;
-            pattern |= dotBits[dy][dx];
-            colors.push(color);
-          }
-        }
-        if (pattern === 0) {
-          line += " ";
-          continue;
-        }
-        const colorCounts = new Map<string, { color: RgbColor; count: number }>();
-        for (const color of colors) {
-          const key = `${color.r},${color.g},${color.b}`;
-          const existing = colorCounts.get(key);
-          if (existing) existing.count += 1;
-          else colorCounts.set(key, { color, count: 1 });
-        }
-        const dominant = [...colorCounts.values()].sort((a, b) => b.count - a.count)[0]?.color;
-        line += `${fg(dominant!)}${String.fromCodePoint(0x2800 + pattern)}${RESET}`;
-      }
-      lines.push(line);
-    }
-    return lines;
-  }
-
   private parseMascotSvgGrid(path: string): Array<Array<RgbColor | null>> {
     try {
       const svg = readFileSync(path, "utf-8");
@@ -2222,6 +2178,47 @@ export class App {
     );
   }
 
+  private resampleColorGrid(
+    cells: Array<Array<RgbColor | null>>,
+    targetWidth: number,
+    targetHeight: number,
+  ): Array<Array<RgbColor | null>> {
+    const srcHeight = cells.length;
+    const srcWidth = cells[0]?.length ?? 0;
+    if (srcHeight === 0 || srcWidth === 0) return [];
+    const background = cells[0]?.[0] ?? null;
+    const backgroundKey = background ? `${background.r},${background.g},${background.b}` : null;
+
+    return Array.from({ length: targetHeight }, (_, row) =>
+      Array.from({ length: targetWidth }, (_, col) => {
+        const startRow = Math.floor((row * srcHeight) / targetHeight);
+        const endRow = Math.max(startRow + 1, Math.floor(((row + 1) * srcHeight) / targetHeight));
+        const startCol = Math.floor((col * srcWidth) / targetWidth);
+        const endCol = Math.max(startCol + 1, Math.floor(((col + 1) * srcWidth) / targetWidth));
+        const counts = new Map<string, { color: RgbColor; count: number }>();
+
+        for (let y = startRow; y < endRow; y++) {
+          for (let x = startCol; x < endCol; x++) {
+            const color = cells[y]?.[x] ?? null;
+            if (!color) continue;
+            const key = `${color.r},${color.g},${color.b}`;
+            const existing = counts.get(key);
+            if (existing) existing.count += 1;
+            else counts.set(key, { color, count: 1 });
+          }
+        }
+
+        if (counts.size === 0) return null;
+        const ranked = [...counts.entries()].sort((a, b) => {
+          const aBoost = a[0] === backgroundKey ? 0 : 1000;
+          const bBoost = b[0] === backgroundKey ? 0 : 1000;
+          return (b[1].count + bBoost) - (a[1].count + aBoost);
+        });
+        return ranked[0][1].color;
+      }),
+    );
+  }
+
   private renderMascotBlock(): string[] {
     const path = this.resolveMascotPath();
     if (!path) return [];
@@ -2233,7 +2230,8 @@ export class App {
     const path = this.resolveMascotPath();
     if (!path) return [];
     const cells = this.parseMascotSvgGrid(path);
-    return this.renderBrailleColorGrid(cells);
+    const compact = this.resampleColorGrid(cells, 9, 4);
+    return this.renderAnsiColorGrid(compact);
   }
 
   private wrapHomeDetail(label: string, value: string, width: number): string[] {
