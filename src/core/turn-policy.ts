@@ -1,3 +1,6 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { homedir } from "os";
+import { join } from "path";
 import { generateText, type LanguageModel } from "ai";
 import { calculateCost, type TokenUsage } from "../ai/cost.js";
 import { estimateTextTokens } from "../ai/tokens.js";
@@ -37,6 +40,9 @@ export interface TurnPolicy {
 }
 
 const PLANNED_SCAFFOLD_CACHE = new Map<string, string>();
+const CACHE_DIR = join(homedir(), ".brokecli");
+const CACHE_FILE = join(CACHE_DIR, "turn-policy-cache.json");
+let cacheHydrated = false;
 
 const ALL_EDIT_TOOLS: ToolName[] = ["bash", "readFile", "writeFile", "editFile", "listFiles", "grep", "todoWrite", "agent"];
 const NO_TOOLS: ToolName[] = [];
@@ -197,6 +203,31 @@ function getPlanCacheKey(archetype: TurnArchetype): string {
   return `v2:${archetype}`;
 }
 
+function hydratePlannedScaffoldCache(): void {
+  if (cacheHydrated) return;
+  cacheHydrated = true;
+  if (!existsSync(CACHE_FILE)) return;
+  try {
+    const raw = JSON.parse(readFileSync(CACHE_FILE, "utf-8")) as Record<string, unknown>;
+    for (const [key, value] of Object.entries(raw)) {
+      if (typeof value === "string" && value.trim().length > 0) {
+        PLANNED_SCAFFOLD_CACHE.set(key, value);
+      }
+    }
+  } catch {
+    // ignore cache hydration failures
+  }
+}
+
+function persistPlannedScaffoldCache(): void {
+  try {
+    mkdirSync(CACHE_DIR, { recursive: true });
+    writeFileSync(CACHE_FILE, JSON.stringify(Object.fromEntries(PLANNED_SCAFFOLD_CACHE), null, 2), "utf-8");
+  } catch {
+    // ignore cache persistence failures
+  }
+}
+
 function sanitizePlannedScaffold(text: string): string {
   return text
     .split(/\r?\n/)
@@ -204,6 +235,14 @@ function sanitizePlannedScaffold(text: string): string {
     .filter(Boolean)
     .slice(0, 8)
     .join("\n");
+}
+
+function isUsablePlannedScaffold(scaffold: string): boolean {
+  if (!scaffold) return false;
+  const normalized = scaffold.toLowerCase();
+  return normalized.includes("lane:")
+    && normalized.includes("steps:")
+    && normalized.includes("verify:");
 }
 
 function buildPlannerPrompt(policy: TurnPolicy, userMessage: string): string {
@@ -245,6 +284,7 @@ export async function resolveTurnPolicy(
   const basePolicy = getTurnPolicy(userMessage, lastToolCalls);
   if (!planner?.model || !PLANNABLE_ARCHETYPES.has(basePolicy.archetype)) return basePolicy;
 
+  hydratePlannedScaffoldCache();
   const cacheKey = getPlanCacheKey(basePolicy.archetype);
   const cached = PLANNED_SCAFFOLD_CACHE.get(cacheKey);
   if (cached) {
@@ -258,21 +298,23 @@ export async function resolveTurnPolicy(
   }
 
   try {
+    const plannerPrompt = buildPlannerPrompt(basePolicy, userMessage);
     const result = await generateText({
       model: planner.model,
       system: "You design compact execution scaffolds for a coding terminal. Output raw lines only. Keep it under 120 tokens.",
-      prompt: buildPlannerPrompt(basePolicy, userMessage),
+      prompt: plannerPrompt,
       maxOutputTokens: 160,
     });
     const scaffold = sanitizePlannedScaffold(result.text);
-    if (!scaffold) return basePolicy;
+    if (!isUsablePlannedScaffold(scaffold)) return basePolicy;
     PLANNED_SCAFFOLD_CACHE.set(cacheKey, scaffold);
+    persistPlannedScaffoldCache();
     return {
       ...basePolicy,
       scaffold,
       scaffoldSource: "planned",
       plannerCacheHit: false,
-      plannerUsage: normalizePlannerUsage(result, planner, buildPlannerPrompt(basePolicy, userMessage), scaffold),
+      plannerUsage: normalizePlannerUsage(result, planner, plannerPrompt, scaffold),
       preferSmallExecutor: basePolicy.archetype === "edit" || basePolicy.archetype === "bugfix" ? false : true,
     };
   } catch {
@@ -293,4 +335,9 @@ export function shouldPreferSmallExecutor(
     return policy.archetype === "review" || policy.archetype === "research" || policy.archetype === "planning";
   }
   return false;
+}
+
+export function resetPlannedScaffoldCacheForTests(): void {
+  PLANNED_SCAFFOLD_CACHE.clear();
+  cacheHydrated = false;
 }

@@ -1,3 +1,6 @@
+import { existsSync, rmSync } from "fs";
+import { homedir } from "os";
+import { join } from "path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { generateTextMock } = vi.hoisted(() => ({
@@ -12,10 +15,18 @@ vi.mock("ai", async () => {
   };
 });
 
-import { resolveTurnPolicy, shouldPreferSmallExecutor } from "../src/core/turn-policy.js";
+import {
+  resolveTurnPolicy,
+  resetPlannedScaffoldCacheForTests,
+  shouldPreferSmallExecutor,
+} from "../src/core/turn-policy.js";
+
+const cacheFile = join(homedir(), ".brokecli", "turn-policy-cache.json");
 
 describe("planned scaffolds", () => {
   beforeEach(() => {
+    if (existsSync(cacheFile)) rmSync(cacheFile, { force: true });
+    resetPlannedScaffoldCacheForTests();
     generateTextMock.mockReset();
     generateTextMock.mockResolvedValue({
       text: "lane: cheap\ngoal: inspect\nsteps: 1) read 2) answer\ntools: readFile, grep\nrules: no edits\nverify: cite evidence",
@@ -36,6 +47,37 @@ describe("planned scaffolds", () => {
     expect(second.plannerCacheHit).toBe(true);
     expect(second.plannerUsage).toBeUndefined();
     expect(generateTextMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("reloads cached scaffolds after an in-process cache reset", async () => {
+    const planner = { model: {} as any, modelId: "gpt-5.4-mini", providerId: "openai" };
+
+    const first = await resolveTurnPolicy("review this file tree", [], planner);
+    expect(first.scaffoldSource).toBe("planned");
+    expect(first.plannerCacheHit).toBe(false);
+    expect(existsSync(cacheFile)).toBe(true);
+
+    resetPlannedScaffoldCacheForTests();
+    generateTextMock.mockClear();
+
+    const second = await resolveTurnPolicy("review the render path", [], planner);
+    expect(second.scaffoldSource).toBe("planned");
+    expect(second.plannerCacheHit).toBe(true);
+    expect(generateTextMock).not.toHaveBeenCalled();
+  });
+
+  it("falls back to built-in scaffolds when planner output is unusable", async () => {
+    const planner = { model: {} as any, modelId: "gpt-5.4-mini", providerId: "openai" };
+    generateTextMock.mockResolvedValueOnce({
+      text: "be concise",
+      usage: { inputTokens: 50, outputTokens: 2 },
+    });
+
+    const policy = await resolveTurnPolicy("review this code", [], planner);
+
+    expect(policy.scaffoldSource).toBe("builtin");
+    expect(policy.plannerCacheHit).toBeUndefined();
+    expect(policy.plannerUsage).toBeUndefined();
   });
 
   it("keeps edits and bugfixes off the forced small-model lane", async () => {
