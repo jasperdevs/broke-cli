@@ -1,15 +1,20 @@
 import { Screen } from "./screen.js";
 import { KeypressHandler, type Keypress } from "./keypress.js";
 import { InputWidget } from "./input.js";
-import { GRAY, RESET, BOLD, DIM, RED, WHITE, GREEN, GREEN_DIM, YELLOW, bg, moveTo } from "../utils/ansi.js";
+import { RESET, BOLD, DIM, BOX } from "../utils/ansi.js";
 import { currentTheme, getPlanColor } from "../core/themes.js";
 import { execSync } from "child_process";
+import { existsSync, readFileSync } from "fs";
 import { matchesBinding, loadKeybindings } from "../core/keybindings.js";
 import { getSettings, updateSetting } from "../core/config.js";
 import type { Mode, ThinkingLevel, CavemanLevel } from "../core/config.js";
+import { Session } from "../core/session.js";
+import { dirname, join } from "path";
 import stripAnsi from "strip-ansi";
 import { renderMarkdown } from "../utils/markdown.js";
 import { collectProjectFiles, filterFiles, readFileForContext } from "./file-picker.js";
+import { buildSidebarFooterLines, loadSidebarFileTree, type SidebarTreeItem } from "./sidebar.js";
+import { fileURLToPath } from "url";
 
 interface ChatMessage {
   role: "user" | "assistant" | "system";
@@ -44,8 +49,31 @@ interface CommandEntry {
   aliases?: string[];
 }
 
+interface MenuEntry {
+  text: string;
+  selectIndex?: number;
+}
+
+interface RgbColor {
+  r: number;
+  g: number;
+  b: number;
+  a?: number;
+}
+
 /** Shorthand for theme primary color — called per-render so theme switches take effect. */
 function T(): string { return currentTheme().primary; }
+function TXT(): string { return currentTheme().text; }
+function MUTED(): string { return currentTheme().textMuted; }
+function BORDER(): string { return currentTheme().border; }
+function USER_BG(): string { return currentTheme().userBubble; }
+function USER_TXT(): string { return currentTheme().userText; }
+function CODE_BG(): string { return currentTheme().codeBg; }
+function APP_BG(): string { return currentTheme().background; }
+function ERR(): string { return currentTheme().error; }
+function OK(): string { return currentTheme().success; }
+function ACCENT_2(): string { return currentTheme().secondary; }
+function WARN(): string { return currentTheme().warning; }
 
 /** Shorthand for plan mode color (yellow/amber). */
 function P(): string { return getPlanColor(); }
@@ -157,27 +185,39 @@ function bounceDot(frame: number, len = 4): string {
   const idx = pos < len ? pos : cycle - pos;
   let s = "";
   for (let i = 0; i < len; i++) {
-    s += i === idx ? `${GREEN}\u2022${RESET}` : `${DIM}\u00B7${RESET}`;
+    s += i === idx ? `${OK()}\u2022${RESET}` : `${DIM}\u00B7${RESET}`;
   }
   return s;
 }
 
 const COMMANDS: CommandEntry[] = [
+  { name: "btw", desc: "fork and ask a side question" },
+  { name: "connect", desc: "connect provider", aliases: ["login"] },
   { name: "model", desc: "switch model" },
   { name: "settings", desc: "configure options" },
+  { name: "notify", desc: "send test notification" },
+  { name: "theme", desc: "change color theme" },
   { name: "compact", desc: "compress context" },
-  { name: "sessions", desc: "recent sessions" },
+  { name: "resume", desc: "resume session (sessions)", aliases: ["sessions"] },
   { name: "name", desc: "name this session" },
-  { name: "export", desc: "export to markdown" },
+  { name: "export", desc: "export or copy transcript" },
   { name: "copy", desc: "copy last response" },
   { name: "undo", desc: "undo last change" },
-  { name: "resume", desc: "resume session" },
-  { name: "reload", desc: "reload context" },
-  { name: "cost", desc: "session spend" },
+  { name: "thinking", desc: "cycle thinking" },
   { name: "caveman", desc: "cycle token saving" },
   { name: "clear", desc: "clear chat (new)", aliases: ["new"] },
   { name: "exit", desc: "quit" },
 ];
+
+const HOME_TIPS = [
+  "Use /resume to jump back into an older session.",
+  "Use /model to switch providers without leaving the chat.",
+  "Use /compact before long refactors to keep token pressure down.",
+  "Use /btw to fork a side question without derailing the main thread.",
+  "Paste an image path to attach a screenshot to your next prompt.",
+];
+
+const APP_DIR = dirname(fileURLToPath(import.meta.url));
 
 export class App {
   private screen: Screen;
@@ -209,7 +249,7 @@ export class App {
   private statusMessage: string | undefined;
   private detectedProviders: string[] = [];
   private cwd = process.cwd();
-  private modelPicker: { options: ModelOption[]; cursor: number; query: string } | null = null;
+  private modelPicker: { options: ModelOption[]; cursor: number; query: string; scope: "all" | "scoped" } | null = null;
   private onModelSelect: ((providerId: string, modelId: string) => void) | null = null;
   private onModelPin: ((providerId: string, modelId: string, pinned: boolean) => void) | null = null;
   private settingsPicker: { entries: SettingEntry[]; cursor: number; query: string } | null = null;
@@ -218,7 +258,17 @@ export class App {
   private projectFiles: string[] | null = null;
   private fileContexts: Map<string, string> = new Map();
   private cmdSuggestionCursor = 0;
-  private itemPicker: { title: string; items: PickerItem[]; cursor: number; query: string } | null = null;
+  private itemPicker: {
+    title: string;
+    items: PickerItem[];
+    cursor: number;
+    query: string;
+    previewHint?: string;
+    onPreview?: (id: string) => void;
+    onCancel?: () => void;
+    onSecondaryAction?: (id: string) => void;
+    secondaryHint?: string;
+  } | null = null;
   private onItemSelect: ((id: string) => void) | null = null;
   private toolOutputCollapsed = false;
   private questionPrompt: { question: string; options?: string[]; cursor: number; textInput: string; resolve: (answer: string) => void } | null = null;
@@ -241,13 +291,23 @@ export class App {
   private allToolsExpanded = false;
   private isCompacting = false;
   private escPrimed = false;
+  private escTimeout: ReturnType<typeof setTimeout> | null = null;
   private compactStartTime = 0;
   private compactTokens = 0;
-  private sidebarFileTree: Array<{ name: string; isDir: boolean; children?: string[]; depth: number }> | null = null;
+  private sidebarFileTree: SidebarTreeItem[] | null = null;
   private sidebarExpandedDirs = new Set<string>();
   private sidebarTreeOpen = true;
   private sidebarScrollOffset = 0;
   private sidebarFocused = false;
+  private hideCursorUntil = 0;
+  private hideCursorTimer: NodeJS.Timeout | null = null;
+  private activeMenuClickTargets = new Map<number, () => void>();
+  private homeRecentSessions: Array<{ id: string; cwd: string; model: string; cost: number; updatedAt: number; messageCount: number }> = Session.listRecent(5);
+  private homeTip = HOME_TIPS[this.pickHomeTipIndex()];
+  private readonly handleResize = (): void => {
+    this.screen.forceRedraw([]);
+    this.draw();
+  };
 
   // Animated counters
   private animTokens = new AnimCounter();
@@ -363,20 +423,62 @@ export class App {
   private renderSidebarFooter(): string[] {
     const settings = getSettings();
     if (!settings.showTokens) return [];
-    const lines: string[] = [];
-    const headerParts = ["Tokens"];
-    if (settings.showCost && this.sessionCost > 0) {
-      headerParts.push(fmtCost(this.animCost.get()));
-    }
-    lines.push(`${WHITE}${headerParts.join(` ${DIM}·${RESET} `)}${RESET}`);
-    for (const part of this.renderTokenSummaryParts()) {
-      lines.push(`  ${DIM}${part}${RESET}`);
-    }
-    if (this.contextLimitTokens > 0) {
-      const ctxColor = this.contextUsed > 90 ? RED : this.contextUsed > 70 ? "\x1b[33m" : DIM;
-      lines.push(`  ${ctxColor}${this.contextUsed}% ctx${RESET} ${DIM}· ${fmtTokens(this.contextTokenCount)}/${fmtTokens(this.contextLimitTokens)}${RESET}`);
-    }
-    return lines;
+    const width = this.screen.sidebarWidth;
+    const statusParts: string[] = [];
+    const modeLabel = this.mode === "plan" ? "plan" : "build";
+    statusParts.push(modeLabel);
+    const thinkLevel = settings.thinkingLevel || (settings.enableThinking ? "low" : "off");
+    if (thinkLevel !== "off") statusParts.push(thinkLevel);
+    const caveLevel = settings.cavemanLevel ?? "off";
+    if (caveLevel !== "off") statusParts.push(`🪨 ${caveLevel}`);
+    return buildSidebarFooterLines({
+      width,
+      statusParts,
+      cost: settings.showCost && this.sessionCost > 0 ? fmtCost(this.animCost.get()) : undefined,
+      tokenParts: this.renderTokenSummaryParts().filter((part) => !part.startsWith("Σ ")),
+      contextUsed: this.contextLimitTokens > 0 ? this.contextUsed : undefined,
+      contextUsage: this.contextLimitTokens > 0 ? `${fmtTokens(this.contextTokenCount)}/${fmtTokens(this.contextLimitTokens)}` : undefined,
+      colors: {
+        accent: T(),
+        muted: MUTED(),
+        text: TXT(),
+        warning: currentTheme().warning,
+        error: currentTheme().error,
+      },
+    });
+  }
+
+  private clearInterruptPrompt(): void {
+    this.ctrlCCount = 0;
+    this.escPrimed = false;
+    if (this.ctrlCTimeout) clearTimeout(this.ctrlCTimeout);
+    if (this.escTimeout) clearTimeout(this.escTimeout);
+    this.ctrlCTimeout = null;
+    this.escTimeout = null;
+  }
+
+  private primeCtrlCExit(): void {
+    this.escPrimed = false;
+    this.ctrlCCount = 1;
+    if (this.ctrlCTimeout) clearTimeout(this.ctrlCTimeout);
+    this.ctrlCTimeout = setTimeout(() => {
+      this.ctrlCCount = 0;
+      this.ctrlCTimeout = null;
+      this.draw();
+    }, 1500);
+    this.draw();
+  }
+
+  private primeEscapeAbort(): void {
+    this.ctrlCCount = 0;
+    this.escPrimed = true;
+    if (this.escTimeout) clearTimeout(this.escTimeout);
+    this.escTimeout = setTimeout(() => {
+      this.escPrimed = false;
+      this.escTimeout = null;
+      this.draw();
+    }, 1500);
+    this.draw();
   }
 
   setContextUsage(tokens: number, limit: number): void {
@@ -453,16 +555,16 @@ export class App {
 
   openModelPicker(options: ModelOption[], onSelect: (providerId: string, modelId: string) => void, onPin?: (providerId: string, modelId: string, pinned: boolean) => void, initialCursor?: number): void {
     const cursorIdx = initialCursor ?? options.findIndex((o) => o.active);
-    this.modelPicker = { options, cursor: cursorIdx >= 0 ? cursorIdx : 0, query: "" };
+    this.modelPicker = { options, cursor: cursorIdx >= 0 ? cursorIdx : 0, query: "", scope: "all" };
     this.onModelSelect = onSelect;
     this.onModelPin = onPin ?? null;
-    this.draw();
+    this.drawNow();
   }
 
   openSettings(entries: SettingEntry[], onToggle: (key: string) => void): void {
     this.settingsPicker = { entries, cursor: 0, query: "" };
     this.onSettingToggle = onToggle;
-    this.draw();
+    this.drawNow();
   }
 
   updateSettings(entries: SettingEntry[]): void {
@@ -472,15 +574,51 @@ export class App {
     }
   }
 
-  openItemPicker(title: string, items: PickerItem[], onSelect: (id: string) => void): void {
-    this.itemPicker = { title, items, cursor: 0, query: "" };
-    this.onItemSelect = onSelect;
+  updateItemPickerItems(items: PickerItem[], focusId?: string): void {
+    if (!this.itemPicker) return;
+    this.itemPicker.items = items;
+    if (focusId) {
+      const idx = this.getFilteredItems().findIndex((item) => item.id === focusId);
+      this.itemPicker.cursor = idx >= 0 ? idx : 0;
+    } else {
+      this.itemPicker.cursor = this.clampMenuCursor(this.itemPicker.cursor, this.getFilteredItems().length);
+    }
     this.draw();
+  }
+
+  openItemPicker(
+    title: string,
+    items: PickerItem[],
+    onSelect: (id: string) => void,
+    options?: {
+      initialCursor?: number;
+      previewHint?: string;
+      onPreview?: (id: string) => void;
+      onCancel?: () => void;
+      onSecondaryAction?: (id: string) => void;
+      secondaryHint?: string;
+    },
+  ): void {
+    const cursor = this.clampMenuCursor(options?.initialCursor ?? 0, items.length);
+    this.itemPicker = {
+      title,
+      items,
+      cursor,
+      query: "",
+      previewHint: options?.previewHint,
+      onPreview: options?.onPreview,
+      onCancel: options?.onCancel,
+      onSecondaryAction: options?.onSecondaryAction,
+      secondaryHint: options?.secondaryHint,
+    };
+    this.onItemSelect = onSelect;
+    this.drawNow();
   }
 
   clearMessages(): void {
     this.messages = [];
     this.scrollOffset = 0;
+    this.refreshHomeScreenData();
     this.invalidateMsgCache();
     this.screen.forceRedraw([]);
     this.draw();
@@ -692,7 +830,7 @@ export class App {
     this.onThinkingChange = callback;
   }
 
-  private cycleThinkingMode(): void {
+  cycleThinkingMode(): void {
     const levels: ThinkingLevel[] = ["off", "low", "medium", "high"];
     const settings = getSettings();
     const current = settings.thinkingLevel || (settings.enableThinking ? "low" : "off");
@@ -709,7 +847,7 @@ export class App {
   }
 
   cycleCavemanMode(): void {
-    const levels: CavemanLevel[] = ["off", "lite", "full", "ultra"];
+    const levels: CavemanLevel[] = ["off", "lite", "auto", "ultra"];
     const settings = getSettings();
     const current = settings.cavemanLevel ?? "off";
     const idx = levels.indexOf(current);
@@ -727,10 +865,11 @@ export class App {
 
   private getChatHeight(): number {
     const headerLines = this.screen.hasSidebar ? 0 : 1; // compact header when narrow
-    const hasSidebar = this.screen.hasSidebar && this.messages.length > 0 && !getSettings().hideSidebar;
+    const hasSidebar = this.shouldShowSidebar();
     const mainW = hasSidebar ? this.screen.mainWidth : this.screen.width;
     const bottomBase = this.getBottomLineCount(mainW, this.screen.height);
-    return Math.max(1, this.screen.height - bottomBase - headerLines);
+    const footerBase = hasSidebar ? this.renderSidebarFooter().length : 0;
+    return Math.max(1, this.screen.height - Math.max(bottomBase, footerBase) - headerLines);
   }
 
   private getBottomLineCount(mainW: number, maxHeight: number): number {
@@ -740,30 +879,38 @@ export class App {
 
     if (this.questionPrompt) {
       count += 1;
-      count += this.questionPrompt.options ? this.questionPrompt.options.length + 1 : 2;
+      count += 1;
+      count += this.questionPrompt.options
+        ? this.getQuestionOptionEntries().length + 1
+        : this.getWrappedInputLines(this.questionPrompt.textInput, mainW).length + 1;
     }
 
     if (this.filePicker) {
-      count += Math.min(this.filePicker.filtered.length, Math.max(0, maxHeight - 4));
+      count += 1;
+      count += Math.min(this.getFilePickerEntries().length, Math.max(0, maxHeight - 4));
       count += 1;
     } else if (this.itemPicker) {
-      const filtered = this.getFilteredItems();
       count += 1;
-      count += filtered.length === 0 ? 1 : Math.min(filtered.length, 10);
+      count += 1;
+      count += this.getItemPickerEntries().length === 0 ? 1 : Math.min(this.getItemPickerEntries().length, 10);
+      if (this.itemPicker.previewHint) count += 1;
+      if (this.itemPicker.secondaryHint) count += 1;
       count += 1;
     } else if (this.settingsPicker) {
-      const filtered = this.getFilteredSettings();
+      const filtered = this.getSettingsPickerEntries();
+      count += 1;
       count += 1;
       count += filtered.length === 0 ? 1 : Math.min(filtered.length, 6);
       if (filtered.length > 0) count += 2;
     } else if (this.modelPicker) {
-      const filtered = this.getFilteredModels();
+      const filtered = this.getModelPickerEntries();
       count += 1;
-      count += filtered.length === 0
-        ? 2
-        : Math.min(filtered.length + new Set(filtered.map((opt) => opt.providerName)).size, 12) + 1;
+      count += 1;
+      count += filtered.length === 0 ? 3 : Math.min(filtered.length, 12) + 2;
     } else {
-      count += this.getCommandSuggestions().length;
+      const suggestions = this.getCommandSuggestionEntries();
+      if (suggestions.length > 0) count += 1;
+      count += suggestions.length;
     }
 
     count += 1; // separator below input
@@ -798,11 +945,21 @@ export class App {
   /** Filter model options by search query */
   private getFilteredModels(): ModelOption[] {
     if (!this.modelPicker) return [];
+    const pool = this.modelPicker.scope === "scoped"
+      ? this.modelPicker.options.filter((option) => option.active)
+      : this.modelPicker.options;
     const q = this.modelPicker.query.toLowerCase();
-    if (!q) return this.modelPicker.options;
-    return this.modelPicker.options.filter(o =>
+    if (!q) return pool;
+    return pool.filter(o =>
       o.modelId.toLowerCase().includes(q) || o.providerName.toLowerCase().includes(q)
     );
+  }
+
+  private toggleModelScope(): void {
+    if (!this.modelPicker) return;
+    this.modelPicker.scope = this.modelPicker.scope === "all" ? "scoped" : "all";
+    this.modelPicker.cursor = this.clampMenuCursor(this.modelPicker.cursor, this.getFilteredModels().length);
+    this.draw();
   }
 
   /** Filter settings by search query */
@@ -825,14 +982,282 @@ export class App {
     );
   }
 
+  private previewCurrentItem(): void {
+    if (!this.itemPicker?.onPreview) return;
+    const item = this.getFilteredItems()[this.itemPicker.cursor];
+    if (!item) return;
+    this.itemPicker.onPreview(item.id);
+  }
+
+  private closeItemPicker(revertPreview = false): void {
+    if (revertPreview) this.itemPicker?.onCancel?.();
+    this.itemPicker = null;
+    this.drawNow();
+  }
+
   private getSidebarMaxScroll(visibleHeight: number): number {
     const sidebarLines = this.buildSidebarLines();
     return Math.max(0, sidebarLines.length - visibleHeight);
   }
 
+  private clampMenuCursor(cursor: number, itemCount: number): number {
+    if (itemCount <= 0) return 0;
+    return Math.max(0, Math.min(itemCount - 1, cursor));
+  }
+
+  private buildMenuView(entries: MenuEntry[], cursor: number, maxVisible: number): MenuEntry[] {
+    if (entries.length <= maxVisible) return entries;
+    let cursorEntryIndex = entries.findIndex((entry) => entry.selectIndex === cursor);
+    if (cursorEntryIndex < 0) cursorEntryIndex = entries.findIndex((entry) => entry.selectIndex !== undefined);
+    if (cursorEntryIndex < 0) cursorEntryIndex = 0;
+    let start = Math.max(0, cursorEntryIndex - Math.floor(maxVisible / 2));
+    if (start + maxVisible > entries.length) start = Math.max(0, entries.length - maxVisible);
+    return entries.slice(start, start + maxVisible);
+  }
+
+  private registerMenuClickTarget(targets: Array<{ lineIndex: number; action: () => void }>, lines: string[], action: () => void): void {
+    targets.push({ lineIndex: lines.length, action });
+  }
+
+  private getQuestionOptionEntries(): MenuEntry[] {
+    if (!this.questionPrompt?.options) return [];
+    return this.questionPrompt.options.map((option, i) => {
+      const isCursor = i === this.questionPrompt!.cursor;
+      const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
+      const color = isCursor ? `${TXT()}${BOLD}` : DIM;
+      return { text: ` ${arrow}${color}${option}${RESET}`, selectIndex: i };
+    });
+  }
+
+  private getFilePickerEntries(): MenuEntry[] {
+    if (!this.filePicker) return [];
+    return this.filePicker.filtered.map((file, i) => {
+      const isCursor = i === this.filePicker!.cursor;
+      const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
+      const color = isCursor ? `${TXT()}${BOLD}` : DIM;
+      return { text: ` ${arrow}${color}${file}${RESET}`, selectIndex: i };
+    });
+  }
+
+  private getSettingsPickerEntries(): MenuEntry[] {
+    if (!this.settingsPicker) return [];
+    const filtered = this.getFilteredSettings();
+    return filtered.map((entry, i) => {
+      const isCursor = i === this.settingsPicker!.cursor;
+      const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
+      const nameCol = isCursor ? `${TXT()}${BOLD}` : T();
+      const pad = " ".repeat(Math.max(1, 22 - entry.label.length));
+      const valColor = entry.value === "true" ? T() : DIM;
+      return {
+        text: ` ${arrow}${nameCol}${entry.label}${RESET}${pad}${valColor}${entry.value}${RESET}`,
+        selectIndex: i,
+      };
+    });
+  }
+
+  private getItemPickerEntries(): MenuEntry[] {
+    if (!this.itemPicker) return [];
+    const filtered = this.getFilteredItems();
+    return filtered.map((item, i) => {
+      const isCursor = i === this.itemPicker!.cursor;
+      const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
+      const labelCol = isCursor ? `${TXT()}${BOLD}` : T();
+      return {
+        text: ` ${arrow}${labelCol}${item.label}${RESET}${item.detail ? ` ${DIM}${item.detail}${RESET}` : ""}`,
+        selectIndex: i,
+      };
+    });
+  }
+
+  private getModelPickerEntries(): MenuEntry[] {
+    if (!this.modelPicker) return [];
+    const filtered = this.getFilteredModels();
+    const byProvider = new Map<string, ModelOption[]>();
+    for (const opt of filtered) {
+      if (!byProvider.has(opt.providerName)) byProvider.set(opt.providerName, []);
+      byProvider.get(opt.providerName)!.push(opt);
+    }
+
+    const entries: MenuEntry[] = [];
+    let currentIdx = 0;
+    for (const [provider, opts] of byProvider) {
+      entries.push({ text: ` ${DIM}${provider}${RESET}` });
+      for (const opt of opts) {
+        const isCursor = currentIdx === this.modelPicker.cursor;
+        const pin = opt.active ? ` ${T()}*${RESET}` : "";
+        const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
+        const nameCol = isCursor ? `${TXT()}${BOLD}` : T();
+        entries.push({
+          text: `  ${arrow}${nameCol}${opt.modelId}${RESET}${pin}`,
+          selectIndex: currentIdx,
+        });
+        currentIdx++;
+      }
+    }
+    return entries;
+  }
+
+  private getCommandSuggestionEntries(): MenuEntry[] {
+    const matches = this.getCommandMatches();
+    if (matches.length === 0) return [];
+    const cursor = Math.min(this.cmdSuggestionCursor, matches.length - 1);
+    return matches.map((entry, i) => {
+      const arrow = i === cursor ? `${T()}> ${RESET}` : "  ";
+      const nameColor = i === cursor ? `${TXT()}${BOLD}` : T();
+      const pad = " ".repeat(Math.max(1, 16 - entry.name.length));
+      return {
+        text: ` ${arrow}${nameColor}${entry.name}${RESET}${pad}${DIM}${entry.desc}${RESET}`,
+        selectIndex: i,
+      };
+    });
+  }
+
   private scrollSidebar(delta: number, visibleHeight: number): void {
     const maxScroll = this.getSidebarMaxScroll(visibleHeight);
     this.sidebarScrollOffset = Math.max(0, Math.min(maxScroll, this.sidebarScrollOffset + delta));
+  }
+
+  private scrollActiveMenu(delta: number): boolean {
+    if (this.questionPrompt?.options) {
+      this.questionPrompt.cursor = this.clampMenuCursor(this.questionPrompt.cursor + delta, this.questionPrompt.options.length);
+      return true;
+    }
+    if (this.settingsPicker) {
+      this.settingsPicker.cursor = this.clampMenuCursor(this.settingsPicker.cursor + delta, this.getFilteredSettings().length);
+      return true;
+    }
+    if (this.itemPicker) {
+      this.itemPicker.cursor = this.clampMenuCursor(this.itemPicker.cursor + delta, this.getFilteredItems().length);
+      this.previewCurrentItem();
+      return true;
+    }
+    if (this.modelPicker) {
+      this.modelPicker.cursor = this.clampMenuCursor(this.modelPicker.cursor + delta, this.getFilteredModels().length);
+      return true;
+    }
+    if (this.filePicker) {
+      this.filePicker.cursor = this.clampMenuCursor(this.filePicker.cursor + delta, this.filePicker.filtered.length);
+      return true;
+    }
+    const suggestions = this.getCommandMatches();
+    if (suggestions.length > 0) {
+      this.cmdSuggestionCursor = this.clampMenuCursor(this.cmdSuggestionCursor + delta, suggestions.length);
+      return true;
+    }
+    return false;
+  }
+
+  private selectQuestionOption(index: number): void {
+    if (!this.questionPrompt?.options) return;
+    const answer = this.questionPrompt.options[index];
+    if (!answer) return;
+    const qp = this.questionPrompt;
+    qp.cursor = index;
+    this.questionPrompt = null;
+    this.addMessage("system", `${DIM}> ${answer}${RESET}`);
+    this.invalidateMsgCache();
+    this.drawNow();
+    qp.resolve(answer);
+  }
+
+  private toggleSettingEntry(index: number): void {
+    if (!this.settingsPicker) return;
+    const filtered = this.getFilteredSettings();
+    const entry = filtered[index];
+    if (!entry) return;
+    this.settingsPicker.cursor = index;
+    if (this.onSettingToggle) this.onSettingToggle(entry.key);
+    this.draw();
+  }
+
+  private selectItemEntry(index: number): void {
+    if (!this.itemPicker) return;
+    const filtered = this.getFilteredItems();
+    const item = filtered[index];
+    if (!item) return;
+    this.itemPicker.cursor = index;
+    if (this.onItemSelect) this.onItemSelect(item.id);
+    this.closeItemPicker(false);
+  }
+
+  private toggleModelPin(index: number): void {
+    if (!this.modelPicker) return;
+    const filtered = this.getFilteredModels();
+    const opt = filtered[index];
+    if (!opt) return;
+    this.modelPicker.cursor = index;
+    opt.active = !opt.active;
+    if (this.onModelPin) this.onModelPin(opt.providerId, opt.modelId, opt.active);
+    this.draw();
+  }
+
+  private selectModelEntry(index: number): void {
+    if (!this.modelPicker) return;
+    const filtered = this.getFilteredModels();
+    const selected = filtered[index];
+    if (!selected) return;
+    this.modelPicker.cursor = index;
+    this.modelPicker = null;
+    if (this.onModelSelect) {
+      this.onModelSelect(selected.providerId, selected.modelId);
+    }
+    this.drawNow();
+  }
+
+  private selectFileEntry(index: number): void {
+    if (!this.filePicker) return;
+    const selected = this.filePicker.filtered[index];
+    if (!selected) return;
+    this.filePicker.cursor = index;
+    const text = this.input.getText();
+    const atIdx = text.lastIndexOf("@");
+    if (atIdx >= 0) {
+      this.input.clear();
+      this.input.paste(text.slice(0, atIdx) + `@${selected} `);
+    }
+    const content = readFileForContext(this.cwd, selected);
+    this.fileContexts.set(selected, content);
+    this.filePicker = null;
+    this.drawNow();
+  }
+
+  private applyCommandSuggestion(index: number, submitOnReturn = false): void {
+    const suggestions = this.getCommandMatches();
+    const selected = suggestions[index];
+    if (!selected) return;
+    this.cmdSuggestionCursor = index;
+    this.input.clear();
+    this.input.paste(`/${selected.name}`);
+    if (submitOnReturn) {
+      const cmd = this.input.submit();
+      if (cmd && this.onSubmit) this.onSubmit(cmd);
+    }
+    this.draw();
+  }
+
+  private hideCursorBriefly(durationMs = 140): void {
+    this.hideCursorUntil = Date.now() + durationMs;
+    if (this.hideCursorTimer) clearTimeout(this.hideCursorTimer);
+    this.hideCursorTimer = setTimeout(() => {
+      this.hideCursorTimer = null;
+      this.draw();
+    }, durationMs + 10);
+  }
+
+  private getSidebarBorder(): string {
+    return `${currentTheme().sidebarBorder}│${RESET}`;
+  }
+
+  private shouldEnableMenuMouse(): boolean {
+    return Boolean(
+      this.shouldShowSidebar() ||
+      this.questionPrompt?.options ||
+      this.filePicker ||
+      this.itemPicker ||
+      this.settingsPicker ||
+      this.modelPicker ||
+      this.getCommandMatches().length > 0
+    );
   }
 
   private handleKey(key: Keypress): void {
@@ -841,15 +1266,92 @@ export class App {
       if (key.ctrl && key.name === "c") {
         this.ctrlCCount++;
         if (this.ctrlCCount >= 2) { this.stop(); return; }
-        this.statusMessage = `${RED}Press Ctrl+C again to exit${RESET}`;
-        this.draw();
-        if (this.ctrlCTimeout) clearTimeout(this.ctrlCTimeout);
-        this.ctrlCTimeout = setTimeout(() => {
-          this.ctrlCCount = 0;
-          this.statusMessage = undefined;
-          this.draw();
-        }, 1500);
+        this.primeCtrlCExit();
       }
+      return;
+    }
+
+    // Mouse click — sidebar first, then active bottom menus
+    if (key.name === "click" && key.char) {
+      const [colStr, rowStr] = key.char.split(",");
+      const col = parseInt(colStr, 10);
+      const row = parseInt(rowStr, 10);
+      const hasSB = this.shouldShowSidebar();
+      if (hasSB && col > this.screen.mainWidth) {
+        this.sidebarFocused = true;
+        const sidebarLines = this.renderSidebar(this.getChatHeight());
+        const clickedLine = row <= sidebarLines.length ? sidebarLines[row - 1] : undefined;
+        if (clickedLine) {
+          const plain = stripAnsi(clickedLine).trim();
+          if (plain.startsWith("▾ Files") || plain.startsWith("▸ Files")) {
+            this.sidebarTreeOpen = !this.sidebarTreeOpen;
+          } else if (plain.match(/^[▾▸] .+\/$/)) {
+            const dirName = plain.slice(2).replace(/\/$/, "");
+            if (this.sidebarExpandedDirs.has(dirName)) {
+              this.sidebarExpandedDirs.delete(dirName);
+            } else {
+              this.sidebarExpandedDirs.add(dirName);
+            }
+          } else if (plain.match(/^▸ \+\d+ more$/)) {
+            for (let i = row - 2; i >= 0; i--) {
+              const prevPlain = stripAnsi(sidebarLines[i] ?? "").trim();
+              if (prevPlain.match(/^▾ .+\/$/)) {
+                const dirName = prevPlain.slice(2).replace(/\/$/, "");
+                this.sidebarExpandedDirs.add(`${dirName}:all`);
+                break;
+              }
+            }
+          }
+        }
+        this.draw();
+      } else {
+        this.sidebarFocused = false;
+        const menuAction = this.activeMenuClickTargets.get(row);
+        if (menuAction) {
+          menuAction();
+        }
+      }
+      return;
+    }
+
+    // Mouse wheel: menus/sidebar only, never transcript history
+    if (key.name === "scrollup") {
+      this.hideCursorBriefly();
+      if (this.sidebarFocused && this.screen.hasSidebar && !getSettings().hideSidebar) {
+        this.scrollSidebar(-3, this.getChatHeight());
+        this.draw();
+      } else if (this.scrollActiveMenu(-1)) {
+        this.draw();
+      }
+      return;
+    }
+    if (key.name === "scrolldown") {
+      this.hideCursorBriefly();
+      if (this.sidebarFocused && this.screen.hasSidebar && !getSettings().hideSidebar) {
+        this.scrollSidebar(3, this.getChatHeight());
+        this.draw();
+      } else if (this.scrollActiveMenu(1)) {
+        this.draw();
+      }
+      return;
+    }
+
+    // Keyboard transcript paging only
+    if (key.name === "pageup" || (key.ctrl && key.name === "up")) {
+      this.hideCursorBriefly();
+      this.scrollOffset = Math.max(0, this.scrollOffset - 3);
+      this.invalidateMsgCache();
+      this.draw();
+      return;
+    }
+    if (key.name === "pagedown" || (key.ctrl && key.name === "down")) {
+      this.hideCursorBriefly();
+      const chatHeight = this.getChatHeight();
+      const messageLines = this.renderMessages(this.screen.mainWidth - 2);
+      const maxScroll = Math.max(0, messageLines.length - chatHeight);
+      this.scrollOffset = Math.min(maxScroll, this.scrollOffset + 3);
+      this.invalidateMsgCache();
+      this.draw();
       return;
     }
 
@@ -865,17 +1367,12 @@ export class App {
           qp.cursor = Math.min(qp.options.length - 1, qp.cursor + 1);
           this.draw();
         } else if (key.name === "return") {
-          const answer = qp.options[qp.cursor];
-          this.questionPrompt = null;
-          this.addMessage("system", `${DIM}> ${answer}${RESET}`);
-          this.invalidateMsgCache();
-          this.draw();
-          qp.resolve(answer);
+          this.selectQuestionOption(qp.cursor);
         } else if (key.name === "escape") {
           this.questionPrompt = null;
           this.addMessage("system", `${DIM}> [skipped]${RESET}`);
           this.invalidateMsgCache();
-          this.draw();
+          this.drawNow();
           qp.resolve("[user skipped]");
         }
       } else {
@@ -885,13 +1382,13 @@ export class App {
           this.questionPrompt = null;
           this.addMessage("system", `${DIM}> ${answer}${RESET}`);
           this.invalidateMsgCache();
-          this.draw();
+          this.drawNow();
           qp.resolve(answer);
         } else if (key.name === "escape") {
           this.questionPrompt = null;
           this.addMessage("system", `${DIM}> [skipped]${RESET}`);
           this.invalidateMsgCache();
-          this.draw();
+          this.drawNow();
           qp.resolve("[user skipped]");
         } else if (key.name === "backspace") {
           if (qp.textInput.length > 0) {
@@ -916,12 +1413,10 @@ export class App {
         this.settingsPicker.cursor = Math.min(filtered.length - 1, this.settingsPicker.cursor + 1);
         this.draw();
       } else if (key.name === "return" || key.name === "space") {
-        const entry = filtered[this.settingsPicker.cursor];
-        if (entry && this.onSettingToggle) this.onSettingToggle(entry.key);
-        this.draw();
+        this.toggleSettingEntry(this.settingsPicker.cursor);
       } else if (key.name === "escape" || (key.ctrl && key.name === "c")) {
         this.settingsPicker = null;
-        this.draw();
+        this.drawNow();
       } else if (key.name === "backspace") {
         if (this.settingsPicker.query.length > 0) {
           this.settingsPicker.query = this.settingsPicker.query.slice(0, -1);
@@ -941,29 +1436,32 @@ export class App {
       const filtered = this.getFilteredItems();
       if (key.name === "up") {
         this.itemPicker.cursor = Math.max(0, this.itemPicker.cursor - 1);
+        this.previewCurrentItem();
         this.draw();
       } else if (key.name === "down") {
         this.itemPicker.cursor = Math.min(filtered.length - 1, this.itemPicker.cursor + 1);
+        this.previewCurrentItem();
         this.draw();
       } else if (key.name === "return") {
-        const item = filtered[this.itemPicker.cursor];
-        if (item && this.onItemSelect) {
-          this.onItemSelect(item.id);
-        }
-        this.itemPicker = null;
-        this.draw();
+        this.selectItemEntry(this.itemPicker.cursor);
       } else if (key.name === "escape" || (key.ctrl && key.name === "c")) {
-        this.itemPicker = null;
-        this.draw();
+        this.closeItemPicker(true);
+      } else if (key.name === "tab") {
+        const item = filtered[this.itemPicker.cursor];
+        if (item && this.itemPicker.onSecondaryAction) {
+          this.itemPicker.onSecondaryAction(item.id);
+        }
       } else if (key.name === "backspace") {
         if (this.itemPicker.query.length > 0) {
           this.itemPicker.query = this.itemPicker.query.slice(0, -1);
           this.itemPicker.cursor = 0;
+          this.previewCurrentItem();
           this.draw();
         }
       } else if (key.char && !key.ctrl && !key.meta && key.char.length === 1) {
         this.itemPicker.query += key.char;
         this.itemPicker.cursor = 0;
+        this.previewCurrentItem();
         this.draw();
       }
       return;
@@ -979,23 +1477,14 @@ export class App {
         this.modelPicker.cursor = Math.min(filtered.length - 1, this.modelPicker.cursor + 1);
         this.draw();
       } else if (key.name === "tab") {
-        // Tab to pin/unpin in model picker
-        const opt = filtered[this.modelPicker.cursor];
-        if (opt) {
-          opt.active = !opt.active;
-          if (this.onModelPin) this.onModelPin(opt.providerId, opt.modelId, opt.active);
-        }
-        this.draw();
+        this.toggleModelScope();
+      } else if (key.name === "space") {
+        this.toggleModelPin(this.modelPicker.cursor);
       } else if (key.name === "return") {
-        const selected = filtered[this.modelPicker.cursor];
-        this.modelPicker = null;
-        if (selected && this.onModelSelect) {
-          this.onModelSelect(selected.providerId, selected.modelId);
-        }
-        this.draw();
+        this.selectModelEntry(this.modelPicker.cursor);
       } else if (key.name === "escape" || (key.ctrl && key.name === "c")) {
         this.modelPicker = null;
-        this.draw();
+        this.drawNow();
       } else if (key.name === "backspace") {
         if (this.modelPicker.query.length > 0) {
           this.modelPicker.query = this.modelPicker.query.slice(0, -1);
@@ -1019,24 +1508,10 @@ export class App {
         this.filePicker.cursor = Math.min(this.filePicker.filtered.length - 1, this.filePicker.cursor + 1);
         this.draw();
       } else if (key.name === "return" || key.name === "tab") {
-        const selected = this.filePicker.filtered[this.filePicker.cursor];
-        if (selected) {
-          // Replace @query with @filepath in input
-          const text = this.input.getText();
-          const atIdx = text.lastIndexOf("@");
-          if (atIdx >= 0) {
-            this.input.clear();
-            this.input.paste(text.slice(0, atIdx) + `@${selected} `);
-          }
-          // Inject file contents as hidden context
-          const content = readFileForContext(this.cwd, selected);
-          this.fileContexts.set(selected, content);
-        }
-        this.filePicker = null;
-        this.draw();
+        this.selectFileEntry(this.filePicker.cursor);
       } else if (key.name === "escape") {
         this.filePicker = null;
-        this.draw();
+        this.drawNow();
       } else if (key.name === "backspace") {
         if (this.filePicker.query.length > 0) {
           this.filePicker.query = this.filePicker.query.slice(0, -1);
@@ -1048,7 +1523,7 @@ export class App {
         } else {
           this.filePicker = null;
           this.input.handleKey(key);
-          this.draw();
+          this.drawNow();
         }
       } else if (key.char && !key.ctrl && !key.meta) {
         this.filePicker.query += key.char;
@@ -1060,31 +1535,24 @@ export class App {
       return;
     }
 
-    // ESC to interrupt streaming (single press)
+    // ESC to interrupt streaming (double press)
     if (key.name === "escape" && this.isStreaming && this.onAbort) {
-      this.onAbort();
+      if (this.escPrimed) {
+        this.clearInterruptPrompt();
+        this.onAbort();
+      } else {
+        this.primeEscapeAbort();
+      }
       return;
     }
 
     if (key.ctrl && key.name === "c") {
-      if (this.isStreaming && this.onAbort) {
-        this.onAbort();
-        this.ctrlCCount = 0;
-        return;
-      }
       this.ctrlCCount++;
       if (this.ctrlCCount >= 2) { this.stop(); return; }
-      this.statusMessage = `${RED}Press Ctrl+C again to exit${RESET}`;
-      this.draw();
-      if (this.ctrlCTimeout) clearTimeout(this.ctrlCTimeout);
-      this.ctrlCTimeout = setTimeout(() => {
-        this.ctrlCCount = 0;
-        this.statusMessage = undefined;
-        this.draw();
-      }, 1500);
+      this.primeCtrlCExit();
       return;
     }
-    this.ctrlCCount = 0;
+    this.clearInterruptPrompt();
 
     // Keybinding: model picker (default Ctrl+L)
     const bindings = loadKeybindings();
@@ -1112,81 +1580,10 @@ export class App {
       return;
     }
 
-    // Mouse click — handle sidebar clicks
-    if (key.name === "click" && key.char) {
-      const [colStr, rowStr] = key.char.split(",");
-      const col = parseInt(colStr, 10);
-      const row = parseInt(rowStr, 10);
-      const hasSB = this.screen.hasSidebar && this.messages.length > 0 && !getSettings().hideSidebar;
-      if (hasSB && col > this.screen.mainWidth) {
-        this.sidebarFocused = true;
-        // Determine which sidebar row was clicked
-        const sidebarLines = this.renderSidebar(this.getChatHeight());
-        const clickedLine = row <= sidebarLines.length ? sidebarLines[row - 1] : undefined; // 1-based rows
-        if (clickedLine) {
-          const plain = stripAnsi(clickedLine).trim();
-          // Click on "▼ Files" / "▶ Files" — toggle whole tree
-          if (plain.startsWith("\u25BC Files") || plain.startsWith("\u25B6 Files")) {
-            this.sidebarTreeOpen = !this.sidebarTreeOpen;
-          }
-          // Click on a folder "▶ dirname/" or "▼ dirname/" — toggle that folder
-          else if (plain.match(/^[\u25BC\u25B6] .+\/$/)) {
-            const dirName = plain.slice(2).replace(/\/$/, "");
-            if (this.sidebarExpandedDirs.has(dirName)) {
-              this.sidebarExpandedDirs.delete(dirName);
-            } else {
-              this.sidebarExpandedDirs.add(dirName);
-            }
-          }
-          // Click on "▶ +N more" — expand all children of that dir
-          else if (plain.match(/^[\u25B6] \+\d+ more$/)) {
-            // Find which dir this belongs to by scanning backwards
-            for (let i = row - 2; i >= 0; i--) {
-              const prevPlain = stripAnsi(sidebarLines[i] ?? "").trim();
-              if (prevPlain.match(/^[\u25BC] .+\/$/)) {
-                const dirName = prevPlain.slice(2).replace(/\/$/, "");
-                this.sidebarExpandedDirs.add(`${dirName}:all`);
-                break;
-              }
-            }
-          }
-        }
-        this.draw();
-      } else {
-        this.sidebarFocused = false;
-      }
-      return;
-    }
-
     // Shift+Tab — toggle between build and plan mode
     if (key.shift && key.name === "tab") {
       this.mode = this.mode === "build" ? "plan" : "build";
       if (this.onModeChange) this.onModeChange(this.mode);
-      this.draw();
-      return;
-    }
-
-    // Scroll: mouse wheel, PageUp/Down, Ctrl+Up/Down
-    if (key.name === "scrollup" || key.name === "pageup" || (key.ctrl && key.name === "up")) {
-      if (this.sidebarFocused && this.screen.hasSidebar && !getSettings().hideSidebar) {
-        this.scrollSidebar(-3, this.getChatHeight());
-      } else {
-        this.scrollOffset = Math.max(0, this.scrollOffset - 3);
-        this.invalidateMsgCache();
-      }
-      this.draw();
-      return;
-    }
-    if (key.name === "scrolldown" || key.name === "pagedown" || (key.ctrl && key.name === "down")) {
-      if (this.sidebarFocused && this.screen.hasSidebar && !getSettings().hideSidebar) {
-        this.scrollSidebar(3, this.getChatHeight());
-      } else {
-        const chatHeight = this.getChatHeight();
-        const messageLines = this.renderMessages(this.screen.mainWidth - 2);
-        const maxScroll = Math.max(0, messageLines.length - chatHeight);
-        this.scrollOffset = Math.min(maxScroll, this.scrollOffset + 3);
-        this.invalidateMsgCache();
-      }
       this.draw();
       return;
     }
@@ -1219,18 +1616,7 @@ export class App {
           return;
         }
         if (key.name === "tab" || key.name === "return") {
-          const selected = suggestions[this.cmdSuggestionCursor];
-          if (selected) {
-            this.input.clear();
-            this.input.paste(`/${selected.name}`);
-            this.cmdSuggestionCursor = 0;
-            // If it's a complete command, submit it
-            if (key.name === "return") {
-              const cmd = this.input.submit();
-              if (cmd && this.onSubmit) this.onSubmit(cmd);
-            }
-          }
-          this.draw();
+          this.applyCommandSuggestion(this.cmdSuggestionCursor, key.name === "return");
           return;
         }
       }
@@ -1245,6 +1631,7 @@ export class App {
       if (text && this.onSubmit) {
         const settings = getSettings();
         const followUpMode = settings.followUpMode;
+        const shouldQueueBtw = this.isStreaming && text.startsWith("/btw");
         
         // If not streaming, always submit immediately
         // If streaming, check followUpMode
@@ -1255,7 +1642,7 @@ export class App {
           } else {
             this.onSubmit(text);
           }
-        } else if (followUpMode === "immediate") {
+        } else if (followUpMode === "immediate" && !shouldQueueBtw) {
           // Send immediately even while streaming
           if (images.length > 0) {
             (this.onSubmit as (text: string, images?: Array<{ mimeType: string; data: string }>) => void)(text, images);
@@ -1279,7 +1666,7 @@ export class App {
       }
       this.filePicker = {
         files: this.projectFiles,
-        filtered: this.projectFiles.slice(0, 10),
+        filtered: this.projectFiles,
         query: "",
         cursor: 0,
       };
@@ -1350,22 +1737,22 @@ export class App {
         let content = msg.content;
         if (msg.images && msg.images.length > 0) {
           for (let i = 0; i < msg.images.length; i++) {
-            const tag = `${bg(58, 199, 58)}${BOLD}${WHITE}[IMAGE ${i + 1}]${RESET}`;
+            const tag = `${currentTheme().imageTagBg}${BOLD}${TXT()}[IMAGE ${i + 1}]${RESET}`;
             content += ` ${tag}`;
           }
         }
-        const availW = maxWidth - 4; // "  > " prefix
+        const availW = Math.max(1, maxWidth - 4);
         const contentLines = content.split("\n");
+        lines.push(`${USER_BG()}${" ".repeat(maxWidth)}${RESET}`);
         for (let li = 0; li < contentLines.length; li++) {
-          const prefix = li === 0 ? "  > " : "    ";
           const wrapped = wordWrap(contentLines[li], availW);
           for (let wi = 0; wi < wrapped.length; wi++) {
-            const pfx = wi === 0 ? prefix : "    ";
             const text = wrapped[wi];
-            const padW = Math.max(0, maxWidth - text.length - pfx.length);
-            lines.push(`${bg(30, 30, 30)}${WHITE}${pfx}${text}${" ".repeat(padW)}${RESET}`);
+            const padW = Math.max(0, maxWidth - text.length - 4);
+            lines.push(`${USER_BG()}${USER_TXT()}  ${text}${" ".repeat(padW)}  ${RESET}`);
           }
         }
+        lines.push(`${USER_BG()}${" ".repeat(maxWidth)}${RESET}`);
         lines.push("");
       } else if (msg.role === "assistant") {
         const rendered = renderMarkdown(msg.content);
@@ -1383,7 +1770,7 @@ export class App {
         }
         if (idx + 1 < this.messages.length && this.messages[idx + 1].role === "user") {
           lines.push("");
-          lines.push(`${DIM}  ${"─".repeat(Math.max(1, maxWidth - 4))}${RESET}`);
+          lines.push(`${BORDER()}  ${"─".repeat(Math.max(1, maxWidth - 4))}${RESET}`);
         }
       } else if (this.toolOutputCollapsed && this.isToolOutput(msg.content)) {
         while (idx + 1 < this.messages.length
@@ -1413,10 +1800,10 @@ export class App {
         const wrapW = maxWidth - 4;
         const plain = msg.content;
         if (plain.length <= wrapW) {
-          lines.push(`${DIM}  ${plain}${RESET}`);
+          lines.push(`${MUTED()}  ${plain}${RESET}`);
         } else {
           for (let i = 0; i < plain.length; i += wrapW) {
-            lines.push(`${DIM}  ${plain.slice(i, i + wrapW)}${RESET}`);
+            lines.push(`${MUTED()}  ${plain.slice(i, i + wrapW)}${RESET}`);
           }
         }
       }
@@ -1455,12 +1842,12 @@ export class App {
     const L = "\u2514"; // └
 
     // Icon: green circle (running/blinking), dim circle (done), red circle (error)
-    const icon = tc.error ? `${RED}\u25CF${RESET}`
+    const icon = tc.error ? `${ERR()}\u25CF${RESET}`
       : done ? `${DIM}\u25CF${RESET}`
-      : (this.spinnerFrame % 2 === 0 ? `${GREEN}\u25CF${RESET}` : `${GREEN_DIM}\u25CF${RESET}`);
+      : (this.spinnerFrame % 2 === 0 ? `${OK()}\u25CF${RESET}` : `${ACCENT_2()}\u25CF${RESET}`);
 
     const desc = this.toolDescription(tc);
-    lines.push(`  ${icon} ${done ? DIM : WHITE}${desc}${running ? "..." : ""}${RESET}`);
+    lines.push(`  ${icon} ${done ? MUTED() : TXT()}${desc}${running ? "..." : ""}${RESET}`);
 
     const a = tc.args as Record<string, string> | undefined;
 
@@ -1494,14 +1881,14 @@ export class App {
         for (const l of oldLines.slice(0, 4)) {
           const text = `- ${l}`.slice(0, diffW - 2);
           const pad = Math.max(0, diffW - 2 - text.length);
-          lines.push(`  ${bg(60, 15, 15)} ${text}${" ".repeat(pad)} ${RESET}`);
+          lines.push(`  ${currentTheme().diffRemoveBg} ${text}${" ".repeat(pad)} ${RESET}`);
         }
         if (oldLines.length > 4) lines.push(`${DIM}      ... +${oldLines.length - 4} more${RESET}`);
         // Show added lines (green bg)
         for (const l of newLines.slice(0, 4)) {
           const text = `+ ${l}`.slice(0, diffW - 2);
           const pad = Math.max(0, diffW - 2 - text.length);
-          lines.push(`  ${bg(15, 45, 15)} ${text}${" ".repeat(pad)} ${RESET}`);
+          lines.push(`  ${currentTheme().diffAddBg} ${text}${" ".repeat(pad)} ${RESET}`);
         }
         if (newLines.length > 4) lines.push(`${DIM}      ... +${newLines.length - 4} more${RESET}`);
       } else if (tc.name === "writeFile" && a?.content) {
@@ -1511,7 +1898,7 @@ export class App {
         for (const l of newLines.slice(0, 6)) {
           const text = `+ ${l}`.slice(0, diffW - 2);
           const pad = Math.max(0, diffW - 2 - text.length);
-          lines.push(`  ${bg(15, 45, 15)} ${text}${" ".repeat(pad)} ${RESET}`);
+          lines.push(`  ${currentTheme().diffAddBg} ${text}${" ".repeat(pad)} ${RESET}`);
         }
         if (newLines.length > 6) {
           lines.push(`${DIM}      ... +${newLines.length - 6} more${RESET}`);
@@ -1540,7 +1927,7 @@ export class App {
     }
 
     if (tc.error && tc.result) {
-      lines.push(`${RED}  ${L} ${tc.result}${RESET}`);
+      lines.push(`${ERR()}  ${L} ${tc.result}${RESET}`);
     }
 
     return lines;
@@ -1578,17 +1965,17 @@ export class App {
         const headerText = inProgress ? inProgress.text : (allDone ? "Done" : "Working...");
         lines.push(`  ${T()}${spin}${RESET} ${T()}${headerText}${RESET}  ${DIM}${timeStr} \u00B7 ${done}/${total}${RESET}`);
       } else {
-        lines.push(`  ${allDone ? GREEN : T()}\u2714${RESET} ${DIM}Tasks ${done}/${total}${RESET}`);
+        lines.push(`  ${allDone ? OK() : T()}\u2714${RESET} ${DIM}Tasks ${done}/${total}${RESET}`);
       }
       // Task items
       for (let i = 0; i < this.todoItems.length; i++) {
         const item = this.todoItems[i];
         const isLast = i === this.todoItems.length - 1;
         const branch = isLast ? "\u2514" : "\u251C"; // └ or ├
-        const icon = item.status === "done" ? `${GREEN}\u25A0${RESET}` // ■ green
+        const icon = item.status === "done" ? `${OK()}\u25A0${RESET}` // ■ green
           : item.status === "in_progress" ? `${T()}${spin}${RESET}` // spinner
           : `${DIM}\u25A1${RESET}`; // □ dim
-        const textColor = item.status === "done" ? DIM : item.status === "in_progress" ? WHITE : DIM;
+        const textColor = item.status === "done" ? DIM : item.status === "in_progress" ? `${TXT()}${BOLD}` : DIM;
         lines.push(`  ${DIM}${branch}${RESET} ${icon} ${textColor}${item.text.slice(0, maxWidth - 10)}${RESET}`);
       }
       lines.push("");
@@ -1596,14 +1983,14 @@ export class App {
 
     // Compacting indicator
     if (this.isCompacting) {
-      const spinnerFrames = ["\u00B7", "\u25E6", "\u25CB", "\u25C9", "\u25CB", "\u25E6"];
-      const spinner = spinnerFrames[this.spinnerFrame % spinnerFrames.length];
       const elapsed = Date.now() - this.compactStartTime;
       const secs = Math.floor(elapsed / 1000);
       const mins = Math.floor(secs / 60);
       const timeStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
       const tokenStr = this.compactTokens > 0 ? ` \u2191 ${fmtTokens(this.compactTokens)} tokens` : "";
-      lines.push(`  ${YELLOW}${spinner}${RESET} ${YELLOW}Compacting conversation...${RESET} ${DIM}(${timeStr}${tokenStr ? ` \u00B7${tokenStr}` : ""})${RESET}`);
+      const sparkle = this.sparkleSpinner(this.spinnerFrame, WARN());
+      const shimmer = this.shimmerText("Compacting conversation...", this.spinnerFrame);
+      lines.push(`  ${sparkle} ${shimmer} ${DIM}(${timeStr}${tokenStr ? ` \u00B7${tokenStr}` : ""})${RESET}`);
       lines.push("");
     }
 
@@ -1637,8 +2024,225 @@ export class App {
 
   private renderCompactHeader(): string {
     const model = `${T()}${this.providerName}/${this.modelName}${RESET}`;
-    const git = this.gitBranch ? ` ${DIM}${this.gitBranch}${this.gitDirty ? "*" : ""}${RESET}` : "";
+    const git = this.gitBranch ? ` ${MUTED()}${this.gitBranch}${this.gitDirty ? "*" : ""}${RESET}` : "";
     return ` ${model}${git}`;
+  }
+
+  private shouldShowSidebar(): boolean {
+    return this.messages.length > 0 && this.screen.hasSidebar && !getSettings().hideSidebar;
+  }
+
+  private pickHomeTipIndex(): number {
+    const seed = `${process.cwd()}|${process.platform}|${this.appVersion}`;
+    let hash = 0;
+    for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+    return hash % HOME_TIPS.length;
+  }
+
+  private refreshHomeScreenData(): void {
+    this.homeRecentSessions = Session.listRecent(5);
+    this.homeTip = HOME_TIPS[this.pickHomeTipIndex()];
+  }
+
+  private formatShortCwd(maxWidth: number): string {
+    return this.formatShortPath(this.cwd, maxWidth);
+  }
+
+  private formatShortPath(pathValue: string, maxWidth: number): string {
+    const home = process.env.USERPROFILE || process.env.HOME || "";
+    let display = pathValue;
+    if (home && display.toLowerCase().startsWith(home.toLowerCase())) {
+      display = `~${display.slice(home.length)}`;
+      if (display === "~") display = "~/";
+    }
+    if (maxWidth <= 1) return display.slice(0, Math.max(0, maxWidth));
+    if (display.length <= maxWidth) return display;
+    return `~${display.slice(-(maxWidth - 1))}`;
+  }
+
+  private formatRelativeAge(updatedAt: number): string {
+    const diffMs = Math.max(0, Date.now() - updatedAt);
+    const minutes = Math.floor(diffMs / 60_000);
+    if (minutes < 1) return "just now";
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 30) return `${days}d ago`;
+    const months = Math.floor(days / 30);
+    if (months < 12) return `${months}mo ago`;
+    return `${Math.floor(months / 12)}y ago`;
+  }
+
+  private resolveMascotPath(): string | null {
+    const svgCandidates = [
+      join(process.cwd(), "logos", "brokecli-face.svg"),
+      join(APP_DIR, "..", "..", "logos", "brokecli-face.svg"),
+      join(process.cwd(), "logos", "brokecli-square.svg"),
+      join(APP_DIR, "..", "..", "logos", "brokecli-square.svg"),
+    ];
+    return svgCandidates.find((candidate) => existsSync(candidate)) ?? null;
+  }
+
+  private parseSvgColor(fill: string | undefined, opacity: string | undefined): RgbColor | null {
+    if (!fill || fill === "none") return null;
+    const match = fill.match(/^#([0-9a-f]{6})$/i);
+    if (!match) return null;
+    const alpha = opacity ? Math.max(0, Math.min(1, Number(opacity))) : 1;
+    if (alpha <= 0) return null;
+    return {
+      r: parseInt(match[1].slice(0, 2), 16),
+      g: parseInt(match[1].slice(2, 4), 16),
+      b: parseInt(match[1].slice(4, 6), 16),
+      a: alpha,
+    };
+  }
+
+  private renderAnsiColorGrid(grid: Array<Array<RgbColor | null>>): string[] {
+    const lines: string[] = [];
+    const fg = (color: RgbColor): string => `\x1b[38;2;${color.r};${color.g};${color.b}m`;
+    const bg = (color: RgbColor): string => `\x1b[48;2;${color.r};${color.g};${color.b}m`;
+    for (let row = 0; row < grid.length; row += 2) {
+      let line = "";
+      for (let col = 0; col < (grid[row]?.length ?? 0); col++) {
+        const top = grid[row][col];
+        const bottom = grid[row + 1]?.[col] ?? null;
+        if (top && bottom) {
+          if (top.r === bottom.r && top.g === bottom.g && top.b === bottom.b) {
+            line += `${bg(top)} ${RESET}`;
+          } else {
+            line += `${fg(top)}${bg(bottom)}▀${RESET}`;
+          }
+        } else if (top) {
+          line += `${fg(top)}▀${RESET}`;
+        } else if (bottom) {
+          line += `${fg(bottom)}▄${RESET}`;
+        } else {
+          line += " ";
+        }
+      }
+      lines.push(line);
+    }
+    return lines;
+  }
+
+  private parseMascotSvgGrid(path: string): Array<Array<RgbColor | null>> {
+    try {
+      const svg = readFileSync(path, "utf-8");
+      const viewBoxMatch = svg.match(/viewBox="0 0 (\d+(?:\.\d+)?) (\d+(?:\.\d+)?)"/i);
+      const widthAttrMatch = svg.match(/\bwidth="(\d+(?:\.\d+)?)"/i);
+      const heightAttrMatch = svg.match(/\bheight="(\d+(?:\.\d+)?)"/i);
+      const spriteWidth = Math.max(1, Math.round(Number(viewBoxMatch?.[1] ?? widthAttrMatch?.[1] ?? "20")));
+      const spriteHeight = Math.max(1, Math.round(Number(viewBoxMatch?.[2] ?? heightAttrMatch?.[1] ?? "20")));
+      const cells: Array<Array<RgbColor | null>> = Array.from(
+        { length: spriteHeight },
+        () => Array.from({ length: spriteWidth }, () => null),
+      );
+      const rects = [...svg.matchAll(/<rect\s+([^>]+?)\s*\/?>/g)];
+      for (const rect of rects) {
+        const attrs = Object.fromEntries(
+          [...rect[1].matchAll(/(\w+)="([^"]*)"/g)].map(([, key, value]) => [key, value]),
+        ) as Record<string, string>;
+        const color = this.parseSvgColor(attrs.fill, attrs.opacity);
+        if (!color) continue;
+        const x = Number(attrs.x ?? "0");
+        const y = Number(attrs.y ?? "0");
+        const width = Number(attrs.width ?? "0");
+        const height = Number(attrs.height ?? "0");
+        for (let row = y; row < y + height; row++) {
+          for (let col = x; col < x + width; col++) {
+            if (row >= 0 && row < spriteHeight && col >= 0 && col < spriteWidth) cells[row][col] = color;
+          }
+        }
+      }
+      return cells;
+    } catch {
+      return [];
+    }
+  }
+
+  private scaleColorGrid(
+    cells: Array<Array<RgbColor | null>>,
+    targetWidth: number,
+    targetHeight: number,
+  ): Array<Array<RgbColor | null>> {
+    const srcHeight = cells.length;
+    const srcWidth = cells[0]?.length ?? 0;
+    if (srcHeight === 0 || srcWidth === 0) return [];
+    return Array.from({ length: targetHeight }, (_, row) =>
+      Array.from({ length: targetWidth }, (_, col) => {
+        const srcRow = Math.min(srcHeight - 1, Math.floor((row / targetHeight) * srcHeight));
+        const srcCol = Math.min(srcWidth - 1, Math.floor((col / targetWidth) * srcWidth));
+        return cells[srcRow]?.[srcCol] ?? null;
+      }),
+    );
+  }
+
+  private renderMascotBlock(): string[] {
+    const path = this.resolveMascotPath();
+    if (!path) return [];
+    const cells = this.parseMascotSvgGrid(path);
+    return this.renderAnsiColorGrid(cells);
+  }
+
+  private renderMascotInline(): string {
+    const path = this.resolveMascotPath();
+    if (!path) return "";
+    const cells = this.parseMascotSvgGrid(path);
+    const scaled = this.scaleColorGrid(cells, 3, 2);
+    return this.renderAnsiColorGrid(scaled)[0] ?? "";
+  }
+
+  private wrapHomeDetail(label: string, value: string, width: number): string[] {
+    const prefix = `${TXT()}${label}${RESET}  `;
+    const prefixPlain = `${label}  `;
+    const available = Math.max(8, width - prefixPlain.length);
+    const wrapped = wordWrap(value, available);
+    return wrapped.map((part, index) => index === 0 ? `${prefix}${MUTED()}${part}${RESET}` : `${" ".repeat(prefixPlain.length)}${MUTED()}${part}${RESET}`);
+  }
+
+  private centerVisibleLine(line: string, width: number): string {
+    const visible = stripAnsi(line).length;
+    if (visible >= width) return line;
+    const left = Math.floor((width - visible) / 2);
+    return `${" ".repeat(left)}${line}`;
+  }
+
+  private renderHomeBox(width: number, title: string, body: string[]): string[] {
+    const innerWidth = Math.max(1, width - 2);
+    const titleText = title ? ` ${title} ` : "";
+    const titleFill = Math.max(0, innerWidth - stripAnsi(titleText).length);
+    const lines = [`${BORDER()}${BOX.tl}${titleText}${BOX.h.repeat(titleFill)}${BOX.tr}${RESET}`];
+    for (const row of body) {
+      lines.push(`${BORDER()}${BOX.v}${RESET}${this.padLine(row, innerWidth)}${BORDER()}${BOX.v}${RESET}`);
+    }
+    lines.push(`${BORDER()}${BOX.bl}${BOX.h.repeat(innerWidth)}${BOX.br}${RESET}`);
+    return lines;
+  }
+
+  private renderHomeView(mainW: number, topHeight: number): string[] {
+    const mascotInline = this.renderMascotInline();
+    const modelLabel = this.modelName === "none"
+      ? "Pick one with /model"
+      : `${this.providerName}/${this.modelName}`;
+    const versionText = `v${this.appVersion}`;
+    const headerText = mainW < 46 ? "Welcome" : "Welcome to BrokeCLI";
+    const locationText = `${this.formatShortCwd(Math.max(12, mainW - 14))}  ${versionText}`;
+
+    const body = [
+      `${mascotInline ? `${mascotInline} ` : ""}${T()}${BOLD}${headerText}${RESET}`,
+      `${MUTED()} ${locationText}${RESET}`,
+      "",
+      ...this.wrapHomeDetail("Model", modelLabel, Math.max(18, mainW - 4)),
+      ...this.wrapHomeDetail("Tip", this.homeTip, Math.max(18, mainW - 4)),
+    ];
+
+    const boxBodyHeight = Math.max(8, topHeight - 2);
+    const clippedBody = body.slice(0, boxBodyHeight);
+    const box = this.renderHomeBox(Math.max(12, mainW), "", clippedBody);
+    const lines = box.slice(0, topHeight);
+    while (lines.length < topHeight) lines.push("");
+    return lines;
   }
 
   /** Build the full sidebar content before viewport slicing */
@@ -1647,8 +2251,8 @@ export class App {
     const lines: string[] = [];
 
     // Session name + version
-    lines.push(`${WHITE}${BOLD}${this.sessionName.slice(0, w - 2)}${RESET}`);
-    lines.push(`${DIM}v${this.appVersion}${RESET}`);
+    lines.push(`${TXT()}${BOLD}${this.sessionName.slice(0, w - 2)}${RESET}`);
+    lines.push(`${MUTED()}v${this.appVersion}${RESET}`);
     lines.push("");
 
     // Model
@@ -1657,90 +2261,50 @@ export class App {
 
     // Providers
     if (this.detectedProviders.length > 0) {
-      lines.push(`${WHITE}Providers${RESET}`);
+      lines.push(`${TXT()}Providers${RESET}`);
       for (const p of this.detectedProviders.slice(0, 4)) {
-        lines.push(`  ${DIM}${p}${RESET}`);
+        lines.push(`  ${MUTED()}${p}${RESET}`);
       }
       if (this.detectedProviders.length > 4) {
-        lines.push(`  ${DIM}+${this.detectedProviders.length - 4} more${RESET}`);
+        lines.push(`  ${MUTED()}+${this.detectedProviders.length - 4} more${RESET}`);
       }
       lines.push("");
     }
 
     // MCP connections
     if (this.mcpConnections.length > 0) {
-      lines.push(`${WHITE}MCP${RESET}`);
+      lines.push(`${TXT()}MCP${RESET}`);
       for (const c of this.mcpConnections.slice(0, 3)) {
-        lines.push(`  ${GREEN}\u25CF${RESET} ${DIM}${c.slice(0, w - 6)}${RESET}`);
+        lines.push(`  ${currentTheme().success}\u25CF${RESET} ${MUTED()}${c.slice(0, w - 6)}${RESET}`);
       }
       lines.push("");
     }
 
     // Directory
-    lines.push(`${WHITE}Directory${RESET}`);
-    const shortCwd = this.cwd.length > w - 2
-      ? "~" + this.cwd.slice(-(w - 3))
-      : this.cwd;
-    lines.push(`  ${DIM}${shortCwd}${RESET}`);
+    lines.push(`${TXT()}Directory${RESET}`);
+    const shortCwd = this.formatShortCwd(Math.max(4, w - 2));
+    lines.push(`  ${MUTED()}${shortCwd}${RESET}`);
     if (this.gitBranch) {
-      lines.push(`  ${DIM}${this.gitBranch}${this.gitDirty ? " *" : ""}${RESET}`);
+      lines.push(`  ${MUTED()}${this.gitBranch}${this.gitDirty ? " *" : ""}${RESET}`);
     }
     lines.push("");
 
     // File tree (collapsible)
-    const treeArrow = this.sidebarTreeOpen ? "\u25BC" : "\u25B6";
-    lines.push(`${WHITE}${treeArrow} Files${RESET}`);
+    const treeArrow = this.sidebarTreeOpen ? "▾" : "▸";
+    lines.push(`${TXT()}${treeArrow} Files${RESET}`);
     if (this.sidebarTreeOpen) {
       if (!this.sidebarFileTree) {
-        try {
-          const files = execSync("git ls-files --others --cached --exclude-standard", { cwd: this.cwd, encoding: "utf-8", timeout: 2000 }).trim();
-          const raw = files.split("\n").filter(Boolean);
-          const dirContents = new Map<string, string[]>();
-          const topFiles: string[] = [];
-          for (const f of raw) {
-            const slash = f.indexOf("/");
-            if (slash > 0) {
-              const dir = f.slice(0, slash);
-              if (!dirContents.has(dir)) dirContents.set(dir, []);
-              dirContents.get(dir)!.push(f.slice(slash + 1));
-            } else {
-              topFiles.push(f);
-            }
-          }
-          const items: Array<{ name: string; isDir: boolean; children?: string[]; depth: number }> = [];
-          for (const dir of [...dirContents.keys()].sort()) {
-            const children = dirContents.get(dir)!.sort().map(c => c.includes("/") ? c.split("/").pop()! : c);
-            items.push({ name: dir, isDir: true, children, depth: 0 });
-          }
-          for (const f of topFiles.sort()) {
-            items.push({ name: f, isDir: false, depth: 0 });
-          }
-          this.sidebarFileTree = items;
-        } catch {
-          try {
-            const { readdirSync, statSync } = require("fs");
-            const { join: pathJoin } = require("path");
-            this.sidebarFileTree = readdirSync(this.cwd)
-              .filter((f: string) => !f.startsWith(".") && f !== "node_modules")
-              .map((f: string) => {
-                const isD = (() => { try { return statSync(pathJoin(this.cwd, f)).isDirectory(); } catch { return false; } })();
-                return { name: f, isDir: isD, children: isD ? [] : undefined, depth: 0 };
-              })
-              .slice(0, 30) as typeof this.sidebarFileTree;
-          } catch {
-            this.sidebarFileTree = [];
-          }
-        }
+        this.sidebarFileTree = loadSidebarFileTree(this.cwd);
       }
       const tree = this.sidebarFileTree ?? [];
       for (const item of tree) {
         if (item.isDir) {
           const expanded = this.sidebarExpandedDirs.has(item.name);
-          const arrow = expanded ? "\u25BC" : "\u25B6";
+          const arrow = expanded ? "▾" : "▸";
           const display = item.name.length > w - 6 ? item.name.slice(-(w - 7)) : item.name;
           lines.push(`  ${T()}${arrow} ${display}/${RESET}`);
           if (expanded && item.children) {
-            const showCount = this.sidebarExpandedDirs.has(`${item.name}:all`) ? item.children.length : Math.min(item.children.length, 5);
+            const showCount = this.sidebarExpandedDirs.has(`${item.name}:all`) ? item.children.length : Math.min(item.children.length, 4);
             for (let i = 0; i < showCount; i++) {
               const child = item.children[i];
               const cDisplay = child.length > w - 8 ? child.slice(-(w - 9)) : child;
@@ -1748,7 +2312,7 @@ export class App {
             }
             if (showCount < item.children.length) {
               const remaining = item.children.length - showCount;
-              lines.push(`    ${DIM}\u25B6 +${remaining} more${RESET}`);
+              lines.push(`    ${DIM}▸ +${remaining} more${RESET}`);
             }
           }
         } else {
@@ -1774,10 +2338,10 @@ export class App {
     if (visible.length === 0) return visible;
 
     if (this.sidebarScrollOffset > 0) {
-      visible[0] = `${DIM}↑ more${this.sidebarFocused ? " · scroll" : ""}${RESET}`;
+      visible[0] = `${DIM}^ more${this.sidebarFocused ? " · scroll" : ""}${RESET}`;
     }
     if (this.sidebarScrollOffset + visibleHeight < allLines.length) {
-      visible[visible.length - 1] = `${DIM}↓ more${this.sidebarFocused ? " · scroll" : ""}${RESET}`;
+      visible[visible.length - 1] = `${DIM}v more${this.sidebarFocused ? " · scroll" : ""}${RESET}`;
     }
     return visible;
   }
@@ -1820,11 +2384,19 @@ export class App {
     }
   }
 
+  private drawNow(): void {
+    this.drawScheduled = false;
+    this.lastDrawTime = 0;
+    this.drawImmediate();
+  }
+
   private drawImmediate(): void {
     this.lastDrawTime = Date.now();
+    this.keypress.setMouseTracking(this.shouldEnableMenuMouse());
     const { height, width } = this.screen;
-    const hasSidebar = this.screen.hasSidebar && this.messages.length > 0 && !getSettings().hideSidebar;
+    const hasSidebar = this.shouldShowSidebar();
     const mainW = hasSidebar ? this.screen.mainWidth : width;
+    const footerLines = hasSidebar ? this.renderSidebarFooter() : [];
     const inputText = this.input.getText();
     const cursor = this.input.getCursor();
     const inputLayout = this.getInputCursorLayout(inputText, cursor, mainW);
@@ -1832,46 +2404,64 @@ export class App {
 
     // Build bottom section first to know how much space it takes
     const bottomLines: string[] = [];
+    const bottomMenuClicks: Array<{ lineIndex: number; action: () => void }> = [];
 
     // Separator above input
     bottomLines.push(`${DIM}${"─".repeat(mainW)}${RESET}`);
 
     // Input line(s) — explicit multi-line and soft-wrapped long lines
     for (let i = 0; i < inputLayout.lines.length; i++) {
-      const prefix = i === 0 ? `${T()} > ${RESET}` : `${T()}   ${RESET}`;
-      bottomLines.push(`${prefix}${inputLayout.lines[i]}`);
+      bottomLines.push(inputLayout.lines[i]);
     }
 
     // Question prompt from model
     if (this.questionPrompt) {
       const qp = this.questionPrompt;
-      bottomLines.push(` ${T()}?${RESET} ${WHITE}${BOLD}${qp.question}${RESET}`);
+      bottomLines.push(`${BORDER()}${"─".repeat(mainW)}${RESET}`);
+      bottomLines.push(` ${T()}?${RESET} ${TXT()}${BOLD}${qp.question}${RESET}`);
       if (qp.options) {
-        for (let i = 0; i < qp.options.length; i++) {
-          const isCursor = i === qp.cursor;
-          const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
-          const color = isCursor ? `${WHITE}${BOLD}` : DIM;
-          bottomLines.push(` ${arrow}${color}${qp.options[i]}${RESET}`);
+        for (const entry of this.buildMenuView(this.getQuestionOptionEntries(), qp.cursor, 8)) {
+          if (entry.selectIndex !== undefined) {
+            this.registerMenuClickTarget(bottomMenuClicks, bottomLines, () => this.selectQuestionOption(entry.selectIndex!));
+          }
+          bottomLines.push(entry.text);
         }
         bottomLines.push(` ${DIM}enter select, esc skip${RESET}`);
       } else {
-        bottomLines.push(` ${T()} > ${RESET}${qp.textInput}`);
+        for (const line of this.getWrappedInputLines(qp.textInput, mainW)) {
+          bottomLines.push(`  ${line}`);
+        }
         bottomLines.push(` ${DIM}enter submit, esc skip${RESET}`);
       }
     }
 
     // Pickers appear below input
     if (this.filePicker) {
-      this.appendFilePicker(bottomLines, height);
+      bottomLines.push(`${BORDER()}${"─".repeat(mainW)}${RESET}`);
+      this.appendFilePicker(bottomLines, height, bottomMenuClicks);
     } else if (this.itemPicker) {
-      this.appendItemPicker(bottomLines, height);
+      bottomLines.push(`${BORDER()}${"─".repeat(mainW)}${RESET}`);
+      this.appendItemPicker(bottomLines, height, bottomMenuClicks);
     } else if (this.settingsPicker) {
-      this.appendSettingsPicker(bottomLines, height);
+      bottomLines.push(`${BORDER()}${"─".repeat(mainW)}${RESET}`);
+      this.appendSettingsPicker(bottomLines, height, bottomMenuClicks);
     } else if (this.modelPicker) {
-      this.appendModelPicker(bottomLines, height);
+      bottomLines.push(`${BORDER()}${"─".repeat(mainW)}${RESET}`);
+      this.appendModelPicker(bottomLines, height, bottomMenuClicks);
     } else {
-      const suggestions = this.getCommandSuggestions();
-      for (const s of suggestions) bottomLines.push(s);
+      const suggestions = this.buildMenuView(this.getCommandSuggestionEntries(), this.cmdSuggestionCursor, 5);
+      if (suggestions.length > 0) {
+        bottomLines.push(`${BORDER()}${"─".repeat(mainW)}${RESET}`);
+      }
+      for (const entry of suggestions) {
+        if (entry.selectIndex !== undefined) {
+          this.registerMenuClickTarget(bottomMenuClicks, bottomLines, () => this.applyCommandSuggestion(entry.selectIndex!));
+        }
+        bottomLines.push(entry.text);
+      }
+      if (suggestions.length > 0) {
+        bottomLines.push(` ${DIM}(${Math.min(this.cmdSuggestionCursor + 1, this.getCommandMatches().length)}/${this.getCommandMatches().length})${RESET}`);
+      }
     }
 
     // Separator below input/pickers
@@ -1880,24 +2470,29 @@ export class App {
     // Info bar below input — contextual status + hints
     {
       const parts: Array<{ text: string; plain: string; priority: number }> = [];
-      const modeLabel = this.mode === "plan" ? "plan" : "build";
+      if (this.ctrlCCount === 1) {
+        parts.push({ text: `${ERR()}Ctrl+C again to exit${RESET}`, plain: "Ctrl+C again to exit", priority: -1 });
+      } else if (this.escPrimed) {
+        parts.push({ text: `${ERR()}Esc again to stop${RESET}`, plain: "Esc again to stop", priority: -1 });
+      }
       if (this.isStreaming) {
         parts.push({ text: `${DIM}esc${RESET} ${DIM}stop${RESET}`, plain: "esc stop", priority: 0 });
       }
-      parts.push({ text: `${this.mode === "plan" ? P() : T()}${modeLabel}${RESET}`, plain: modeLabel, priority: 1 });
-      if (this.pendingMessages.length > 0) {
-        parts.push({ text: `${P()}${this.pendingMessages.length} queued${RESET}`, plain: `${this.pendingMessages.length} queued`, priority: 2 });
-      }
       const settings = getSettings();
-      const thinkLevel = settings.thinkingLevel || (settings.enableThinking ? "low" : "off");
-      if (thinkLevel !== "off") {
-        parts.push({ text: `${T()}think ${thinkLevel}${RESET}`, plain: `think ${thinkLevel}`, priority: 3 });
-      } else {
-        parts.push({ text: `${DIM}think off${RESET}`, plain: "think off", priority: 3 });
-      }
-      const caveLevel = settings.cavemanLevel ?? "off";
-      if (caveLevel !== "off") {
-        parts.push({ text: `\u{1FAA8} ${YELLOW}${caveLevel}${RESET}`, plain: `cave ${caveLevel}`, priority: 3 });
+      if (!hasSidebar) {
+        const modeLabel = this.mode === "plan" ? "plan" : "build";
+        parts.push({ text: `${this.mode === "plan" ? P() : T()}${modeLabel}${RESET}`, plain: modeLabel, priority: 1 });
+        if (this.pendingMessages.length > 0) {
+          parts.push({ text: `${P()}${this.pendingMessages.length} queued${RESET}`, plain: `${this.pendingMessages.length} queued`, priority: 2 });
+        }
+        const thinkLevel = settings.thinkingLevel || (settings.enableThinking ? "low" : "off");
+        if (thinkLevel !== "off") {
+          parts.push({ text: `${T()}${thinkLevel}${RESET}`, plain: thinkLevel, priority: 3 });
+        }
+        const caveLevel = settings.cavemanLevel ?? "off";
+        if (caveLevel !== "off") {
+          parts.push({ text: `\u{1FAA8} ${WARN()}${caveLevel}${RESET}`, plain: `rock ${caveLevel}`, priority: 3 });
+        }
       }
       // Cost/tokens in bottom bar — compact when there's no sidebar
       const liveTokens = this.getLiveTotalTokens();
@@ -1927,17 +2522,31 @@ export class App {
 
     // Build the full frame — MUST have exactly `height` lines
     const frameLines: string[] = [];
-    const topHeight = Math.max(0, height - bottomLines.length);
+    const reservedBottom = hasSidebar ? Math.max(bottomLines.length, footerLines.length) : bottomLines.length;
+    const bottomPad = reservedBottom - bottomLines.length;
+    const footerPad = reservedBottom - footerLines.length;
+    const topHeight = Math.max(0, height - reservedBottom);
+    this.activeMenuClickTargets = new Map(
+      bottomMenuClicks.map(({ lineIndex, action }) => [topHeight + bottomPad + lineIndex + 1, action]),
+    );
 
     // Compact header when no sidebar
-    const showCompactHeader = !hasSidebar && this.modelName !== "none";
+    const showCompactHeader = !isHome && !hasSidebar && this.modelName !== "none";
 
     if (isHome) {
       if (showCompactHeader) frameLines.push(this.renderCompactHeader());
-      frameLines.push("");
-      frameLines.push(`${T()}${BOLD}  BrokeCLI${RESET}`);
-      frameLines.push(`${DIM}  AI coding on a budget${RESET}`);
-      frameLines.push("");
+      const homeLines = this.renderHomeView(mainW, Math.max(0, topHeight - (showCompactHeader ? 1 : 0)));
+      if (hasSidebar) {
+        const sidebarLines = this.renderSidebar(homeLines.length);
+        const border = this.getSidebarBorder();
+        for (let i = 0; i < homeLines.length; i++) {
+          const homeLine = this.padLine(homeLines[i] ?? "", mainW);
+          const sidebarLine = this.padLine(sidebarLines[i] ?? "", this.screen.sidebarWidth);
+          frameLines.push(`${homeLine} ${border} ${sidebarLine}`);
+        }
+      } else {
+        frameLines.push(...homeLines);
+      }
       while (frameLines.length < topHeight) frameLines.push("");
     } else {
       if (showCompactHeader) frameLines.push(this.renderCompactHeader());
@@ -1951,7 +2560,7 @@ export class App {
 
       if (hasSidebar) {
         const sidebarLines = this.renderSidebar(chatH);
-        const border = `${DIM}\u2502${RESET}`;
+        const border = this.getSidebarBorder();
         for (let i = 0; i < chatH; i++) {
           const chatLine = this.padLine(visibleMsgs[i] ?? "", mainW);
           const sidebarLine = sidebarLines[i] ?? "";
@@ -1967,14 +2576,13 @@ export class App {
 
     // Append bottom lines — extend sidebar border through them
     if (hasSidebar) {
-      const border = `${DIM}\u2502${RESET}`;
+      const border = this.getSidebarBorder();
       const sideW = this.screen.sidebarWidth;
-      const footerLines = this.renderSidebarFooter();
-      const footerStart = Math.max(0, bottomLines.length - footerLines.length);
-      for (let i = 0; i < bottomLines.length; i++) {
-        const padded = this.padLine(bottomLines[i] ?? "", mainW);
-        const sidebarLine = i >= footerStart ? footerLines[i - footerStart] ?? "" : "";
-        frameLines.push(`${padded} ${border} ${this.padLine(sidebarLine, sideW)}`);
+      for (let i = 0; i < reservedBottom; i++) {
+        const mainLine = i >= bottomPad ? bottomLines[i - bottomPad] ?? "" : "";
+        const footerLine = i >= footerPad ? footerLines[i - footerPad] ?? "" : "";
+        const padded = this.padLine(mainLine, mainW);
+        frameLines.push(`${padded} ${border} ${this.padLine(footerLine, sideW)}`);
       }
     } else {
       for (const l of bottomLines) frameLines.push(l);
@@ -1984,17 +2592,21 @@ export class App {
     while (frameLines.length < height) frameLines.push("");
     if (frameLines.length > height) frameLines.length = height;
 
-    this.screen.render(frameLines);
+    this.screen.render(frameLines.map((line) => this.decorateFrameLine(line, width)));
 
     // Hide cursor during streaming/pickers/compacting — no input focus
     if (this.isStreaming || this.isCompacting || this.modelPicker || this.settingsPicker || this.itemPicker || this.questionPrompt) {
       this.screen.hideCursor();
       return;
     }
+    if (Date.now() < this.hideCursorUntil) {
+      this.screen.hideCursor();
+      return;
+    }
 
     // Cursor on input line — account for multi-line input
     const inputRow = Math.min(height, topHeight + 2 + inputLayout.row); // +1 separator, +1 for 1-based
-    const inputCol = Math.min(width, 4 + inputLayout.col);
+    const inputCol = Math.min(width, 1 + inputLayout.col);
     this.screen.setCursor(inputRow, inputCol);
   }
 
@@ -2032,63 +2644,49 @@ export class App {
     return result + RESET;
   }
 
-  private appendModelPicker(lines: string[], _maxTotal: number): void {
+  private appendModelPicker(lines: string[], _maxTotal: number, clickTargets: Array<{ lineIndex: number; action: () => void }>): void {
     const picker = this.modelPicker!;
     lines.push(` ${T()}${BOLD}Select model${RESET}${picker.query ? `  ${DIM}/${RESET}${picker.query}` : ""}`);
+    const allLabel = picker.scope === "all" ? `${TXT()}${BOLD}all${RESET}` : `${MUTED()}all${RESET}`;
+    const scopedLabel = picker.scope === "scoped" ? `${TXT()}${BOLD}scoped${RESET}` : `${MUTED()}scoped${RESET}`;
+    lines.push(` ${DIM}Scope:${RESET} ${allLabel} ${DIM}|${RESET} ${scopedLabel}`);
 
-    const filtered = this.getFilteredModels();
-    if (filtered.length === 0) {
+    if (this.getFilteredModels().length === 0) {
       lines.push(`  ${DIM}no matches${RESET}`);
+      lines.push(` ${DIM}tab scope (all/scoped)${RESET}`);
       lines.push(` ${DIM}type to search, esc to close${RESET}`);
       return;
     }
 
-    const byProvider = new Map<string, ModelOption[]>();
-    for (const opt of filtered) {
-      if (!byProvider.has(opt.providerName)) byProvider.set(opt.providerName, []);
-      byProvider.get(opt.providerName)!.push(opt);
-    }
-
-    let currentIdx = 0;
-    const flatList: Array<{ type: 'header' | 'model'; provider: string; option?: ModelOption; index: number }> = [];
-    for (const [provider, opts] of byProvider) {
-      flatList.push({ type: 'header', provider, index: -1 });
-      for (const opt of opts) {
-        flatList.push({ type: 'model', provider, option: opt, index: currentIdx++ });
+    for (const entry of this.buildMenuView(this.getModelPickerEntries(), picker.cursor, 12)) {
+      if (entry.selectIndex !== undefined) {
+        this.registerMenuClickTarget(clickTargets, lines, () => this.selectModelEntry(entry.selectIndex!));
       }
+      lines.push(entry.text);
     }
-
-    const cursorFlatIdx = flatList.findIndex(item => item.index === picker.cursor);
-    const maxVisible = 12;
-    let start = Math.max(0, cursorFlatIdx - Math.floor(maxVisible / 2));
-    if (start + maxVisible > flatList.length) start = Math.max(0, flatList.length - maxVisible);
-    const end = Math.min(start + maxVisible, flatList.length);
-
-    for (let i = start; i < end; i++) {
-      const item = flatList[i];
-      if (item.type === 'header') {
-        lines.push(` ${DIM}${item.provider}${RESET}`);
-      } else {
-        const opt = item.option!;
-        const isCursor = item.index === picker.cursor;
-        const pin = opt.active ? ` ${T()}*${RESET}` : "";
-        const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
-        const nameCol = isCursor ? `${WHITE}${BOLD}` : T();
-        lines.push(`  ${arrow}${nameCol}${opt.modelId}${RESET}${pin}`);
-      }
-    }
-    lines.push(` ${DIM}(${Math.min(picker.cursor + 1, filtered.length)}/${filtered.length}) tab pin, enter select${RESET}`);
+    lines.push(` ${DIM}(${Math.min(picker.cursor + 1, this.getFilteredModels().length)}/${this.getFilteredModels().length}) tab scope, space pin, enter select${RESET}`);
   }
 
-  private appendFilePicker(lines: string[], maxTotal: number): void {
+  private decorateFrameLine(line: string, targetWidth: number): string {
+    const visible = stripAnsi(line).length;
+    const content = visible > targetWidth ? this.padLine(line, targetWidth) : line;
+    const padded = Math.max(0, targetWidth - Math.min(visible, targetWidth));
+    const bg = APP_BG();
+    if (!bg) {
+      return `${content}${" ".repeat(padded)}`;
+    }
+    const themedContent = content.replaceAll(RESET, `${RESET}${bg}`);
+    return `${bg}${themedContent}${bg}${" ".repeat(padded)}${RESET}`;
+  }
+
+  private appendFilePicker(lines: string[], maxTotal: number, clickTargets: Array<{ lineIndex: number; action: () => void }>): void {
     const picker = this.filePicker!;
-    const maxItems = Math.min(picker.filtered.length, maxTotal - 4);
-    for (let i = 0; i < maxItems; i++) {
-      const f = picker.filtered[i];
-      const isCursor = i === picker.cursor;
-      const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
-      const color = isCursor ? `${WHITE}${BOLD}` : DIM;
-      lines.push(` ${arrow}${color}${f}${RESET}`);
+    const maxItems = Math.max(1, maxTotal - 4);
+    for (const entry of this.buildMenuView(this.getFilePickerEntries(), picker.cursor, maxItems)) {
+      if (entry.selectIndex !== undefined) {
+        this.registerMenuClickTarget(clickTargets, lines, () => this.selectFileEntry(entry.selectIndex!));
+      }
+      lines.push(entry.text);
     }
     if (picker.filtered.length === 0) {
       lines.push(` ${DIM}  no matches${RESET}`);
@@ -2096,7 +2694,7 @@ export class App {
     lines.push(` ${DIM}(${Math.min(picker.cursor + 1, picker.filtered.length)}/${picker.filtered.length} files)${RESET}`);
   }
 
-  private appendSettingsPicker(lines: string[], _maxTotal: number): void {
+  private appendSettingsPicker(lines: string[], _maxTotal: number, clickTargets: Array<{ lineIndex: number; action: () => void }>): void {
     const picker = this.settingsPicker!;
     lines.push(` ${T()}${BOLD}Settings${RESET}${picker.query ? `  ${DIM}/${RESET}${picker.query}` : ""}`);
 
@@ -2106,19 +2704,11 @@ export class App {
       return;
     }
 
-    const maxVisible = 6;
-    let start = Math.max(0, picker.cursor - Math.floor(maxVisible / 2));
-    if (start + maxVisible > filtered.length) start = Math.max(0, filtered.length - maxVisible);
-    const end = Math.min(start + maxVisible, filtered.length);
-
-    for (let i = start; i < end; i++) {
-      const e = filtered[i];
-      const isCursor = i === picker.cursor;
-      const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
-      const nameCol = isCursor ? `${WHITE}${BOLD}` : T();
-      const pad = " ".repeat(Math.max(1, 22 - e.label.length));
-      const valColor = e.value === "true" ? T() : DIM;
-      lines.push(` ${arrow}${nameCol}${e.label}${RESET}${pad}${valColor}${e.value}${RESET}`);
+    for (const entry of this.buildMenuView(this.getSettingsPickerEntries(), picker.cursor, 6)) {
+      if (entry.selectIndex !== undefined) {
+        this.registerMenuClickTarget(clickTargets, lines, () => this.toggleSettingEntry(entry.selectIndex!));
+      }
+      lines.push(entry.text);
     }
 
     const selected = filtered[picker.cursor];
@@ -2128,7 +2718,7 @@ export class App {
     lines.push(` ${DIM}(${Math.min(picker.cursor + 1, filtered.length)}/${filtered.length}) enter to toggle${RESET}`);
   }
 
-  private appendItemPicker(lines: string[], _maxTotal: number): void {
+  private appendItemPicker(lines: string[], _maxTotal: number, clickTargets: Array<{ lineIndex: number; action: () => void }>): void {
     const picker = this.itemPicker!;
     lines.push(` ${T()}${BOLD}${picker.title}${RESET}${picker.query ? `  ${DIM}/${RESET}${picker.query}` : ""}`);
 
@@ -2138,17 +2728,17 @@ export class App {
       return;
     }
 
-    const maxVisible = 10;
-    let start = Math.max(0, picker.cursor - Math.floor(maxVisible / 2));
-    if (start + maxVisible > filtered.length) start = Math.max(0, filtered.length - maxVisible);
-    const end = Math.min(start + maxVisible, filtered.length);
-
-    for (let i = start; i < end; i++) {
-      const item = filtered[i];
-      const isCursor = i === picker.cursor;
-      const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
-      const labelCol = isCursor ? `${WHITE}${BOLD}` : T();
-      lines.push(` ${arrow}${labelCol}${item.label}${RESET}${item.detail ? ` ${DIM}${item.detail}${RESET}` : ""}`);
+    for (const entry of this.buildMenuView(this.getItemPickerEntries(), picker.cursor, 10)) {
+      if (entry.selectIndex !== undefined) {
+        this.registerMenuClickTarget(clickTargets, lines, () => this.selectItemEntry(entry.selectIndex!));
+      }
+      lines.push(entry.text);
+    }
+    if (picker.previewHint) {
+      lines.push(` ${DIM}${picker.previewHint}${RESET}`);
+    }
+    if (picker.secondaryHint) {
+      lines.push(` ${DIM}${picker.secondaryHint}${RESET}`);
     }
     lines.push(` ${DIM}(${Math.min(picker.cursor + 1, filtered.length)}/${filtered.length}) enter to select${RESET}`);
   }
@@ -2163,29 +2753,6 @@ export class App {
       const matchesAlias = c.aliases?.some((alias) => alias.startsWith(query)) ?? false;
       return matchesName || matchesAlias;
     });
-  }
-
-  private getCommandSuggestions(): string[] {
-    const matches = this.getCommandMatches();
-    if (matches.length === 0) return [];
-
-    const cursor = Math.min(this.cmdSuggestionCursor, matches.length - 1);
-    const maxVisible = 5;
-    // Scroll window around cursor
-    let start = Math.max(0, cursor - Math.floor(maxVisible / 2));
-    if (start + maxVisible > matches.length) start = Math.max(0, matches.length - maxVisible);
-    const end = Math.min(start + maxVisible, matches.length);
-
-    const lines: string[] = [];
-    for (let i = start; i < end; i++) {
-      const c = matches[i];
-      const arrow = i === cursor ? `${T()}> ${RESET}` : "  ";
-      const nameColor = i === cursor ? `${WHITE}${BOLD}` : T();
-      const pad = " ".repeat(Math.max(1, 16 - c.name.length));
-      lines.push(` ${arrow}${nameColor}${c.name}${RESET}${pad}${DIM}${c.desc}${RESET}`);
-    }
-    lines.push(` ${DIM}(${cursor + 1}/${matches.length})${RESET}`);
-    return lines;
   }
 
   onInput(handler: (text: string, images?: Array<{ mimeType: string; data: string }>) => void): void {
@@ -2243,7 +2810,7 @@ export class App {
         textInput: "",
         resolve,
       };
-      this.draw();
+      this.drawNow();
     });
   }
 
@@ -2270,19 +2837,18 @@ export class App {
     this.screen.enter();
     this.keypress.start();
     this.draw();
-
-    process.stdout.on("resize", () => {
-      this.screen.forceRedraw([]);
-      this.draw();
-    });
+    process.stdout.on("resize", this.handleResize);
   }
 
   stop(): void {
     if (!this.running) return;
     this.running = false;
     if (this.spinnerTimer) clearInterval(this.spinnerTimer);
+    this.clearInterruptPrompt();
+    process.stdout.off("resize", this.handleResize);
     this.keypress.stop();
     this.screen.exit();
+    this.screen.dispose();
 
     console.log("");
     console.log(`${T()}${BOLD} BrokeCLI${RESET} ${DIM}session ended${RESET}`);

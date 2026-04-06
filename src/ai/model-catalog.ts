@@ -23,12 +23,26 @@ export interface ModelSpec {
   cost?: ModelPricing;
   limit: ModelLimits;
   providerId: string;
+  attachment?: boolean;
+  reasoning?: boolean;
+  toolCall?: boolean;
+  modalities?: {
+    input?: string[];
+    output?: string[];
+  };
 }
 
 const modelSchema = z.object({
   id: z.string(),
   name: z.string(),
   family: z.string().optional(),
+  attachment: z.boolean().optional(),
+  reasoning: z.boolean().optional(),
+  tool_call: z.boolean().optional(),
+  modalities: z.object({
+    input: z.array(z.string()).optional(),
+    output: z.array(z.string()).optional(),
+  }).optional(),
   cost: z.object({
     input: z.number().optional(),
     output: z.number().optional(),
@@ -180,6 +194,13 @@ function asModelSpec(providerId: string, model: z.infer<typeof modelSchema>): Mo
     name: model.name,
     family: model.family,
     providerId,
+    attachment: model.attachment,
+    reasoning: model.reasoning,
+    toolCall: model.tool_call,
+    modalities: {
+      input: model.modalities?.input,
+      output: model.modalities?.output,
+    },
     cost: model.cost ? {
       input: model.cost.input ?? 0,
       output: model.cost.output ?? 0,

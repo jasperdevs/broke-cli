@@ -1,9 +1,12 @@
 import { Command } from "commander";
-import { spawn } from "child_process";
-import { writeFileSync } from "fs";
+import { execSync, spawn } from "child_process";
+import { existsSync, writeFileSync } from "fs";
+import { dirname, join } from "path";
+import { fileURLToPath } from "url";
 import { App } from "../src/tui/app.js";
 import { detectProviders, pickDefault } from "../src/ai/detect.js";
-import { createModel, listProviders, refreshLocalModels, syncCloudProviderModelsFromCatalog } from "../src/ai/providers.js";
+import type { ModelHandle } from "../src/ai/providers.js";
+import { startNativeStream } from "../src/ai/native-stream.js";
 import { startStream } from "../src/ai/stream.js";
 import { getContextLimit, loadPricing } from "../src/ai/cost.js";
 import { buildSystemPrompt, reloadContext, resolveCavemanLevel } from "../src/core/context.js";
@@ -12,17 +15,19 @@ import { getTools } from "../src/tools/registry.js";
 import { createAskUserTool } from "../src/tools/ask.js";
 import { setBashOutputCallback } from "../src/tools/bash.js";
 import { setTodoChangeCallback, clearTodo } from "../src/tools/todo.js";
-import { renderMarkdown } from "../src/utils/markdown.js";
+import { marked } from "marked";
 import { checkBudget } from "../src/core/budget.js";
-import { getModelContextLimitOverride, getSettings, updateSetting, type Settings, type Mode } from "../src/core/config.js";
+import { getApiKey, getModelContextLimitOverride, getProviderCredential, getSettings, updateProviderConfig, updateSetting, type Settings, type Mode } from "../src/core/config.js";
 import { compactMessages, getTotalContextTokens } from "../src/core/compact.js";
 import { undoLastCheckpoint } from "../src/core/git.js";
 import { listTemplates, loadTemplate } from "../src/core/templates.js";
 import { loadExtensions } from "../src/core/extensions.js";
 import { RESET, DIM, RED, GREEN } from "../src/utils/ansi.js";
 import { routeMessage, getSmallModelId } from "../src/ai/router.js";
-import { optimizeMessages, nextTurn, resetOptimizer, trackFileRead, wasFileRead, buildDiffSummary } from "../src/core/context-optimizer.js";
 import { estimateTextTokens } from "../src/ai/tokens.js";
+import { listThemes, setPreviewTheme } from "../src/core/themes.js";
+import { ProviderRegistry, LOCAL_PROVIDER_DEFAULTS } from "../src/ai/provider-registry.js";
+import { runRpcMode } from "../src/cli/rpc.js";
 
 const program = new Command()
   .name("brokecli")
@@ -34,46 +39,89 @@ const program = new Command()
   .option("-p, --print", "Single-shot mode: print response and exit")
   .option("--rpc", "Non-interactive JSON RPC mode");
 
-function sendResponseNotification(): void {
+const RUNTIME_DIR = dirname(fileURLToPath(import.meta.url));
+
+function getNotificationIconPath(): string | null {
+  const candidates = [
+    join(process.cwd(), "logos", "brokecli-square-1024.png"),
+    join(RUNTIME_DIR, "..", "logos", "brokecli-square-1024.png"),
+  ];
+  return candidates.find((candidate) => existsSync(candidate)) ?? null;
+}
+
+function isSkippedPromptAnswer(value: string | undefined | null): boolean {
+  const normalized = (value ?? "").trim().toLowerCase();
+  return normalized === "" || normalized === "[user skipped]" || normalized === "[no answer]";
+}
+
+function isValidHttpBaseUrl(value: string): boolean {
   try {
+    const url = new URL(value);
+    return (url.protocol === "http:" || url.protocol === "https:") && !!url.host;
+  } catch {
+    return false;
+  }
+}
+
+function resolveWindowsPowerShell(): string {
+  const systemRoot = process.env.SystemRoot || "C:\\Windows";
+  const candidates = [
+    `${systemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`,
+    "powershell.exe",
+    "pwsh.exe",
+  ];
+  return candidates.find((candidate) => candidate.includes("\\") ? existsSync(candidate) : true) ?? "powershell.exe";
+}
+
+function sendResponseNotification(message = "Response complete"): void {
+  try {
+    const iconPath = getNotificationIconPath();
     if (process.platform === "win32") {
       const script = `
 $shown = $false
 try {
-  [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null
-  [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] > $null
-  $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
-  $xml.LoadXml('<toast><visual><binding template="ToastGeneric"><text>BrokeCLI</text><text>Response complete</text></binding></visual></toast>')
-  $toast = New-Object Windows.UI.Notifications.ToastNotification $xml
-  [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('Windows PowerShell').Show($toast)
+  Add-Type -AssemblyName System.Windows.Forms
+  Add-Type -AssemblyName System.Drawing
+  $icon = New-Object System.Windows.Forms.NotifyIcon
+  $iconObj = $null
+  if ('${(iconPath ?? "").replace(/\\/g, "\\\\").replace(/'/g, "''")}') {
+    try {
+      $bitmap = New-Object System.Drawing.Bitmap '${(iconPath ?? "").replace(/\\/g, "\\\\").replace(/'/g, "''")}'
+      $iconObj = [System.Drawing.Icon]::FromHandle($bitmap.GetHicon())
+    } catch {}
+  }
+  if ($iconObj -eq $null) {
+    $iconObj = [System.Drawing.SystemIcons]::Information
+  }
+  $icon.Icon = $iconObj
+  $icon.BalloonTipIcon = [System.Windows.Forms.ToolTipIcon]::Info
+  $icon.BalloonTipTitle = 'BrokeCLI'
+  $icon.BalloonTipText = '${message.replace(/'/g, "''")}'
+  $icon.Visible = $true
+  $icon.ShowBalloonTip(4000)
+  $end = (Get-Date).AddMilliseconds(4500)
+  while ((Get-Date) -lt $end) {
+    [System.Windows.Forms.Application]::DoEvents()
+    Start-Sleep -Milliseconds 50
+  }
+  $icon.Dispose()
   $shown = $true
 } catch {}
 if (-not $shown) {
   try {
-    Add-Type -AssemblyName System.Windows.Forms
-    Add-Type -AssemblyName System.Drawing
-    $n = New-Object System.Windows.Forms.NotifyIcon
-    $n.Icon = [System.Drawing.SystemIcons]::Information
-    $n.BalloonTipTitle = 'BrokeCLI'
-    $n.BalloonTipText = 'Response complete'
-    $n.Visible = $true
-    $n.ShowBalloonTip(5000)
-    Start-Sleep -Milliseconds 5500
-    $n.Dispose()
+    Start-Process msg.exe -ArgumentList '*', 'BrokeCLI: ${message.replace(/'/g, "''")}' -WindowStyle Hidden
     $shown = $true
   } catch {}
 }
 if (-not $shown) {
-  try {
-    Start-Process msg.exe -ArgumentList '*', 'BrokeCLI: Response complete' -WindowStyle Hidden
-    $shown = $true
-  } catch {}
+  try { [System.Media.SystemSounds]::Exclamation.Play(); $shown = $true } catch {}
 }
 if (-not $shown) {
   try { [console]::beep(880, 220) } catch {}
 }
+try { [console]::write([char]7) } catch {}
 `;
-      const child = spawn("powershell", [
+      const child = spawn(resolveWindowsPowerShell(), [
         "-NoProfile",
         "-Sta",
         "-ExecutionPolicy", "Bypass",
@@ -86,18 +134,22 @@ if (-not $shown) {
       });
       child.unref();
       return;
-    }
+  }
 
     if (process.platform === "darwin") {
+      const script = `display notification "${message.replace(/"/g, '\\"')}" with title "BrokeCLI"`;
       const child = spawn("osascript", [
         "-e",
-        'display notification "Response complete" with title "BrokeCLI"',
+        script,
       ], { detached: true, stdio: "ignore" });
       child.unref();
       return;
     }
 
-    const child = spawn("notify-send", ["BrokeCLI", "Response complete"], {
+    const notifyArgs = iconPath
+      ? ["--icon", iconPath, "BrokeCLI", message]
+      : ["BrokeCLI", message];
+    const child = spawn("notify-send", notifyArgs, {
       detached: true,
       stdio: "ignore",
     });
@@ -105,6 +157,214 @@ if (-not $shown) {
   } catch {
     // ignore notification failures
   }
+}
+
+const CONNECT_PROVIDER_ORDER = [
+  "codex",
+  "anthropic",
+  "openai",
+  "google",
+  "groq",
+  "mistral",
+  "xai",
+  "openrouter",
+  "ollama",
+  "lmstudio",
+  "llamacpp",
+  "jan",
+  "vllm",
+] as const;
+
+function getNativeCliLabel(providerId: string): string {
+  if (providerId === "anthropic") return "Claude Code";
+  if (providerId === "codex") return "Codex";
+  return "native provider";
+}
+
+function canUseSdkTools(model: ModelHandle): boolean {
+  return model.runtime === "sdk"
+    && !!model.model
+    && ["anthropic", "openai", "codex", "google", "mistral", "groq", "xai", "openrouter"].includes(model.provider.id);
+}
+
+async function compactForModel(
+  messages: Array<{ role: "user" | "assistant"; content: string }>,
+  model: ModelHandle,
+): Promise<Array<{ role: "user" | "assistant"; content: string }>> {
+  if (model.runtime === "sdk" && model.model) {
+    return compactMessages(messages, model.model);
+  }
+  return messages.slice(-6);
+}
+
+function formatRelativeMinutes(updatedAt: number): string {
+  const ago = Math.max(0, Math.floor((Date.now() - updatedAt) / 60000));
+  if (ago < 1) return "now";
+  if (ago < 60) return `${ago}m ago`;
+  if (ago < 1440) return `${Math.floor(ago / 60)}h ago`;
+  return `${Math.floor(ago / 1440)}d ago`;
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function formatTimestamp(timestamp: number): string {
+  return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(timestamp));
+}
+
+function buildMarkdownExport(msgs: ReturnType<Session["getMessages"]>, providerName: string, modelName: string, cwd: string): string {
+  const header = [
+    "# BrokeCLI Transcript",
+    "",
+    `- Exported: ${formatTimestamp(Date.now())}`,
+    `- Model: ${providerName}/${modelName}`,
+    `- Directory: \`${cwd}\``,
+    "",
+  ];
+  const body = msgs.map((m) => {
+    const title = m.role.charAt(0).toUpperCase() + m.role.slice(1);
+    return `## ${title}\n\n_Time: ${formatTimestamp(m.timestamp)}_\n\n${m.content}\n`;
+  });
+  return [...header, ...body].join("\n");
+}
+
+function buildHtmlExport(msgs: ReturnType<Session["getMessages"]>, providerName: string, modelName: string, cwd: string): string {
+  const cards = msgs.map((m) => {
+    const rendered = m.role === "assistant"
+      ? marked.parse(m.content) as string
+      : `<pre>${escapeHtml(m.content)}</pre>`;
+    return `<article class="message ${m.role}">
+<header>
+  <span class="role">${escapeHtml(m.role)}</span>
+  <time>${escapeHtml(formatTimestamp(m.timestamp))}</time>
+</header>
+<div class="content">${rendered}</div>
+</article>`;
+  }).join("\n");
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BrokeCLI Transcript</title>
+<style>
+:root {
+  --bg: #0b0b0b;
+  --panel: #121212;
+  --panel-soft: #1e1e1e;
+  --border: #2a2a2a;
+  --text: #f3f3f3;
+  --muted: #8a8a8a;
+  --green: #3ac73a;
+  --green-soft: #183118;
+  --gray-bubble: #2a2a32;
+  --shadow: 0 20px 80px rgba(0,0,0,.35);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+body { padding: 32px 20px 64px; }
+.shell {
+  max-width: 980px;
+  margin: 0 auto;
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,0)) , var(--panel);
+  box-shadow: var(--shadow);
+}
+.meta {
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 6px;
+}
+.meta h1 { margin: 0; font-size: 15px; color: var(--green); }
+.meta-row { color: var(--muted); font-size: 12px; }
+.transcript { padding: 18px; display: grid; gap: 14px; }
+.message {
+  border: 1px solid var(--border);
+  background: var(--panel-soft);
+}
+.message header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: .08em;
+}
+.message.user {
+  background: var(--gray-bubble);
+}
+.message.assistant {
+  border-color: #214121;
+}
+.message.assistant .role {
+  color: var(--green);
+}
+.message.system {
+  background: #151515;
+}
+.content {
+  padding: 16px 18px;
+  line-height: 1.6;
+  white-space: normal;
+}
+.content pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.content code {
+  background: #171717;
+  border: 1px solid #2b2b2b;
+  padding: .12rem .35rem;
+}
+.content pre code {
+  display: block;
+  padding: 14px;
+  overflow-x: auto;
+}
+.content p:first-child { margin-top: 0; }
+.content p:last-child { margin-bottom: 0; }
+.content a { color: #8fd48f; }
+.content blockquote {
+  margin: 0;
+  padding-left: 12px;
+  border-left: 2px solid #2c5d2c;
+  color: #b9d8b9;
+}
+</style>
+</head>
+<body>
+<main class="shell">
+  <section class="meta">
+    <h1>BrokeCLI Transcript</h1>
+    <div class="meta-row">Model: ${escapeHtml(providerName)}/${escapeHtml(modelName)}</div>
+    <div class="meta-row">Directory: ${escapeHtml(cwd)}</div>
+    <div class="meta-row">Exported: ${escapeHtml(formatTimestamp(Date.now()))}</div>
+  </section>
+  <section class="transcript">
+    ${cards}
+  </section>
+</main>
+</body>
+</html>`;
 }
 
 program.action(async (opts) => {
@@ -118,6 +378,7 @@ program.action(async (opts) => {
   }
 
   const app = new App();
+  app.setVersion(program.version() ?? "0.0.1");
   let currentMode: Mode = getSettings().mode;
   let systemPrompt = buildSystemPrompt(process.cwd(), undefined, currentMode, getSettings().cavemanLevel ?? "off");
   let lastActivityTime = Date.now(); // Track for cache expiry warning
@@ -142,10 +403,12 @@ program.action(async (opts) => {
   } else {
     session = new Session();
   }
+  const getContextOptimizer = (): ReturnType<Session["getContextOptimizer"]> => session.getContextOptimizer();
 
   app.start();
   hooks.emit("on_session_start", { cwd: process.cwd() });
   app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
+  const providerRegistry = new ProviderRegistry();
 
   // Scoped model index for Ctrl+P cycling
   let scopedModelIndex = -1;
@@ -178,7 +441,7 @@ program.action(async (opts) => {
       const provId = entry.slice(0, slashIdx);
       const modId = entry.slice(slashIdx + 1);
       try {
-        activeModel = createModel(provId, modId);
+        activeModel = providerRegistry.createModel(provId, modId);
         currentModelId = modId;
         systemPrompt = buildSystemPrompt(process.cwd(), provId, currentMode, getSettings().cavemanLevel ?? "off");
         app.setModel(activeModel.provider.name, currentModelId);
@@ -192,17 +455,121 @@ program.action(async (opts) => {
 
   // Detect providers + load pricing in background
   let providers: Awaited<ReturnType<typeof detectProviders>> = [];
-  let activeModel: ReturnType<typeof createModel> | null = null;
-  let smallModel: ReturnType<typeof createModel> | null = null;
+  let activeModel: ModelHandle | null = null;
+  let smallModel: ModelHandle | null = null;
   let currentModelId = "";
   let smallModelId = "";
   let lastToolCalls: string[] = [];
 
-  const initPromise = (async () => {
-    [, providers] = await Promise.all([loadPricing(), detectProviders()]);
-    syncCloudProviderModelsFromCatalog();
+  async function refreshProviderState(): Promise<void> {
+    providers = await providerRegistry.refresh();
     app.setDetectedProviders(providers.map((p) => p.name));
-    await refreshLocalModels(providers.map((p) => p.id));
+  }
+
+  function buildVisibleModelOptions(): Array<{ providerId: string; providerName: string; modelId: string; active: boolean }> {
+    return providerRegistry.buildVisibleModelOptions(activeModel, currentModelId, getSettings().scopedModels);
+  }
+
+  async function runConnectFlow(providerId?: string): Promise<void> {
+    const selectedProviderId = providerId ?? await new Promise<string>((resolve) => {
+      const items = CONNECT_PROVIDER_ORDER
+        .map((id) => providerRegistry.getProviderInfo(id))
+        .filter((info): info is NonNullable<typeof info> => !!info)
+        .map((info) => ({
+          id: info.id,
+          label: info.name,
+          detail: providerRegistry.getConnectStatus(info.id),
+        }));
+      app.openItemPicker("Connect Provider", items, resolve);
+    });
+
+    const info = providerRegistry.getProviderInfo(selectedProviderId);
+    if (!info) {
+      app.addMessage("system", `Unknown provider: ${selectedProviderId}`);
+      return;
+    }
+
+    const discoveredCredential = getProviderCredential(selectedProviderId);
+
+    if (discoveredCredential.kind === "native_oauth") {
+      updateProviderConfig(selectedProviderId, { disabled: false });
+      await refreshProviderState();
+      if (providers.some((p) => p.id === selectedProviderId)) {
+        app.addMessage("system", `Connected ${getNativeCliLabel(selectedProviderId)} using existing native login${discoveredCredential.source ? ` from ${discoveredCredential.source}` : ""}.`);
+      } else {
+        app.addMessage("system", `Found ${getNativeCliLabel(selectedProviderId)} login, but the native CLI is not available on PATH yet.`);
+      }
+      return;
+    }
+
+    if (selectedProviderId in LOCAL_PROVIDER_DEFAULTS) {
+      const defaultBaseUrl = LOCAL_PROVIDER_DEFAULTS[selectedProviderId];
+      const savedBaseUrl = providerRegistry.getSavedBaseUrl(selectedProviderId);
+      const baseUrlOptions = savedBaseUrl && savedBaseUrl !== defaultBaseUrl
+        ? ["use default", "use saved", "custom"]
+        : ["use default", "custom"];
+      const entered = (await app.showQuestion(`Base URL for ${info.name}`, baseUrlOptions))?.trim() ?? "";
+      let baseUrl = defaultBaseUrl;
+      if (isSkippedPromptAnswer(entered)) {
+        app.addMessage("system", "Connect cancelled.");
+        return;
+      }
+      if (entered === "use default") {
+        baseUrl = defaultBaseUrl;
+      } else if (entered === "use saved" && savedBaseUrl) {
+        baseUrl = savedBaseUrl;
+      } else if (entered === "custom") {
+        const custom = (await app.showQuestion(`Enter ${info.name} base URL`, undefined)).trim();
+        if (isSkippedPromptAnswer(custom)) {
+          app.addMessage("system", "Connect cancelled.");
+          return;
+        }
+        if (!isValidHttpBaseUrl(custom)) {
+          app.addMessage("system", `Invalid base URL: ${custom}`);
+          return;
+        }
+        baseUrl = custom;
+      } else if (entered && entered !== defaultBaseUrl) {
+        if (!isValidHttpBaseUrl(entered)) {
+          app.addMessage("system", `Invalid base URL: ${entered}`);
+          return;
+        }
+        baseUrl = entered;
+      }
+      updateProviderConfig(selectedProviderId, { baseUrl, disabled: false });
+      await refreshProviderState();
+      if (providers.some((p) => p.id === selectedProviderId)) {
+        app.addMessage("system", `Connected ${info.name} at ${baseUrl}.`);
+      } else {
+        app.addMessage("system", `${info.name} saved at ${baseUrl}, but it is not responding yet.`);
+      }
+      return;
+    }
+
+    if (discoveredCredential.kind === "api_key") {
+      updateProviderConfig(selectedProviderId, { disabled: false });
+      await refreshProviderState();
+      app.addMessage("system", `Connected ${info.name} using existing credentials${discoveredCredential.source ? ` from ${discoveredCredential.source}` : ""}.`);
+      return;
+    }
+
+    const apiKey = (await app.showQuestion(`Paste ${info.name} API key`, undefined)).trim();
+    if (isSkippedPromptAnswer(apiKey)) {
+      app.addMessage("system", "Connect cancelled.");
+      return;
+    }
+    updateProviderConfig(selectedProviderId, { apiKey, disabled: false });
+    await refreshProviderState();
+    if (providers.some((p) => p.id === selectedProviderId)) {
+      app.addMessage("system", `Connected ${info.name}.`);
+    } else {
+      app.addMessage("system", `${info.name} credentials saved, but detection has not confirmed access yet.`);
+    }
+  }
+
+  const initPromise = (async () => {
+    await loadPricing();
+    await refreshProviderState();
 
     let providerId: string | undefined;
     let modelId: string | undefined;
@@ -238,7 +605,7 @@ program.action(async (opts) => {
       if (!providerId) {
         const def = pickDefault(providers);
         if (!def) {
-          app.addMessage("system", "No providers found. Set ANTHROPIC_API_KEY or OPENAI_API_KEY, or start Ollama.");
+          app.addMessage("system", "No providers found. Run /connect, set an API key, or start a local model server.");
           return;
         }
         providerId = def.id;
@@ -246,7 +613,7 @@ program.action(async (opts) => {
     }
 
     try {
-      activeModel = createModel(providerId!, modelId);
+      activeModel = providerRegistry.createModel(providerId!, modelId);
       currentModelId = modelId ?? activeModel.provider.defaultModel;
       systemPrompt = buildSystemPrompt(process.cwd(), providerId!, currentMode, getSettings().cavemanLevel ?? "off");
       app.setModel(activeModel.provider.name, currentModelId);
@@ -258,7 +625,7 @@ program.action(async (opts) => {
       const cheapId = getSmallModelId(activeModel.provider.id);
       if (cheapId && cheapId !== currentModelId) {
         try {
-          smallModel = createModel(activeModel.provider.id, cheapId);
+          smallModel = providerRegistry.createModel(activeModel.provider.id, cheapId);
           smallModelId = cheapId;
         } catch { /* no small model available */ }
       }
@@ -302,9 +669,22 @@ program.action(async (opts) => {
 
     // Slash commands
     let templateLoaded = false;
+    let commandRewrittenText: string | null = null;
     if (text.startsWith("/")) {
       const [cmd] = text.slice(1).split(" ");
       switch (cmd) {
+        case "btw": {
+          const sideQuestion = text.slice(5).trim();
+          if (!sideQuestion) {
+            app.addMessage("system", "Usage: /btw <side question>");
+            return;
+          }
+          session = session.fork();
+          if (activeModel) session.setProviderModel(activeModel.provider.name, currentModelId);
+          app.addMessage("system", "Forked session for /btw.");
+          commandRewrittenText = sideQuestion;
+          break;
+        }
         case "help":
           app.addMessage("system", "Type / to see available commands.");
           return;
@@ -313,46 +693,21 @@ program.action(async (opts) => {
           session.clear();
           app.clearMessages();
           app.resetCost();
-          resetOptimizer();
+          getContextOptimizer().reset();
           return;
-        case "cost":
-          app.addMessage("system", `$${session.getTotalCost().toFixed(4)} | ${session.getTotalTokens()} tokens`);
+        case "connect":
+        case "login":
+          await runConnectFlow();
           return;
         case "model": {
-          const detectedIds = new Set(providers.map((p) => p.id));
-          const pinnedModels = getSettings().scopedModels;
-          const allOptions: Array<{ providerId: string; providerName: string; modelId: string; active: boolean }> = [];
-          for (const prov of listProviders()) {
-            for (const m of prov.models) {
-              allOptions.push({
-                providerId: prov.id,
-                providerName: prov.name,
-                modelId: m,
-                active: pinnedModels.includes(`${prov.id}/${m}`),
-              });
-            }
-          }
-          // Sort: available providers first, then pinned models, then by provider/name
-          allOptions.sort((a, b) => {
-            // Available (detected) first
-            const aAvail = detectedIds.has(a.providerId);
-            const bAvail = detectedIds.has(b.providerId);
-            if (aAvail && !bAvail) return -1;
-            if (!aAvail && bAvail) return 1;
-            // Then pinned
-            if (a.active && !b.active) return -1;
-            if (!a.active && b.active) return 1;
-            // Then by provider, then model
-            if (a.providerId !== b.providerId) return a.providerId.localeCompare(b.providerId);
-            return a.modelId.localeCompare(b.modelId);
-          });
+          const allOptions = buildVisibleModelOptions();
           if (allOptions.length === 0) {
-            app.addMessage("system", "No providers found. Run /login or set API keys.");
+            app.addMessage("system", "No connected providers found. Run /connect.");
             return;
           }
           app.openModelPicker(allOptions, (provId, modId) => {
             try {
-              activeModel = createModel(provId, modId);
+              activeModel = providerRegistry.createModel(provId, modId);
               currentModelId = modId;
               systemPrompt = buildSystemPrompt(process.cwd(), provId, currentMode, getSettings().cavemanLevel ?? "off");
               app.setModel(activeModel.provider.name, currentModelId);
@@ -394,7 +749,8 @@ program.action(async (opts) => {
               { key: "maxSessionCost", label: "Max session cost", value: s.maxSessionCost === 0 ? "unlimited" : `$${s.maxSessionCost}`, description: "Maximum cost per session (0 = unlimited)" },
               { key: "followUpMode", label: "Follow-up mode", value: followUpLabels[s.followUpMode] ?? s.followUpMode, description: "When to send queued messages while AI is working" },
               { key: "notifyOnResponse", label: "Notify on response", value: String(s.notifyOnResponse), description: "Show a desktop notification when a response completes" },
-              { key: "cavemanLevel", label: "Caveman mode", value: s.cavemanLevel ?? "off", description: "off / lite / full / ultra — save output tokens (ctrl+y)" },
+              { key: "theme", label: "Theme", value: s.theme, description: "Switch the full terminal color theme" },
+              { key: "cavemanLevel", label: "Caveman mode", value: s.cavemanLevel ?? "off", description: "off / lite / auto / ultra — save output tokens (ctrl+y)" },
             ];
           }
           app.openSettings(buildEntries(), (key) => {
@@ -417,8 +773,12 @@ program.action(async (opts) => {
               const currentIdx = modes.indexOf(s.followUpMode);
               const nextIdx = (currentIdx + 1) % modes.length;
               updateSetting("followUpMode", modes[nextIdx]);
+            } else if (key === "theme") {
+              const themes = listThemes();
+              const currentIdx = Math.max(0, themes.findIndex((theme) => theme.key === s.theme));
+              updateSetting("theme", themes[(currentIdx + 1) % themes.length].key);
             } else if (key === "cavemanLevel") {
-              const levels = ["off", "lite", "full", "ultra"] as const;
+              const levels = ["off", "lite", "auto", "ultra"] as const;
               const current = s.cavemanLevel ?? "off";
               const idx = levels.indexOf(current as any);
               const next = levels[(idx + 1) % levels.length];
@@ -430,9 +790,58 @@ program.action(async (opts) => {
           });
           return;
         }
-        case "theme":
-          app.addMessage("system", "Themes have been removed.");
+        case "notify": {
+          sendResponseNotification("Test notification");
+          app.addMessage("system", "Notification test sent.");
           return;
+        }
+        case "theme": {
+          const themes = listThemes();
+          const previousTheme = getSettings().theme;
+          const buildThemeItems = () => {
+            const favoriteThemes = getSettings().favoriteThemes ?? [];
+            const order = [...themes].sort((a, b) => {
+              const aDefault = a.key === "brokecli-dark" || a.key === "brokecli-light" ? 0 : 1;
+              const bDefault = b.key === "brokecli-dark" || b.key === "brokecli-light" ? 0 : 1;
+              if (aDefault !== bDefault) return aDefault - bDefault;
+              const aFav = favoriteThemes.includes(a.key) ? 0 : 1;
+              const bFav = favoriteThemes.includes(b.key) ? 0 : 1;
+              if (aFav !== bFav) return aFav - bFav;
+              return themes.findIndex((theme) => theme.key === a.key) - themes.findIndex((theme) => theme.key === b.key);
+            });
+            return order.map((theme) => ({
+              id: theme.key,
+              label: theme.label,
+              detail: `${favoriteThemes.includes(theme.key) ? "★ " : ""}${theme.dark ? "dark" : "light"}`,
+            }));
+          };
+          const themeItems = buildThemeItems();
+          const currentIdx = Math.max(0, themeItems.findIndex((theme) => theme.id === previousTheme));
+          app.openItemPicker(
+            "Theme",
+            themeItems,
+            (themeId) => {
+              setPreviewTheme(null);
+              updateSetting("theme", themeId);
+            },
+            {
+              initialCursor: currentIdx,
+              previewHint: "previewing highlighted theme · enter keeps it · esc goes back",
+              secondaryHint: "tab stars theme",
+              onPreview: (themeId) => setPreviewTheme(themeId),
+              onCancel: () => setPreviewTheme(null),
+              onSecondaryAction: (themeId) => {
+                const currentFavorites = getSettings().favoriteThemes ?? [];
+                const nextFavorites = currentFavorites.includes(themeId)
+                  ? currentFavorites.filter((id) => id !== themeId)
+                  : [...currentFavorites, themeId];
+                updateSetting("favoriteThemes", nextFavorites);
+                app.updateItemPickerItems(buildThemeItems(), themeId);
+              },
+            },
+          );
+          return;
+        }
         case "compact": {
           if (!activeModel) {
             app.addMessage("system", "No model available for compaction.");
@@ -443,7 +852,7 @@ program.action(async (opts) => {
             const chatMsgs = session.getChatMessages();
             const ctxTokens = getTotalContextTokens(chatMsgs, systemPrompt, currentModelId);
             app.setCompacting(true, ctxTokens);
-            const compacted = await compactMessages(chatMsgs, activeModel.model);
+            const compacted = await compactForModel(chatMsgs, activeModel);
             session.clear();
             for (const m of compacted) session.addMessage(m.role, m.content);
             app.setCompacting(false);
@@ -453,35 +862,6 @@ program.action(async (opts) => {
             app.setCompacting(false);
             app.addMessage("system", `Compact failed: ${(err as Error).message}`);
           }
-          return;
-        }
-        case "sessions": {
-          const recent = Session.listRecent(20);
-          if (recent.length === 0) {
-            app.addMessage("system", "No saved sessions.");
-            return;
-          }
-          const items = recent.map((s) => {
-            const ago = Math.floor((Date.now() - s.updatedAt) / 60000);
-            const time = ago < 60 ? `${ago}m ago` : `${Math.floor(ago / 60)}h ago`;
-            const cost = `$${s.cost.toFixed(4)}`;
-            return {
-              id: s.id,
-              label: s.model || "unknown",
-              detail: `${s.messageCount} msgs ${cost} ${time}`,
-            };
-          });
-          app.openItemPicker("Sessions", items, (id) => {
-            const loaded = Session.load(id);
-            if (loaded) {
-              session = loaded;
-              if (activeModel) session.setProviderModel(activeModel.provider.name, currentModelId);
-              app.clearMessages();
-              app.addMessage("system", `Resumed session`);
-            } else {
-              app.addMessage("system", "Failed to load session");
-            }
-          });
           return;
         }
         case "fork": {
@@ -496,7 +876,13 @@ program.action(async (opts) => {
           reloadContext();
           const lvl = getSettings().cavemanLevel ?? "off";
           systemPrompt = buildSystemPrompt(process.cwd(), activeModel?.provider?.id, currentMode, lvl);
-          app.addMessage("system", `Caveman mode: ${lvl}`);
+          app.addMessage("system", `🪨 ${lvl}`);
+          return;
+        }
+        case "thinking": {
+          app.cycleThinkingMode();
+          const lvl = getSettings().thinkingLevel || (getSettings().enableThinking ? "low" : "off");
+          app.addMessage("system", `Thinking: ${lvl}`);
           return;
         }
         case "name": {
@@ -533,39 +919,37 @@ program.action(async (opts) => {
           const items = [
             { id: "markdown", label: "Markdown", detail: ".md file format" },
             { id: "html", label: "HTML", detail: "standalone HTML file" },
+            { id: "copy-markdown", label: "Copy Markdown", detail: "copy full transcript" },
           ];
           app.openItemPicker("Export format", items, (id) => {
+            const shouldCopy = id === "copy-markdown";
             const defaultPath = `brokecli-export.${id === "html" ? "html" : "md"}`;
             const filePath = text.slice(8).trim() || defaultPath;
             const msgs = session.getMessages();
-            let content = "";
-            const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
-            if (id === "html") {
-              content = `<!DOCTYPE html>
-<html>
-<head><title>BrokeCLI Export</title>
-<style>
-body { font-family: system-ui; max-width: 800px; margin: 0 auto; padding: 20px; background: #000; color: #fff; }
-.user { background: #1a1a1a; padding: 10px; border-radius: 8px; margin: 10px 0; }
-.assistant { background: #0a0a0a; color: #10b981; padding: 10px; border-radius: 8px; margin: 10px 0; white-space: pre-wrap; }
-.system { color: #666; font-style: italic; padding: 10px; }
-</style></head>
-<body>
-${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.content) : m.content}</div>`).join("\n")}
-</body>
-</html>`;
-            } else {
-              content = msgs.map((m) => `## ${m.role}\n\n${m.content}\n`).join("\n");
-            }
+            const content = id === "html"
+              ? buildHtmlExport(msgs, activeModel?.provider.name ?? "unknown", currentModelId || "unknown", process.cwd())
+              : buildMarkdownExport(msgs, activeModel?.provider.name ?? "unknown", currentModelId || "unknown", process.cwd());
             try {
-              writeFileSync(filePath, content, "utf-8");
-              app.addMessage("system", `Exported to ${filePath}`);
+              if (shouldCopy) {
+                if (process.platform === "win32") {
+                  execSync("clip", { input: content });
+                } else if (process.platform === "darwin") {
+                  execSync("pbcopy", { input: content });
+                } else {
+                  execSync("xclip -selection clipboard", { input: content });
+                }
+                app.addMessage("system", "Transcript copied.");
+              } else {
+                writeFileSync(filePath, content, "utf-8");
+                app.addMessage("system", `Exported to ${filePath}`);
+              }
             } catch (err) {
               app.addMessage("system", `Export failed: ${(err as Error).message}`);
             }
           });
           return;
         }
+        case "sessions":
         case "resume": {
           const cwd = process.cwd();
           const recent = Session.listRecent(10).filter((s) => s.cwd === cwd);
@@ -573,17 +957,12 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
             app.addMessage("system", "No sessions for this directory.");
             return;
           }
-          const options = recent.map((s) => {
-            const ago = Math.floor((Date.now() - s.updatedAt) / 60000);
-            const time = ago < 60 ? `${ago}m ago` : `${Math.floor(ago / 60)}h ago`;
-            return {
-              providerId: s.id,
-              providerName: time,
-              modelId: `${s.model} (${s.messageCount} msgs, $${s.cost.toFixed(4)})`,
-              active: false,
-            };
-          });
-          app.openModelPicker(options, (sessionId) => {
+          const items = recent.map((s) => ({
+            id: s.id,
+            label: s.model || "unknown",
+            detail: `${s.messageCount} msgs · ${formatRelativeMinutes(s.updatedAt)}`,
+          }));
+          app.openItemPicker("Resume Session", items, (sessionId) => {
             const loaded = Session.load(sessionId);
             if (loaded) {
               session = loaded;
@@ -597,10 +976,6 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
           });
           return;
         }
-        case "reload":
-          reloadContext();
-          app.addMessage("system", "Context reloaded.");
-          return;
         case "undo": {
           const result = undoLastCheckpoint();
           app.addMessage("system", result.message);
@@ -616,9 +991,6 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
           app.addMessage("system", `Templates:\n${lines.join("\n")}`);
           return;
         }
-        case "login":
-          app.addMessage("system", "OAuth login not yet implemented. Set API keys via environment variables: ANTHROPIC_API_KEY, OPENAI_API_KEY, etc.");
-          return;
         case "logout":
           app.addMessage("system", "OAuth login not yet implemented. Set API keys via environment variables: ANTHROPIC_API_KEY, OPENAI_API_KEY, etc.");
           return;
@@ -651,6 +1023,10 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
           return;
         }
       }
+    }
+
+    if (commandRewrittenText) {
+      text = commandRewrittenText;
     }
 
     if (!templateLoaded) {
@@ -689,7 +1065,7 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
     }
 
     if (!activeModel) {
-      app.addMessage("system", "No provider configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY.");
+      app.addMessage("system", "No provider configured. Run /connect.");
       return;
     }
 
@@ -724,7 +1100,7 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
     if (ctxPct > 80 && chatMsgs.length > 8) {
       try {
         app.setCompacting(true, ctxTokens);
-        const compacted = await compactMessages(chatMsgs, activeModel.model);
+        const compacted = await compactForModel(chatMsgs, activeModel);
         session.clear();
         for (const m of compacted) session.addMessage(m.role, m.content);
         app.setCompacting(false);
@@ -754,7 +1130,7 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
     clearTodo();
     let streamedText = "";
     let streamedReasoning = "";
-    nextTurn();
+    getContextOptimizer().nextTurn();
 
     // Smart model routing — pick cheap model for simple tasks
     const route = smallModel && getSettings().autoRoute
@@ -765,7 +1141,7 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
     lastToolCalls = [];
 
     // Optimize context — evict old tool results, compress history
-    const optimizedMessages = optimizeMessages(session.getChatMessages());
+    const optimizedMessages = getContextOptimizer().optimizeMessages(session.getChatMessages());
 
     abortController = new AbortController();
     app.onAbortRequest(() => {
@@ -779,257 +1155,151 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
     const effectiveCavemanLevel = resolveCavemanLevel(configuredCavemanLevel, text);
     const turnSystemPrompt = buildSystemPrompt(process.cwd(), useModel.provider.id, currentMode, effectiveCavemanLevel);
 
-    await startStream(
-      {
-        model: useModel.model,
-        modelId: useModelId,
-        providerId: useModel.provider.id,
-        system: turnSystemPrompt,
-        messages: optimizedMessages,
-        tools,
-        abortSignal: abortController.signal,
-        enableThinking: route === "main" ? getSettings().enableThinking : false,
-        thinkingLevel: getSettings().thinkingLevel || "low",
-        },
-      {
-        onText: (delta) => {
-          app.appendToLastMessage(delta);
-          streamedText += delta;
-          app.setStreamTokens(estimateTextTokens(streamedText + streamedReasoning, useModelId));
-        },
-        onReasoning: (delta) => {
-          app.appendThinking(delta);
-          streamedReasoning += delta;
-          app.setStreamTokens(estimateTextTokens(streamedText + streamedReasoning, useModelId));
-        },
-        onFinish: (usage) => {
-          const content = app.getLastAssistantContent();
-          if (content) {
-            session.addMessage("assistant", content);
-          } else {
-            // Model returned empty response
-            session.addMessage("assistant", "[empty response]");
-            app.addMessage("system", `${DIM}No response from model. Try again or switch models with /model.${RESET}`);
-          }
-          session.addUsage(usage.inputTokens, usage.outputTokens, usage.cost);
-          app.setStreaming(false);
-          app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
-          abortController = null;
-          lastActivityTime = Date.now();
-          if (getSettings().notifyOnResponse) {
-            sendResponseNotification();
-          }
-        },
-        onError: (err) => {
-          let msg = err.message;
-          const data = (err as any).data;
-          if (data?.error?.message) msg = data.error.message;
-          // Make errors human-friendly
-          if (msg.includes("insufficient permissions") || msg.includes("Missing scopes")) {
-            msg = `Your API key doesn't have access to this model. Try a different model with /model.`;
-          } else if (msg.includes("invalid_api_key") || msg.includes("Incorrect API key") || msg.includes("401")) {
-            msg = `Invalid API key for ${activeModel?.provider.name ?? "this provider"}. Check your key and try again.`;
-          } else if (msg.includes("Could not resolve") || msg.includes("ECONNREFUSED") || msg.includes("fetch failed")) {
-            msg = `Can't reach ${activeModel?.provider.name ?? "the provider"}. Check your connection or if the server is running.`;
-          } else if (msg.includes("429") || msg.includes("rate_limit")) {
-            msg = `Rate limited. Wait a moment and try again.`;
-          } else if (msg.includes("model_not_found") || msg.includes("does not exist") || msg.includes("not found")) {
-            msg = `Model "${currentModelId}" not available. Try /model to pick a different one.`;
-          } else if (msg.includes("overloaded") || msg.includes("503") || msg.includes("529")) {
-            msg = `${activeModel?.provider.name ?? "Provider"} is overloaded right now. Try again in a moment.`;
-          }
-          if (msg.length > 300) msg = msg.slice(0, 297) + "...";
-          session.addMessage("assistant", `[error: ${msg}]`);
-          app.setStreaming(false);
-          app.addMessage("system", `${RED}${msg}${RESET}`);
-          abortController = null;
-        },
-        onToolCallStart: (name) => {
-          // Show tool call immediately when model starts generating args
-          if (name === "todoWrite") return;
-          app.addToolCall(name, "...");
-        },
-        onToolCall: (name, args) => {
-          hooks.emit("on_tool_call", { name, args });
-          lastToolCalls.push(name);
-          if (name === "todoWrite") return;
-          // Update the existing tool call with real args
-          let preview = "";
-          if (name === "writeFile" || name === "editFile") {
-            preview = (args as any)?.path ?? "?";
-          } else if (name === "readFile" || name === "listFiles" || name === "grep") {
-            preview = (args as any)?.path ?? (args as any)?.pattern ?? "?";
-          } else if (name === "bash") {
-            const cmd = (args as any)?.command ?? "?";
-            preview = cmd.length > 60 ? cmd.slice(0, 57) + "..." : cmd;
-          } else {
-            preview = typeof args === "object" ? JSON.stringify(args).slice(0, 50) : String(args).slice(0, 50);
-          }
-          app.updateToolCallArgs(name, preview, args);
-        },
-        onToolResult: (_name, result) => {
-          hooks.emit("on_tool_result", { name: _name, result });
-          if (_name === "todoWrite") return; // rendered as overlay
-          const r = result as { success?: boolean; output?: string; error?: string; content?: string; matches?: unknown[]; files?: string[] };
-          let detail: string | undefined;
-          if (_name === "bash" && r.output) {
-            detail = r.output.slice(0, 200);
-          } else if (_name === "readFile" && r.content) {
-            const lineCount = r.content.split("\n").length;
-            detail = `${lineCount} lines`;
-            // Track for dedup and diff-only optimization
-            const readPath = (result as any)?.path ?? "";
-            if (readPath) trackFileRead(readPath, lineCount);
-          } else if (_name === "grep" && r.matches) {
-            detail = `${(r.matches as unknown[]).length} matches`;
-          } else if (_name === "listFiles" && r.files) {
-            detail = `${(r.files as string[]).length} files`;
-          }
-          if (r.success === false && r.error) {
-            app.addToolResult(_name, r.error.slice(0, 80), true);
-          } else {
-            app.addToolResult(_name, "ok", false, detail);
-          }
-        },
-        onAfterToolCall: () => {
-          // Check if we need to flush pending messages after tool call
-          const settings = getSettings();
-          if (settings.followUpMode === "after_tool" && app.hasPendingMessages()) {
-            app.flushPendingMessages();
-          }
-        },
-        onAfterResponse: () => {
-          // Check if we need to flush pending messages after response
-          const settings = getSettings();
-          if (settings.followUpMode === "after_response" && app.hasPendingMessages()) {
-            app.flushPendingMessages();
-          }
-        },
+    const streamCallbacks = {
+      onText: (delta: string) => {
+        app.appendToLastMessage(delta);
+        streamedText += delta;
+        app.setStreamTokens(estimateTextTokens(streamedText + streamedReasoning, useModelId));
       },
-    );
+      onReasoning: (delta: string) => {
+        app.appendThinking(delta);
+        streamedReasoning += delta;
+        app.setStreamTokens(estimateTextTokens(streamedText + streamedReasoning, useModelId));
+      },
+      onFinish: (usage: { inputTokens: number; outputTokens: number; cost: number }) => {
+        const content = app.getLastAssistantContent();
+        if (content) {
+          session.addMessage("assistant", content);
+        } else {
+          session.addMessage("assistant", "[empty response]");
+          app.addMessage("system", `${DIM}No response from model. Try again or switch models with /model.${RESET}`);
+        }
+        session.addUsage(usage.inputTokens, usage.outputTokens, usage.cost);
+        app.setStreaming(false);
+        app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
+        abortController = null;
+        lastActivityTime = Date.now();
+        if (getSettings().notifyOnResponse) {
+          sendResponseNotification();
+        }
+      },
+      onError: (err: Error) => {
+        let msg = err.message;
+        const data = (err as any).data;
+        if (data?.error?.message) msg = data.error.message;
+        if (msg.includes("insufficient permissions") || msg.includes("Missing scopes")) {
+          msg = `Your API key doesn't have access to this model. Try a different model with /model.`;
+        } else if (msg.includes("invalid_api_key") || msg.includes("Incorrect API key") || msg.includes("401")) {
+          msg = `Invalid API key for ${activeModel?.provider.name ?? "this provider"}. Check your key and try again.`;
+        } else if (msg.includes("Could not resolve") || msg.includes("ECONNREFUSED") || msg.includes("fetch failed")) {
+          msg = `Can't reach ${activeModel?.provider.name ?? "the provider"}. Check your connection or if the server is running.`;
+        } else if (msg.includes("429") || msg.includes("rate_limit") || msg.includes("hit your limit")) {
+          msg = `Rate limited. Wait a moment and try again.`;
+        } else if (msg.includes("model_not_found") || msg.includes("does not exist") || msg.includes("not found")) {
+          msg = `Model "${currentModelId}" not available. Try /model to pick a different one.`;
+        } else if (msg.includes("overloaded") || msg.includes("503") || msg.includes("529")) {
+          msg = `${activeModel?.provider.name ?? "Provider"} is overloaded right now. Try again in a moment.`;
+        }
+        if (msg.length > 300) msg = msg.slice(0, 297) + "...";
+        session.addMessage("assistant", `[error: ${msg}]`);
+        app.setStreaming(false);
+        app.addMessage("system", `${RED}${msg}${RESET}`);
+        abortController = null;
+      },
+      onAfterResponse: () => {
+        const settings = getSettings();
+        if (settings.followUpMode === "after_response" && app.hasPendingMessages()) {
+          app.flushPendingMessages();
+        }
+      },
+    };
+
+    if (useModel.runtime === "native-cli") {
+      await startNativeStream(
+        {
+          providerId: useModel.provider.id as "anthropic" | "codex",
+          modelId: useModelId,
+          system: turnSystemPrompt,
+          messages: optimizedMessages,
+          abortSignal: abortController.signal,
+          enableThinking: route === "main" ? getSettings().enableThinking : false,
+          thinkingLevel: getSettings().thinkingLevel || "low",
+          yoloMode: getSettings().yoloMode,
+          cwd: process.cwd(),
+        },
+        streamCallbacks,
+      );
+    } else {
+      await startStream(
+        {
+          model: useModel.model!,
+          modelId: useModelId,
+          providerId: useModel.provider.id,
+          system: turnSystemPrompt,
+          messages: optimizedMessages,
+          tools: canUseSdkTools(useModel) ? tools : undefined,
+          abortSignal: abortController.signal,
+          enableThinking: route === "main" ? getSettings().enableThinking : false,
+          thinkingLevel: getSettings().thinkingLevel || "low",
+        },
+        {
+          ...streamCallbacks,
+          onToolCallStart: (name) => {
+            if (name === "todoWrite") return;
+            app.addToolCall(name, "...");
+          },
+          onToolCall: (name, args) => {
+            hooks.emit("on_tool_call", { name, args });
+            lastToolCalls.push(name);
+            if (name === "todoWrite") return;
+            let preview = "";
+            if (name === "writeFile" || name === "editFile") {
+              preview = (args as any)?.path ?? "?";
+            } else if (name === "readFile" || name === "listFiles" || name === "grep") {
+              preview = (args as any)?.path ?? (args as any)?.pattern ?? "?";
+            } else if (name === "bash") {
+              const cmd = (args as any)?.command ?? "?";
+              preview = cmd.length > 60 ? cmd.slice(0, 57) + "..." : cmd;
+            } else {
+              preview = typeof args === "object" ? JSON.stringify(args).slice(0, 50) : String(args).slice(0, 50);
+            }
+            app.updateToolCallArgs(name, preview, args);
+          },
+          onToolResult: (_name, result) => {
+            hooks.emit("on_tool_result", { name: _name, result });
+            if (_name === "todoWrite") return;
+            const r = result as { success?: boolean; output?: string; error?: string; content?: string; matches?: unknown[]; files?: string[] };
+            let detail: string | undefined;
+            if (_name === "bash" && r.output) {
+              detail = r.output.slice(0, 200);
+            } else if (_name === "readFile" && r.content) {
+              const lineCount = r.content.split("\n").length;
+              detail = `${lineCount} lines`;
+              const readPath = (result as any)?.path ?? "";
+              if (readPath) getContextOptimizer().trackFileRead(readPath, lineCount);
+            } else if (_name === "grep" && r.matches) {
+              detail = `${(r.matches as unknown[]).length} matches`;
+            } else if (_name === "listFiles" && r.files) {
+              detail = `${(r.files as string[]).length} files`;
+            }
+            if (r.success === false && r.error) {
+              app.addToolResult(_name, r.error.slice(0, 80), true);
+            } else {
+              app.addToolResult(_name, "ok", false, detail);
+            }
+          },
+          onAfterToolCall: () => {
+            const settings = getSettings();
+            if (settings.followUpMode === "after_tool" && app.hasPendingMessages()) {
+              app.flushPendingMessages();
+            }
+          },
+        },
+      );
+    }
   }
 
 // Close the program.action callback
 });
-
-async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts: any): Promise<void> {
-  const rpcMode = getSettings().mode;
-  let systemPrompt = buildSystemPrompt(process.cwd(), undefined, rpcMode);
-  let abortController: AbortController | null = null;
-
-  const [, providers] = await Promise.all([loadPricing(), detectProviders()]);
-  syncCloudProviderModelsFromCatalog();
-  await refreshLocalModels(providers.map((p) => p.id));
-
-  let providerId: string;
-  let modelId: string | undefined;
-
-  if (opts.model) {
-    const parts = opts.model.split("/");
-    if (parts.length === 2) {
-      providerId = parts[0];
-      modelId = parts[1];
-    } else {
-      const def = pickDefault(providers);
-      providerId = def?.id ?? "openai";
-      modelId = opts.model;
-    }
-  } else {
-    const def = pickDefault(providers);
-    if (!def) {
-      process.stdout.write(JSON.stringify({ type: "error", message: "No providers found" }) + "\n");
-      process.exit(1);
-      return;
-    }
-    providerId = def.id;
-  }
-
-  let activeModel: ReturnType<typeof createModel>;
-  try {
-    activeModel = createModel(providerId, modelId);
-  } catch (err) {
-    process.stdout.write(JSON.stringify({ type: "error", message: (err as Error).message }) + "\n");
-    process.exit(1);
-    return;
-  }
-
-  const currentModelId = modelId ?? activeModel.provider.defaultModel;
-  systemPrompt = buildSystemPrompt(process.cwd(), providerId, rpcMode);
-  const tools = getTools();
-  const session = new Session();
-
-  await hooks.emit("on_session_start", { cwd: process.cwd(), rpc: true });
-
-  const readline = await import("readline");
-  const rl = readline.createInterface({ input: process.stdin });
-
-  function writeLine(obj: object): void {
-    process.stdout.write(JSON.stringify(obj) + "\n");
-  }
-
-  for await (const line of rl) {
-    let msg: { type: string; content?: string };
-    try {
-      msg = JSON.parse(line);
-    } catch {
-      writeLine({ type: "error", message: "Invalid JSON" });
-      continue;
-    }
-
-    if (msg.type === "abort") {
-      abortController?.abort();
-      abortController = null;
-      continue;
-    }
-
-    if (msg.type !== "message" || !msg.content) {
-      writeLine({ type: "error", message: 'Expected {"type":"message", "content":"..."}' });
-      continue;
-    }
-
-    session.addMessage("user", msg.content);
-    await hooks.emit("on_message", { role: "user", content: msg.content });
-
-    abortController = new AbortController();
-
-    await startStream(
-      {
-        model: activeModel.model,
-        modelId: currentModelId,
-        system: buildSystemPrompt(process.cwd(), providerId, rpcMode, resolveCavemanLevel(getSettings().cavemanLevel ?? "off", msg.content)),
-        messages: session.getChatMessages(),
-        tools: ["anthropic", "openai", "codex", "google", "mistral", "groq", "xai", "openrouter"].includes(activeModel.provider.id) ? tools : undefined,
-        abortSignal: abortController.signal,
-      },
-      {
-        onText: (delta) => {
-          writeLine({ type: "text", content: delta });
-        },
-        onReasoning: () => {},
-        onFinish: (usage) => {
-          session.addMessage("assistant", ""); // placeholder
-          session.addUsage(usage.inputTokens, usage.outputTokens, usage.cost);
-          writeLine({ type: "done", usage: { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, cost: usage.cost } });
-          abortController = null;
-        },
-        onError: (err) => {
-          writeLine({ type: "error", message: err.message.slice(0, 200) });
-          session.addMessage("assistant", "[error]");
-          abortController = null;
-        },
-        onToolCall: (name, args) => {
-          hooks.emit("on_tool_call", { name, args });
-          writeLine({ type: "tool_call", name, args });
-        },
-        onToolResult: (_name, result) => {
-          hooks.emit("on_tool_result", { name: _name, result });
-          writeLine({ type: "tool_result", name: _name, result });
-        },
-      },
-    );
-  }
-
-  await hooks.emit("on_session_end", { cost: session.getTotalCost(), tokens: session.getTotalTokens() });
-}
 
 program.parse();

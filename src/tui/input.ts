@@ -45,6 +45,15 @@ export class InputWidget {
     this.cursor += text.length;
   }
 
+  private deletePreviousWord(): void {
+    if (this.cursor <= 0) return;
+    let i = this.cursor;
+    while (i > 0 && /\s/.test(this.text[i - 1])) i--;
+    while (i > 0 && !/\s/.test(this.text[i - 1])) i--;
+    this.text = this.text.slice(0, i) + this.text.slice(this.cursor);
+    this.cursor = i;
+  }
+
   /** Handle a keypress */
   handleKey(key: Keypress): "submit" | "interrupt" | "none" {
     // Ctrl+C — interrupt
@@ -67,6 +76,12 @@ export class InputWidget {
     // Ctrl+U — clear line
     if (key.ctrl && key.name === "u") {
       this.clear();
+      return "none";
+    }
+
+    // Ctrl+Backspace / Ctrl+W — delete previous word
+    if ((key.ctrl && key.name === "backspace") || (key.ctrl && key.name === "w") || (key.ctrl && key.name === "h")) {
+      this.deletePreviousWord();
       return "none";
     }
 
@@ -134,18 +149,6 @@ export class InputWidget {
           this.text = "";
         }
         this.cursor = this.text.length;
-      }
-      return "none";
-    }
-
-    // Ctrl+W — delete previous word
-    if (key.ctrl && key.name === "w") {
-      if (this.cursor > 0) {
-        let i = this.cursor - 1;
-        while (i > 0 && this.text[i - 1] === " ") i--;
-        while (i > 0 && this.text[i - 1] !== " ") i--;
-        this.text = this.text.slice(0, i) + this.text.slice(this.cursor);
-        this.cursor = i;
       }
       return "none";
     }

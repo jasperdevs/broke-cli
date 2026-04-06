@@ -2,7 +2,7 @@ import {
   ALT_SCREEN_ON, ALT_SCREEN_OFF, CLEAR_SCREEN, CLEAR_LINE,
   CURSOR_HOME, CURSOR_HIDE, CURSOR_SHOW, CURSOR_BLOCK, CURSOR_DEFAULT,
   SYNC_START, SYNC_END,
-  moveToRow, write, getTermSize,
+  moveTo, moveToRow, write, getTermSize,
 } from "../utils/ansi.js";
 
 /**
@@ -15,17 +15,18 @@ export class Screen {
   private prev: string[] = [];
   private rows: number;
   private cols: number;
+  private resizeAttached = false;
+  private readonly handleResize = (): void => {
+    const s = getTermSize();
+    this.rows = s.rows;
+    this.cols = s.cols;
+    this.prev = [];
+  };
 
   constructor() {
     const size = getTermSize();
     this.rows = size.rows;
     this.cols = size.cols;
-
-    process.stdout.on("resize", () => {
-      const s = getTermSize();
-      this.rows = s.rows;
-      this.cols = s.cols;
-    });
   }
 
   get height(): number { return this.rows; }
@@ -33,6 +34,10 @@ export class Screen {
 
   /** Enter fullscreen mode */
   enter(): void {
+    if (!this.resizeAttached) {
+      process.stdout.on("resize", this.handleResize);
+      this.resizeAttached = true;
+    }
     write(ALT_SCREEN_ON);
     write(CURSOR_HOME);
     write(CLEAR_SCREEN);
@@ -48,21 +53,34 @@ export class Screen {
     write(ALT_SCREEN_OFF);
   }
 
+  dispose(): void {
+    if (!this.resizeAttached) return;
+    process.stdout.off("resize", this.handleResize);
+    this.resizeAttached = false;
+  }
+
   /**
    * Render a frame. Writes all lines using synchronized output
    * to prevent flicker. Always does a full write for reliability.
    */
   render(lines: string[]): void {
-    let buf = SYNC_START;
+    let buf = CURSOR_HIDE + SYNC_START;
+    let dirty = false;
     for (let i = 0; i < this.rows; i++) {
-      buf += moveToRow(i + 1) + CLEAR_LINE + (lines[i] ?? "");
+      const next = lines[i] ?? "";
+      if (this.prev[i] === next) continue;
+      dirty = true;
+      buf += moveToRow(i + 1) + CLEAR_LINE + next;
     }
-    buf += SYNC_END;
+    if (!dirty) return;
+    buf += moveTo(1, 1) + SYNC_END;
     write(buf);
+    this.prev = Array.from({ length: this.rows }, (_, i) => lines[i] ?? "");
   }
 
   /** Force full redraw — same as render now */
   forceRedraw(lines: string[]): void {
+    this.prev = [];
     this.render(lines);
   }
 
@@ -80,7 +98,7 @@ export class Screen {
 
   /** Whether the terminal is wide enough for a sidebar */
   get hasSidebar(): boolean {
-    return this.cols >= 70;
+    return this.cols >= 58;
   }
 
   /** Width available for main content (excluding sidebar) */
@@ -94,6 +112,7 @@ export class Screen {
   get sidebarWidth(): number {
     if (this.cols >= 120) return 28;
     if (this.cols >= 90) return 24;
-    return 20;
+    if (this.cols >= 70) return 20;
+    return 18;
   }
 }

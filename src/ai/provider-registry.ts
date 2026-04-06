@@ -1,0 +1,120 @@
+import { detectProviders } from "./detect.js";
+import {
+  createModel,
+  getDisplayModels,
+  getProviderInfo,
+  getProviderPopularity,
+  listProviders,
+  refreshLocalModels,
+  syncCloudProviderModelsFromCatalog,
+  type ModelHandle,
+} from "./providers.js";
+import { getBaseUrl, getProviderCredential } from "../core/config.js";
+
+const LOCAL_PROVIDER_DEFAULTS: Record<string, string> = {
+  ollama: "http://127.0.0.1:11434/v1",
+  lmstudio: "http://127.0.0.1:1234/v1",
+  llamacpp: "http://127.0.0.1:8080/v1",
+  jan: "http://127.0.0.1:1337/v1",
+  vllm: "http://127.0.0.1:8000/v1",
+};
+
+export interface VisibleModelOption {
+  providerId: string;
+  providerName: string;
+  modelId: string;
+  active: boolean;
+}
+
+function getNativeCliLabel(providerId: string): string {
+  if (providerId === "anthropic") return "Claude Code";
+  if (providerId === "codex") return "Codex";
+  return "native provider";
+}
+
+export class ProviderRegistry {
+  private providers: Awaited<ReturnType<typeof detectProviders>> = [];
+
+  getDetectedProviders(): Awaited<ReturnType<typeof detectProviders>> {
+    return this.providers;
+  }
+
+  async refresh(): Promise<Awaited<ReturnType<typeof detectProviders>>> {
+    this.providers = await detectProviders();
+    syncCloudProviderModelsFromCatalog();
+    await refreshLocalModels(this.providers.map((provider) => provider.id));
+    return this.providers;
+  }
+
+  getConnectStatus(providerId: string): string {
+    const detectedIds = new Set(this.providers.map((provider) => provider.id));
+    const credential = getProviderCredential(providerId);
+    if (detectedIds.has(providerId)) {
+      if (providerId in LOCAL_PROVIDER_DEFAULTS) return "connected · local";
+      if (credential.kind === "native_oauth") return "connected · native";
+      if (credential.kind === "api_key") return "connected · ready";
+      return "connected";
+    }
+    if (credential.kind === "native_oauth") {
+      return `${getNativeCliLabel(providerId)} login found`;
+    }
+    if (credential.kind === "api_key") return "API key found";
+    if (providerId in LOCAL_PROVIDER_DEFAULTS) return "local endpoint";
+    return "not connected";
+  }
+
+  buildVisibleModelOptions(
+    activeModel: ModelHandle | null,
+    currentModelId: string,
+    pinnedModels: string[],
+  ): VisibleModelOption[] {
+    const detectedIds = new Set(this.providers.map((provider) => provider.id));
+    const currentKey = activeModel ? `${activeModel.provider.id}/${currentModelId}` : "";
+    const options: VisibleModelOption[] = [];
+
+    for (const provider of listProviders().filter((item) => detectedIds.has(item.id))) {
+      const preserve = pinnedModels
+        .filter((entry) => entry.startsWith(`${provider.id}/`))
+        .map((entry) => entry.slice(provider.id.length + 1));
+      if (currentKey.startsWith(`${provider.id}/`)) {
+        preserve.push(currentModelId);
+      }
+      const visibleModels = [...new Set([...getDisplayModels(provider.id, preserve), ...preserve])];
+      for (const modelId of visibleModels) {
+        options.push({
+          providerId: provider.id,
+          providerName: provider.name,
+          modelId,
+          active: pinnedModels.includes(`${provider.id}/${modelId}`),
+        });
+      }
+    }
+
+    options.sort((a, b) => {
+      const aPinned = a.active ? 0 : 1;
+      const bPinned = b.active ? 0 : 1;
+      if (aPinned !== bPinned) return aPinned - bPinned;
+
+      const providerDiff = getProviderPopularity(a.providerId) - getProviderPopularity(b.providerId);
+      if (providerDiff !== 0) return providerDiff;
+
+      return a.modelId.localeCompare(b.modelId);
+    });
+
+    return options;
+  }
+
+  getSavedBaseUrl(providerId: string): string | undefined {
+    return getBaseUrl(providerId);
+  }
+
+  getProviderInfo(providerId: string) {
+    return getProviderInfo(providerId);
+  }
+
+  createModel(providerId: string, modelId?: string): ModelHandle {
+    return createModel(providerId, modelId);
+  }
+}
+
+export { LOCAL_PROVIDER_DEFAULTS };

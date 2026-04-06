@@ -4,8 +4,8 @@ import {
   PASTE_MODE_OFF,
   MODIFY_OTHER_KEYS_ON,
   MODIFY_OTHER_KEYS_OFF,
-  MOUSE_ON,
-  MOUSE_OFF,
+  MENU_MOUSE_ON,
+  MENU_MOUSE_OFF,
   write,
 } from "../utils/ansi.js";
 
@@ -30,6 +30,7 @@ export class KeypressHandler {
   private onPaste: PasteHandler;
   private isPasting = false;
   private pasteBuffer = "";
+  private mouseTrackingEnabled = false;
 
   constructor(onKey: KeyHandler, onPaste: PasteHandler) {
     this.onKey = onKey;
@@ -49,8 +50,6 @@ export class KeypressHandler {
     // Enable bracketed paste and mouse tracking (scroll wheel)
     write(PASTE_MODE_ON);
     write(MODIFY_OTHER_KEYS_ON);
-    write(MOUSE_ON);
-
     // Track mouse sequences
     const mouseSeqRe = /\x1b\[<(\d+);(\d+);(\d+)([Mm])/g;
     let lastMouseTime = 0;
@@ -67,6 +66,8 @@ export class KeypressHandler {
           "\x1b[13;3u": { name: "return", char: "", ctrl: false, meta: true, shift: false },
           "\x1b[27;3;13~": { name: "return", char: "", ctrl: false, meta: true, shift: false },
           "\x1b\r": { name: "return", char: "", ctrl: false, meta: true, shift: false },
+          "\x1b[127;5u": { name: "backspace", char: "", ctrl: true, meta: false, shift: false },
+          "\x1b[8;5u": { name: "backspace", char: "", ctrl: true, meta: false, shift: false },
         };
         if (specialEnterSequences[s]) {
           this.onKey(specialEnterSequences[s]);
@@ -145,12 +146,18 @@ export class KeypressHandler {
 
   /** Stop listening, restore terminal */
   stop(): void {
-    write(MOUSE_OFF);
+    this.setMouseTracking(false);
     write(MODIFY_OTHER_KEYS_OFF);
     write(PASTE_MODE_OFF);
     if (process.stdin.isTTY) {
       process.stdin.setRawMode(false);
     }
     process.stdin.pause();
+  }
+
+  setMouseTracking(enabled: boolean): void {
+    if (this.mouseTrackingEnabled === enabled) return;
+    write(enabled ? MENU_MOUSE_ON : MENU_MOUSE_OFF);
+    this.mouseTrackingEnabled = enabled;
   }
 }

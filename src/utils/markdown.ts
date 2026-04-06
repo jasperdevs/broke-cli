@@ -7,23 +7,23 @@
  */
 
 import { marked } from "marked";
+import { currentTheme } from "../core/themes.js";
 
 let highlightFn: ((code: string, opts: { language: string; ignoreIllegals: boolean }) => string) | null = null;
 let supportsLangFn: ((lang: string) => boolean) | null = null;
 
-// ANSI codes
 const RESET = "\x1b[0m";
 const BOLD = "\x1b[1m";
 const DIM = "\x1b[2m";
 const ITALIC = "\x1b[3m";
 const UNDERLINE = "\x1b[4m";
 const STRIKETHROUGH = "\x1b[9m";
-const GREEN = "\x1b[38;2;58;199;58m";
-const WHITE = "\x1b[38;2;255;255;255m";
-const GRAY = "\x1b[38;2;128;128;128m";
-const YELLOW = "\x1b[38;2;255;200;50m";
-const CYAN = "\x1b[38;2;100;200;200m";
-const CODE_BG = "\x1b[48;2;30;30;30m";
+function T(): string { return currentTheme().primary; }
+function ACCENT_2(): string { return currentTheme().secondary; }
+function TXT(): string { return currentTheme().text; }
+function MUTED(): string { return currentTheme().textMuted; }
+function WARN(): string { return currentTheme().warning; }
+function CODE_BG(): string { return currentTheme().codeBg; }
 
 let initialized = false;
 
@@ -77,7 +77,7 @@ function renderInline(tokens: Token[], parentStyle = ""): string {
         out += t.text ?? "";
         break;
       case "strong":
-        out += `${BOLD}${WHITE}${renderInline(t.tokens ?? [], BOLD + WHITE)}${RESET}${parentStyle}`;
+        out += `${BOLD}${TXT()}${renderInline(t.tokens ?? [], BOLD + TXT())}${RESET}${parentStyle}`;
         break;
       case "em":
         out += `${ITALIC}${renderInline(t.tokens ?? [], ITALIC)}${RESET}${parentStyle}`;
@@ -86,20 +86,20 @@ function renderInline(tokens: Token[], parentStyle = ""): string {
         out += `${STRIKETHROUGH}${DIM}${renderInline(t.tokens ?? [], STRIKETHROUGH + DIM)}${RESET}${parentStyle}`;
         break;
       case "codespan":
-        out += `${CODE_BG}${GREEN} ${t.text ?? ""} ${RESET}${parentStyle}`;
+        out += `${CODE_BG()}${T()} ${t.text ?? ""} ${RESET}${parentStyle}`;
         break;
       case "link": {
-        const linkText = renderInline(t.tokens ?? [], UNDERLINE + CYAN);
+        const linkText = renderInline(t.tokens ?? [], UNDERLINE + ACCENT_2());
         const href = t.href ?? "";
         if (linkText.replace(/\x1b\[[^m]*m/g, "") === href) {
-          out += `${UNDERLINE}${CYAN}${href}${RESET}${parentStyle}`;
+          out += `${UNDERLINE}${ACCENT_2()}${href}${RESET}${parentStyle}`;
         } else {
-          out += `${UNDERLINE}${CYAN}${linkText}${RESET}${parentStyle} ${DIM}(${href})${RESET}${parentStyle}`;
+          out += `${UNDERLINE}${ACCENT_2()}${linkText}${RESET}${parentStyle} ${MUTED()}(${href})${RESET}${parentStyle}`;
         }
         break;
       }
       case "image":
-        out += `${DIM}[image: ${t.text ?? t.href ?? ""}]${RESET}${parentStyle}`;
+        out += `${MUTED()}[image: ${t.text ?? t.href ?? ""}]${RESET}${parentStyle}`;
         break;
       case "br":
         out += "\n";
@@ -128,12 +128,12 @@ function renderBlock(token: Token, indent = ""): string[] {
       const text = renderInline(token.tokens ?? []);
       const depth = token.depth ?? 1;
       if (depth === 1) {
-        lines.push(`${indent}${BOLD}${UNDERLINE}${GREEN}${text}${RESET}`);
+        lines.push(`${indent}${BOLD}${UNDERLINE}${T()}${text}${RESET}`);
       } else if (depth === 2) {
-        lines.push(`${indent}${BOLD}${GREEN}${text}${RESET}`);
+        lines.push(`${indent}${BOLD}${T()}${text}${RESET}`);
       } else {
         const prefix = "#".repeat(depth) + " ";
-        lines.push(`${indent}${GREEN}${prefix}${text}${RESET}`);
+        lines.push(`${indent}${T()}${prefix}${text}${RESET}`);
       }
       lines.push("");
       break;
@@ -153,10 +153,10 @@ function renderBlock(token: Token, indent = ""): string[] {
     case "code": {
       const lang = (token.lang ?? "").trim();
       const code = token.text ?? "";
-      const border = `${DIM}${"─".repeat(40)}${RESET}`;
+      const border = `${MUTED()}${"─".repeat(40)}${RESET}`;
 
       if (lang) {
-        lines.push(`${indent}${border} ${DIM}${lang}${RESET}`);
+        lines.push(`${indent}${border} ${MUTED()}${lang}${RESET}`);
       } else {
         lines.push(`${indent}${border}`);
       }
@@ -179,7 +179,7 @@ function renderBlock(token: Token, indent = ""): string[] {
       for (const child of inner) {
         const childLines = renderBlock(child, "");
         for (const cl of childLines) {
-          lines.push(`${indent}${DIM}│${RESET} ${ITALIC}${cl}${RESET}`);
+          lines.push(`${indent}${MUTED()}│${RESET} ${ITALIC}${cl}${RESET}`);
         }
       }
       lines.push("");
@@ -192,7 +192,7 @@ function renderBlock(token: Token, indent = ""): string[] {
       const startNum = token.start ?? 1;
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
-        const bullet = ordered ? `${DIM}${startNum + i}.${RESET}` : `${GREEN}\u2022${RESET}`;
+        const bullet = ordered ? `${MUTED()}${startNum + i}.${RESET}` : `${T()}\u2022${RESET}`;
 
         // Render item content
         const itemTokens = item.tokens ?? [];
@@ -204,7 +204,7 @@ function renderBlock(token: Token, indent = ""): string[] {
             const textLines = text.split("\n");
             for (const tl of textLines) {
               if (firstLine) {
-                const checkbox = item.task ? (item.checked ? `${GREEN}[x]${RESET} ` : `${DIM}[ ]${RESET} `) : "";
+                const checkbox = item.task ? (item.checked ? `${T()}[x]${RESET} ` : `${MUTED()}[ ]${RESET} `) : "";
                 lines.push(`${indent} ${bullet} ${checkbox}${tl}`);
                 firstLine = false;
               } else {
@@ -219,7 +219,7 @@ function renderBlock(token: Token, indent = ""): string[] {
             const childLines = renderBlock(child, indent + "   ");
             for (const cl of childLines) {
               if (firstLine) {
-                const checkbox = item.task ? (item.checked ? `${GREEN}[x]${RESET} ` : `${DIM}[ ]${RESET} `) : "";
+                const checkbox = item.task ? (item.checked ? `${T()}[x]${RESET} ` : `${MUTED()}[ ]${RESET} `) : "";
                 lines.push(`${indent} ${bullet} ${checkbox}${cl.trimStart()}`);
                 firstLine = false;
               } else {
@@ -259,21 +259,21 @@ function renderBlock(token: Token, indent = ""): string[] {
 
       // Header
       const hCells = header.map((h, i) => padCell(renderInline(h), colWidths[i], aligns[i]));
-      lines.push(`${indent}${DIM}${BOLD}${hCells.join(` ${DIM}|${RESET} ${DIM}${BOLD}`)}${RESET}`);
+      lines.push(`${indent}${MUTED()}${BOLD}${hCells.join(` ${MUTED()}|${RESET} ${MUTED()}${BOLD}`)}${RESET}`);
       // Separator
       const sepCells = colWidths.map(w => "─".repeat(w));
-      lines.push(`${indent}${DIM}${sepCells.join("─┼─")}${RESET}`);
+      lines.push(`${indent}${MUTED()}${sepCells.join("─┼─")}${RESET}`);
       // Rows
       for (const row of rows) {
         const rCells = row.map((cell, i) => padCell(renderInline(cell), colWidths[i], aligns[i]));
-        lines.push(`${indent}${rCells.join(` ${DIM}|${RESET} `)}`);
+        lines.push(`${indent}${rCells.join(` ${MUTED()}|${RESET} `)}`);
       }
       lines.push("");
       break;
     }
 
     case "hr":
-      lines.push(`${indent}${DIM}${"─".repeat(40)}${RESET}`);
+      lines.push(`${indent}${MUTED()}${"─".repeat(40)}${RESET}`);
       lines.push("");
       break;
 
@@ -285,7 +285,7 @@ function renderBlock(token: Token, indent = ""): string[] {
       // Render HTML blocks as dimmed raw text
       if (token.text) {
         for (const l of token.text.split("\n")) {
-          lines.push(`${indent}${DIM}${l}${RESET}`);
+          lines.push(`${indent}${MUTED()}${l}${RESET}`);
         }
       }
       break;

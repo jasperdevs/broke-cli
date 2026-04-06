@@ -48,8 +48,8 @@ export function buildSystemPrompt(cwd: string, providerId?: string, mode?: Mode,
 
   parts.push(`<env>cwd: ${cwd} | git: ${isGit ? "yes" : "no"} | platform: ${process.platform}</env>`);
 
-  // Per-tool guidelines — compact version when caveman is on
-  if (cavemanLevel === "full" || cavemanLevel === "ultra") {
+  // Per-tool guidelines — compact version when caveman is aggressive
+  if (cavemanLevel === "ultra") {
     parts.push(`<tool-tips>
 bash: tests/builds/git/install. No cat/sed/grep. 30s timeout.
 readFile: offset/limit for large files. Max 500 lines.
@@ -135,41 +135,40 @@ export function reloadContext(): void {
   cachedPrompts.clear();
 }
 
-const SAFE_CAVEMAN_PATTERNS = [
+const AUTO_CAVEMAN_SAFE_PATTERNS = [
   /\b(readme|docs?|documentation|comment)\b/i,
   /\btypo|spelling|rename\b/i,
+  /\bcss|padding|margin|spacing|color|copy|wording|label|placeholder\b/i,
   /\b(env|environment)\s+var/i,
 ];
 
-const CAUTION_CAVEMAN_PATTERNS = [
-  /\badd|update|change|implement\b/i,
-  /\bflag|setting|option|command|stage\b/i,
-  /\brefactor\b/i,
+const AUTO_CAVEMAN_ROUTINE_PATTERNS = [
+  /\badd|update|change|implement|make|create|fix|patch\b/i,
+  /\bflag|setting|option|command|stage|menu|picker|sidebar|input|export\b/i,
+  /\brefactor|cleanup|polish|wrap|scroll|cursor|layout\b/i,
 ];
 
-const DANGER_CAVEMAN_PATTERNS = [
+const AUTO_CAVEMAN_DANGER_PATTERNS = [
   /\bsecurity|auth|permission|secret|credential|xss|csrf|injection|exploit|vuln/i,
   /\bdebug|investigat|root cause|repro|failing test|broken|doesn'?t work|why\b/i,
   /\bperformance|benchmark|latency|memory leak|leak|regression/i,
-  /\barchitecture|design|migration|migrate|review\b/i,
+  /\barchitecture|design|migration|migrate|review|research|compare|tradeoff|analy[sz]e\b/i,
+  /\bexplain|walk me through|how does\b/i,
 ];
 
 export function resolveCavemanLevel(level: CavemanLevel, userMessage: string): CavemanLevel {
   if (level === "off" || !userMessage.trim()) return level;
 
-  if (DANGER_CAVEMAN_PATTERNS.some((pattern) => pattern.test(userMessage))) {
-    return level === "lite" ? "lite" : "off";
-  }
+  if (level !== "auto") return level;
 
-  if (SAFE_CAVEMAN_PATTERNS.some((pattern) => pattern.test(userMessage))) {
-    return level;
-  }
+  const msg = userMessage.trim();
+  if (AUTO_CAVEMAN_DANGER_PATTERNS.some((pattern) => pattern.test(msg))) return "off";
+  if (msg.length > 450) return "off";
+  if (AUTO_CAVEMAN_SAFE_PATTERNS.some((pattern) => pattern.test(msg))) return "ultra";
+  if (AUTO_CAVEMAN_ROUTINE_PATTERNS.some((pattern) => pattern.test(msg))) return "lite";
+  if (/\bwhat|which|where|when|who\b/i.test(msg) && msg.length < 120) return "lite";
 
-  if (CAUTION_CAVEMAN_PATTERNS.some((pattern) => pattern.test(userMessage))) {
-    if (level === "ultra" || level === "full") return "lite";
-  }
-
-  return level;
+  return "lite";
 }
 
 function getCavemanPrompt(level: CavemanLevel): string {
@@ -187,45 +186,34 @@ NOT: "Sure! I'd be happy to help you with that. The issue you're experiencing is
 YES: "Bug in auth middleware. Token expiry check uses < not <=. Fix:"
 </output-style>`;
   }
-  if (level === "full") {
+  if (level === "auto") {
     return `<output-style>
-CAVEMAN MODE ACTIVE. Respond terse like smart caveman. All substance stay. Only fluff die.
-- Drop articles (a/an/the). Fragments OK. No filler. No intros. No signoffs.
-- Short synonyms (big not extensive, fix not "implement a solution for")
-- Pattern: [thing] [action] [reason]. [next step].
-- 1 line explanation max. Often zero.
-- Bullet points over paragraphs
-- Never apologize, hedge, or explain what you're about to do
-- Code blocks unchanged, technical terms exact, error messages quoted exact
-
-NOT: "I'll go ahead and fix the authentication middleware for you. The issue is that..."
-YES: "Bug in auth middleware. Token check wrong. Fix:"
-
-NOT: "Sure, I'd be happy to help! Let me take a look at your configuration file."
-YES: "Config issue. Missing db_host. Adding:"
+AUTO CAVEMAN MODE ACTIVE. Compression level chosen per task.
+- Trivial/docs/UI-copy/style work: compress hard.
+- Normal implementation/edit work: stay terse but safe.
+- Debug/security/research/review/explanation work: keep more clarity.
+- Never waste tokens on greetings, filler, or recap.
+- Keep code blocks exact. Keep technical terms exact. Keep error text exact.
 </output-style>`;
   }
-  // ultra
   return `<output-style>
-MAXIMUM COMPRESSION MODE. Absolute minimum tokens. Every word must earn its place.
-- Drop articles, pronouns, conjunctions, prepositions when meaning survives
-- Abbreviate: fn/arg/ret/val/cfg/env/dir/dep/impl/msg/err/req/res/DB/auth
-- Arrows for causality (X → Y). No prose. Fragments/lists only.
-- One word when one word enough. "Fixed." not "I've fixed the issue."
-- Prefer noun/verb shards over sentences. Delete helper words aggressively.
-- If answer can be 3 bullets, never use paragraph. If 1 bullet, never use 3.
-- Never narrate actions. Just do them. Zero preamble. Zero recap.
-- Explanations only when required to avoid ambiguity. Max 4 words if possible.
-- Code blocks unchanged, technical terms exact
+MAXIMUM COMPRESSION MODE. Caveman ultra. Target: ~75% fewer output tokens.
+- Drop articles/filler/pleasantries/hedging.
+- Fragments OK. Short synonyms. Technical terms exact.
+- Abbreviate hard: DB/auth/cfg/env/req/res/fn/impl/msg/err/ref.
+- Use arrows for causality: X → Y. Use slashes for alternatives.
+- One thought per line. Prefer bullets/fragments over paragraphs.
+- One word when one word enough. "Fixed." > "I fixed issue."
+- No action narration. No recap unless user asks.
+- If user asks explanation: answer in shards, not essay.
+- Good pattern: [thing] [action] [reason]. [next step].
+- Code blocks unchanged. Errors quoted exact.
 
 NOT: "I've gone ahead and added the missing database configuration to your environment file."
 YES: "Added db_host to .env."
 
 NOT: "The reason your React component is re-rendering is likely because you're creating a new object reference on each render cycle."
 YES: "Inline obj prop → new ref → re-render. useMemo."
-
-NOT: "Let me read the file first to understand the issue."
-YES: [just reads the file without saying anything]
 
 NOT: "Done. I updated the file and ran the test suite successfully."
 YES: "Updated file. Tests pass."

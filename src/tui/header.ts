@@ -1,4 +1,5 @@
-import { GREEN, GRAY, RESET, BOLD, DIM } from "../utils/ansi.js";
+import { RESET, BOLD } from "../utils/ansi.js";
+import { currentTheme } from "../core/themes.js";
 
 export interface HeaderState {
   model: string;
@@ -23,11 +24,12 @@ function formatTokens(n: number): string {
 
 /** Render the header bar as a single string */
 export function renderHeader(state: HeaderState, width: number): string {
-  const left = `${GREEN}${BOLD} brokecli${RESET} ${GRAY}│${RESET} ${state.provider}/${state.model}`;
-  const streaming = state.isStreaming ? ` ${GREEN}*${RESET}` : "";
-  const right = `${GREEN}${formatCost(state.cost)}${RESET} ${GRAY}│${RESET} ${formatTokens(state.tokens)} tok${streaming} `;
+  const theme = currentTheme();
+  const left = `${theme.primary}${BOLD} brokecli${RESET} ${theme.border}│${RESET} ${theme.text}${state.provider}/${state.model}${RESET}`;
+  const streaming = state.isStreaming ? ` ${theme.success}*${RESET}` : "";
+  const right = `${theme.primary}${formatCost(state.cost)}${RESET} ${theme.border}│${RESET} ${theme.textMuted}${formatTokens(state.tokens)} tok${streaming} ${RESET}`;
 
   // The actual visible characters (without ANSI) determine padding
   // For now just concat — proper width calculation comes with strip-ansi
-  return `${left}${GRAY}${" ".repeat(Math.max(1, 10))}${RESET}${right}`;
+  return `${left}${theme.border}${" ".repeat(Math.max(1, 10))}${RESET}${right}`;
 }

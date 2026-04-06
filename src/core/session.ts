@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
+import { ContextOptimizer } from "./context-optimizer.js";
 
 const SESSIONS_DIR = join(homedir(), ".brokecli", "sessions");
 
@@ -34,12 +35,17 @@ export class Session {
   private provider = "";
   private model = "";
   private createdAt = Date.now();
+  private readonly contextOptimizer = new ContextOptimizer();
 
   constructor(id?: string) {
     this.id = id ?? new Date().toISOString().replace(/[:.]/g, "-");
   }
 
   getId(): string { return this.id; }
+
+  getContextOptimizer(): ContextOptimizer {
+    return this.contextOptimizer;
+  }
 
   setProviderModel(provider: string, model: string): void {
     this.provider = provider;
@@ -89,6 +95,7 @@ export class Session {
     this.totalInputTokens = 0;
     this.totalOutputTokens = 0;
     this.totalCost = 0;
+    this.contextOptimizer.reset();
     this.save();
   }
 

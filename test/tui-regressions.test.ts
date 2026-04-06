@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import { Session } from "../src/core/session.js";
 import { App } from "../src/tui/app.js";
 import { MOUSE_OFF, MOUSE_ON } from "../src/utils/ansi.js";
+import { currentTheme, listThemes, setPreviewTheme } from "../src/core/themes.js";
+import { getSettings, updateSetting } from "../src/core/config.js";
 import stripAnsi from "strip-ansi";
+import type { Keypress } from "../src/tui/keypress.js";
 
 describe("session token accounting", () => {
   it("keeps separate input and output totals", () => {
@@ -17,11 +20,9 @@ describe("session token accounting", () => {
 });
 
 describe("mouse reporting mode", () => {
-  it("uses normal tracking so drag selection is not captured", () => {
-    expect(MOUSE_ON).toContain("?1000h");
-    expect(MOUSE_OFF).toContain("?1000l");
-    expect(MOUSE_ON).not.toContain("?1002h");
-    expect(MOUSE_OFF).not.toContain("?1002l");
+  it("keeps mouse tracking disabled so terminal text selection stays native", () => {
+    expect(MOUSE_ON).toBe("");
+    expect(MOUSE_OFF).toBe("");
   });
 });
 
@@ -37,9 +38,167 @@ describe("sidebar token summary", () => {
       "Σ 210/344k total",
     ]);
   });
+
+  it("omits the duplicate total line from the sidebar footer", () => {
+    const app = new App() as any;
+    app.setContextUsage(132, 344_000);
+    app.updateUsage(0.0016, 150, 60);
+
+    const footer = app.renderSidebarFooter().map((line: string) => stripAnsi(line)).join("\n");
+    expect(footer).toContain("↑ 150 in");
+    expect(footer).toContain("↓ 60 out");
+    expect(footer).not.toContain("Σ 210/344k total");
+  });
+
+  it("uses the rock indicator and wraps cost/context details instead of clipping", () => {
+    const app = new App() as any;
+    app.screen = {
+      sidebarWidth: 12,
+      width: 80,
+      height: 24,
+      hasSidebar: true,
+      mainWidth: 61,
+      render: () => {},
+      setCursor: () => {},
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+    updateSetting("cavemanLevel", "ultra");
+    app.setContextUsage(132_000, 344_000);
+    app.updateUsage(0.0016, 150, 60);
+
+    const footer = app.renderSidebarFooter().map((line: string) => stripAnsi(line));
+    expect(footer.some((line: string) => line.includes("🪨 ultra"))).toBe(true);
+    expect(footer.some((line: string) => line.trim() === "$0.0016")).toBe(true);
+    expect(footer.some((line: string) => line.includes("132k/344k"))).toBe(true);
+
+    updateSetting("cavemanLevel", "off");
+  });
+});
+
+describe("startup home view", () => {
+  it("starts without the sidebar and keeps recent sessions compact", () => {
+    const app = new App() as any;
+    app.providerName = "openai";
+    app.modelName = "gpt-5.4-mini";
+    app.appVersion = "1.2.3";
+    app.cwd = "C:\\Users\\bunny\\Downloads\\broke-cli";
+    app.homeTip = "Use /resume to jump back in without wasting time on manual session hunting.";
+    app.homeRecentSessions = [
+      {
+        id: "abc123",
+        cwd: "C:\\Users\\bunny\\Downloads\\broke-cli",
+        model: "anthropic/claude-sonnet",
+        cost: 0.0012,
+        updatedAt: Date.now() - 60_000,
+        messageCount: 4,
+      },
+    ];
+
+    let rendered: string[] = [];
+    app.screen = {
+      height: 20,
+      width: 100,
+      hasSidebar: true,
+      mainWidth: 73,
+      sidebarWidth: 24,
+      render: (lines: string[]) => { rendered = lines; },
+      setCursor: () => {},
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+
+    app.drawImmediate();
+
+    const output = rendered.map((line) => stripAnsi(line)).join("\n");
+    expect(stripAnsi(rendered[0] ?? "")).toContain("╭");
+    expect(stripAnsi(rendered[0] ?? "")).not.toContain("BrokeCLI Home");
+    expect(stripAnsi(rendered[0] ?? "")).toContain("╭");
+    expect(stripAnsi(rendered[rendered.findIndex((line) => stripAnsi(line).includes("BrokeCLI Home")) + 16] ?? "")).not.toContain("┌");
+    expect(output).toContain("Welcome to BrokeCLI");
+    expect(output).toContain("openai/gpt-5.4-mini");
+    expect(output).toContain("~\\Downloads\\broke-cli");
+    expect(output).toContain("Tip");
+    expect(output).not.toContain("Files");
+    expect(output).not.toContain("Recent Sessions");
+    expect(output).not.toContain("anthropic/claude-sonnet");
+  });
+
+  it("only enables the sidebar after chat starts", () => {
+    const app = new App() as any;
+    let rendered: string[] = [];
+
+    app.screen = {
+      height: 18,
+      width: 100,
+      hasSidebar: true,
+      mainWidth: 73,
+      sidebarWidth: 24,
+      render: (lines: string[]) => { rendered = lines; },
+      setCursor: () => {},
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+
+    app.drawImmediate();
+    expect(rendered.map((line) => stripAnsi(line)).join("\n")).not.toContain("Files");
+
+    app.messages = [{ role: "user", content: "hello" }];
+    app.drawImmediate();
+    expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("Files");
+  });
+});
+
+describe("input editing", () => {
+  it("deletes the previous word with Ctrl+Backspace", () => {
+    const app = new App() as any;
+    app.input.paste("hello brave world");
+    const key: Keypress = { name: "backspace", char: "", ctrl: true, meta: false, shift: false };
+
+    app.input.handleKey(key);
+
+    expect(app.input.getText()).toBe("hello brave ");
+  });
+
+  it("deletes the previous word when terminals report Ctrl+Backspace as Ctrl+H", () => {
+    const app = new App() as any;
+    app.input.paste("hello brave world");
+    const key: Keypress = { name: "h", char: "\b", ctrl: true, meta: false, shift: false };
+
+    app.input.handleKey(key);
+
+    expect(app.input.getText()).toBe("hello brave ");
+  });
 });
 
 describe("command aliases", () => {
+  it("suggests btw from the slash-command surface", () => {
+    const app = new App() as any;
+    app.input.paste("/bt");
+
+    const matches = app.getCommandMatches();
+    expect(matches).toHaveLength(1);
+    expect(matches[0].name).toBe("btw");
+  });
+
+  it("suggests notify from the slash-command surface", () => {
+    const app = new App() as any;
+    app.input.paste("/not");
+
+    const matches = app.getCommandMatches();
+    expect(matches).toHaveLength(1);
+    expect(matches[0].name).toBe("notify");
+  });
+
+  it("suggests theme from the slash-command surface", () => {
+    const app = new App() as any;
+    app.input.paste("/the");
+
+    const matches = app.getCommandMatches();
+    expect(matches).toHaveLength(1);
+    expect(matches[0].name).toBe("theme");
+  });
+
   it("suggests clear for the new alias", () => {
     const app = new App() as any;
     app.input.paste("/new");
@@ -48,9 +207,85 @@ describe("command aliases", () => {
     expect(matches).toHaveLength(1);
     expect(matches[0].name).toBe("clear");
   });
+
+  it("suggests resume for the sessions alias and hides reload/cost from the surface", () => {
+    const app = new App() as any;
+    app.input.paste("/sessions");
+
+    const matches = app.getCommandMatches();
+    expect(matches).toHaveLength(1);
+    expect(matches[0].name).toBe("resume");
+
+    app.input.clear();
+    app.input.paste("/");
+    const all = app.getCommandMatches().map((entry: { name: string }) => entry.name);
+    expect(all).not.toContain("reload");
+    expect(all).not.toContain("cost");
+    expect(all).toContain("thinking");
+  });
+
+  it("queues /btw while streaming even if follow-up mode is immediate", () => {
+    const app = new App() as any;
+    app.setStreaming(true);
+    app.input.paste("/btw quick question");
+    app.onSubmit = () => {
+      throw new Error("should not submit immediately");
+    };
+
+    app.handleKey({ name: "return" });
+
+    expect(app.getPendingMessagesCount()).toBe(1);
+    expect(app.takePendingMessages()[0].text).toBe("/btw quick question");
+  });
 });
 
 describe("sidebar scrolling", () => {
+  it("enables mouse handling when the chat sidebar is visible", () => {
+    const app = new App() as any;
+    app.messages = [{ role: "user", content: "hello" }];
+    app.screen = {
+      height: 18,
+      width: 100,
+      hasSidebar: true,
+      mainWidth: 73,
+      sidebarWidth: 24,
+      render: () => {},
+      setCursor: () => {},
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+
+    expect(app.shouldEnableMenuMouse()).toBe(true);
+  });
+
+  it("lets sidebar triangle clicks expand directories", () => {
+    const app = new App() as any;
+    app.messages = [{ role: "user", content: "hello" }];
+    app.screen = {
+      height: 18,
+      width: 100,
+      hasSidebar: true,
+      mainWidth: 73,
+      sidebarWidth: 24,
+      render: () => {},
+      setCursor: () => {},
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+    app.sidebarTreeOpen = true;
+    app.sidebarFileTree = [
+      { name: "src", isDir: true, children: ["app.ts"], depth: 0 },
+    ];
+
+    const sidebarLines = app.renderSidebar(app.getChatHeight()).map((line: string) => stripAnsi(line));
+    const row = sidebarLines.findIndex((line: string) => line.includes("▸ src/"));
+    expect(row).toBeGreaterThanOrEqual(0);
+
+    app.handleKey({ name: "click", char: `${app.screen.mainWidth + 2},${row + 1}`, ctrl: false, meta: false, shift: false });
+
+    expect(app.sidebarExpandedDirs.has("src")).toBe(true);
+  });
+
   it("keeps long file trees scrollable", () => {
     const app = new App() as any;
     app.messages = [{ role: "user", content: "hi" }];
@@ -72,8 +307,86 @@ describe("sidebar scrolling", () => {
     const after = app.renderSidebar(12).map((line: string) => stripAnsi(line));
 
     expect(before.join("\n")).toContain("src/");
-    expect(after[0]).toContain("↑ more");
+    expect(after[0]).toContain("^ more");
     expect(after.join("\n")).toContain("file-");
+  });
+
+  it("uses unicode disclosure triangles for the file tree", () => {
+    const app = new App() as any;
+    app.messages = [{ role: "user", content: "hi" }];
+    app.sidebarTreeOpen = true;
+    app.sidebarFileTree = [
+      { name: "src", isDir: true, children: ["app.ts"], depth: 0 },
+    ];
+    app.sidebarExpandedDirs.add("src");
+
+    const lines = app.buildSidebarLines().map((line: string) => stripAnsi(line));
+    expect(lines).toContain("▾ Files");
+    expect(lines).toContain("  ▾ src/");
+  });
+
+  it("does not mouse-wheel scroll chat history when no menu is active", () => {
+    const app = new App() as any;
+    app.messages = Array.from({ length: 30 }, (_, i) => ({ role: "user", content: `msg ${i}` }));
+    app.scrollOffset = 6;
+
+    app.handleKey({ name: "scrolldown", char: "", ctrl: false, meta: false, shift: false });
+    expect(app.scrollOffset).toBe(6);
+
+    app.handleKey({ name: "scrollup", char: "", ctrl: false, meta: false, shift: false });
+    expect(app.scrollOffset).toBe(6);
+  });
+
+  it("still allows explicit keyboard paging to move transcript history", () => {
+    const app = new App() as any;
+    app.messages = Array.from({ length: 30 }, (_, i) => ({ role: "user", content: `msg ${i}` }));
+    app.scrollOffset = 6;
+    app.screen = {
+      height: 16,
+      width: 80,
+      hasSidebar: false,
+      mainWidth: 80,
+      sidebarWidth: 20,
+      render: () => {},
+      setCursor: () => {},
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+
+    app.handleKey({ name: "pageup", char: "", ctrl: false, meta: false, shift: false });
+    expect(app.scrollOffset).toBe(3);
+
+    app.handleKey({ name: "pagedown", char: "", ctrl: false, meta: false, shift: false });
+    expect(app.scrollOffset).toBe(6);
+  });
+
+  it("prioritizes sidebar scrolling over active menus when the sidebar is focused", () => {
+    const app = new App() as any;
+    app.messages = [{ role: "user", content: "hello" }];
+    app.sidebarFocused = true;
+    app.screen = {
+      height: 18,
+      width: 100,
+      hasSidebar: true,
+      mainWidth: 73,
+      sidebarWidth: 24,
+      render: () => {},
+      setCursor: () => {},
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+    app.sidebarTreeOpen = true;
+    app.sidebarFileTree = [
+      { name: "src", isDir: true, children: Array.from({ length: 12 }, (_, i) => `file-${i}.ts`), depth: 0 },
+    ];
+    app.sidebarExpandedDirs.add("src");
+    app.sidebarExpandedDirs.add("src:all");
+    app.openItemPicker("Theme", listThemes().slice(0, 5).map((theme) => ({ id: theme.key, label: theme.label })), () => {});
+
+    app.handleKey({ name: "scrolldown", char: "", ctrl: false, meta: false, shift: false });
+
+    expect(app.sidebarScrollOffset).toBeGreaterThan(0);
+    expect(app.itemPicker.cursor).toBe(0);
   });
 });
 
@@ -85,6 +398,222 @@ describe("wrapped input layout", () => {
     expect(layout.lines.length).toBeGreaterThan(1);
     expect(layout.row).toBeGreaterThan(0);
     expect(layout.col).toBeGreaterThanOrEqual(0);
+  });
+
+  it("renders the input without the old left gutter", () => {
+    const app = new App() as any;
+    app.messages = [{ role: "user", content: "hello" }];
+    app.input.paste("test");
+
+    let rendered: string[] = [];
+    app.screen = {
+      height: 12,
+      width: 40,
+      hasSidebar: false,
+      mainWidth: 40,
+      sidebarWidth: 20,
+      render: (lines: string[]) => { rendered = lines; },
+      setCursor: () => {},
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+
+    app.drawImmediate();
+
+    const inputLine = rendered.find((line) => stripAnsi(line).trimEnd() === "test");
+    expect(inputLine).toBeTruthy();
+    expect(stripAnsi(inputLine!).trimEnd()).toBe("test");
+  });
+
+  it("expands the bottom layout for wrapped question prompt input", () => {
+    const app = new App() as any;
+    app.questionPrompt = {
+      question: "Base URL",
+      cursor: 0,
+      textInput: "http://127.0.0.1:8080/v1/chat/completions/really/long/path",
+      resolve: () => {},
+    };
+
+    const count = app.getBottomLineCount(20, 20);
+    expect(count).toBeGreaterThan(6);
+  });
+});
+
+describe("picker menus", () => {
+  it("scrolls through long file menus with the mouse wheel", () => {
+    const app = new App() as any;
+    app.messages = [{ role: "user", content: "hello" }];
+    app.filePicker = {
+      files: Array.from({ length: 20 }, (_, i) => `src/file-${i}.ts`),
+      filtered: Array.from({ length: 20 }, (_, i) => `src/file-${i}.ts`),
+      query: "",
+      cursor: 0,
+    };
+
+    let rendered: string[] = [];
+    app.screen = {
+      height: 16,
+      width: 60,
+      hasSidebar: false,
+      mainWidth: 60,
+      sidebarWidth: 20,
+      render: (lines: string[]) => { rendered = lines; },
+      setCursor: () => {},
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+
+    app.drawImmediate();
+    expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("src/file-0.ts");
+
+    for (let i = 0; i < 8; i++) {
+      app.handleKey({ name: "scrolldown", char: "", ctrl: false, meta: false, shift: false });
+    }
+    app.drawImmediate();
+
+    expect(app.filePicker.cursor).toBe(8);
+    expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("src/file-8.ts");
+    expect(rendered.map((line) => stripAnsi(line)).join("\n")).not.toContain("src/file-0.ts");
+  });
+
+  it("lets visible picker rows be selected with a click", () => {
+    const app = new App() as any;
+    app.messages = [{ role: "user", content: "hello" }];
+
+    const selected: string[] = [];
+    app.openItemPicker(
+      "Pick one",
+      [
+        { id: "one", label: "First" },
+        { id: "two", label: "Second" },
+        { id: "three", label: "Third" },
+      ],
+      (id: string) => selected.push(id),
+    );
+
+    let rendered: string[] = [];
+    app.screen = {
+      height: 16,
+      width: 60,
+      hasSidebar: false,
+      mainWidth: 60,
+      sidebarWidth: 20,
+      render: (lines: string[]) => { rendered = lines; },
+      setCursor: () => {},
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+
+    app.drawImmediate();
+    const row = rendered.findIndex((line) => stripAnsi(line).includes("Second"));
+    expect(row).toBeGreaterThanOrEqual(0);
+
+    app.handleKey({ name: "click", char: `5,${row + 1}`, ctrl: false, meta: false, shift: false });
+
+    expect(selected).toEqual(["two"]);
+    expect(app.itemPicker).toBeNull();
+  });
+
+  it("shows a model scope toggle and lets tab switch between all and scoped", () => {
+    const app = new App() as any;
+    app.openModelPicker(
+      [
+        { providerId: "openai", providerName: "OpenAI", modelId: "gpt-5.4-mini", active: true },
+        { providerId: "openai", providerName: "OpenAI", modelId: "gpt-4o", active: false },
+      ],
+      () => {},
+      () => {},
+    );
+
+    expect(app.getFilteredModels().map((entry: { modelId: string }) => entry.modelId)).toEqual(["gpt-5.4-mini", "gpt-4o"]);
+
+    app.handleKey({ name: "tab", char: "", ctrl: false, meta: false, shift: false });
+
+    expect(app.modelPicker.scope).toBe("scoped");
+    expect(app.getFilteredModels().map((entry: { modelId: string }) => entry.modelId)).toEqual(["gpt-5.4-mini"]);
+
+    let rendered: string[] = [];
+    app.screen = {
+      height: 16,
+      width: 60,
+      hasSidebar: false,
+      mainWidth: 60,
+      sidebarWidth: 20,
+      render: (lines: string[]) => { rendered = lines; },
+      setCursor: () => {},
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+    app.drawImmediate();
+
+    const output = rendered.map((line) => stripAnsi(line)).join("\n");
+    expect(output).toContain("Scope: all | scoped");
+    expect(output).toContain("tab scope");
+  });
+
+  it("previews highlighted themes and restores the previous theme on escape", () => {
+    const app = new App() as any;
+    const originalTheme = getSettings().theme;
+    const themes = listThemes().slice(0, 4);
+    const previousTheme = themes[0].key;
+    const previewCursor = 1;
+
+    try {
+      updateSetting("theme", previousTheme);
+      app.openItemPicker(
+        "Theme",
+        themes.map((theme) => ({ id: theme.key, label: theme.label })),
+        () => {},
+        {
+          initialCursor: 0,
+          onPreview: (themeId: string) => setPreviewTheme(themeId),
+          onCancel: () => setPreviewTheme(null),
+        },
+      );
+
+      while (app.itemPicker.cursor < previewCursor) {
+        app.handleKey({ name: "down", char: "", ctrl: false, meta: false, shift: false });
+      }
+      expect(currentTheme().key).toBe(themes[previewCursor].key);
+      expect(getSettings().theme).toBe(previousTheme);
+
+      app.handleKey({ name: "escape", char: "", ctrl: false, meta: false, shift: false });
+      expect(currentTheme().key).toBe(previousTheme);
+      expect(getSettings().theme).toBe(previousTheme);
+      expect(app.itemPicker).toBeNull();
+    } finally {
+      setPreviewTheme(null);
+      updateSetting("theme", originalTheme);
+    }
+  });
+
+  it("lets tab star themes in the item picker", () => {
+    const app = new App() as any;
+    const originalFavorites = getSettings().favoriteThemes ?? [];
+
+    try {
+      updateSetting("favoriteThemes", []);
+      app.openItemPicker(
+        "Theme",
+        [{ id: "codex", label: "Codex", detail: "dark" }],
+        () => {},
+        {
+          onSecondaryAction: (themeId: string) => {
+            const currentFavorites = getSettings().favoriteThemes ?? [];
+            updateSetting("favoriteThemes", [...currentFavorites, themeId]);
+            app.updateItemPickerItems([{ id: "codex", label: "Codex", detail: "★ dark" }], themeId);
+          },
+          secondaryHint: "tab stars theme",
+        },
+      );
+
+      app.handleKey({ name: "tab", char: "", ctrl: false, meta: false, shift: false });
+
+      expect(getSettings().favoriteThemes).toContain("codex");
+      expect(app.itemPicker.items[0].detail).toContain("★");
+    } finally {
+      updateSetting("favoriteThemes", originalFavorites);
+    }
   });
 });
 
@@ -100,5 +629,79 @@ describe("thinking preview", () => {
 
     app.addMessage("user", "next");
     expect(app.renderMessages(80).map((line: string) => stripAnsi(line)).join("\n")).not.toContain("thought");
+  });
+});
+
+describe("theme catalog", () => {
+  it("keeps BrokeCLI dark and light at the top of the picker", () => {
+    const themes = listThemes();
+    expect(themes[0]?.key).toBe("brokecli-dark");
+    expect(themes[1]?.key).toBe("brokecli-light");
+    expect(themes.length).toBeGreaterThan(10);
+  });
+
+  it("applies the active theme background across rendered rows", () => {
+    const app = new App() as any;
+    const previousTheme = getSettings().theme;
+    let rendered: string[] = [];
+
+    try {
+      updateSetting("theme", "brokecli-light");
+      app.messages = [{ role: "user", content: "hello" }];
+      app.input.paste("test");
+      app.screen = {
+        height: 12,
+        width: 40,
+        hasSidebar: false,
+        mainWidth: 40,
+        sidebarWidth: 20,
+        render: (lines: string[]) => { rendered = lines; },
+        setCursor: () => {},
+        hideCursor: () => {},
+        forceRedraw: () => {},
+      };
+
+      app.drawImmediate();
+
+      expect(rendered[0]).toContain(currentTheme().background);
+    } finally {
+      updateSetting("theme", previousTheme);
+    }
+  });
+
+  it("keeps BrokeCLI Dark on the terminal background", () => {
+    const originalTheme = getSettings().theme;
+    try {
+      updateSetting("theme", "brokecli-dark");
+      setPreviewTheme(null);
+      expect(currentTheme().background).toBe("");
+    } finally {
+      updateSetting("theme", originalTheme);
+    }
+  });
+});
+
+describe("interrupt prompts", () => {
+  it("primes escape before aborting a stream", () => {
+    const app = new App() as any;
+    let aborted = 0;
+    app.setStreaming(true);
+    app.onAbort = () => { aborted++; };
+
+    app.handleKey({ name: "escape", char: "", ctrl: false, meta: false, shift: false });
+    expect(app.escPrimed).toBe(true);
+    expect(aborted).toBe(0);
+
+    app.handleKey({ name: "escape", char: "", ctrl: false, meta: false, shift: false });
+    expect(aborted).toBe(1);
+    expect(app.escPrimed).toBe(false);
+  });
+
+  it("shows inline ctrl+c exit prompt without using the extra status line", () => {
+    const app = new App() as any;
+    app.handleKey({ name: "c", char: "\u0003", ctrl: true, meta: false, shift: false });
+
+    expect(app.ctrlCCount).toBe(1);
+    expect(app.statusMessage).toBeUndefined();
   });
 });
