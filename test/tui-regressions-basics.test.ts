@@ -336,7 +336,8 @@ describe("budget inspector", () => {
   it("opens as a fullscreen mode and closes with escape", () => {
     const app = new App() as any;
     let rendered: string[] = [];
-    app.screen = { height: 12, width: 40, hasSidebar: true, mainWidth: 28, sidebarWidth: 11, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
+    const alternateStates: boolean[] = [];
+    app.screen = { height: 12, width: 40, hasSidebar: true, mainWidth: 28, sidebarWidth: 11, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {}, setAlternateScreen: (enabled: boolean) => { alternateStates.push(enabled); } };
     const report = {
       sessionCount: 1,
       totalTokens: 240,
@@ -357,14 +358,16 @@ describe("budget inspector", () => {
     };
     app.openBudgetView("Budget Inspector", { all: { ...report, sessionCount: 4 }, session: report }, "all");
     app.drawImmediate();
+    expect(alternateStates.at(-1)).toBe(true);
     expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("Budget Inspector");
-      expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("tab current");
-      expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("all sessions");
-      expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("BUDGET");
-      app.handleKey({ name: "tab", char: "", ctrl: false, meta: false, shift: false } as Keypress);
-      expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("current session");
-      expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("tab all");
+    expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("tab current");
+    expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("all sessions");
+    expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("BUDGET");
+    app.handleKey({ name: "tab", char: "", ctrl: false, meta: false, shift: false } as Keypress);
+    expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("current session");
+    expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("tab all");
     app.handleKey({ name: "escape", char: "", ctrl: false, meta: false, shift: false } as Keypress);
+    expect(alternateStates.at(-1)).toBe(false);
     expect(rendered.map((line) => stripAnsi(line)).join("\n")).not.toContain("Budget Inspector");
   });
 });

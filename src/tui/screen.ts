@@ -1,4 +1,5 @@
 import {
+  ALT_SCREEN_OFF, ALT_SCREEN_ON,
   CLEAR_SCREEN, CLEAR_LINE,
   CURSOR_HOME, CURSOR_HIDE, CURSOR_SHOW, CURSOR_BLOCK, CURSOR_DEFAULT,
   SYNC_START, SYNC_END,
@@ -17,6 +18,7 @@ export class Screen {
   private rows: number;
   private cols: number;
   private resizeAttached = false;
+  private usingAlternateScreen = false;
   private readonly handleResize = (): void => {
     const s = getTermSize();
     this.rows = s.rows;
@@ -46,8 +48,22 @@ export class Screen {
     this.prev = [];
   }
 
+  setAlternateScreen(enabled: boolean): void {
+    if (this.usingAlternateScreen === enabled) return;
+    this.usingAlternateScreen = enabled;
+    write(enabled ? ALT_SCREEN_ON : ALT_SCREEN_OFF);
+    write(CURSOR_HOME);
+    write(CLEAR_SCREEN);
+    if (!getSettings().showHardwareCursor) write(CURSOR_HIDE);
+    this.prev = [];
+  }
+
   /** Exit fullscreen mode, restore terminal */
   exit(): void {
+    if (this.usingAlternateScreen) {
+      write(ALT_SCREEN_OFF);
+      this.usingAlternateScreen = false;
+    }
     write(CURSOR_DEFAULT);
     write(CURSOR_SHOW);
   }

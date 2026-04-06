@@ -35,6 +35,7 @@ export function drawNow(app: AppState): void {
 export function drawImmediate(app: AppState): void {
   app.lastDrawTime = Date.now();
   app.keypress.setMouseTracking(app.shouldEnableMenuMouse());
+  app.screen.setAlternateScreen?.(!!(app.budgetView || app.agentRunView || app.questionView));
   if (app.budgetView) {
     drawBudgetView(app);
     return;
