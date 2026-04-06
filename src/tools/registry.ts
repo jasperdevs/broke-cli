@@ -15,23 +15,35 @@ export const TOOL_NAMES = [
   "webSearch",
   "webFetch",
   "todoWrite",
+  "subagent",
 ] as const;
 
+export type ToolName = typeof TOOL_NAMES[number];
+
+const BASE_TOOLS: ToolSet = {
+  bash: bashTool,
+  readFile: readFileTool,
+  writeFile: writeFileTool,
+  editFile: editFileTool,
+  listFiles: listFilesTool,
+  grep: grepTool,
+  webSearch: webSearchTool,
+  webFetch: webFetchTool,
+  todoWrite: todoWriteTool,
+};
+
 /** All tools available to the agent */
-export function getTools(): ToolSet {
+export function getTools(options?: {
+  include?: readonly ToolName[];
+  extraTools?: ToolSet;
+}): ToolSet {
+  const include = options?.include ? new Set<string>(options.include) : null;
   const all: ToolSet = {
-    bash: bashTool,
-    readFile: readFileTool,
-    writeFile: writeFileTool,
-    editFile: editFileTool,
-    listFiles: listFilesTool,
-    grep: grepTool,
-    webSearch: webSearchTool,
-    webFetch: webFetchTool,
-    todoWrite: todoWriteTool,
+    ...BASE_TOOLS,
+    ...(options?.extraTools ?? {}),
   };
 
   return Object.fromEntries(
-    Object.entries(all).filter(([name]) => isToolAllowed(name)),
+    Object.entries(all).filter(([name]) => (!include || include.has(name)) && isToolAllowed(name)),
   ) as ToolSet;
 }

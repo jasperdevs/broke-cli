@@ -8,6 +8,7 @@ import { Session } from "../src/core/session.js";
 import { touchProject } from "../src/core/projects.js";
 import { getTools } from "../src/tools/registry.js";
 import { createAskUserTool } from "../src/tools/ask.js";
+import { createSubagentTool } from "../src/tools/subagent.js";
 import { setBashOutputCallback } from "../src/tools/bash.js";
 import { setTodoChangeCallback } from "../src/tools/todo.js";
 import { getApiKey, getSettings, updateSetting, type Mode } from "../src/core/config.js";
@@ -62,7 +63,7 @@ program.action(async (opts) => {
   // Resume or new session
   let session: Session;
   if (opts.continue && getSettings().autoSaveSessions) {
-    const recent = Session.listRecent(1);
+    const recent = Session.listRecent(1, "", process.cwd());
     if (recent.length > 0) {
       const loaded = Session.load(recent[0].id);
       session = loaded ?? new Session();
@@ -164,7 +165,16 @@ program.action(async (opts) => {
   })();
 
   const buildTools = () => ({
-    ...getTools(),
+    ...getTools({
+      extraTools: {
+        subagent: createSubagentTool({
+          cwd: () => process.cwd(),
+          providerRegistry,
+          getActiveModel: () => activeModel,
+          getCurrentModelId: () => currentModelId,
+        }),
+      },
+    }),
     askUser: createAskUserTool((q, opts) => app.showQuestion(q, opts)),
   });
 

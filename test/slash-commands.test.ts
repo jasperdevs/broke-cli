@@ -310,7 +310,7 @@ describe("slash command handling", () => {
     }
   });
 
-  it("shows saved sessions across projects in /resume", async () => {
+  it("keeps /resume scoped to the current project", async () => {
     updateSetting("autoSaveSessions", true);
     const app = createAppStub();
     let capturedItems: Array<{ id: string; label: string; detail?: string }> = [];
@@ -346,8 +346,8 @@ describe("slash command handling", () => {
     });
 
     expect(result.handled).toBe(true);
-    expect(capturedItems.some((item) => item.detail?.includes("here"))).toBe(true);
-    expect(capturedItems.some((item) => item.detail?.includes("C:\\other-project"))).toBe(true);
+    expect(capturedItems.some((item) => item.label.includes("local session"))).toBe(true);
+    expect(capturedItems.some((item) => item.label.includes("remote session"))).toBe(false);
   });
 
   it("clears stored auth for /logout <provider>", async () => {

@@ -5,6 +5,7 @@ import { startStream } from "../ai/stream.js";
 import { buildSystemPrompt, resolveCavemanLevel } from "../core/context.js";
 import { Session } from "../core/session.js";
 import { getTools } from "../tools/registry.js";
+import { createSubagentTool } from "../tools/subagent.js";
 import { getSettings, type Mode } from "../core/config.js";
 import { loadPricing } from "../ai/cost.js";
 import { ProviderRegistry } from "../ai/provider-registry.js";
@@ -14,7 +15,7 @@ import { loadExtensions } from "../core/extensions.js";
 function canUseSdkTools(model: ModelHandle): boolean {
   return model.runtime === "sdk"
     && !!model.model
-    && ["anthropic", "openai", "codex", "google", "mistral", "groq", "xai", "openrouter"].includes(model.provider.id);
+    && ["anthropic", "openai", "codex", "google", "mistral", "groq", "xai", "openrouter", "ollama", "lmstudio", "llamacpp", "jan", "vllm"].includes(model.provider.id);
 }
 
 export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts: { model?: string }): Promise<void> {
@@ -57,7 +58,6 @@ export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts:
   }
 
   const currentModelId = modelId ?? activeModel.provider.defaultModel;
-  const tools = getTools();
   const session = new Session();
 
   await hooks.emit("on_session_start", { cwd: process.cwd(), rpc: true });
@@ -94,6 +94,16 @@ export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts:
 
     abortController = new AbortController();
     let assistantText = "";
+    const tools = getTools({
+      extraTools: {
+        subagent: createSubagentTool({
+          cwd: () => process.cwd(),
+          providerRegistry,
+          getActiveModel: () => activeModel,
+          getCurrentModelId: () => currentModelId,
+        }),
+      },
+    });
 
     const rpcCallbacks = {
       onText: (delta: string) => {

@@ -15,11 +15,12 @@ npm install -g @jasperdevs/brokecli
 - Multi-provider chat and coding flows across OpenAI, Anthropic, Google, Groq, Mistral, xAI, OpenRouter, Ollama, LM Studio, llama.cpp, Jan, and vLLM
 - Native CLI passthrough for Claude Code / Codex when local auth is available
 - TUI with sidebar, file tree, compact mode, home screen, theme picker, keybindings, and desktop notifications
-- Session persistence with `/resume`, `/fork`, transcript export, and per-project recall
+- Session persistence with current-project `/resume`, `/fork`, transcript export, and per-project recall
 - Cost-aware routing, caveman compression, auto-compaction, and token/cost telemetry
 - Auto lint/test validation after edits, with optional one-pass auto-fix
 - Tool permission blocking and extension enable/disable controls
 - JSON RPC mode for non-interactive usage
+- Delegated read-only `subagent` tool for focused research/plan/review work
 
 ## Core Commands
 
@@ -28,7 +29,7 @@ npm install -g @jasperdevs/brokecli
 - `/model` choose the main model
 - `/resume` search and resume recent sessions in the current project
 - `/projects` search and switch among recently used projects
-- `/share` create a standalone shareable HTML transcript
+- `/share` publish a secret GitHub gist when a share token is present, otherwise create a local shareable HTML transcript
 - `/permissions` allow/block model tools
 - `/extensions` enable/disable loaded extensions
 - `/theme` switch themes
@@ -61,8 +62,11 @@ The agent has first-class tools for:
 - web search
 - web fetch
 - todo/task tracking
+- delegated subagent research/plan/review
 
 You can block specific tools with `/permissions`.
+
+For hosted `/share`, set either `BROKECLI_SHARE_GITHUB_TOKEN` or `GITHUB_TOKEN`. Without one, `brokecli` falls back to a local HTML share file and copies its `file:///` URL.
 
 ## Extensions
 

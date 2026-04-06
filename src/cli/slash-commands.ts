@@ -1,6 +1,5 @@
 import { execSync } from "child_process";
-import { mkdirSync, writeFileSync } from "fs";
-import { dirname } from "path";
+import { writeFileSync } from "fs";
 import type { ModelHandle } from "../ai/providers.js";
 import type { ProviderRegistry } from "../ai/provider-registry.js";
 import { buildSystemPrompt, reloadContext } from "../core/context.js";
@@ -14,7 +13,7 @@ import { Session } from "../core/session.js";
 import { listTemplates, loadTemplate } from "../core/templates.js";
 import { undoLastCheckpoint } from "../core/git.js";
 import { listThemes, setPreviewTheme } from "../core/themes.js";
-import { buildHtmlExport, buildMarkdownExport, buildShareFilePath, formatRelativeMinutes } from "./exports.js";
+import { buildHtmlExport, buildMarkdownExport, buildShareFilePath, formatRelativeMinutes, publishTranscriptShare } from "./exports.js";
 import { runConnectFlow } from "./connect-flow.js";
 import { TOOL_NAMES } from "../tools/registry.js";
 
@@ -404,16 +403,23 @@ export async function handleSlashCommand(options: {
       const filePath = buildShareFilePath(msgs, process.cwd());
       const content = buildHtmlExport(msgs, activeModel?.provider.name ?? "unknown", currentModelId || "unknown", process.cwd());
       try {
-        mkdirSync(dirname(filePath), { recursive: true });
-        writeFileSync(filePath, content, "utf-8");
-        const shareUrl = `file:///${filePath.replace(/\\/g, "/")}`;
+        const share = await publishTranscriptShare({
+          html: content,
+          filePath,
+          description: `BrokeCLI transcript from ${process.cwd()}`,
+        });
+        const shareUrl = share.url;
         try {
           if (process.platform === "win32") execSync("clip", { input: shareUrl });
           else if (process.platform === "darwin") execSync("pbcopy", { input: shareUrl });
           else execSync("xclip -selection clipboard", { input: shareUrl });
-          app.addMessage("system", `Shared to ${filePath} (link copied)`);
+          app.addMessage("system", share.kind === "gist"
+            ? `Shared to ${share.url} (link copied)`
+            : `Shared to ${share.filePath} (link copied)`);
         } catch {
-          app.addMessage("system", `Shared to ${filePath}`);
+          app.addMessage("system", share.kind === "gist"
+            ? `Shared to ${share.url}`
+            : `Shared to ${share.filePath}`);
         }
       } catch (err) {
         app.addMessage("system", `Share failed: ${(err as Error).message}`);
@@ -427,7 +433,7 @@ export async function handleSlashCommand(options: {
         app.addMessage("system", "Session history is off. Enable Auto-save sessions in /settings to use /resume.");
         return { handled: true };
       }
-      const recent = Session.listRecent(50, restText);
+      const recent = Session.listRecent(50, restText, cwd);
       if (recent.length === 0) {
         app.addMessage("system", "No saved sessions found.");
         return { handled: true };
@@ -435,7 +441,7 @@ export async function handleSlashCommand(options: {
       const items = recent.map((entry) => ({
         id: entry.id,
         label: entry.preview || entry.model || "unknown",
-        detail: `${entry.cwd === cwd ? "here" : entry.cwd} · ${entry.model || "unknown"} · ${entry.messageCount} msgs · ${formatRelativeMinutes(entry.updatedAt)}`,
+        detail: `${entry.model || "unknown"} · ${entry.messageCount} msgs · ${formatRelativeMinutes(entry.updatedAt)}`,
       }));
       app.openItemPicker("Resume Session", items, (sessionId) => {
         const loaded = Session.load(sessionId);

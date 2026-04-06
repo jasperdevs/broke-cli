@@ -2,6 +2,7 @@ import { marked } from "marked";
 import type { Session } from "../core/session.js";
 import { homedir } from "os";
 import { join } from "path";
+import { mkdirSync, writeFileSync } from "fs";
 
 export function formatRelativeMinutes(updatedAt: number): string {
   const ago = Math.max(0, Math.floor((Date.now() - updatedAt) / 60000));
@@ -109,4 +110,52 @@ export function buildShareFilePath(
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const name = `${slugifySegment(firstUser)}-${stamp}.html`;
   return join(homedir(), ".brokecli", "shares", slugifySegment(cwd.split(/[\\/]/).pop() ?? "project"), name);
+}
+
+export function toFileUrl(path: string): string {
+  return `file:///${path.replace(/\\/g, "/")}`;
+}
+
+export async function publishTranscriptShare(options: {
+  html: string;
+  filePath: string;
+  description: string;
+}): Promise<
+  | { kind: "gist"; url: string; id: string }
+  | { kind: "local"; filePath: string; url: string }
+> {
+  const token = process.env.BROKECLI_SHARE_GITHUB_TOKEN || process.env.GITHUB_TOKEN;
+  if (token) {
+    try {
+      const response = await fetch("https://api.github.com/gists", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${token}`,
+          "user-agent": "brokecli",
+        },
+        body: JSON.stringify({
+          description: options.description,
+          public: false,
+          files: {
+            "brokecli-transcript.html": {
+              content: options.html,
+            },
+          },
+        }),
+      });
+      if (response.ok) {
+        const data = await response.json() as { id?: string; html_url?: string };
+        if (data.id && data.html_url) {
+          return { kind: "gist", id: data.id, url: data.html_url };
+        }
+      }
+    } catch {
+      // fall back to local share below
+    }
+  }
+
+  mkdirSync(join(options.filePath, ".."), { recursive: true });
+  writeFileSync(options.filePath, options.html, "utf-8");
+  return { kind: "local", filePath: options.filePath, url: toFileUrl(options.filePath) };
 }
