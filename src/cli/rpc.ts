@@ -103,17 +103,19 @@ export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts:
     abortController = new AbortController();
     let assistantText = "";
     const policy = getTurnPolicy(msg.content);
-    const tools = getTools({
-      include: policy.allowedTools as readonly ToolName[],
-      extraTools: {
-        agent: createAgentTool({
-          cwd: () => process.cwd(),
-          providerRegistry,
-          getActiveModel: () => activeModel,
-          getCurrentModelId: () => currentModelId,
-        }),
-      },
-    });
+    const tools = policy.allowedTools.length > 0
+      ? getTools({
+          include: policy.allowedTools as readonly ToolName[],
+          extraTools: {
+            agent: createAgentTool({
+              cwd: () => process.cwd(),
+              providerRegistry,
+              getActiveModel: () => activeModel,
+              getCurrentModelId: () => currentModelId,
+            }),
+          },
+        })
+      : undefined;
 
     const rpcCallbacks = {
       onText: (delta: string) => {
@@ -147,6 +149,7 @@ export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts:
       providerId,
       rpcMode,
       resolveCavemanLevel(getSettings().cavemanLevel ?? "off", msg.content),
+      policy.promptProfile,
     );
     const systemPromptSeed = opts.systemPrompt
       ? opts.systemPrompt
@@ -154,6 +157,9 @@ export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts:
         ? `${baseSystemPrompt}\n\n${opts.appendSystemPrompt}`
         : baseSystemPrompt;
     const systemPrompt = `${systemPromptSeed}\n\nExecution scaffold (${policy.archetype}): ${policy.scaffold}`;
+    const turnMessages = policy.historyWindow && session.getChatMessages().length > policy.historyWindow
+      ? session.getChatMessages().slice(-policy.historyWindow)
+      : session.getChatMessages();
 
     if (activeModel.runtime === "native-cli") {
       await startNativeStream(
@@ -161,7 +167,7 @@ export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts:
           providerId: activeModel.provider.id as "anthropic" | "codex",
           modelId: currentModelId,
           system: systemPrompt,
-          messages: session.getChatMessages(),
+          messages: turnMessages,
           abortSignal: abortController.signal,
           enableThinking: getSettings().enableThinking,
           thinkingLevel: getSettings().thinkingLevel || "low",
@@ -176,7 +182,7 @@ export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts:
           model: activeModel.model as LanguageModel,
           modelId: currentModelId,
           system: systemPrompt,
-          messages: session.getChatMessages(),
+          messages: turnMessages,
           tools: canUseSdkTools(activeModel) ? tools : undefined,
           abortSignal: abortController.signal,
           maxToolSteps: policy.maxToolSteps,

@@ -4,6 +4,15 @@ import { Session } from "../src/core/session.js";
 import { buildBudgetReport, renderBudgetDashboard, summarizeBudgetMetrics } from "../src/core/budget-insights.js";
 
 describe("turn policy", () => {
+  it("routes casual greetings onto a no-tool lightweight policy", () => {
+    const policy = getTurnPolicy("hey");
+    expect(policy.archetype).toBe("casual");
+    expect(policy.allowedTools).toEqual([]);
+    expect(policy.promptProfile).toBe("casual");
+    expect(policy.historyWindow).toBe(2);
+    expect(policy.maxToolSteps).toBe(0);
+  });
+
   it("keeps exploration turns on a read-only tool subset with a low step cap", () => {
     const policy = getTurnPolicy("read src/app.ts and tell me what it does");
     expect(policy.archetype).toBe("explore");

@@ -16,4 +16,14 @@ describe("system prompt", () => {
     expect(prompt).toContain("Never print pseudo-tool calls");
     expect(prompt).toContain("do not fake it");
   });
+
+  it("uses a much smaller lightweight prompt for casual turns", () => {
+    const fullPrompt = buildSystemPrompt(process.cwd(), "openai", "build", "off", "full");
+    const casualPrompt = buildSystemPrompt(process.cwd(), "openai", "build", "off", "casual");
+
+    expect(casualPrompt).toContain("This is a lightweight casual turn.");
+    expect(casualPrompt).not.toContain("<tool-tips>");
+    expect(casualPrompt).not.toContain("--- AGENTS.md ---");
+    expect(casualPrompt.length).toBeLessThan(fullPrompt.length);
+  });
 });

@@ -3,6 +3,7 @@ import { join, dirname } from "path";
 import { homedir } from "os";
 import { execSync } from "child_process";
 import type { Mode, CavemanLevel } from "./config.js";
+import type { PromptProfile } from "./turn-policy.js";
 
 const CONVENTION_FILES = [
   "CONVENTIONS.md",
@@ -19,15 +20,26 @@ const MAX_CONVENTION_CHARS = 3200; // ~800 tokens
 
 let cachedPrompts = new Map<string, string>();
 
-export function buildSystemPrompt(cwd: string, providerId?: string, mode?: Mode, cavemanLevel?: CavemanLevel): string {
-  const cacheKey = `${providerId ?? "default"}:${mode ?? "build"}:${cavemanLevel ?? "off"}:${cwd}`;
+export function buildSystemPrompt(cwd: string, providerId?: string, mode?: Mode, cavemanLevel?: CavemanLevel, profile: PromptProfile = "full"): string {
+  const cacheKey = `${providerId ?? "default"}:${mode ?? "build"}:${cavemanLevel ?? "off"}:${profile}:${cwd}`;
   const cached = cachedPrompts.get(cacheKey);
   if (cached) return cached;
 
   const parts: string[] = [];
 
-  // Core identity + behavioral guidelines (blended Pi + OpenCode style)
-  parts.push(`You are a fast, helpful coding assistant running in the user's terminal. You're friendly, sharp, and direct.
+  if (profile === "casual") {
+    parts.push(`You are a fast, helpful assistant running in the user's terminal. Friendly, brief, direct.
+
+<guidelines>
+- This is a lightweight casual turn. Respond naturally and briefly.
+- No tools for this turn.
+- Do not drag in repo context, long explanations, or file details unless the user asks.
+- Never expose raw tool calls, XML tags, JSON payloads, function-call syntax, or internal protocol text to the user.
+- Keep it to a sentence or two unless the user asks for more.
+</guidelines>`);
+  } else {
+    // Core identity + behavioral guidelines (blended Pi + OpenCode style)
+    parts.push(`You are a fast, helpful coding assistant running in the user's terminal. You're friendly, sharp, and direct.
 
 <guidelines>
 - For casual messages (greetings, chitchat, questions about yourself), respond naturally and conversationally. No tools needed. You have personality — be warm but brief.
@@ -45,6 +57,7 @@ export function buildSystemPrompt(cwd: string, providerId?: string, mode?: Mode,
 - Only explore the project when the task requires it. Do NOT list files unprompted.
 - If a task is ambiguous, make a reasonable assumption and proceed. Use askUser for real decisions (preferences, destructive confirmations, choosing between options).
 </guidelines>`);
+  }
 
   // Environment — minimal
   let isGit = false;
@@ -53,7 +66,7 @@ export function buildSystemPrompt(cwd: string, providerId?: string, mode?: Mode,
   parts.push(`<env>cwd: ${cwd} | git: ${isGit ? "yes" : "no"} | platform: ${process.platform}</env>`);
 
   // Per-tool guidelines — compact version when caveman is aggressive
-  if (cavemanLevel === "ultra") {
+  if (profile === "full" && cavemanLevel === "ultra") {
     parts.push(`<tool-tips>
 bash: tests/builds/git/install. No cat/sed/grep. 30s timeout.
 readFile: offset/limit for large files. Max 500 lines.
@@ -64,7 +77,7 @@ grep: Find defs/usages. Use include glob.
 askUser: Only for user decisions.
 todoWrite: Task checklist for 3+ step work.
 </tool-tips>`);
-  } else {
+  } else if (profile === "full") {
     parts.push(`<tool-tips>
 bash: Use for running tests, builds, git commands, installing packages. Prefer tools over bash for file operations (don't cat/sed/grep via bash). Commands timeout at 30s by default.
 readFile: Use offset/limit for large files — don't read entire files over 500 lines.
@@ -80,29 +93,10 @@ todoWrite: Create or update a task checklist for multi-step work. Use at the sta
   }
 
   // Global context files (truncated)
-  for (const file of ["AGENTS.md", "SYSTEM.md"]) {
-    const path = join(GLOBAL_CONTEXT_DIR, file);
-    if (existsSync(path)) {
-      try {
-        let content = readFileSync(path, "utf-8").trim();
-        if (content) {
-          if (content.length > MAX_CONVENTION_CHARS) {
-            content = content.slice(0, MAX_CONVENTION_CHARS) + "\n[truncated]";
-          }
-          parts.push(`--- ${file} ---\n${content}`);
-        }
-      } catch { /* skip */ }
-    }
-  }
-
-  // Walk up directory tree for convention files (truncated)
-  const seen = new Set<string>();
-  let dir = cwd;
-  const home = homedir();
-  while (dir !== dirname(dir) && dir !== home) {
-    for (const file of CONVENTION_FILES) {
-      const path = join(dir, file);
-      if (!seen.has(file) && existsSync(path)) {
+  if (profile === "full") {
+    for (const file of ["AGENTS.md", "SYSTEM.md"]) {
+      const path = join(GLOBAL_CONTEXT_DIR, file);
+      if (existsSync(path)) {
         try {
           let content = readFileSync(path, "utf-8").trim();
           if (content) {
@@ -110,12 +104,33 @@ todoWrite: Create or update a task checklist for multi-step work. Use at the sta
               content = content.slice(0, MAX_CONVENTION_CHARS) + "\n[truncated]";
             }
             parts.push(`--- ${file} ---\n${content}`);
-            seen.add(file);
           }
         } catch { /* skip */ }
       }
     }
-    dir = dirname(dir);
+
+    // Walk up directory tree for convention files (truncated)
+    const seen = new Set<string>();
+    let dir = cwd;
+    const home = homedir();
+    while (dir !== dirname(dir) && dir !== home) {
+      for (const file of CONVENTION_FILES) {
+        const path = join(dir, file);
+        if (!seen.has(file) && existsSync(path)) {
+          try {
+            let content = readFileSync(path, "utf-8").trim();
+            if (content) {
+              if (content.length > MAX_CONVENTION_CHARS) {
+                content = content.slice(0, MAX_CONVENTION_CHARS) + "\n[truncated]";
+              }
+              parts.push(`--- ${file} ---\n${content}`);
+              seen.add(file);
+            }
+          } catch { /* skip */ }
+        }
+      }
+      dir = dirname(dir);
+    }
   }
 
   // Caveman mode — reduce output tokens by constraining verbosity

@@ -1,6 +1,7 @@
 import type { ToolName } from "../tools/registry.js";
 
 export type TurnArchetype =
+  | "casual"
   | "question"
   | "explore"
   | "shell"
@@ -10,24 +11,41 @@ export type TurnArchetype =
   | "research"
   | "planning";
 
+export type PromptProfile = "full" | "casual";
+
 export interface TurnPolicy {
   archetype: TurnArchetype;
   allowedTools: ToolName[];
   maxToolSteps: number;
   scaffold: string;
   plannerCacheHit: boolean;
+  promptProfile: PromptProfile;
+  historyWindow: number | null;
 }
 
 const PLAN_CACHE = new Map<TurnArchetype, string>();
 
 const ALL_EDIT_TOOLS: ToolName[] = ["bash", "readFile", "writeFile", "editFile", "listFiles", "grep", "todoWrite", "agent"];
+const NO_TOOLS: ToolName[] = [];
 const READ_ONLY_TOOLS: ToolName[] = ["readFile", "listFiles", "grep", "todoWrite", "agent"];
 const SHELL_TOOLS: ToolName[] = ["bash", "readFile", "listFiles", "grep", "todoWrite"];
 const RESEARCH_TOOLS: ToolName[] = ["readFile", "listFiles", "grep", "webSearch", "webFetch", "todoWrite", "agent"];
 
+const CASUAL_MESSAGE_PATTERNS = [
+  /^(?:hi|hey|hello|hey there|hello there|yo|sup|what(?:'s| is)\s+up|how(?:'s| is)\s+it\s+going|how are you|thanks|thank you|thx|cool|nice|ok|okay|lol|lmao|gm|gn)[!.?\s]*$/i,
+  /^(?:good (?:morning|afternoon|evening)|see ya|cya|bye|goodbye)[!.?\s]*$/i,
+];
+
+function isCasualTurn(userMessage: string): boolean {
+  const msg = userMessage.trim();
+  if (!msg || msg.length > 80) return false;
+  return CASUAL_MESSAGE_PATTERNS.some((pattern) => pattern.test(msg));
+}
+
 export function classifyTurnArchetype(userMessage: string, lastToolCalls: string[] = []): TurnArchetype {
   const msg = userMessage.toLowerCase().trim();
 
+  if (isCasualTurn(msg)) return "casual";
   if (/\b(plan|roadmap|strategy|tradeoff|approach)\b/i.test(msg)) return "planning";
   if (/\b(review|audit|inspect|critique)\b/i.test(msg)) return "review";
   if (/\b(search web|research|look up|docs?|documentation|source)\b/i.test(msg)) return "research";
@@ -44,6 +62,7 @@ function getScaffold(archetype: TurnArchetype): { text: string; hit: boolean } {
   if (cached) return { text: cached, hit: true };
 
   const text = ({
+    casual: "Chat naturally. No tools. Keep it brief.",
     question: "Answer directly. Use tools only if they materially improve correctness. Keep response compact.",
     explore: "Inspect before acting. Prefer read/list/grep. Do not edit unless the user clearly asked for a change.",
     shell: "Prefer a short command path. Run the minimum shell steps needed. Summarize result tersely.",
@@ -63,22 +82,32 @@ export function getTurnPolicy(userMessage: string, lastToolCalls: string[] = [])
   const scaffold = getScaffold(archetype);
 
   switch (archetype) {
+    case "casual":
+      return {
+        archetype,
+        allowedTools: NO_TOOLS,
+        maxToolSteps: 0,
+        scaffold: scaffold.text,
+        plannerCacheHit: scaffold.hit,
+        promptProfile: "casual",
+        historyWindow: 2,
+      };
     case "question":
-      return { archetype, allowedTools: READ_ONLY_TOOLS, maxToolSteps: 1, scaffold: scaffold.text, plannerCacheHit: scaffold.hit };
+      return { archetype, allowedTools: READ_ONLY_TOOLS, maxToolSteps: 1, scaffold: scaffold.text, plannerCacheHit: scaffold.hit, promptProfile: "full", historyWindow: null };
     case "explore":
-      return { archetype, allowedTools: READ_ONLY_TOOLS, maxToolSteps: 2, scaffold: scaffold.text, plannerCacheHit: scaffold.hit };
+      return { archetype, allowedTools: READ_ONLY_TOOLS, maxToolSteps: 2, scaffold: scaffold.text, plannerCacheHit: scaffold.hit, promptProfile: "full", historyWindow: null };
     case "shell":
-      return { archetype, allowedTools: SHELL_TOOLS, maxToolSteps: 2, scaffold: scaffold.text, plannerCacheHit: scaffold.hit };
+      return { archetype, allowedTools: SHELL_TOOLS, maxToolSteps: 2, scaffold: scaffold.text, plannerCacheHit: scaffold.hit, promptProfile: "full", historyWindow: null };
     case "review":
-      return { archetype, allowedTools: READ_ONLY_TOOLS, maxToolSteps: 3, scaffold: scaffold.text, plannerCacheHit: scaffold.hit };
+      return { archetype, allowedTools: READ_ONLY_TOOLS, maxToolSteps: 3, scaffold: scaffold.text, plannerCacheHit: scaffold.hit, promptProfile: "full", historyWindow: null };
     case "research":
-      return { archetype, allowedTools: RESEARCH_TOOLS, maxToolSteps: 3, scaffold: scaffold.text, plannerCacheHit: scaffold.hit };
+      return { archetype, allowedTools: RESEARCH_TOOLS, maxToolSteps: 3, scaffold: scaffold.text, plannerCacheHit: scaffold.hit, promptProfile: "full", historyWindow: null };
     case "planning":
-      return { archetype, allowedTools: READ_ONLY_TOOLS, maxToolSteps: 2, scaffold: scaffold.text, plannerCacheHit: scaffold.hit };
+      return { archetype, allowedTools: READ_ONLY_TOOLS, maxToolSteps: 2, scaffold: scaffold.text, plannerCacheHit: scaffold.hit, promptProfile: "full", historyWindow: null };
     case "edit":
-      return { archetype, allowedTools: ALL_EDIT_TOOLS, maxToolSteps: 6, scaffold: scaffold.text, plannerCacheHit: scaffold.hit };
+      return { archetype, allowedTools: ALL_EDIT_TOOLS, maxToolSteps: 6, scaffold: scaffold.text, plannerCacheHit: scaffold.hit, promptProfile: "full", historyWindow: null };
     case "bugfix":
     default:
-      return { archetype, allowedTools: ALL_EDIT_TOOLS, maxToolSteps: 7, scaffold: scaffold.text, plannerCacheHit: scaffold.hit };
+      return { archetype, allowedTools: ALL_EDIT_TOOLS, maxToolSteps: 7, scaffold: scaffold.text, plannerCacheHit: scaffold.hit, promptProfile: "full", historyWindow: null };
   }
 }

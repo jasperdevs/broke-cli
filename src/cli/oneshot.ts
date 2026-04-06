@@ -75,22 +75,25 @@ export async function runOneShotPrompt(options: {
   session.addMessage("user", prompt);
 
   const policy = getTurnPolicy(prompt);
-  const tools = getTools({
-    include: policy.allowedTools as readonly ToolName[],
-    extraTools: {
-      agent: createAgentTool({
-        cwd: () => process.cwd(),
-        providerRegistry,
-        getActiveModel: () => activeModel,
-        getCurrentModelId: () => modelId,
-      }),
-    },
-  });
+  const tools = policy.allowedTools.length > 0
+    ? getTools({
+        include: policy.allowedTools as readonly ToolName[],
+        extraTools: {
+          agent: createAgentTool({
+            cwd: () => process.cwd(),
+            providerRegistry,
+            getActiveModel: () => activeModel,
+            getCurrentModelId: () => modelId,
+          }),
+        },
+      })
+    : undefined;
   const baseSystemPrompt = buildSystemPrompt(
     process.cwd(),
     providerId,
     mode,
     resolveCavemanLevel(getSettings().cavemanLevel ?? "off", prompt),
+    policy.promptProfile,
   );
   const systemPromptBase = opts.systemPrompt
     ? opts.systemPrompt
@@ -98,6 +101,9 @@ export async function runOneShotPrompt(options: {
       ? `${baseSystemPrompt}\n\n${opts.appendSystemPrompt}`
       : baseSystemPrompt;
   const systemPrompt = `${systemPromptBase}\n\nExecution scaffold (${policy.archetype}): ${policy.scaffold}`;
+  const turnMessages = policy.historyWindow && session.getChatMessages().length > policy.historyWindow
+    ? session.getChatMessages().slice(-policy.historyWindow)
+    : session.getChatMessages();
 
   let content = "";
   let usage = { inputTokens: 0, outputTokens: 0, cost: 0 };
@@ -133,7 +139,7 @@ export async function runOneShotPrompt(options: {
         providerId: activeModel.provider.id as "anthropic" | "codex",
         modelId,
         system: systemPrompt,
-        messages: session.getChatMessages(),
+        messages: turnMessages,
         enableThinking: getSettings().enableThinking,
         thinkingLevel: getSettings().thinkingLevel || "low",
         yoloMode: getSettings().yoloMode,
@@ -147,7 +153,7 @@ export async function runOneShotPrompt(options: {
         model: activeModel.model as LanguageModel,
         modelId,
         system: systemPrompt,
-        messages: session.getChatMessages(),
+        messages: turnMessages,
         tools: canUseSdkTools(activeModel) ? tools : undefined,
         maxToolSteps: policy.maxToolSteps,
       },

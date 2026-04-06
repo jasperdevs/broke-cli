@@ -77,6 +77,18 @@ interface ExtensionHooks {
   emit(event: string, payload: Record<string, unknown>): void;
 }
 
+function selectMessagesForTurn(
+  messages: Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }>,
+  policy: { promptProfile: "full" | "casual"; historyWindow: number | null },
+  optimizeMessages: (messages: Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }>) => Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }>,
+): Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }> {
+  const baseMessages = policy.promptProfile === "casual" ? messages : optimizeMessages(messages);
+  if (policy.historyWindow && baseMessages.length > policy.historyWindow) {
+    return baseMessages.slice(-policy.historyWindow);
+  }
+  return baseMessages;
+}
+
 export async function runModelTurn(options: {
   app: TurnRunnerApp;
   session: Session;
@@ -126,27 +138,6 @@ export async function runModelTurn(options: {
   }
   if (budget.warning) app.setStatus(budget.warning);
 
-  const chatMsgs = session.getChatMessages();
-  const ctxTokens = getTotalContextTokens(chatMsgs, systemPrompt, currentModelId);
-  const contextLimit = getModelContextLimitOverride(activeModel.provider.id, currentModelId)
-    ?? getContextLimit(currentModelId, activeModel.provider.id)
-    ?? 128000;
-  const ctxPct = contextLimit > 0 ? Math.min(100, Math.round((ctxTokens / contextLimit) * 100)) : 0;
-  app.setContextUsage(ctxTokens, contextLimit);
-
-  if (settings.autoCompact && ctxPct > 80 && chatMsgs.length > 8) {
-    try {
-      app.setCompacting(true, ctxTokens);
-      const compacted = await compactForModel(chatMsgs, activeModel);
-      session.replaceConversation(compacted);
-      session.recordCompaction();
-      app.setCompacting(false);
-      app.addMessage("system", `Auto-compacted: ${chatMsgs.length} -> ${compacted.length} messages`);
-    } catch {
-      app.setCompacting(false);
-    }
-  }
-
   if (!alreadyAddedUserMessage) {
     let fullText = text;
     const fileContexts = app.getFileContexts?.();
@@ -158,6 +149,42 @@ export async function runModelTurn(options: {
     }
     app.addMessage("user", text, effectiveImages);
     session.addMessage("user", fullText, effectiveImages);
+  }
+
+  const effectiveCavemanLevel = resolveCavemanLevel(getSettings().cavemanLevel ?? "off", text);
+  const contextLimit = getModelContextLimitOverride(activeModel.provider.id, currentModelId)
+    ?? getContextLimit(currentModelId, activeModel.provider.id)
+    ?? 128000;
+  let turnSystemPrompt = buildSystemPrompt(
+    process.cwd(),
+    activeModel.provider.id,
+    currentMode,
+    effectiveCavemanLevel,
+    policy.promptProfile,
+  );
+  turnSystemPrompt += `\n\nExecution scaffold (${policy.archetype}): ${policy.scaffold}`;
+  let chatMsgs = session.getChatMessages();
+  let selectedMessages = selectMessagesForTurn(chatMsgs, policy, (messages) => getContextOptimizer().optimizeMessages(messages));
+  let ctxTokens = getTotalContextTokens(selectedMessages, turnSystemPrompt, currentModelId);
+  let ctxPct = contextLimit > 0 ? Math.min(100, Math.round((ctxTokens / contextLimit) * 100)) : 0;
+  app.setContextUsage(ctxTokens, contextLimit);
+
+  if (settings.autoCompact && policy.promptProfile !== "casual" && ctxPct > 80 && chatMsgs.length > 8) {
+    try {
+      app.setCompacting(true, ctxTokens);
+      const compacted = await compactForModel(chatMsgs, activeModel);
+      session.replaceConversation(compacted);
+      session.recordCompaction();
+      app.setCompacting(false);
+      app.addMessage("system", `Auto-compacted: ${chatMsgs.length} -> ${compacted.length} messages`);
+      chatMsgs = session.getChatMessages();
+      selectedMessages = selectMessagesForTurn(chatMsgs, policy, (messages) => getContextOptimizer().optimizeMessages(messages));
+      ctxTokens = getTotalContextTokens(selectedMessages, turnSystemPrompt, currentModelId);
+      ctxPct = contextLimit > 0 ? Math.min(100, Math.round((ctxTokens / contextLimit) * 100)) : 0;
+      app.setContextUsage(ctxTokens, contextLimit);
+    } catch {
+      app.setCompacting(false);
+    }
   }
 
   app.setStreaming(true);
@@ -180,7 +207,7 @@ export async function runModelTurn(options: {
     ? getSettings().enableThinking && supportsThinking(executionModel)
     : false;
   const nextToolCalls: string[] = [];
-  const optimizedMessages = getContextOptimizer().optimizeMessages(session.getChatMessages());
+  let optimizedMessages = selectedMessages;
   let abortController: AbortController | null = new AbortController();
   let steeringInterruptRequested = false;
   let turnMetricsRecorded = false;
@@ -204,9 +231,19 @@ export async function runModelTurn(options: {
     abortController = null;
   });
 
-  const effectiveCavemanLevel = resolveCavemanLevel(getSettings().cavemanLevel ?? "off", text);
-  let turnSystemPrompt = buildSystemPrompt(process.cwd(), executionModel.provider.id, currentMode, effectiveCavemanLevel);
-  turnSystemPrompt += `\n\nExecution scaffold (${policy.archetype}): ${policy.scaffold}`;
+  if (executionModel.provider.id !== activeModel.provider.id || executionModelId !== currentModelId) {
+    turnSystemPrompt = buildSystemPrompt(
+      process.cwd(),
+      executionModel.provider.id,
+      currentMode,
+      effectiveCavemanLevel,
+      policy.promptProfile,
+    );
+    turnSystemPrompt += `\n\nExecution scaffold (${policy.archetype}): ${policy.scaffold}`;
+  }
+  optimizedMessages = selectMessagesForTurn(session.getChatMessages(), policy, (messages) => getContextOptimizer().optimizeMessages(messages));
+  ctxTokens = getTotalContextTokens(optimizedMessages, turnSystemPrompt, executionModelId);
+  app.setContextUsage(ctxTokens, contextLimit);
   if (shouldRequestThinkTags(executionModel, thinkingRequested)) {
     turnSystemPrompt += "\n\nIf this model exposes reasoning in text, place that reasoning inside <think>...</think> before the final answer. Keep it plain text, concise, and specific to this request. If the model does not support that format, ignore this instruction and answer normally.";
   }
@@ -306,7 +343,9 @@ export async function runModelTurn(options: {
       providerId: executionModel.provider.id,
       system: turnSystemPrompt,
       messages: optimizedMessages,
-      tools: canUseSdkTools(executionModel) ? buildTools(policy.allowedTools) as any : undefined,
+      tools: canUseSdkTools(executionModel) && policy.allowedTools.length > 0
+        ? buildTools(policy.allowedTools) as any
+        : undefined,
       abortSignal: abortController.signal,
       enableThinking: thinkingRequested,
       thinkingLevel: getSettings().thinkingLevel || "low",
