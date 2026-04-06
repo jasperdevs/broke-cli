@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
+import { getSettings } from "./config.js";
 
 export interface ProjectRecord {
   cwd: string;
@@ -31,6 +32,7 @@ function writeProjects(projects: ProjectRecord[]): void {
 }
 
 export function touchProject(cwd: string, sessionId: string, lastInstruction: string): void {
+  if (!getSettings().autoSaveSessions) return;
   const projects = readProjects();
   const next = projects.filter((entry) => entry.cwd !== cwd);
   next.push({
@@ -44,6 +46,7 @@ export function touchProject(cwd: string, sessionId: string, lastInstruction: st
 }
 
 export function listProjects(limit = 20, query = ""): ProjectRecord[] {
+  if (!getSettings().autoSaveSessions) return [];
   const normalized = query.trim().toLowerCase();
   const projects = readProjects().sort((a, b) => b.lastAccessed - a.lastAccessed);
   if (!normalized) return projects.slice(0, limit);

@@ -158,6 +158,7 @@ export class Session {
   }
 
   static listRecent(limit = 10, query = "", cwd?: string): Array<{ id: string; cwd: string; model: string; cost: number; updatedAt: number; messageCount: number; preview: string }> {
+    if (!getSettings().autoSaveSessions) return [];
     try {
       if (!existsSync(SESSIONS_DIR)) return [];
       const files = readdirSync(SESSIONS_DIR).filter((f) => f.endsWith(".json"));

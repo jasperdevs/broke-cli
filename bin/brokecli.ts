@@ -62,7 +62,7 @@ program.action(async (opts) => {
 
   // Resume or new session
   let session: Session;
-  if (opts.continue) {
+  if (opts.continue && getSettings().autoSaveSessions) {
     const recent = Session.listRecent(1);
     if (recent.length > 0) {
       const loaded = Session.load(recent[0].id);
