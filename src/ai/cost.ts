@@ -53,7 +53,18 @@ export async function loadPricing(): Promise<void> {
 
 function getPricing(model: string): ModelPricing {
   const cache = pricingCache ?? FALLBACK_PRICING;
-  return cache[model] ?? { input: 0, output: 0 };
+  // Direct match
+  if (cache[model]) return cache[model];
+  // Try with common provider prefixes (LiteLLM uses "anthropic/", "openai/", etc.)
+  for (const prefix of ["anthropic/", "openai/", "google/", "groq/", "mistral/", ""]) {
+    const key = prefix + model;
+    if (cache[key]) return cache[key];
+  }
+  // Fuzzy: try if model ID is a substring of a cache key
+  for (const [key, val] of Object.entries(cache)) {
+    if (key.endsWith("/" + model) || key === model) return val;
+  }
+  return { input: 0, output: 0 };
 }
 
 export interface TokenUsage {

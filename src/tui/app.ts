@@ -128,6 +128,11 @@ export class App {
   private pendingImages: Array<{ mimeType: string; data: string }> = [];
   private gitBranch = "";
   private gitDirty = false;
+  private sessionName = "New Session";
+  private appVersion = "0.0.1";
+  private sidebarFileTree: string[] | null = null;
+  private sidebarTreeOpen = true;
+  private mcpConnections: string[] = [];
   private onCycleScopedModel: (() => void) | null = null;
   private mode: Mode = "build";
   private onModeChange: ((mode: Mode) => void) | null = null;
@@ -239,6 +244,15 @@ export class App {
 
   setDetectedProviders(providers: string[]): void {
     this.detectedProviders = providers;
+  }
+
+  setSessionName(name: string): void { this.sessionName = name; }
+  setVersion(v: string): void { this.appVersion = v; }
+  setMcpConnections(conns: string[]): void { this.mcpConnections = conns; }
+
+  toggleSidebarTree(): void {
+    this.sidebarTreeOpen = !this.sidebarTreeOpen;
+    this.draw();
   }
 
   openModelPicker(options: ModelOption[], onSelect: (providerId: string, modelId: string) => void, onPin?: (providerId: string, modelId: string, pinned: boolean) => void, initialCursor?: number): void {
@@ -1134,48 +1148,78 @@ export class App {
     const lines: string[] = [];
     const sep = `${DIM}${"─".repeat(Math.max(1, w - 2))}${RESET}`;
 
-    // Top separator
+    // Session name + version
     lines.push(sep);
-    lines.push("");
+    lines.push(`${WHITE}${BOLD}${this.sessionName.slice(0, w - 2)}${RESET}`);
+    lines.push(`${DIM}v${this.appVersion}${RESET}`);
+    lines.push(sep);
 
     // Model
     lines.push(`${T()}${this.providerName}/${this.modelName}${RESET}`);
-    lines.push("");
     lines.push(sep);
-    lines.push("");
 
     // Providers
     if (this.detectedProviders.length > 0) {
-      lines.push(`${DIM}providers${RESET}`);
-      for (const p of this.detectedProviders.slice(0, 5)) {
-        lines.push(`  ${p}`);
+      lines.push(`${WHITE}Providers${RESET}`);
+      for (const p of this.detectedProviders.slice(0, 4)) {
+        lines.push(`  ${DIM}${p}${RESET}`);
       }
-      if (this.detectedProviders.length > 5) {
-        lines.push(`  ${DIM}+${this.detectedProviders.length - 5} more${RESET}`);
+      if (this.detectedProviders.length > 4) {
+        lines.push(`  ${DIM}+${this.detectedProviders.length - 4} more${RESET}`);
       }
-      lines.push("");
       lines.push(sep);
-      lines.push("");
     }
 
-    // Working directory
-    lines.push(`${DIM}directory${RESET}`);
-    const shortCwd = this.cwd.length > w - 4
-      ? "~" + this.cwd.slice(-(w - 5))
+    // MCP connections
+    if (this.mcpConnections.length > 0) {
+      lines.push(`${WHITE}MCP${RESET}`);
+      for (const c of this.mcpConnections.slice(0, 3)) {
+        lines.push(`  ${GREEN}\u25CF${RESET} ${DIM}${c.slice(0, w - 6)}${RESET}`);
+      }
+      lines.push(sep);
+    }
+
+    // Directory
+    lines.push(`${WHITE}Directory${RESET}`);
+    const shortCwd = this.cwd.length > w - 2
+      ? "~" + this.cwd.slice(-(w - 3))
       : this.cwd;
     lines.push(`  ${DIM}${shortCwd}${RESET}`);
     if (this.gitBranch) {
       lines.push(`  ${DIM}${this.gitBranch}${this.gitDirty ? " *" : ""}${RESET}`);
     }
-
-    // Fill remaining height
-    const bottomLines = 4;
-    const remaining = this.screen.height - bottomLines - lines.length;
-    for (let i = 0; i < remaining; i++) lines.push("");
-
-    // Bottom
     lines.push(sep);
-    lines.push(`${DIM}/help  /model  /settings${RESET}`);
+
+    // File tree (collapsible)
+    const treeArrow = this.sidebarTreeOpen ? "\u25BC" : "\u25B6";
+    lines.push(`${WHITE}${treeArrow} Files${RESET}`);
+    if (this.sidebarTreeOpen) {
+      if (!this.sidebarFileTree) {
+        // Lazy-load file tree
+        try {
+          const { execSync: exec } = require("child_process");
+          const files = exec("git ls-files --others --cached --exclude-standard", { cwd: this.cwd, encoding: "utf-8", timeout: 2000 }).trim();
+          this.sidebarFileTree = files.split("\n").filter(Boolean).slice(0, 30);
+        } catch {
+          try {
+            const { readdirSync } = require("fs");
+            this.sidebarFileTree = readdirSync(this.cwd).filter((f: string) => !f.startsWith(".") && f !== "node_modules").slice(0, 20);
+          } catch {
+            this.sidebarFileTree = [];
+          }
+        }
+      }
+      const tree = this.sidebarFileTree ?? [];
+      const maxTreeLines = Math.min(tree.length, 15);
+      for (let i = 0; i < maxTreeLines; i++) {
+        const f = tree[i];
+        const display = f.length > w - 4 ? f.slice(-(w - 5)) : f;
+        lines.push(`  ${DIM}${display}${RESET}`);
+      }
+      if (tree.length > 15) {
+        lines.push(`  ${DIM}+${tree.length - 15} more${RESET}`);
+      }
+    }
 
     return lines;
   }
@@ -1332,51 +1376,67 @@ export class App {
       bottomLines.push(` ${this.statusMessage}`);
     }
 
-    // Now build the top section (chat area fills remaining space)
+    // Build the full frame — MUST have exactly `height` lines
     const frameLines: string[] = [];
-    const topHeight = height - bottomLines.length;
+    const topHeight = Math.max(0, height - bottomLines.length);
 
-    // Always show compact header at top (model info)
+    // Compact header when no sidebar
     const showCompactHeader = !hasSidebar && this.modelName !== "none";
-    if (showCompactHeader) {
-      frameLines.push(this.renderCompactHeader());
-    }
 
     if (isHome) {
+      if (showCompactHeader) frameLines.push(this.renderCompactHeader());
       frameLines.push("");
       frameLines.push(`${T()}${BOLD}  BrokeCLI${RESET}`);
       frameLines.push(`${DIM}  AI coding on a budget${RESET}`);
       frameLines.push("");
-      const used = frameLines.length;
-      for (let i = used; i < topHeight; i++) frameLines.push("");
+      while (frameLines.length < topHeight) frameLines.push("");
     } else {
-      const chatH = topHeight - (showCompactHeader ? 1 : 0);
+      if (showCompactHeader) frameLines.push(this.renderCompactHeader());
+
+      const chatH = Math.max(1, topHeight - (showCompactHeader ? 1 : 0));
       const messageLines = this.renderMessages(mainW);
-      // Clamp scroll offset to prevent overflow
       const maxScroll = Math.max(0, messageLines.length - chatH);
       if (this.scrollOffset > maxScroll) this.scrollOffset = maxScroll;
       if (this.scrollOffset < 0) this.scrollOffset = 0;
-      const visible = messageLines.slice(this.scrollOffset, this.scrollOffset + chatH);
+      const visibleMsgs = messageLines.slice(this.scrollOffset, this.scrollOffset + chatH);
+
+      // Scrollbar calculation
+      const totalMsgLines = messageLines.length;
+      const showScrollbar = totalMsgLines > chatH;
+      let scrollThumbStart = 0;
+      let scrollThumbEnd = 0;
+      if (showScrollbar) {
+        const ratio = chatH / totalMsgLines;
+        const thumbSize = Math.max(1, Math.round(chatH * ratio));
+        scrollThumbStart = Math.round((this.scrollOffset / Math.max(1, totalMsgLines - chatH)) * (chatH - thumbSize));
+        scrollThumbEnd = scrollThumbStart + thumbSize;
+      }
 
       if (hasSidebar) {
         const sidebarLines = this.renderSidebar();
-        const border = `${DIM}│${RESET}`;
+        const border = `${DIM}\u2502${RESET}`;
         for (let i = 0; i < chatH; i++) {
-          const chatLine = this.padLine(visible[i] ?? "", mainW);
+          const scrollChar = showScrollbar
+            ? (i >= scrollThumbStart && i < scrollThumbEnd ? `${DIM}\u2588${RESET}` : `${DIM}\u2502${RESET}`)
+            : "";
+          const chatLine = this.padLine(visibleMsgs[i] ?? "", mainW - (showScrollbar ? 1 : 0));
           const sidebarLine = sidebarLines[i] ?? "";
           const paddedSidebar = this.padLine(sidebarLine, this.screen.sidebarWidth);
-          frameLines.push(`${chatLine} ${border} ${paddedSidebar}`);
+          frameLines.push(`${chatLine}${scrollChar} ${border} ${paddedSidebar}`);
         }
       } else {
         for (let i = 0; i < chatH; i++) {
-          frameLines.push(visible[i] ?? "");
+          const scrollChar = showScrollbar
+            ? (i >= scrollThumbStart && i < scrollThumbEnd ? `${DIM}\u2588${RESET}` : ` `)
+            : "";
+          frameLines.push((visibleMsgs[i] ?? "") + scrollChar);
         }
       }
     }
 
-    // Combine top + bottom — extend sidebar border through bottom area
+    // Append bottom lines — extend sidebar border through them
     if (hasSidebar) {
-      const border = `${DIM}│${RESET}`;
+      const border = `${DIM}\u2502${RESET}`;
       const sideW = this.screen.sidebarWidth;
       for (const l of bottomLines) {
         const padded = this.padLine(l, mainW);
@@ -1385,6 +1445,10 @@ export class App {
     } else {
       for (const l of bottomLines) frameLines.push(l);
     }
+
+    // CRITICAL: Ensure exactly `height` lines — pad or truncate
+    while (frameLines.length < height) frameLines.push("");
+    if (frameLines.length > height) frameLines.length = height;
 
     this.screen.render(frameLines);
 
