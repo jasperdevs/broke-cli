@@ -60,23 +60,19 @@ ${tree}
   // Tool capabilities
   parts.push(`
 <tools>
-You have access to these tools. Use them to complete tasks:
+- read: Read file contents
+- write: Create or overwrite files
+- edit: Find and replace in files
+- bash: Execute shell commands
+- listFiles: List directory contents
+- grep: Search file contents
+</tools>
 
-- bash: Execute shell commands. Use for tests, builds, git, package managers.
-- readFile: Read file contents. Use to understand existing code.
-- writeFile: CREATE files. Use to make new files.
-- editFile: MODIFY existing files. Use find-and-replace.
-- listFiles: List directory contents.
-- grep: Search for patterns in files.
-
-CRITICAL: When asked to create a file, use writeFile IMMEDIATELY.
-Do NOT show code in your response. Do NOT explain what you will do.
-Just call writeFile with the content.
-
-Example user request: "make an index.html file"
-Correct response: Call writeFile with path "index.html" and the HTML content.
-WRONG: Showing the HTML code in a code block.
-</tools>`);
+Guidelines:
+- Be concise
+- Use tools directly when asked to create, edit, or explore files
+- Do not ask for permission to make changes
+- Do not show code in responses - use the tools instead`);
 
   // Global context
   for (const file of ["AGENTS.md", "SYSTEM.md"]) {
@@ -149,53 +145,26 @@ export function reloadContext(): void {
   cachedPrompts.clear();
 }
 
-/** Provider-specific system prompt preamble (like OpenCode does) */
+/** Provider-specific system prompt preamble */
 function getProviderPrompt(providerId?: string): string {
-  const toolExamples = `
-
-TOOL USAGE EXAMPLES:
-- Create file: writeFile("index.html", "<html>...</html>")
-- Edit file: editFile("src/app.ts", "old text", "new text")
-- Read file: readFile("src/app.ts")
-- Run command: bash("npm test")
-- List files: listFiles("src")
-- Search: grep("pattern", "src")`;
-
   switch (providerId) {
     case "anthropic":
-      return `You are a coding agent. Execute tasks using tools.
-
-NEVER show code in your response. Use writeFile/editFile instead.
-When asked to create a file: call writeFile immediately.
-When asked to edit: call editFile immediately.${toolExamples}`;
+      return `You are pi, a coding agent. Use the available tools to complete tasks.`;
 
     case "openai":
     case "codex":
-      return `You are a coding agent. Execute tasks using tools.
-
-CRITICAL: When asked to create/edit files, call writeFile/editFile.
-DO NOT output code blocks. USE THE TOOLS.
-When asked to make a file, call writeFile(path, content).${toolExamples}`;
+      return `You are pi, a coding agent. Use tools to interact with files and execute commands.`;
 
     case "google":
-      return `You are a coding agent. Use function calls to execute tasks.
-
-When asked to create a file: call writeFile function with path and content.
-DO NOT output code. CALL THE FUNCTION.${toolExamples}`;
+      return `You are pi, a coding agent. Call functions to read, write, edit files and run commands.`;
 
     case "mistral":
     case "groq":
     case "xai":
     case "openrouter":
-      return `You are a coding agent. Execute tasks using tools.
-
-Use writeFile to create files. Use editFile to modify files.
-Do not ask permission. Do not show code. Use tools.${toolExamples}`;
+      return `You are pi, a coding agent. Use tools to make changes directly.`;
 
     default:
-      return `You are a coding agent. Use tools to complete tasks.
-
-When asked to create files: use writeFile.
-When asked to edit files: use editFile.${toolExamples}`;
+      return `You are pi, a coding agent. Use available tools to complete tasks.`;
   }
 }
