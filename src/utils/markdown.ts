@@ -1,4 +1,4 @@
-import type { MarkedExtension } from "marked";
+import { createRequire } from "node:module";
 
 let initialized = false;
 let markedParse: ((text: string) => string) | null = null;
@@ -12,11 +12,10 @@ function ensureInit(): void {
   process.env.FORCE_COLOR = "3";
 
   try {
-    // Use require() to load synchronously after env is set
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { marked } = require("marked");
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { markedTerminal } = require("marked-terminal");
+    // Use createRequire for ESM compatibility — loads external node_modules
+    const req = createRequire(import.meta.url);
+    const { marked } = req("marked");
+    const { markedTerminal } = req("marked-terminal");
 
     marked.use(
       markedTerminal({
@@ -24,7 +23,7 @@ function ensureInit(): void {
         width: 80,
         showSectionPrefix: false,
         tab: 2,
-      }) as MarkedExtension,
+      }),
     );
 
     markedParse = (text: string) => {

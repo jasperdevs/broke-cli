@@ -643,8 +643,8 @@ export class App {
       return;
     }
 
-    // Tab — toggle between build and plan mode (when input is empty)
-    if (key.name === "tab" && this.input.getText().trim() === "") {
+    // Shift+Tab — toggle between build and plan mode
+    if (key.shift && key.name === "tab") {
       this.mode = this.mode === "build" ? "plan" : "build";
       if (this.onModeChange) this.onModeChange(this.mode);
       this.draw();
