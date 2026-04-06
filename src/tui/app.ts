@@ -2185,12 +2185,12 @@ export class App {
     return this.renderAnsiColorGrid(cells);
   }
 
-  private renderMascotInline(): string {
+  private renderMascotInline(): string[] {
     const path = this.resolveMascotPath();
-    if (!path) return "";
+    if (!path) return [];
     const cells = this.parseMascotSvgGrid(path);
-    const scaled = this.scaleColorGrid(cells, 2, 2);
-    return this.renderAnsiColorGrid(scaled)[0] ?? "";
+    const scaled = this.scaleColorGrid(cells, 4, 4);
+    return this.renderAnsiColorGrid(scaled);
   }
 
   private wrapHomeDetail(label: string, value: string, width: number): string[] {
@@ -2232,6 +2232,8 @@ export class App {
 
   private renderHomeView(mainW: number, topHeight: number): string[] {
     const mascotInline = this.renderMascotInline();
+    const mascotTop = mascotInline[0] ?? "";
+    const mascotBottom = mascotInline[1] ?? "";
     const modelLabel = this.modelName === "none"
       ? "Pick one with /model"
       : `${this.providerName}/${this.modelName}`;
@@ -2239,12 +2241,14 @@ export class App {
     const boxWidth = Math.max(12, mainW - 4);
     const innerWidth = Math.max(1, boxWidth - 2);
     const contentWidth = Math.max(8, innerWidth - 2);
-    const mascotWidth = stripAnsi(mascotInline).length;
-    const headerPrefix = mascotInline ? `${mascotInline} ` : "";
-    const headerPrefixPlain = `${" ".repeat(mascotWidth)} `;
+    const mascotWidth = stripAnsi(mascotTop).length;
+    const headerPrefix = mascotTop ? `${mascotTop} ` : "";
+    const headerPrefixPlain = `${" ".repeat(stripAnsi(headerPrefix).length)}`;
+    const subheadPrefix = mascotBottom ? `${mascotBottom} ` : "";
+    const subheadPrefixPlain = `${" ".repeat(stripAnsi(subheadPrefix).length)}`;
     const headerCandidates = ["Welcome to BrokeCLI", "Welcome"];
     const headerText = headerCandidates.find((candidate) =>
-      mascotWidth + (mascotInline ? 1 : 0) + candidate.length <= contentWidth,
+      mascotWidth + (mascotTop ? 1 : 0) + candidate.length <= contentWidth,
     ) ?? headerCandidates[headerCandidates.length - 1];
     const locationBase = this.formatShortCwd(Math.max(10, contentWidth - 1));
     const locationWithVersion = `${locationBase}  ${versionText}`;
@@ -2252,7 +2256,7 @@ export class App {
 
     const body = [
       ...this.wrapHomeText(`${headerPrefix}${T()}${BOLD}`, headerPrefixPlain, headerText, contentWidth, ""),
-      ...this.wrapHomeText(`${MUTED()} `, " ", locationText, contentWidth),
+      ...this.wrapHomeText(`${subheadPrefix}${MUTED()}`, subheadPrefixPlain, locationText, contentWidth, ""),
       "",
       ...this.wrapHomeDetail("Model", modelLabel, Math.max(18, contentWidth)),
       ...this.wrapHomeDetail("Tip", this.homeTip, Math.max(18, contentWidth)),
