@@ -6,7 +6,10 @@
  * Syntax highlighting via cli-highlight (highlight.js based).
  */
 
-import { createRequire } from "node:module";
+import { marked } from "marked";
+
+let highlightFn: ((code: string, opts: { language: string; ignoreIllegals: boolean }) => string) | null = null;
+let supportsLangFn: ((lang: string) => boolean) | null = null;
 
 // ANSI codes
 const RESET = "\x1b[0m";
@@ -22,9 +25,6 @@ const YELLOW = "\x1b[38;2;255;200;50m";
 const CYAN = "\x1b[38;2;100;200;200m";
 const CODE_BG = "\x1b[48;2;30;30;30m";
 
-let markedLexer: ((text: string) => Token[]) | null = null;
-let highlightCode: ((code: string, lang: string) => string) | null = null;
-let supportsLang: ((lang: string) => boolean) | null = null;
 let initialized = false;
 
 interface Token {
@@ -52,32 +52,16 @@ function ensureInit(): void {
   if (initialized) return;
   initialized = true;
 
-  process.env.FORCE_COLOR = "3";
-
   try {
-    const req = createRequire(import.meta.url);
-    const { marked } = req("marked");
-    markedLexer = (text: string) => marked.lexer(text) as Token[];
-  } catch {
-    // marked unavailable
-  }
-
-  try {
-    const req = createRequire(import.meta.url);
-    const cliHighlight = req("cli-highlight");
-    highlightCode = (code: string, lang: string) => {
-      try {
-        return cliHighlight.highlight(code, { language: lang, ignoreIllegals: true });
-      } catch {
-        return code;
-      }
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const cliHighlight = require("cli-highlight");
+    highlightFn = (code: string, opts: { language: string; ignoreIllegals: boolean }) => {
+      try { return cliHighlight.highlight(code, opts); }
+      catch { return code; }
     };
-    supportsLang = (lang: string) => {
-      try {
-        return cliHighlight.supportsLanguage(lang);
-      } catch {
-        return false;
-      }
+    supportsLangFn = (lang: string) => {
+      try { return cliHighlight.supportsLanguage(lang); }
+      catch { return false; }
     };
   } catch {
     // cli-highlight unavailable
@@ -178,8 +162,8 @@ function renderBlock(token: Token, indent = ""): string[] {
       }
 
       let highlighted = code;
-      if (lang && highlightCode && supportsLang && supportsLang(lang)) {
-        highlighted = highlightCode(code, lang);
+      if (lang && highlightFn && supportsLangFn && supportsLangFn(lang)) {
+        highlighted = highlightFn(code, { language: lang, ignoreIllegals: true });
       }
 
       for (const cl of highlighted.split("\n")) {
@@ -342,14 +326,12 @@ function padCell(text: string, width: number, align: string | null): string {
 export function renderMarkdown(text: string): string {
   ensureInit();
 
-  if (!markedLexer) return text;
-
   try {
-    const tokens = markedLexer(text);
+    const tokens = marked.lexer(text) as Token[];
     const lines: string[] = [];
 
     for (const token of tokens) {
-      const blockLines = renderBlock(token as Token);
+      const blockLines = renderBlock(token);
       for (const l of blockLines) lines.push(l);
     }
 

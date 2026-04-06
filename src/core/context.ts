@@ -29,7 +29,8 @@ export function buildSystemPrompt(cwd: string, providerId?: string, mode?: Mode)
   // Core identity — ultra-concise, saves tokens every single turn
   parts.push(`You are a coding agent. Use tools to complete tasks.
 Be concise. Use tools directly — don't just show code, write it.
-After changes, briefly explain what you did.`);
+After changes, briefly explain what you did.
+NEVER use askUser to clarify — make assumptions and proceed. Only use askUser for irreversible destructive actions.`);
 
   // Environment — minimal
   let isGit = false;

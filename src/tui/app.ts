@@ -1116,7 +1116,7 @@ export class App {
         const mins = Math.floor(secs / 60);
         const timeStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
         const tokenStr = this.streamTokens > 0 ? ` | ${fmtTokens(this.streamTokens)} tokens` : "";
-        lines.push(`  ${DIM}\u25CB${RESET} ${DIM}Thinking...${RESET}  ${DIM}(${timeStr}${tokenStr})${RESET}`);
+        lines.push(`  ${T()}\u25CB${RESET} ${T()}Thinking...${RESET}  ${DIM}(${timeStr}${tokenStr})${RESET}`);
         lines.push("");
       }
     }
@@ -1380,29 +1380,14 @@ export class App {
       if (this.scrollOffset < 0) this.scrollOffset = 0;
       const visibleMsgs = messageLines.slice(this.scrollOffset, this.scrollOffset + chatH);
 
-      // Scrollbar — only when sidebar is visible
-      const totalMsgLines = messageLines.length;
-      const showScrollbar = hasSidebar && totalMsgLines > chatH;
-      let scrollThumbStart = 0;
-      let scrollThumbEnd = 0;
-      if (showScrollbar) {
-        const ratio = chatH / totalMsgLines;
-        const thumbSize = Math.max(1, Math.round(chatH * ratio));
-        scrollThumbStart = Math.round((this.scrollOffset / Math.max(1, totalMsgLines - chatH)) * (chatH - thumbSize));
-        scrollThumbEnd = scrollThumbStart + thumbSize;
-      }
-
       if (hasSidebar) {
         const sidebarLines = this.renderSidebar();
         const border = `${DIM}\u2502${RESET}`;
         for (let i = 0; i < chatH; i++) {
           const chatLine = this.padLine(visibleMsgs[i] ?? "", mainW);
-          const scrollChar = showScrollbar
-            ? (i >= scrollThumbStart && i < scrollThumbEnd ? `${DIM}\u258F${RESET}` : " ")
-            : " ";
           const sidebarLine = sidebarLines[i] ?? "";
           const paddedSidebar = this.padLine(sidebarLine, this.screen.sidebarWidth);
-          frameLines.push(`${chatLine}${scrollChar}${border} ${paddedSidebar}`);
+          frameLines.push(`${chatLine} ${border} ${paddedSidebar}`);
         }
       } else {
         for (let i = 0; i < chatH; i++) {
@@ -1434,8 +1419,8 @@ export class App {
     const cursorLineIdx = (textBeforeCursor.match(/\n/g) || []).length;
     const lastNewline = textBeforeCursor.lastIndexOf("\n");
     const colInLine = lastNewline >= 0 ? cursor - lastNewline - 1 : cursor;
-    const inputRow = topHeight + 2 + cursorLineIdx; // +1 separator, +1 for 1-based
-    const inputCol = (cursorLineIdx === 0 ? 4 : 4) + colInLine;
+    const inputRow = Math.min(height, topHeight + 2 + cursorLineIdx); // +1 separator, +1 for 1-based
+    const inputCol = Math.min(width, 4 + colInLine);
     this.screen.setCursor(inputRow, inputCol);
   }
 
