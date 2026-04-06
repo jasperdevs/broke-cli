@@ -44,7 +44,7 @@ program.action(async (opts) => {
 
   const app = new App();
   let currentMode: Mode = getSettings().mode;
-  let systemPrompt = buildSystemPrompt(process.cwd(), undefined, currentMode);
+  let systemPrompt = buildSystemPrompt(process.cwd(), undefined, currentMode, getSettings().cavemanLevel ?? "off");
   let lastActivityTime = Date.now(); // Track for cache expiry warning
   let abortController: AbortController | null = null;
 
@@ -78,7 +78,14 @@ program.action(async (opts) => {
   app.onModeToggle((newMode) => {
     currentMode = newMode;
     const activeProvider = activeModel?.provider?.id;
-    systemPrompt = buildSystemPrompt(process.cwd(), activeProvider, currentMode);
+    const caveman = getSettings().cavemanLevel ?? "off";
+    systemPrompt = buildSystemPrompt(process.cwd(), activeProvider, currentMode, caveman);
+  });
+
+  app.onCavemanToggle((level) => {
+    const activeProvider = activeModel?.provider?.id;
+    reloadContext();
+    systemPrompt = buildSystemPrompt(process.cwd(), activeProvider, currentMode, level);
   });
 
   app.onScopedModelCycle(() => {
@@ -90,12 +97,14 @@ program.action(async (opts) => {
     }
     scopedModelIndex = (scopedModelIndex + 1) % scoped.length;
     const entry = scoped[scopedModelIndex];
-    const parts = entry.split("/");
-    if (parts.length === 2) {
+    const slashIdx = entry.indexOf("/");
+    if (slashIdx > 0) {
+      const provId = entry.slice(0, slashIdx);
+      const modId = entry.slice(slashIdx + 1);
       try {
-        activeModel = createModel(parts[0], parts[1]);
-        currentModelId = parts[1];
-        systemPrompt = buildSystemPrompt(process.cwd(), parts[0], currentMode);
+        activeModel = createModel(provId, modId);
+        currentModelId = modId;
+        systemPrompt = buildSystemPrompt(process.cwd(), provId, currentMode, getSettings().cavemanLevel ?? "off");
         app.setModel(activeModel.provider.name, currentModelId);
         session.setProviderModel(activeModel.provider.name, currentModelId);
         updateSetting("lastModel", entry);
@@ -129,10 +138,10 @@ program.action(async (opts) => {
         modelId = getSmallModelId(def.id);
       }
     } else if (opts.model) {
-      const parts = opts.model.split("/");
-      if (parts.length === 2) {
-        providerId = parts[0];
-        modelId = parts[1];
+      const slashIdx = opts.model.indexOf("/");
+      if (slashIdx > 0) {
+        providerId = opts.model.slice(0, slashIdx);
+        modelId = opts.model.slice(slashIdx + 1);
       } else {
         const def = pickDefault(providers);
         providerId = def?.id ?? "openai";
@@ -143,10 +152,10 @@ program.action(async (opts) => {
       // wasn't detected (local server may be slow to start, key may still work)
       const lastModel = getSettings().lastModel;
       if (lastModel) {
-        const parts = lastModel.split("/");
-        if (parts.length === 2) {
-          providerId = parts[0];
-          modelId = parts[1];
+        const slashIdx = lastModel.indexOf("/");
+        if (slashIdx > 0) {
+          providerId = lastModel.slice(0, slashIdx);
+          modelId = lastModel.slice(slashIdx + 1);
         }
       }
       if (!providerId) {
@@ -162,7 +171,7 @@ program.action(async (opts) => {
     try {
       activeModel = createModel(providerId!, modelId);
       currentModelId = modelId ?? activeModel.provider.defaultModel;
-      systemPrompt = buildSystemPrompt(process.cwd(), providerId!, currentMode);
+      systemPrompt = buildSystemPrompt(process.cwd(), providerId!, currentMode, getSettings().cavemanLevel ?? "off");
       app.setModel(activeModel.provider.name, currentModelId);
       app.setMode(currentMode);
       session.setProviderModel(activeModel.provider.name, currentModelId);
@@ -267,7 +276,7 @@ program.action(async (opts) => {
             try {
               activeModel = createModel(provId, modId);
               currentModelId = modId;
-              systemPrompt = buildSystemPrompt(process.cwd(), provId, currentMode);
+              systemPrompt = buildSystemPrompt(process.cwd(), provId, currentMode, getSettings().cavemanLevel ?? "off");
               app.setModel(activeModel.provider.name, currentModelId);
               session.setProviderModel(activeModel.provider.name, currentModelId);
               // Save as last used model
@@ -307,6 +316,7 @@ program.action(async (opts) => {
               { key: "maxSessionCost", label: "Max session cost", value: s.maxSessionCost === 0 ? "unlimited" : `$${s.maxSessionCost}`, description: "Maximum cost per session (0 = unlimited)" },
               { key: "followUpMode", label: "Follow-up mode", value: followUpLabels[s.followUpMode] ?? s.followUpMode, description: "When to send queued messages while AI is working" },
               { key: "notifyOnResponse", label: "Notify on response", value: String(s.notifyOnResponse), description: "Show a desktop notification when a response completes" },
+              { key: "cavemanLevel", label: "Caveman mode", value: s.cavemanLevel ?? "off", description: "off / lite / full / ultra — save output tokens (ctrl+y)" },
             ];
           }
           app.openSettings(buildEntries(), (key) => {
@@ -329,6 +339,14 @@ program.action(async (opts) => {
               const currentIdx = modes.indexOf(s.followUpMode);
               const nextIdx = (currentIdx + 1) % modes.length;
               updateSetting("followUpMode", modes[nextIdx]);
+            } else if (key === "cavemanLevel") {
+              const levels = ["off", "lite", "full", "ultra"] as const;
+              const current = s.cavemanLevel ?? "off";
+              const idx = levels.indexOf(current as any);
+              const next = levels[(idx + 1) % levels.length];
+              updateSetting("cavemanLevel", next);
+              reloadContext();
+              systemPrompt = buildSystemPrompt(process.cwd(), activeModel?.provider?.id, currentMode, next);
             }
             app.updateSettings(buildEntries());
           });
@@ -400,6 +418,14 @@ program.action(async (opts) => {
           session = forked;
           if (activeModel) session.setProviderModel(activeModel.provider.name, currentModelId);
           app.addMessage("system", `Forked session. History preserved, new branch started.`);
+          return;
+        }
+        case "caveman": {
+          app.cycleCavemanMode();
+          reloadContext();
+          const lvl = getSettings().cavemanLevel ?? "off";
+          systemPrompt = buildSystemPrompt(process.cwd(), activeModel?.provider?.id, currentMode, lvl);
+          app.addMessage("system", `Caveman mode: ${lvl}`);
           return;
         }
         case "name": {
@@ -713,14 +739,13 @@ ${msgs.map((m) => `<div class="${m.role}">${m.role === "assistant" ? esc(m.conte
           // Desktop notification if enabled
           if (getSettings().notifyOnResponse) {
             try {
-              const { execSync: exec } = require("child_process");
+              const { exec: execAsync } = require("child_process");
               if (process.platform === "win32") {
-                // Use PowerShell toast via .NET — no modules needed
-                exec(`powershell -NoProfile -Command "[void][System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms'); $n = New-Object System.Windows.Forms.NotifyIcon; $n.Icon = [System.Drawing.SystemIcons]::Information; $n.BalloonTipTitle = 'BrokeCLI'; $n.BalloonTipText = 'Response complete'; $n.Visible = $true; $n.ShowBalloonTip(3000); Start-Sleep -Milliseconds 3100; $n.Dispose()"`, { stdio: "ignore", timeout: 8000 });
+                execAsync(`powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; $n = New-Object System.Windows.Forms.NotifyIcon; $n.Icon = [System.Drawing.SystemIcons]::Information; $n.BalloonTipTitle = 'BrokeCLI'; $n.BalloonTipText = 'Response complete'; $n.Visible = $true; $n.ShowBalloonTip(3000)"`, { stdio: "ignore", timeout: 8000 });
               } else if (process.platform === "darwin") {
-                exec(`osascript -e 'display notification "Response complete" with title "BrokeCLI"'`, { stdio: "ignore", timeout: 5000 });
+                execAsync(`osascript -e 'display notification "Response complete" with title "BrokeCLI"'`, { stdio: "ignore", timeout: 5000 });
               } else {
-                exec(`notify-send "BrokeCLI" "Response complete"`, { stdio: "ignore", timeout: 5000 });
+                execAsync(`notify-send "BrokeCLI" "Response complete"`, { stdio: "ignore", timeout: 5000 });
               }
             } catch { /* notification failed, ignore */ }
           }

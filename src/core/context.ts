@@ -2,7 +2,7 @@ import { readFileSync, existsSync } from "fs";
 import { join, dirname } from "path";
 import { homedir } from "os";
 import { execSync } from "child_process";
-import type { Mode } from "./config.js";
+import type { Mode, CavemanLevel } from "./config.js";
 
 const CONVENTION_FILES = [
   "CONVENTIONS.md",
@@ -19,8 +19,8 @@ const MAX_CONVENTION_CHARS = 3200; // ~800 tokens
 
 let cachedPrompts = new Map<string, string>();
 
-export function buildSystemPrompt(cwd: string, providerId?: string, mode?: Mode): string {
-  const cacheKey = `${providerId ?? "default"}:${mode ?? "build"}:${cwd}`;
+export function buildSystemPrompt(cwd: string, providerId?: string, mode?: Mode, cavemanLevel?: CavemanLevel): string {
+  const cacheKey = `${providerId ?? "default"}:${mode ?? "build"}:${cavemanLevel ?? "off"}:${cwd}`;
   const cached = cachedPrompts.get(cacheKey);
   if (cached) return cached;
 
@@ -48,8 +48,20 @@ export function buildSystemPrompt(cwd: string, providerId?: string, mode?: Mode)
 
   parts.push(`<env>cwd: ${cwd} | git: ${isGit ? "yes" : "no"} | platform: ${process.platform}</env>`);
 
-  // Per-tool guidelines (Pi style — concise tips in system prompt, not duplicating tool schemas)
-  parts.push(`<tool-tips>
+  // Per-tool guidelines — compact version when caveman is on
+  if (cavemanLevel === "full" || cavemanLevel === "ultra") {
+    parts.push(`<tool-tips>
+bash: tests/builds/git/install. No cat/sed/grep. 30s timeout.
+readFile: offset/limit for large files. Max 500 lines.
+editFile: EXACT match old_string. Enough context for uniqueness.
+writeFile: New files only. readFile first if exists.
+listFiles: Explore code. Depth 3.
+grep: Find defs/usages. Use include glob.
+askUser: Only for user decisions.
+todoWrite: Task checklist for 3+ step work.
+</tool-tips>`);
+  } else {
+    parts.push(`<tool-tips>
 bash: Use for running tests, builds, git commands, installing packages. Prefer tools over bash for file operations (don't cat/sed/grep via bash). Commands timeout at 30s by default.
 readFile: Use offset/limit for large files — don't read entire files over 500 lines.
 editFile: old_string must be an EXACT match of existing text. Include enough surrounding context to be unique. Prefer this over writeFile for changes.
@@ -61,6 +73,7 @@ webFetch: For reading specific URLs — docs pages, API references. Content is s
 askUser: Use when you need the user's preference or decision. Good for: "which color?", "option A or B?", "delete these files?". Not for: things you can figure out yourself.
 todoWrite: Create or update a task checklist for multi-step work. Use at the start of complex tasks (3+ steps) to show your plan, then update status as you complete each step. Helps the user track progress.
 </tool-tips>`);
+  }
 
   // Global context files (truncated)
   for (const file of ["AGENTS.md", "SYSTEM.md"]) {
@@ -101,6 +114,11 @@ todoWrite: Create or update a task checklist for multi-step work. Use at the sta
     dir = dirname(dir);
   }
 
+  // Caveman mode — reduce output tokens by constraining verbosity
+  if (cavemanLevel && cavemanLevel !== "off") {
+    parts.push(getCavemanPrompt(cavemanLevel));
+  }
+
   // Mode — one line
   if (mode === "plan") {
     parts.push(`MODE: plan — read first, outline steps, wait for confirmation.`);
@@ -115,4 +133,33 @@ todoWrite: Create or update a task checklist for multi-step work. Use at the sta
 
 export function reloadContext(): void {
   cachedPrompts.clear();
+}
+
+function getCavemanPrompt(level: CavemanLevel): string {
+  if (level === "lite") {
+    return `<output-style>
+CONCISE MODE: Cut filler, pleasantries, and padding. No "Sure!", "Great question!", "Here's what I found:". Lead with the answer. Short sentences. One explanation line after changes, max. Code blocks unchanged. Technical terms exact.
+</output-style>`;
+  }
+  if (level === "full") {
+    return `<output-style>
+TERSE MODE: Fragments OK. Drop articles (a/an/the). No filler words. No intros or signoffs. Just facts + code.
+- Skip "I'll", "Let me", "Here's" — just do it
+- 1 line explanations max. Often zero.
+- Bullet points over paragraphs
+- Code blocks unchanged, technical terms exact, error messages quoted exact
+- Never apologize or hedge
+</output-style>`;
+  }
+  // ultra
+  return `<output-style>
+TELEGRAPHIC MODE: Absolute minimum tokens. Write like a telegram.
+- Drop articles, pronouns, conjunctions, prepositions when meaning survives
+- Abbreviate: fn=function, arg=argument, ret=return, val=value, cfg=config, env=environment, dir=directory, dep=dependency, impl=implementation, msg=message, err=error, req=request, res=response
+- No prose. Lists/fragments only. Max 5 words per point.
+- Code blocks unchanged, technical terms exact
+- "Fixed." not "I've fixed the issue in the file."
+- "Added X to Y." not "I've gone ahead and added X to the Y file for you."
+- Never explain what you're about to do. Just do it.
+</output-style>`;
 }

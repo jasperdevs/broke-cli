@@ -12,8 +12,16 @@ const readFiles = new Map<string, { turnIndex: number; lineCount: number }>();
 /** Track which turn we're on */
 let currentTurn = 0;
 
+import { getSettings } from "./config.js";
+
 /** How many turns before tool results get evicted */
-const EVICTION_THRESHOLD = 6;
+function getEvictionThreshold(): number {
+  const level = getSettings().cavemanLevel ?? "off";
+  if (level === "ultra") return 2;
+  if (level === "full") return 3;
+  if (level === "lite") return 4;
+  return 6;
+}
 
 /** Max chars to keep for old tool results */
 const EVICTED_RESULT_MAX = 120;
@@ -58,10 +66,11 @@ function normalizePath(p: string): string {
 export function optimizeMessages(
   messages: Array<{ role: "user" | "assistant"; content: string }>,
 ): Array<{ role: "user" | "assistant"; content: string }> {
-  if (messages.length < EVICTION_THRESHOLD * 2) return messages;
+  const threshold = getEvictionThreshold();
+  if (messages.length < threshold * 2) return messages;
 
   const result: Array<{ role: "user" | "assistant"; content: string }> = [];
-  const recentStart = Math.max(0, messages.length - EVICTION_THRESHOLD * 2);
+  const recentStart = Math.max(0, messages.length - threshold * 2);
 
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i];

@@ -42,34 +42,45 @@ export class KeypressHandler {
     write(PASTE_MODE_ON);
     write(MOUSE_ON);
 
-    // Use readline for keypress parsing
-    readline.emitKeypressEvents(process.stdin);
-
-    // Track mouse sequences to filter them from keypress handler
-    const mouseSeqRe = /\x1b\[<(\d+);(\d+);(\d+)([Mm])/;
+    // Track mouse sequences
+    const mouseSeqRe = /\x1b\[<(\d+);(\d+);(\d+)([Mm])/g;
     let lastMouseTime = 0;
 
-    // Raw data handler for mouse events (SGR extended mode)
-    process.stdin.on("data", (data: Buffer | string) => {
-      const s = typeof data === "string" ? data : data.toString("utf-8");
-      const match = s.match(mouseSeqRe);
-      if (match) {
-        lastMouseTime = Date.now();
-        const button = parseInt(match[1], 10);
-        const col = parseInt(match[2], 10);
-        const row = parseInt(match[3], 10);
-        const release = match[4] === "m";
-        // button 64 = scroll up, 65 = scroll down
-        if (button === 64) {
-          this.onKey({ name: "scrollup", char: "", ctrl: false, meta: false, shift: false });
-        } else if (button === 65) {
-          this.onKey({ name: "scrolldown", char: "", ctrl: false, meta: false, shift: false });
-        } else if (button === 0 && release) {
-          // Left click release — pass click coordinates
-          this.onKey({ name: "click", char: `${col},${row}`, ctrl: false, meta: false, shift: false });
+    // Intercept raw data BEFORE readline to handle mouse sequences
+    const origEmit = process.stdin.emit.bind(process.stdin);
+    process.stdin.emit = ((event: string, ...args: any[]) => {
+      if (event === "data") {
+        const s = typeof args[0] === "string" ? args[0] : (args[0] as Buffer).toString("utf-8");
+        mouseSeqRe.lastIndex = 0;
+        let match;
+        let hasMouseData = false;
+        while ((match = mouseSeqRe.exec(s)) !== null) {
+          hasMouseData = true;
+          lastMouseTime = Date.now();
+          const button = parseInt(match[1], 10);
+          const release = match[4] === "m";
+          if (button === 64) {
+            this.onKey({ name: "scrollup", char: "", ctrl: false, meta: false, shift: false });
+          } else if (button === 65) {
+            this.onKey({ name: "scrolldown", char: "", ctrl: false, meta: false, shift: false });
+          } else if (button === 0 && release) {
+            const col = parseInt(match[2], 10);
+            const row = parseInt(match[3], 10);
+            this.onKey({ name: "click", char: `${col},${row}`, ctrl: false, meta: false, shift: false });
+          }
+        }
+        // If entire data was mouse sequences, don't pass to readline
+        if (hasMouseData) {
+          const stripped = s.replace(/\x1b\[<\d+;\d+;\d+[Mm]/g, "");
+          if (!stripped) return false;
+          return origEmit("data", stripped);
         }
       }
-    });
+      return origEmit(event, ...args);
+    }) as typeof process.stdin.emit;
+
+    // Use readline for keypress parsing (after our intercept)
+    readline.emitKeypressEvents(process.stdin);
 
     process.stdin.on("keypress", (str: string | undefined, key: readline.Key) => {
       // Skip keypresses that are fragments of mouse escape sequences

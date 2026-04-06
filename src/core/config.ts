@@ -6,6 +6,7 @@ import { parse as parseJsonc } from "jsonc-parser";
 export type Mode = "build" | "plan";
 export type FollowUpMode = "immediate" | "after_tool" | "after_response";
 export type ThinkingLevel = "off" | "low" | "medium" | "high";
+export type CavemanLevel = "off" | "lite" | "full" | "ultra";
 
 export interface Settings {
   yoloMode: boolean;
@@ -24,6 +25,7 @@ export interface Settings {
   lastModel: string;
   mode: Mode;
   followUpMode: FollowUpMode;
+  cavemanLevel: CavemanLevel;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -43,6 +45,7 @@ export const DEFAULT_SETTINGS: Settings = {
   lastModel: "",
   mode: "build",
   followUpMode: "after_response",
+  cavemanLevel: "off",
 };
 
 export interface BrokeConfig {

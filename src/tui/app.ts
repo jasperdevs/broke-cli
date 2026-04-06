@@ -6,7 +6,7 @@ import { currentTheme, getPlanColor } from "../core/themes.js";
 import { execSync } from "child_process";
 import { matchesBinding, loadKeybindings } from "../core/keybindings.js";
 import { getSettings, updateSetting } from "../core/config.js";
-import type { Mode, ThinkingLevel } from "../core/config.js";
+import type { Mode, ThinkingLevel, CavemanLevel } from "../core/config.js";
 import stripAnsi from "strip-ansi";
 import { renderMarkdown } from "../utils/markdown.js";
 import { collectProjectFiles, filterFiles, readFileForContext } from "./file-picker.js";
@@ -144,6 +144,7 @@ const COMMANDS = [
   { name: "resume", desc: "resume session" },
   { name: "reload", desc: "reload context" },
   { name: "cost", desc: "session spend" },
+  { name: "caveman", desc: "cycle token saving" },
   { name: "clear", desc: "clear chat" },
   { name: "exit", desc: "quit" },
 ];
@@ -154,6 +155,8 @@ export class App {
   private input: InputWidget;
   private messages: ChatMessage[] = [];
   private thinkingBuffer = "";
+  private thinkingStartTime = 0;
+  private thinkingDuration = 0;
   private todoItems: Array<{ id: string; text: string; status: "pending" | "in_progress" | "done" }> = [];
   private sessionCost = 0;
   private sessionTokens = 0;
@@ -195,6 +198,7 @@ export class App {
   private mode: Mode = "build";
   private onModeChange: ((mode: Mode) => void) | null = null;
   private onThinkingChange: ((level: ThinkingLevel) => void) | null = null;
+  private onCavemanChange: ((level: CavemanLevel) => void) | null = null;
   private pendingMessages: Array<{ text: string; images?: Array<{ mimeType: string; data: string }> }> = [];
   private onPendingMessagesReady: (() => void) | null = null;
   private streamStartTime = 0;
@@ -268,24 +272,36 @@ export class App {
   setStreaming(streaming: boolean): void {
     this.isStreaming = streaming;
     if (!streaming) {
+      // Capture thinking duration before clearing
+      if (this.thinkingStartTime > 0) {
+        this.thinkingDuration = Math.floor((Date.now() - this.thinkingStartTime) / 1000);
+        this.thinkingStartTime = 0;
+      } else {
+        this.thinkingDuration = 0;
+      }
       this.thinkingBuffer = "";
       // Collapse tool call groups into single summary message
       if (this.toolCallGroups.length > 0) {
         this.collapseToolCalls();
       }
-      // Show completion message with elapsed time — always
+      // Show completion message with elapsed time + tokens + thinking
       if (this.streamStartTime > 0) {
         const elapsed = Date.now() - this.streamStartTime;
         const secs = Math.floor(elapsed / 1000);
         const mins = Math.floor(secs / 60);
         const timeStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
-        this.messages.push({ role: "system", content: `${DIM}\u2500 ${timeStr}${RESET}` });
+        const parts = [timeStr];
+        if (this.streamTokens > 0) parts.push(`${fmtTokens(this.streamTokens)} tokens`);
+        if (this.thinkingDuration > 0) parts.push(`thought for ${this.thinkingDuration}s`);
+        this.messages.push({ role: "system", content: `${DIM}\u2726 \u2500 ${parts.join(" \u00B7 ")}${RESET}` });
         this.invalidateMsgCache();
         this.streamStartTime = 0;
       }
     }
     if (streaming) {
       this.thinkingBuffer = "";
+      this.thinkingStartTime = 0;
+      this.thinkingDuration = 0;
       this.spinnerFrame = 0;
       this.streamStartTime = Date.now();
       this.streamTokens = 0;
@@ -353,6 +369,12 @@ export class App {
   }
 
   appendToLastMessage(text: string): void {
+    // Capture thinking duration when first text arrives after thinking
+    if (this.thinkingStartTime > 0 && this.thinkingBuffer) {
+      this.thinkingDuration = Math.floor((Date.now() - this.thinkingStartTime) / 1000);
+      this.thinkingStartTime = 0;
+      this.thinkingBuffer = "";
+    }
     const last = this.messages[this.messages.length - 1];
     if (last && last.role === "assistant") {
       last.content += text;
@@ -365,6 +387,9 @@ export class App {
   }
 
   appendThinking(delta: string): void {
+    if (!this.thinkingBuffer && delta) {
+      this.thinkingStartTime = Date.now();
+    }
     this.thinkingBuffer += delta;
     this.scrollToBottom();
     this.draw();
@@ -543,6 +568,21 @@ export class App {
     updateSetting("thinkingLevel", next);
     updateSetting("enableThinking", next !== "off");
     if (this.onThinkingChange) this.onThinkingChange(next);
+    this.draw();
+  }
+
+  onCavemanToggle(callback: (level: CavemanLevel) => void): void {
+    this.onCavemanChange = callback;
+  }
+
+  cycleCavemanMode(): void {
+    const levels: CavemanLevel[] = ["off", "lite", "full", "ultra"];
+    const settings = getSettings();
+    const current = settings.cavemanLevel ?? "off";
+    const idx = levels.indexOf(current);
+    const next = levels[(idx + 1) % levels.length];
+    updateSetting("cavemanLevel", next);
+    if (this.onCavemanChange) this.onCavemanChange(next);
     this.draw();
   }
 
@@ -815,9 +855,24 @@ export class App {
       return;
     }
 
-    // ESC to interrupt streaming (single press)
+    // ESC to interrupt streaming (double press)
     if (key.name === "escape" && this.isStreaming && this.onAbort) {
-      this.onAbort();
+      if (this.escPrimed) {
+        this.escPrimed = false;
+        this.statusMessage = undefined;
+        this.onAbort();
+      } else {
+        this.escPrimed = true;
+        this.statusMessage = `${RED}Press ESC again to stop${RESET}`;
+        this.draw();
+        setTimeout(() => {
+          this.escPrimed = false;
+          if (this.statusMessage?.includes("ESC again")) {
+            this.statusMessage = undefined;
+            this.draw();
+          }
+        }, 1500);
+      }
       return;
     }
 
@@ -908,6 +963,12 @@ export class App {
     // Ctrl+T — cycle thinking mode
     if (key.ctrl && key.name === "t") {
       this.cycleThinkingMode();
+      return;
+    }
+
+    // Ctrl+Y — cycle caveman mode
+    if (key.ctrl && key.name === "y") {
+      this.cycleCavemanMode();
       return;
     }
 
@@ -1077,15 +1138,15 @@ export class App {
         lines.push("");
       } else if (msg.role === "assistant") {
         const rendered = renderMarkdown(msg.content);
-        const wrapW = maxWidth - 6; // 4 indent + 2 margin
+        const wrapW = maxWidth - 4; // 2 indent + 2 margin
         for (const cl of rendered.split("\n")) {
           const plain = stripAnsi(cl);
           if (plain.length <= wrapW) {
-            lines.push(`    ${cl}`);
+            lines.push(`  ${cl}`);
           } else {
             // Word-aware soft wrap
             for (const wl of wordWrap(plain, wrapW)) {
-              lines.push(`    ${wl}`);
+              lines.push(`  ${wl}`);
             }
           }
         }
@@ -1168,7 +1229,7 @@ export class App {
       : (this.spinnerFrame % 2 === 0 ? `${GREEN}\u25CF${RESET}` : `${GREEN_DIM}\u25CF${RESET}`);
 
     const desc = this.toolDescription(tc);
-    lines.push(`${icon} ${done ? DIM : WHITE}${desc}${running ? "..." : ""}${RESET}`);
+    lines.push(`  ${icon} ${done ? DIM : WHITE}${desc}${running ? "..." : ""}${RESET}`);
 
     const a = tc.args as Record<string, string> | undefined;
 
@@ -1200,18 +1261,18 @@ export class App {
         lines.push(`${DIM}  ${L} +${newLines.length} -${oldLines.length} lines${RESET}`);
         // Show removed lines (red bg)
         for (const l of oldLines.slice(0, 4)) {
-          const text = `- ${l}`.slice(0, diffW);
-          const pad = Math.max(0, diffW - text.length);
-          lines.push(`${bg(60, 15, 15)} ${text}${" ".repeat(pad)} ${RESET}`);
+          const text = `- ${l}`.slice(0, diffW - 2);
+          const pad = Math.max(0, diffW - 2 - text.length);
+          lines.push(`  ${bg(60, 15, 15)} ${text}${" ".repeat(pad)} ${RESET}`);
         }
-        if (oldLines.length > 4) lines.push(`${DIM}    ... +${oldLines.length - 4} more${RESET}`);
+        if (oldLines.length > 4) lines.push(`${DIM}      ... +${oldLines.length - 4} more${RESET}`);
         // Show added lines (green bg)
         for (const l of newLines.slice(0, 4)) {
-          const text = `+ ${l}`.slice(0, diffW);
-          const pad = Math.max(0, diffW - text.length);
-          lines.push(`${bg(15, 45, 15)} ${text}${" ".repeat(pad)} ${RESET}`);
+          const text = `+ ${l}`.slice(0, diffW - 2);
+          const pad = Math.max(0, diffW - 2 - text.length);
+          lines.push(`  ${bg(15, 45, 15)} ${text}${" ".repeat(pad)} ${RESET}`);
         }
-        if (newLines.length > 4) lines.push(`${DIM}    ... +${newLines.length - 4} more${RESET}`);
+        if (newLines.length > 4) lines.push(`${DIM}      ... +${newLines.length - 4} more${RESET}`);
       } else if (tc.name === "writeFile" && a?.content) {
         const n = a.content.split("\n").length;
         lines.push(`${DIM}  ${L} ${n} lines written${RESET}`);
@@ -1306,23 +1367,29 @@ export class App {
       lines.push("");
     }
 
-    // Loading spinner — show while streaming and no text output yet
+    // Streaming status — ALWAYS pinned at bottom while generating
     if (this.isStreaming) {
-      let hasTextOutput = false;
-      for (let i = this.messages.length - 1; i >= 0; i--) {
-        if (this.messages[i].role === "user") break;
-        if (this.messages[i].role === "assistant" && this.messages[i].content.length > 0) { hasTextOutput = true; break; }
+      const elapsed = Date.now() - this.streamStartTime;
+      const secs = Math.floor(elapsed / 1000);
+      const mins = Math.floor(secs / 60);
+      const timeStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
+      const statParts: string[] = [timeStr];
+      if (this.streamTokens > 0) statParts.push(`\u2193 ${fmtTokens(this.streamTokens)} tokens`);
+      // Show thinking duration
+      if (this.thinkingStartTime > 0) {
+        // Still thinking — show live
+        const thinkSecs = Math.floor((Date.now() - this.thinkingStartTime) / 1000);
+        if (thinkSecs > 0) statParts.push(`thinking ${thinkSecs}s`);
+      } else if (this.thinkingDuration > 0) {
+        statParts.push(`thought for ${this.thinkingDuration}s`);
       }
-      if (!hasTextOutput && !this.thinkingBuffer) {
-        const elapsed = Date.now() - this.streamStartTime;
-        const secs = Math.floor(elapsed / 1000);
-        const mins = Math.floor(secs / 60);
-        const timeStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
-        const spinChars = ["\u25DC", "\u25DD", "\u25DE", "\u25DF"]; // ◜◝◞◟
-        const spin = spinChars[this.spinnerFrame % spinChars.length];
-        lines.push(`  ${T()}${spin}${RESET} ${T()}Thinking...${RESET}  ${DIM}${timeStr}${RESET}`);
-        lines.push("");
-      }
+      const stats = statParts.join(" \u00B7 ");
+      const sparkle = this.sparkleSpinner(this.spinnerFrame);
+      // Label: "Thinking..." while thinking, "Composing..." while outputting text
+      const label = this.thinkingBuffer ? "Thinking..." : "Composing...";
+      const shimmer = this.shimmerText(label, this.spinnerFrame);
+      lines.push(`  ${sparkle} ${shimmer} ${T()}(${stats})${RESET}`);
+      lines.push("");
     }
     return lines;
   }
@@ -1556,6 +1623,10 @@ export class App {
       } else {
         parts.push({ text: `${DIM}off${RESET} ${DIM}(ctrl+t)${RESET}`, plain: "off (ctrl+t)", priority: 3 });
       }
+      const caveLevel = settings.cavemanLevel ?? "off";
+      if (caveLevel !== "off") {
+        parts.push({ text: `\u{1FAA8}:${YELLOW}${caveLevel}${RESET} ${DIM}(ctrl+y)${RESET}`, plain: `\u{1FAA8}:${caveLevel} (ctrl+y)`, priority: 3 });
+      }
       // Cost/tokens/context in bottom bar — respect showCost/showTokens settings
       const liveTokens = this.isStreaming ? this.sessionTokens + this.streamTokens : this.sessionTokens;
       const showCost = settings.showCost && this.sessionCost > 0;
@@ -1660,18 +1731,35 @@ export class App {
     this.screen.setCursor(inputRow, inputCol);
   }
 
-/** Shimmer effect — green wave sweeping across text */
+  /** Sparkle spinner: cycles through · ✧ ✦ ✧ one at a time */
+  private sparkleSpinner(frame: number, color?: string): string {
+    const chars = ["\u00B7", "\u2727", "\u2726", "\u2727"]; // · ✧ ✦ ✧
+    const c = color ?? T();
+    return `${c}${chars[frame % chars.length]}${RESET}`;
+  }
+
+  /** Shimmer effect — color wave sweeping across text */
   private shimmerText(text: string, frame: number): string {
+    // Parse theme color RGB for shimmer range
+    const themeCol = T();
+    const rgbMatch = themeCol.match(/38;2;(\d+);(\d+);(\d+)/);
+    const tr = rgbMatch ? parseInt(rgbMatch[1]) : 58;
+    const tg = rgbMatch ? parseInt(rgbMatch[2]) : 199;
+    const tb = rgbMatch ? parseInt(rgbMatch[3]) : 58;
+    // Dim version: 40% brightness
+    const dr = Math.round(tr * 0.35);
+    const dg = Math.round(tg * 0.35);
+    const db = Math.round(tb * 0.35);
+
     const period = text.length + 8;
     const pos = (frame * 0.6) % period;
     let result = "";
     for (let i = 0; i < text.length; i++) {
       const dist = Math.abs(i - pos);
       const t = Math.max(0, 1 - dist / 4);
-      // Shimmer from dim green (30,100,30) to bright green (58,220,58)
-      const r = Math.round(30 + t * 28);
-      const g = Math.round(100 + t * 120);
-      const b = Math.round(30 + t * 28);
+      const r = Math.round(dr + t * (tr - dr));
+      const g = Math.round(dg + t * (tg - dg));
+      const b = Math.round(db + t * (tb - db));
       result += `\x1b[38;2;${r};${g};${b}m${text[i]}`;
     }
     return result + RESET;
