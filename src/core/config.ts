@@ -88,6 +88,7 @@ export function getApiKey(provider: string): string | undefined {
   const fromConfig = config.providers?.[provider]?.apiKey;
   if (fromConfig) return fromConfig;
 
+  // Check environment variables first
   switch (provider) {
     case "anthropic":
       return process.env.ANTHROPIC_API_KEY;

@@ -18,6 +18,7 @@ import { listThemes, getTheme } from "../src/core/themes.js";
 import { undoLastCheckpoint } from "../src/core/git.js";
 import { listTemplates, loadTemplate } from "../src/core/templates.js";
 import { loadExtensions } from "../src/core/extensions.js";
+import { RESET, DIM, RED, GREEN } from "../src/utils/ansi.js";
 
 const program = new Command()
   .name("brokecli")
@@ -589,22 +590,39 @@ program.action(async (opts) => {
         },
         onToolCall: (name, args) => {
           hooks.emit("on_tool_call", { name, args });
-          const preview = typeof args === "object" && args !== null
-            ? JSON.stringify(args).slice(0, 80)
-            : String(args).slice(0, 80);
-          app.addMessage("system", `> ${name} ${preview}`);
+          // Pretty format tool calls
+          let preview = "";
+          if (name === "writeFile" || name === "editFile") {
+            const path = (args as any)?.path ?? "?";
+            preview = path;
+          } else if (name === "readFile" || name === "listFiles" || name === "grep") {
+            const path = (args as any)?.path ?? (args as any)?.pattern ?? "?";
+            preview = path;
+          } else if (name === "bash") {
+            const cmd = (args as any)?.command ?? "?";
+            preview = cmd.length > 60 ? cmd.slice(0, 60) + "..." : cmd;
+          } else {
+            preview = typeof args === "object" ? JSON.stringify(args).slice(0, 60) : String(args).slice(0, 60);
+          }
+          app.addMessage("system", `${GREEN}${name}${RESET} ${DIM}${preview}${RESET}`);
         },
         onToolResult: (_name, result) => {
           hooks.emit("on_tool_result", { name: _name, result });
           const r = result as { success?: boolean; output?: string; error?: string };
           if (r.success === false && r.error) {
-            app.addMessage("system", `  error: ${r.error.slice(0, 100)}`);
+            app.addMessage("system", `${RED}✗ ${r.error.slice(0, 100)}${RESET}`);
+          } else if (r.success && _name === "writeFile") {
+            app.addMessage("system", `${GREEN}✓ wrote file${RESET}`);
+          } else if (r.success && _name === "editFile") {
+            app.addMessage("system", `${GREEN}✓ edited file${RESET}`);
           } else if (r.output) {
             const lines = r.output.split("\n");
             const preview = lines.length > 5
-              ? lines.slice(0, 5).join("\n") + `\n  ... (${lines.length} lines)`
+              ? lines.slice(0, 5).join("\n") + `\n  ${DIM}... (${lines.length} lines)${RESET}`
               : r.output;
             app.addMessage("system", preview.slice(0, 500));
+          } else if (r.success) {
+            app.addMessage("system", `${GREEN}✓${RESET}`);
           }
         },
       },
