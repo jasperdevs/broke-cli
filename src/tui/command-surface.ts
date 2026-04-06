@@ -23,7 +23,6 @@ export const COMMANDS: CommandEntry[] = [
   { name: "projects", desc: "switch or search recent projects" },
   { name: "resume", desc: "resume session (sessions)", aliases: ["sessions"] },
   { name: "agents", desc: "inspect delegated agent tasks", hotkey: "alt+a", isVisible: (context) => context.hasAgentRuns },
-  { name: "share", desc: "create shareable transcript html" },
   { name: "session", desc: "show active session info" },
   { name: "hotkeys", desc: "show keyboard shortcuts" },
   { name: "reload", desc: "reload templates, context, and extensions" },

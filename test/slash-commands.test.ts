@@ -315,37 +315,6 @@ describe("slash command handling", () => {
     }
   });
 
-  it("writes a standalone html share for /share", async () => {
-    const app = createAppStub();
-    const session = new Session(`test-share-${Date.now()}`);
-    session.addMessage("user", "share this session");
-    session.addMessage("assistant", "done");
-
-    const result = await handleSlashCommand({
-      text: "/share",
-      app,
-      session,
-      activeModel: null,
-      currentModelId: "",
-      currentMode: "build",
-      systemPrompt: "sys",
-      providerRegistry: {} as any,
-      buildVisibleModelOptions: () => [],
-      refreshProviderState: async () => [],
-      isSkippedPromptAnswer: () => false,
-      isValidHttpBaseUrl: () => true,
-      getContextOptimizer: () => ({ reset() {} }) as any,
-      onSessionReplace: () => {},
-      onModelChange: () => {},
-      onSystemPromptChange: () => {},
-      hooks: { emit() {} },
-      onProjectChange: () => {},
-    });
-
-    expect(result.handled).toBe(true);
-    expect(app.messages.some((entry) => entry.content.includes("Shared to"))).toBe(true);
-  });
-
   it("does not add transcript comments for /thinking and /caveman toggles", async () => {
     const app = createAppStub();
     const session = new Session(`test-toggle-comments-${Date.now()}`);

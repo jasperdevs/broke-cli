@@ -20,7 +20,7 @@ import { checkForNewVersion } from "../core/update.js";
 import { formatRelativeMinutes } from "./exports.js";
 import { runConnectFlow } from "./connect-flow.js";
 import { runLoginFlow } from "./login-flow.js";
-import { handleLogoutMenu, openEmptyItemMenu, openExportMenu, openExtensionsMenu, openPermissionsMenu, openProjectsMenu, openResumeMenu, openSettingsMenu, openThemeMenu, shareTranscript } from "./slash-command-menus.js";
+import { handleLogoutMenu, openEmptyItemMenu, openExportMenu, openExtensionsMenu, openPermissionsMenu, openProjectsMenu, openResumeMenu, openSettingsMenu, openThemeMenu } from "./slash-command-menus.js";
 import type { ModelOption, SettingEntry, PickerItem, UpdateNotice } from "../tui/app-types.js";
 import { SessionManager } from "../core/session-manager.js";
 
@@ -377,14 +377,6 @@ export async function handleSlashCommand(options: {
     }
     case "export": {
       openExportMenu({ app, session, activeModel, currentModelId, text });
-      return { handled: true };
-    }
-    case "share": {
-      try {
-        await shareTranscript({ app, session, activeModel, currentModelId });
-      } catch (err) {
-        app.addMessage("system", `Share failed: ${(err as Error).message}`);
-      }
       return { handled: true };
     }
     case "sessions":

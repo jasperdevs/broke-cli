@@ -33,7 +33,6 @@ npm install -g @jasperdevs/brokecli
 - `/resume` search and resume recent sessions in the current project
 - `/session` inspect the active session file, tokens, and cost
 - `/projects` search and switch among recently used projects
-- `/share` publish a secret GitHub gist when a share token is present, otherwise create a local shareable HTML transcript
 - `/budget` inspect planner reuse, cheap-vs-main execution share, cache cliffs, and tool waste
 - `/permissions` allow/block model tools
 - `/extensions` enable/disable loaded extensions
@@ -70,8 +69,6 @@ The agent has first-class tools for:
 - delegated stateless agent search/research/plan/review
 
 You can block specific tools with `/permissions`.
-
-For hosted `/share`, set either `BROKECLI_SHARE_GITHUB_TOKEN` or `GITHUB_TOKEN`. Without one, `brokecli` falls back to a local HTML share file and copies its `file:///` URL.
 
 ## Extensions
 
