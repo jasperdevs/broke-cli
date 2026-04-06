@@ -70,6 +70,11 @@ export class Screen {
     write(CURSOR_SHOW);
   }
 
+  /** Hide the cursor (during streaming, pickers, etc.) */
+  hideCursor(): void {
+    write(CURSOR_HIDE);
+  }
+
   /** Whether the terminal is wide enough for a sidebar */
   get hasSidebar(): boolean {
     return this.cols >= 70;

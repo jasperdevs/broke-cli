@@ -9,6 +9,7 @@ import { buildSystemPrompt, reloadContext } from "../src/core/context.js";
 import { Session } from "../src/core/session.js";
 import { getTools } from "../src/tools/registry.js";
 import { createAskUserTool } from "../src/tools/ask.js";
+import { setBashOutputCallback } from "../src/tools/bash.js";
 import { renderMarkdown } from "../src/utils/markdown.js";
 import { checkBudget } from "../src/core/budget.js";
 import { getSettings, updateSetting, type Settings, type Mode } from "../src/core/config.js";
@@ -184,6 +185,11 @@ program.action(async (opts) => {
     ...getTools(),
     askUser: createAskUserTool((q, opts) => app.showQuestion(q, opts)),
   };
+
+  // Wire bash streaming output to UI
+  setBashOutputCallback((chunk) => {
+    app.appendToolOutput(chunk);
+  });
 
   // Handle pending messages when they become ready
   app.onPendingMessagesReadyHandler(() => {
