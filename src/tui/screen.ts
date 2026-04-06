@@ -47,32 +47,20 @@ export class Screen {
   }
 
   /**
-   * Render a new frame. Only writes lines that changed.
-   * Lines array should have exactly this.rows entries.
-   * Batches all writes into a single stdout.write for performance.
+   * Render a frame. Writes all lines using synchronized output
+   * to prevent flicker. Always does a full write for reliability.
    */
   render(lines: string[]): void {
     let buf = SYNC_START;
-    let changed = false;
-
     for (let i = 0; i < this.rows; i++) {
-      const line = lines[i] ?? "";
-      if (line !== this.prev[i]) {
-        buf += moveToRow(i + 1) + CLEAR_LINE + line;
-        this.prev[i] = line;
-        changed = true;
-      }
+      buf += moveToRow(i + 1) + CLEAR_LINE + (lines[i] ?? "");
     }
-
     buf += SYNC_END;
-    if (changed) write(buf);
-    // Truncate prev if lines array is shorter
-    if (this.prev.length > this.rows) this.prev.length = this.rows;
+    write(buf);
   }
 
-  /** Force full redraw (e.g. after resize) */
+  /** Force full redraw — same as render now */
   forceRedraw(lines: string[]): void {
-    this.prev = [];
     this.render(lines);
   }
 
@@ -84,16 +72,20 @@ export class Screen {
 
   /** Whether the terminal is wide enough for a sidebar */
   get hasSidebar(): boolean {
-    return this.cols >= 90;
+    return this.cols >= 70;
   }
 
   /** Width available for main content (excluding sidebar) */
   get mainWidth(): number {
-    return this.hasSidebar ? this.cols - 30 : this.cols; // 30 col sidebar
+    if (!this.hasSidebar) return this.cols;
+    const sideTotal = this.sidebarWidth + 3; // border + padding
+    return this.cols - sideTotal;
   }
 
-  /** Sidebar width */
+  /** Sidebar width — scales with terminal */
   get sidebarWidth(): number {
-    return 29; // 29 chars + 1 border
+    if (this.cols >= 120) return 28;
+    if (this.cols >= 90) return 24;
+    return 20;
   }
 }

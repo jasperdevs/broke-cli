@@ -144,7 +144,7 @@ export class App {
   private escPrimed = false;
   private compactStartTime = 0;
   private compactTokens = 0;
-  private lastBottomHeight = 0;
+  private sidebarFileTree: string[] | null = null;
 
   // Render throttling
   private drawScheduled = false;
@@ -765,14 +765,14 @@ export class App {
       return;
     }
 
-    // Scroll: mouse wheel, PageUp/Down
-    if (key.name === "scrollup" || key.name === "pageup") {
+    // Scroll: mouse wheel, PageUp/Down, Ctrl+Up/Down
+    if (key.name === "scrollup" || key.name === "pageup" || (key.ctrl && key.name === "up")) {
       this.scrollOffset = Math.max(0, this.scrollOffset - 3);
       this.invalidateMsgCache();
       this.draw();
       return;
     }
-    if (key.name === "scrolldown" || key.name === "pagedown") {
+    if (key.name === "scrolldown" || key.name === "pagedown" || (key.ctrl && key.name === "down")) {
       const chatHeight = this.getChatHeight();
       const messageLines = this.renderMessages(this.screen.mainWidth - 2);
       const maxScroll = Math.max(0, messageLines.length - chatHeight);
@@ -1104,29 +1104,21 @@ export class App {
     }
 
     // Loading indicator — only show before model starts outputting in this turn
-    let hasCurrentOutput = false;
-    for (let i = this.messages.length - 1; i >= 0; i--) {
-      if (this.messages[i].role === "user") break;
-      if (this.messages[i].role === "assistant" && this.messages[i].content.length > 0) { hasCurrentOutput = true; break; }
-    }
-    if (this.isStreaming && !this.thinkingBuffer && !hasCurrentOutput) {
-      const loadingMessages = [
-        "Thinking...", "Working on it...", "Processing...", "Generating...",
-        "Cooking something up...", "Connecting the dots...", "Crunching...",
-        "Putting it together...", "Brewing...", "Almost there...",
-        "Hammering away...", "Just a moment...", "Spinning gears...", "On it...",
-      ];
-      const spinnerFrames = ["\u00B7", "\u25E6", "\u25CB", "\u25C9", "\u25CB", "\u25E6"];
-      const spinner = spinnerFrames[this.spinnerFrame % spinnerFrames.length];
-      const msgIdx = Math.floor(this.spinnerFrame / 20) % loadingMessages.length;
-      const msg = loadingMessages[msgIdx];
-      const elapsed = Date.now() - this.streamStartTime;
-      const secs = Math.floor(elapsed / 1000);
-      const mins = Math.floor(secs / 60);
-      const timeStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
-      const tokenStr = this.streamTokens > 0 ? ` | ${fmtTokens(this.streamTokens)} tokens` : "";
-      lines.push(`  ${T()}${spinner}${RESET} ${this.shimmerText(msg, this.spinnerFrame)}  ${DIM}(${timeStr}${tokenStr})${RESET}`);
-      lines.push("");
+    if (this.isStreaming && !this.thinkingBuffer) {
+      let hasCurrentOutput = false;
+      for (let i = this.messages.length - 1; i >= 0; i--) {
+        if (this.messages[i].role === "user") break;
+        if (this.messages[i].role === "assistant" && this.messages[i].content.length > 0) { hasCurrentOutput = true; break; }
+      }
+      if (!hasCurrentOutput) {
+        const elapsed = Date.now() - this.streamStartTime;
+        const secs = Math.floor(elapsed / 1000);
+        const mins = Math.floor(secs / 60);
+        const timeStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
+        const tokenStr = this.streamTokens > 0 ? ` | ${fmtTokens(this.streamTokens)} tokens` : "";
+        lines.push(`  ${DIM}\u25CB${RESET} ${DIM}Thinking...${RESET}  ${DIM}(${timeStr}${tokenStr})${RESET}`);
+        lines.push("");
+      }
     }
     return lines;
   }
@@ -1180,6 +1172,33 @@ export class App {
     lines.push(`  ${DIM}${shortCwd}${RESET}`);
     if (this.gitBranch) {
       lines.push(`  ${DIM}${this.gitBranch}${this.gitDirty ? " *" : ""}${RESET}`);
+    }
+    lines.push("");
+
+    // File tree
+    lines.push(`${WHITE}Files${RESET}`);
+    if (!this.sidebarFileTree) {
+      try {
+        const files = execSync("git ls-files --others --cached --exclude-standard", { cwd: this.cwd, encoding: "utf-8", timeout: 2000 }).trim();
+        this.sidebarFileTree = files.split("\n").filter(Boolean).slice(0, 30);
+      } catch {
+        try {
+          const { readdirSync } = require("fs");
+          this.sidebarFileTree = readdirSync(this.cwd).filter((f: string) => !f.startsWith(".") && f !== "node_modules").slice(0, 20);
+        } catch {
+          this.sidebarFileTree = [];
+        }
+      }
+    }
+    const tree = this.sidebarFileTree ?? [];
+    const maxTreeLines = Math.min(tree.length, 12);
+    for (let i = 0; i < maxTreeLines; i++) {
+      const f = tree[i];
+      const display = f.length > w - 4 ? f.slice(-(w - 5)) : f;
+      lines.push(`  ${DIM}${display}${RESET}`);
+    }
+    if (tree.length > 12) {
+      lines.push(`  ${DIM}+${tree.length - 12} more${RESET}`);
     }
 
     return lines;
@@ -1361,9 +1380,9 @@ export class App {
       if (this.scrollOffset < 0) this.scrollOffset = 0;
       const visibleMsgs = messageLines.slice(this.scrollOffset, this.scrollOffset + chatH);
 
-      // Scrollbar calculation
+      // Scrollbar — only when sidebar is visible
       const totalMsgLines = messageLines.length;
-      const showScrollbar = totalMsgLines > chatH;
+      const showScrollbar = hasSidebar && totalMsgLines > chatH;
       let scrollThumbStart = 0;
       let scrollThumbEnd = 0;
       if (showScrollbar) {
@@ -1377,20 +1396,17 @@ export class App {
         const sidebarLines = this.renderSidebar();
         const border = `${DIM}\u2502${RESET}`;
         for (let i = 0; i < chatH; i++) {
+          const chatLine = this.padLine(visibleMsgs[i] ?? "", mainW);
           const scrollChar = showScrollbar
-            ? (i >= scrollThumbStart && i < scrollThumbEnd ? `${DIM}\u2591${RESET}` : " ")
-            : "";
-          const chatLine = this.padLine(visibleMsgs[i] ?? "", mainW - (showScrollbar ? 1 : 0));
+            ? (i >= scrollThumbStart && i < scrollThumbEnd ? `${DIM}\u258F${RESET}` : " ")
+            : " ";
           const sidebarLine = sidebarLines[i] ?? "";
           const paddedSidebar = this.padLine(sidebarLine, this.screen.sidebarWidth);
-          frameLines.push(`${chatLine}${scrollChar} ${border} ${paddedSidebar}`);
+          frameLines.push(`${chatLine}${scrollChar}${border} ${paddedSidebar}`);
         }
       } else {
         for (let i = 0; i < chatH; i++) {
-          const scrollChar = showScrollbar
-            ? (i >= scrollThumbStart && i < scrollThumbEnd ? `${DIM}\u2591${RESET}` : " ")
-            : "";
-          frameLines.push((visibleMsgs[i] ?? "") + scrollChar);
+          frameLines.push(visibleMsgs[i] ?? "");
         }
       }
     }
@@ -1401,7 +1417,7 @@ export class App {
       const sideW = this.screen.sidebarWidth;
       for (const l of bottomLines) {
         const padded = this.padLine(l, mainW);
-        frameLines.push(`${padded} ${border}${" ".repeat(sideW)}`);
+        frameLines.push(`${padded} ${border}${" ".repeat(sideW + 1)}`);
       }
     } else {
       for (const l of bottomLines) frameLines.push(l);
@@ -1411,13 +1427,7 @@ export class App {
     while (frameLines.length < height) frameLines.push("");
     if (frameLines.length > height) frameLines.length = height;
 
-    // Force full redraw when bottom section height changes to prevent stale lines
-    if (bottomLines.length !== this.lastBottomHeight) {
-      this.lastBottomHeight = bottomLines.length;
-      this.screen.forceRedraw(frameLines);
-    } else {
-      this.screen.render(frameLines);
-    }
+    this.screen.render(frameLines);
 
     // Cursor on input line — account for multi-line input
     const textBeforeCursor = inputText.slice(0, cursor);
