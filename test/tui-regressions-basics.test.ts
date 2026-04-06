@@ -70,7 +70,7 @@ describe("sidebar token summary", () => {
     expect(footer).toContain("Σ 210 session");
     expect(footer).toContain("↑ 150 in");
     expect(footer).toContain("↓ 60 out");
-    expect(footer).toContain("ctx 132/344k");
+    expect(footer).toContain("live 132/344k");
     expect(footer).toContain("<1% of limit");
   });
 
@@ -84,7 +84,7 @@ describe("sidebar token summary", () => {
     expect(footer.some((line: string) => line.trim() === "Σ 210 session")).toBe(true);
     expect(footer.some((line: string) => line.trim() === "↑ 150 in")).toBe(true);
     expect(footer.some((line: string) => line.trim() === "↓ 60 out")).toBe(true);
-    expect(footer.some((line: string) => line.trim() === "ctx 132k/344k")).toBe(true);
+    expect(footer.some((line: string) => line.trim() === "live 132k/344k")).toBe(true);
     expect(footer.some((line: string) => line.trim() === "38% of limit")).toBe(true);
     updateSetting("cavemanLevel", "off");
   });
@@ -94,7 +94,7 @@ describe("sidebar token summary", () => {
     app.setContextUsage(822, 400_000);
     app.updateUsage(0.0016, 150, 60);
     const footer = app.renderSidebarFooter().map((line: string) => stripAnsi(line)).join("\n");
-    expect(footer).toContain("ctx 822/400k");
+    expect(footer).toContain("live 822/400k");
     expect(footer).toContain("<1% of limit");
   });
 

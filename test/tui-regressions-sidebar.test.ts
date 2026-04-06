@@ -111,7 +111,7 @@ describe("sidebar scrolling", () => {
     const footer = app.renderSidebarFooter();
     const footerText = footer.map((line: string) => stripAnsi(line)).join("\n");
     expect(footerText).toContain("Σ 8.8k session");
-    expect(footerText).toContain("ctx 120k/128k");
+    expect(footerText).toContain("live 120k/128k");
     expect(footerText).not.toContain("plan");
   });
 });

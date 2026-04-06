@@ -77,7 +77,7 @@ export async function startStream(
       system: opts.system,
       messages,
       tools: opts.tools,
-      stopWhen: opts.tools ? stepCountIs(Math.max(1, opts.maxToolSteps ?? 10)) : stepCountIs(1),
+      stopWhen: opts.tools ? stepCountIs(Math.max(2, opts.maxToolSteps ?? 10)) : stepCountIs(1),
       abortSignal: opts.abortSignal,
       providerOptions,
       onError: ({ error }) => {
