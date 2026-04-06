@@ -3,7 +3,7 @@ import { writeFileSync } from "fs";
 import type { ModelHandle } from "../ai/providers.js";
 import type { ProviderRegistry } from "../ai/provider-registry.js";
 import { buildSystemPrompt, reloadContext } from "../core/context.js";
-import { buildBudgetReport, renderBudgetDashboard, type BudgetReport } from "../core/budget-insights.js";
+import { buildAggregateBudgetReport, buildBudgetReport, renderBudgetDashboard, type BudgetReport } from "../core/budget-insights.js";
 import { compactMessages, getTotalContextTokens } from "../core/compact.js";
 import { clearCredentials, hasStoredCredentials, listAuthenticated } from "../core/auth.js";
 import { getProviderCredential, getSettings, loadConfig, updateProviderConfig, updateSetting, type Settings, type Mode } from "../core/config.js";
@@ -63,7 +63,20 @@ interface SlashCommandApp {
   showQuestion(prompt: string, options?: string[]): Promise<string>;
   updateItemPickerItems?(items: PickerItem[], focusId?: string): void;
   setCompacting?(compacting: boolean, tokenCount?: number): void;
-  openBudgetView?(title: string, report: BudgetReport): void;
+  openBudgetView?(title: string, reports: { all: BudgetReport; session: BudgetReport }, scope?: "all" | "session"): void;
+}
+
+async function loadBudgetReports(session: Session): Promise<{ all: BudgetReport; session: BudgetReport }> {
+  const sessionDir = getSettings().sessionDir?.trim() || undefined;
+  const allEntries = await SessionManager.listAll(process.cwd(), sessionDir);
+  const sessions = allEntries
+    .map((entry) => Session.load(entry.id))
+    .filter((entry): entry is Session => !!entry);
+  if (!sessions.some((entry) => entry.getId() === session.getId())) sessions.unshift(session);
+  return {
+    all: buildAggregateBudgetReport(sessions),
+    session: buildBudgetReport(session),
+  };
 }
 
 interface ExtensionHooks {
@@ -230,8 +243,11 @@ export async function handleSlashCommand(options: {
       return { handled: true };
     }
     case "budget":
-      if (app.openBudgetView) app.openBudgetView("Budget Inspector", buildBudgetReport(session));
-      else app.addMessage("system", renderBudgetDashboard({ report: buildBudgetReport(session), width: 100 }).join("\n"));
+      if (app.openBudgetView) app.openBudgetView("Budget Inspector", await loadBudgetReports(session), "all");
+      else {
+        const reports = await loadBudgetReports(session);
+        app.addMessage("system", renderBudgetDashboard({ report: reports.all, scopeLabel: "all sessions", width: 100 }).join("\n"));
+      }
       return { handled: true };
     case "tree": {
       openTreeMenu({ app, session, onSessionReplace });

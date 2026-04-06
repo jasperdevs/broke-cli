@@ -85,8 +85,8 @@ export function openItemPicker(
   app.drawNow();
 }
 
-export function openBudgetView(app: AppState, title: string, report: BudgetReport): void {
-  app.budgetView = { title, report, scrollOffset: 0 };
+export function openBudgetView(app: AppState, title: string, reports: { all: BudgetReport; session: BudgetReport }, scope: "all" | "session" = "all"): void {
+  app.budgetView = { title, reports, scope, scrollOffset: 0 };
   app.drawNow();
 }
 
@@ -424,7 +424,7 @@ export interface AppStateUiMethods {
   updateSettings(entries: SettingEntry[]): void;
   updateItemPickerItems(items: PickerItem[], focusId?: string): void;
   openItemPicker(title: string, items: PickerItem[], onSelect: (id: string) => void, options?: { initialCursor?: number; previewHint?: string; onPreview?: (id: string) => void; onCancel?: () => void; onSecondaryAction?: (id: string) => void; onKey?: (key: Keypress) => boolean; secondaryHint?: string; closeOnSelect?: boolean; kind?: MenuPromptKind }): void;
-  openBudgetView(title: string, report: BudgetReport): void;
+  openBudgetView(title: string, reports: { all: BudgetReport; session: BudgetReport }, scope?: "all" | "session"): void;
   closeBudgetView(): void;
   openAgentRunsView(title: string, runs: AgentRun[]): void;
   closeAgentRunsView(): void;
@@ -476,7 +476,7 @@ export const appStateUiMethods: AppStateUiMethods = {
   updateSettings(this: AppState, entries) { return updateSettings(this, entries); },
   updateItemPickerItems(this: AppState, items, focusId) { return updateItemPickerItems(this, items, focusId); },
   openItemPicker(this: AppState, title, items, onSelect, options) { return openItemPicker(this, title, items, onSelect, options); },
-  openBudgetView(this: AppState, title, lines) { return openBudgetView(this, title, lines); },
+  openBudgetView(this: AppState, title, reports, scope) { return openBudgetView(this, title, reports, scope); },
   closeBudgetView(this: AppState) { return closeBudgetView(this); },
   openAgentRunsView(this: AppState, title, runs) { return openAgentRunsView(this, title, runs); },
   closeAgentRunsView(this: AppState) { return closeAgentRunsView(this); },

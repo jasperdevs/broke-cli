@@ -249,16 +249,25 @@ export function handleKey(app: AppState, key: Keypress): void {
 }
 
 function handleBudgetViewKey(app: AppState, key: Keypress): void {
-  const page = Math.max(1, app.screen.height - 5);
+  const page = Math.max(1, app.screen.height - 7);
+  const report = app.budgetView.reports[app.budgetView.scope];
   const lineCount = renderBudgetDashboard({
-    report: app.budgetView.report,
-    width: Math.max(20, app.screen.width - 2),
+    report,
+    width: Math.max(20, app.screen.width - 4),
+    scopeLabel: app.budgetView.scope === "all" ? "all sessions" : "current session",
     contextTokens: app.contextTokenCount,
     contextLimit: app.contextLimitTokens,
+    showContext: app.budgetView.scope === "session",
   }).length;
-  const maxScroll = Math.max(0, lineCount - Math.max(1, app.screen.height - 4));
+  const maxScroll = Math.max(0, lineCount - Math.max(1, app.screen.height - 6));
   if (key.name === "escape" || key.name === "q" || (key.ctrl && key.name === "c")) {
     app.closeBudgetView();
+    return;
+  }
+  if (key.name === "tab") {
+    app.budgetView.scope = app.budgetView.scope === "all" ? "session" : "all";
+    app.budgetView.scrollOffset = 0;
+    app.drawNow();
     return;
   }
   if (key.name === "up" || key.name === "scrollup") {

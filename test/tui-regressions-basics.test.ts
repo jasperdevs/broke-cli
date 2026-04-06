@@ -337,7 +337,8 @@ describe("budget inspector", () => {
     const app = new App() as any;
     let rendered: string[] = [];
     app.screen = { height: 12, width: 40, hasSidebar: true, mainWidth: 28, sidebarWidth: 11, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
-    app.openBudgetView("Budget Inspector", {
+    const report = {
+      sessionCount: 1,
       totalTokens: 240,
       inputTokens: 200,
       outputTokens: 40,
@@ -353,11 +354,16 @@ describe("budget inspector", () => {
       plannerCacheHits: 1,
       plannerCacheMisses: 0,
       topBleed: { key: "tool waste", value: 4, pct: "67%" },
-    });
+    };
+    app.openBudgetView("Budget Inspector", { all: { ...report, sessionCount: 4 }, session: report }, "all");
     app.drawImmediate();
     expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("Budget Inspector");
-    expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("esc back");
-    expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("SESSION");
+      expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("tab current");
+      expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("all sessions");
+      expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("BUDGET");
+      app.handleKey({ name: "tab", char: "", ctrl: false, meta: false, shift: false } as Keypress);
+      expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("current session");
+      expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("tab all");
     app.handleKey({ name: "escape", char: "", ctrl: false, meta: false, shift: false } as Keypress);
     expect(rendered.map((line) => stripAnsi(line)).join("\n")).not.toContain("Budget Inspector");
   });

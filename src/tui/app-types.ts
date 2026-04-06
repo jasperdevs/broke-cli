@@ -31,7 +31,11 @@ export interface PickerItem {
 
 export interface BudgetView {
   title: string;
-  report: BudgetReport;
+  reports: {
+    all: BudgetReport;
+    session: BudgetReport;
+  };
+  scope: "all" | "session";
   scrollOffset: number;
 }
 

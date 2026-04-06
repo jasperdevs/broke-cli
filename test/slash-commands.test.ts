@@ -344,9 +344,9 @@ describe("slash command handling", () => {
     session.recordIdleCacheCliff();
     session.recordCompaction({ freshThreadCarryForward: true });
 
-    let opened: { title: string; report: any } | null = null;
-    app.openBudgetView = (title: string, report: any) => {
-      opened = { title, report };
+    let opened: { title: string; reports: any; scope?: "all" | "session" } | null = null;
+    app.openBudgetView = (title: string, reports: any, scope?: "all" | "session") => {
+      opened = { title, reports, scope };
     };
 
     const result = await handleSlashCommand({
@@ -372,9 +372,11 @@ describe("slash command handling", () => {
 
     expect(result.handled).toBe(true);
     expect(opened?.title).toBe("Budget Inspector");
-    expect(opened?.report.totalTokens).toBe(165);
-    expect(opened?.report.idleCacheCliffs).toBe(1);
-    expect(opened?.report.freshThreadCarryForwards).toBe(1);
+    expect(opened?.scope).toBe("all");
+    expect(opened?.reports.session.totalTokens).toBe(165);
+    expect(opened?.reports.session.idleCacheCliffs).toBe(1);
+    expect(opened?.reports.session.freshThreadCarryForwards).toBe(1);
+    expect(opened?.reports.all.sessionCount).toBeGreaterThanOrEqual(1);
   });
 
   it("reloads extensions immediately when toggled with enter", async () => {
