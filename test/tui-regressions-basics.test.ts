@@ -70,21 +70,21 @@ describe("sidebar token summary", () => {
     expect(footer).toContain("Σ 210 session");
     expect(footer).toContain("↑ 150 in");
     expect(footer).toContain("↓ 60 out");
-    expect(footer).toContain("132/344k");
+    expect(footer).toContain("ctx 132/344k");
     expect(footer).toContain("<1% of limit");
   });
 
-  it("uses the rock indicator and keeps the token region to totals plus context", () => {
+  it("keeps the token region to totals plus explicitly labeled context", () => {
     const app = new App() as any;
     app.screen = { sidebarWidth: 12, width: 80, height: 24, hasSidebar: true, mainWidth: 61, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
     updateSetting("cavemanLevel", "ultra");
     app.setContextUsage(132_000, 344_000);
     app.updateUsage(0.0016, 150, 60);
     const footer = app.renderSidebarFooter().map((line: string) => stripAnsi(line));
-    expect(footer.some((line: string) => line.includes("🪨 ultra"))).toBe(true);
-    expect(footer[0]).toBe("");
     expect(footer.some((line: string) => line.trim() === "Σ 210 session")).toBe(true);
-    expect(footer.some((line: string) => line.trim() === "132k/344k")).toBe(true);
+    expect(footer.some((line: string) => line.trim() === "↑ 150 in")).toBe(true);
+    expect(footer.some((line: string) => line.trim() === "↓ 60 out")).toBe(true);
+    expect(footer.some((line: string) => line.trim() === "ctx 132k/344k")).toBe(true);
     expect(footer.some((line: string) => line.trim() === "38% of limit")).toBe(true);
     updateSetting("cavemanLevel", "off");
   });
@@ -94,7 +94,7 @@ describe("sidebar token summary", () => {
     app.setContextUsage(822, 400_000);
     app.updateUsage(0.0016, 150, 60);
     const footer = app.renderSidebarFooter().map((line: string) => stripAnsi(line)).join("\n");
-    expect(footer).toContain("822/400k");
+    expect(footer).toContain("ctx 822/400k");
     expect(footer).toContain("<1% of limit");
   });
 

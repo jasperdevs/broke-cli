@@ -79,7 +79,7 @@ describe("sidebar scrolling", () => {
     expect(lines).toContain("  ▾ src/");
   });
 
-  it("handles transcript and sidebar wheel behavior plus plan footer accent", () => {
+  it("handles transcript and sidebar wheel behavior while keeping the sidebar footer token-only", () => {
     const app = new App() as any;
     app.messages = Array.from({ length: 30 }, (_, i) => ({ role: "user", content: `msg ${i}` }));
     app.scrollOffset = 6;
@@ -103,9 +103,13 @@ describe("sidebar scrolling", () => {
     expect(app.itemPicker.cursor).toBe(0);
 
     app.mode = "plan";
+    app.setContextUsage(120_000, 128_000);
+    app.updateUsage(0.0021, 8_200, 621);
     const footer = app.renderSidebarFooter();
     const footerText = footer.map((line: string) => stripAnsi(line)).join("\n");
-    expect(footerText).toContain("plan");
+    expect(footerText).toContain("Σ 8.8k session");
+    expect(footerText).toContain("ctx 120k/128k");
+    expect(footerText).not.toContain("plan");
   });
 });
 

@@ -89,26 +89,8 @@ export function buildSidebarFooterLines(options: {
   contextUsage?: string;
   colors: SidebarFooterColors;
 }): string[] {
-  const { width, statusParts, tokenParts, contextUsed, contextUsage, colors } = options;
+  const { tokenParts, contextUsed, contextUsage, colors } = options;
   const lines: string[] = [];
-
-  if (statusParts.length > 0) {
-    const wrappedStatusParts: string[][] = [];
-    let currentLine: string[] = [];
-    for (const part of statusParts) {
-      const nextPlain = currentLine.length === 0 ? part : `${currentLine.join(" · ")} · ${part}`;
-      if (nextPlain.length > width && currentLine.length > 0) {
-        wrappedStatusParts.push(currentLine);
-        currentLine = [part];
-      } else {
-        currentLine.push(part);
-      }
-    }
-    if (currentLine.length > 0) wrappedStatusParts.push(currentLine);
-    for (const statusLine of wrappedStatusParts) {
-      lines.push(`${colors.accent}${statusLine.join(` ${colors.muted}·${colors.accent} `)}${RESET}`);
-    }
-  }
 
   for (const part of tokenParts) {
     lines.push(`${colors.muted}${part}${RESET}`);
@@ -116,7 +98,7 @@ export function buildSidebarFooterLines(options: {
 
   if (contextUsed !== undefined && contextUsage) {
     const contextColor = contextUsed > 90 ? colors.error : contextUsed > 70 ? colors.warning : colors.muted;
-    lines.push(`${contextColor}${contextUsage}${RESET}`);
+    lines.push(`${contextColor}ctx ${contextUsage}${RESET}`);
     lines.push(`${contextColor}${formatContextPercent(contextUsed)}${RESET}`);
   }
 
