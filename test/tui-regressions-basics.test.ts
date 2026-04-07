@@ -186,6 +186,33 @@ describe("menu counters", () => {
   });
 });
 
+describe("input layout", () => {
+  it("keeps the cursor on the input row below the separator", () => {
+    const app = new App() as any;
+    let rendered: string[] = [];
+    let cursorRow = 0;
+    app.messages = [{ role: "assistant", content: "hello" }];
+    app.input.setText("test");
+    app.screen = {
+      height: 14,
+      width: 60,
+      hasSidebar: false,
+      mainWidth: 60,
+      sidebarWidth: 0,
+      render: (lines: string[]) => { rendered = lines; },
+      setCursor: (row: number) => { cursorRow = row; },
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+    app.drawImmediate();
+    const plain = rendered.map((line) => stripAnsi(line));
+    const separatorRow = plain.findIndex((line) => line.includes("─".repeat(10))) + 1;
+    expect(separatorRow).toBeGreaterThan(0);
+    expect(cursorRow).toBeGreaterThan(separatorRow);
+    expect(plain[cursorRow - 1]).toContain("test");
+  });
+});
+
 describe("terminal cell width", () => {
   it("pads and decorates frame lines to the exact terminal width even with emoji and ANSI", () => {
     const app = new App() as any;

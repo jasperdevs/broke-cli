@@ -255,7 +255,7 @@ export async function runModelTurn(options: {
   if (app.hasPendingMessages("followup")) app.flushPendingMessages("followup");
 
   if (typeof (session as any).getName !== "function" || session.getName() === "New Session") {
-    const assistantText = app.getLastAssistantContent().trim();
+    const assistantText = result.assistantText.trim();
     if (assistantText) {
       void maybeAutoNameSession({
         app,

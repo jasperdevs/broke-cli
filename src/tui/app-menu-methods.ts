@@ -26,35 +26,58 @@ export function getChatHeight(app: AppState): number {
 }
 
 export function getBottomLineCount(app: AppState, mainW: number, maxHeight: number): number {
+  const inputLineCount = app.getWrappedInputLines(app.input.getText(), mainW).length;
+  const tailReserve = 2 + (app.statusMessage ? 1 : 0);
   let count = 0;
-  count += 1;
-  count += app.getWrappedInputLines(app.input.getText(), mainW).length;
+  count += 2; // visual gap above the input bar
+  count += 1; // separator above the input
+  count += inputLineCount;
+
+  const menuBodyCapacity = (sepAlreadyAdded = false): number => {
+    const projected = count + (sepAlreadyAdded ? 0 : 1);
+    return Math.max(1, maxHeight - projected - tailReserve);
+  };
 
   if (app.filePicker) {
-    count += 1;
-    count += Math.min(app.getFilePickerEntries().length, Math.max(0, maxHeight - 4));
+    const entries = app.getFilePickerEntries();
+    const visible = Math.min(entries.length, Math.max(1, menuBodyCapacity(true) - 1));
+    count += 1; // menu separator
+    count += 1; // title
+    count += visible;
   } else if (app.itemPicker) {
-    count += 1;
-    count += 1;
-    count += app.getItemPickerEntries().length === 0 ? 1 : Math.min(app.getItemPickerEntries().length, 10);
+    const entries = app.getItemPickerEntries();
+    const visible = entries.length === 0 ? 1 : Math.min(entries.length, Math.max(1, menuBodyCapacity(true) - 1));
+    count += 1; // menu separator
+    count += 1; // title
+    count += visible;
   } else if (app.settingsPicker) {
-    const filtered = app.getSettingsPickerEntries();
-    count += 1;
-    count += filtered.length === 0 ? 1 : Math.min(filtered.length, 6);
+    const entries = app.getSettingsPickerEntries();
+    const visible = entries.length === 0 ? 1 : Math.min(entries.length, Math.max(1, menuBodyCapacity(true) - 1));
+    count += 1; // menu separator
+    count += 1; // title
+    count += visible;
   } else if (app.modelPicker) {
-    const filtered = app.getModelPickerEntries();
-    count += 1;
-    count += 1;
-    count += filtered.length === 0 ? 1 : Math.min(filtered.length, 12);
+    const entries = app.getModelPickerEntries();
+    const visible = entries.length === 0 ? 1 : Math.min(entries.length, Math.max(1, menuBodyCapacity(true) - 3));
+    count += 1; // menu separator
+    count += 1; // title
+    count += 1; // scope
+    count += 1; // hint
+    count += visible;
   } else {
-    const suggestions = app.getCommandSuggestionEntries();
-    if (suggestions.length > 0) count += 1;
-    count += suggestions.length;
+    const allSuggestions = app.getCommandSuggestionEntries();
+    if (allSuggestions.length > 0) {
+      const visible = Math.min(
+        allSuggestions.length,
+        Math.max(1, Math.min(getSettings().autocompleteMaxVisible, menuBodyCapacity(true) - 1)),
+      );
+      count += 1; // menu separator
+      count += 1; // title
+      count += visible;
+    }
   }
 
-  count += 1;
-  count += 1;
-  if (app.statusMessage) count += 1;
+  count += tailReserve;
   return count;
 }
 

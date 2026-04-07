@@ -311,4 +311,64 @@ describe("stream tool steps", () => {
     expect(session.addMessage).toHaveBeenCalledWith("assistant", "real answer");
     expect(app.addMessage).not.toHaveBeenCalledWith("system", "No response from model. Try again or switch models with /model.");
   });
+
+  it("does not reuse the previous assistant turn when a new turn emits no text", async () => {
+    const app = {
+      addMessage: vi.fn(),
+      appendToLastMessage: vi.fn(),
+      appendThinking: vi.fn(),
+      setThinkingRequested: vi.fn(),
+      getLastAssistantContent: vi.fn(() => "old answer"),
+      setStreaming: vi.fn(),
+      setStreamTokens: vi.fn(),
+      updateUsage: vi.fn(),
+      setContextUsage: vi.fn(),
+      setCompacting: vi.fn(),
+      setStatus: vi.fn(),
+      addToolCall: vi.fn(),
+      updateToolCallArgs: vi.fn(),
+      addToolResult: vi.fn(),
+      onAbortRequest: vi.fn(),
+      hasPendingMessages: vi.fn(() => false),
+      flushPendingMessages: vi.fn(),
+    };
+    const session = {
+      getTotalCost: () => 0,
+      getChatMessages: () => [{ role: "user", content: "hey" }, { role: "assistant", content: "old answer" }],
+      addMessage: vi.fn(),
+      addUsage: vi.fn(),
+      recordTurn: vi.fn(),
+      recordIdleCacheCliff: vi.fn(),
+      replaceConversation: vi.fn(),
+      recordCompaction: vi.fn(),
+      getContextOptimizer: () => ({ optimizeMessages: (messages: any[]) => messages, nextTurn: vi.fn() }),
+      getTotalInputTokens: () => 0,
+      getTotalOutputTokens: () => 0,
+      getName: () => "Existing Session",
+    } as any;
+
+    streamTextMock.mockReturnValueOnce({
+      fullStream: (async function* () {})(),
+      usage: Promise.resolve({ inputTokens: 1, outputTokens: 1 }),
+    });
+
+    await runModelTurn({
+      app: app as any,
+      session,
+      text: "what sup",
+      activeModel: { provider: { id: "openai", name: "OpenAI", defaultModel: "gpt-5.4-mini", models: [] }, runtime: "sdk", model: {} as any, modelId: "gpt-5.4-mini" },
+      currentModelId: "gpt-5.4-mini",
+      smallModel: null,
+      smallModelId: "",
+      currentMode: "build",
+      systemPrompt: "system",
+      buildTools: () => ({}),
+      hooks: { emit: () => {} },
+      lastToolCalls: [],
+      lastActivityTime: Date.now(),
+    });
+
+    expect(session.addMessage).not.toHaveBeenCalledWith("assistant", "old answer");
+    expect(session.addMessage).toHaveBeenCalledWith("assistant", "[empty response]");
+  });
 });

@@ -9,7 +9,7 @@ import { getCommandMatches as findCommandMatches } from "./command-surface.js";
 import { fmtCost, fmtTokens, wordWrap } from "./render/formatting.js";
 import { APP_BG, ERR, MUTED, OK, P, T, TXT, WARN } from "./app-shared.js";
 import { drawQuestionView } from "./question-view.js";
-import { drawAgentRunsView, drawBudgetView, drawModelPickerView } from "./fullscreen-views.js";
+import { drawAgentRunsView, drawBudgetView } from "./fullscreen-views.js";
 import { appendBottomMenus, buildInfoBar } from "./bottom-ui.js";
 
 type AppState = any;
@@ -54,10 +54,6 @@ export function drawImmediate(app: AppState): void {
     drawQuestionView(app);
     return;
   }
-  if (app.modelPicker) {
-    drawModelPickerView(app);
-    return;
-  }
   const { height, width } = app.screen;
   const hasSidebar = app.shouldShowSidebar();
   const mainW = hasSidebar ? app.screen.mainWidth : width;
@@ -68,6 +64,7 @@ export function drawImmediate(app: AppState): void {
   const bottomLines: string[] = [];
   const bottomMenuClicks: Array<{ lineIndex: number; action: () => void }> = [];
 
+  bottomLines.push("");
   bottomLines.push("");
   bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
   bottomLines.push(...inputLayout.lines);
@@ -94,7 +91,7 @@ export function drawImmediate(app: AppState): void {
     return;
   }
   const mainTopHeight = Math.max(0, height - bottomLines.length);
-  app.screen.setCursor(Math.min(height, mainTopHeight + 2 + inputLayout.row), Math.min(width, 1 + inputLayout.col));
+  app.screen.setCursor(Math.min(height, mainTopHeight + 4 + inputLayout.row), Math.min(width, 1 + inputLayout.col));
 }
 
 function buildFrameLines(app: AppState, opts: { height: number; width: number; mainW: number; hasSidebar: boolean; footerLines: string[]; bottomLines: string[]; bottomMenuClicks: Array<{ lineIndex: number; action: () => void }>; isHome: boolean; }): string[] {
@@ -192,6 +189,7 @@ export function shimmerText(_app: AppState, text: string, frame: number, color =
 export function appendModelPicker(app: AppState, lines: string[], _maxTotal: number, clickTargets: Array<{ lineIndex: number; action: () => void }>): void {
   const picker = app.modelPicker!;
   const total = app.getFilteredModels().length;
+  const maxItems = Math.max(1, _maxTotal - 3);
   lines.push(` ${T()}${BOLD}Select model${RESET} ${renderMenuCount(total === 0 ? 0 : picker.cursor + 1, total)}`);
   const allLabel = picker.scope === "all" ? `${TXT()}${BOLD}all${RESET}` : `${MUTED()}all${RESET}`;
   const scopedLabel = picker.scope === "scoped" ? `${TXT()}${BOLD}pinned${RESET}` : `${MUTED()}pinned${RESET}`;
@@ -201,7 +199,7 @@ export function appendModelPicker(app: AppState, lines: string[], _maxTotal: num
     lines.push(`  ${DIM}no matches${RESET}`);
     return;
   }
-  for (const entry of app.buildMenuView(app.getModelPickerEntries(), picker.cursor, 12)) {
+  for (const entry of app.buildMenuView(app.getModelPickerEntries(), picker.cursor, maxItems)) {
     if (entry.selectIndex !== undefined) app.registerMenuClickTarget(clickTargets, lines, () => app.selectModelEntry(entry.selectIndex!));
     lines.push(entry.text);
   }

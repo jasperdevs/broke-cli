@@ -105,7 +105,7 @@ describe("picker menus", () => {
     expect(app.modelPicker.cursor).toBe(0);
   });
 
-  it("renders long model lists in a scrollable fullscreen view so the last item stays reachable", () => {
+  it("renders long model lists inline and keeps the last item reachable", () => {
     const app = new App() as any;
     const models = Array.from({ length: 18 }, (_, i) => ({
       providerId: i < 9 ? "openai" : "anthropic",
@@ -133,6 +133,7 @@ describe("picker menus", () => {
     expect(output).toContain("/model");
     expect(output).toContain("model-17");
     expect(output).not.toContain("no matches");
+    expect(output).toContain("space pin");
   });
 });
 

@@ -17,29 +17,33 @@ export function appendBottomMenus(
   mainW: number,
   separatorColor: string,
 ): void {
+  const tailReserve = 2 + (app.statusMessage ? 1 : 0);
+  const getAvailableBodyRows = (): number => Math.max(1, height - bottomLines.length - tailReserve);
+
   if (app.filePicker) {
     bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
-    app.appendFilePicker(bottomLines, height, bottomMenuClicks);
+    app.appendFilePicker(bottomLines, getAvailableBodyRows(), bottomMenuClicks);
     return;
   }
   if (app.itemPicker) {
     bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
-    app.appendItemPicker(bottomLines, height, bottomMenuClicks);
+    app.appendItemPicker(bottomLines, getAvailableBodyRows(), bottomMenuClicks);
     return;
   }
   if (app.settingsPicker) {
     bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
-    app.appendSettingsPicker(bottomLines, height, bottomMenuClicks);
+    app.appendSettingsPicker(bottomLines, getAvailableBodyRows(), bottomMenuClicks);
     return;
   }
   if (app.modelPicker) {
     bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
-    app.appendModelPicker(bottomLines, height, bottomMenuClicks);
+    app.appendModelPicker(bottomLines, getAvailableBodyRows(), bottomMenuClicks);
     return;
   }
 
   const allSuggestions = app.getCommandSuggestionEntries();
-  const suggestions = app.buildMenuView(allSuggestions, app.cmdSuggestionCursor, Math.max(1, getSettings().autocompleteMaxVisible));
+  const maxVisible = Math.max(1, Math.min(getSettings().autocompleteMaxVisible, getAvailableBodyRows() - 1));
+  const suggestions = app.buildMenuView(allSuggestions, app.cmdSuggestionCursor, maxVisible);
   if (suggestions.length > 0) {
     bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
     bottomLines.push(` ${T()}${BOLD}Commands${RESET} ${renderMenuCount(Math.min(app.cmdSuggestionCursor, allSuggestions.length - 1) + 1, allSuggestions.length)}`);
