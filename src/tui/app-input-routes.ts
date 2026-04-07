@@ -50,12 +50,12 @@ export function handleBudgetViewKey(app: AppState, key: Keypress): void {
     app.drawNow();
     return;
   }
-  if (key.name === "up" || key.name === "scrollup") {
+  if (key.name === "up") {
     app.budgetView.scrollOffset = Math.max(0, app.budgetView.scrollOffset - 1);
     app.draw();
     return;
   }
-  if (key.name === "down" || key.name === "scrolldown") {
+  if (key.name === "down") {
     app.budgetView.scrollOffset = Math.min(maxScroll, app.budgetView.scrollOffset + 1);
     app.draw();
     return;
@@ -81,8 +81,8 @@ export function handleTreeViewKey(app: AppState, key: Keypress): void {
     app.closeTreeView();
     return;
   }
-  if (key.name === "up" || key.name === "scrollup") moveTreeSelection(app, -1);
-  else if (key.name === "down" || key.name === "scrolldown") moveTreeSelection(app, 1);
+  if (key.name === "up") moveTreeSelection(app, -1);
+  else if (key.name === "down") moveTreeSelection(app, 1);
   else if (key.name === "home") {
     const rows = getVisibleTreeRows(app);
     app.treeView.selectedId = rows[0]?.item.id ?? null;
@@ -195,16 +195,13 @@ export function handlePickerKey(app: AppState, key: Keypress): void {
     const page = Math.max(1, app.screen.height - 8);
     if (key.name === "up") app.modelPicker.cursor = app.clampMenuCursor(app.modelPicker.cursor - 1, filtered.length);
     else if (key.name === "down") app.modelPicker.cursor = app.clampMenuCursor(app.modelPicker.cursor + 1, filtered.length);
-    else if (key.name === "scrollup") app.modelPicker.cursor = app.clampMenuCursor(app.modelPicker.cursor - 1, filtered.length);
-    else if (key.name === "scrolldown") app.modelPicker.cursor = app.clampMenuCursor(app.modelPicker.cursor + 1, filtered.length);
     else if (key.name === "pageup") app.modelPicker.cursor = app.clampMenuCursor(app.modelPicker.cursor - page, filtered.length);
     else if (key.name === "pagedown") app.modelPicker.cursor = app.clampMenuCursor(app.modelPicker.cursor + page, filtered.length);
     else if (key.name === "home") app.modelPicker.cursor = 0;
     else if (key.name === "end") app.modelPicker.cursor = app.clampMenuCursor(filtered.length - 1, filtered.length);
     else if (key.name === "space") app.toggleModelPin(app.modelPicker.cursor);
-    else if (!key.ctrl && !key.meta && key.char?.toLowerCase() === "a") app.openModelLanePicker(app.modelPicker.cursor);
     else if ((key.name === "return" || key.name === "enter") && !key.shift && !key.meta && !key.ctrl) {
-      app.selectModelEntry(app.modelPicker.cursor);
+      app.openModelLanePicker(app.modelPicker.cursor);
       return;
     } else if (isPlainBackspace(key) && app.getMenuFilterQuery().length === 0) {
       app.modelPicker = null;

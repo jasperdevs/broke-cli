@@ -303,7 +303,7 @@ export function getModelPickerEntries(app: AppState): MenuEntry[] {
   const entries: MenuEntry[] = [];
   let currentIdx = 0;
   const showProviderHeaders = byProvider.size > 1;
-  entries.push({ text: ` ${DIM}enter switch · space favorite · a assign lane · type filter${RESET}` });
+  entries.push({ text: ` ${DIM}enter choose use · space favorite · type filter${RESET}` });
   for (const [provider, opts] of byProvider) {
     if (showProviderHeaders) entries.push({ text: ` ${DIM}${provider}${RESET}` });
     for (const opt of opts) {

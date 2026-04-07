@@ -6,8 +6,8 @@ import type { MenuEntry, ModelLaneOption } from "./app-types.js";
 type AppState = any;
 
 const MODEL_LANE_OPTIONS: ModelLaneOption[] = [
-  { id: "default", slot: "default", label: "Use for chat", detail: "main assistant model" },
-  { id: "small", slot: "small", label: "Use for fast", detail: "cheap/simple turns" },
+  { id: "default", slot: "default", label: "Use for chat", detail: "switch to it now and make it the main chat model" },
+  { id: "small", slot: "small", label: "Use for fast", detail: "auto-route, cheap turns, and chat naming" },
   { id: "review", slot: "review", label: "Use for review", detail: "audits and code review" },
   { id: "planning", slot: "planning", label: "Use for planning", detail: "plans and research" },
   { id: "ui", slot: "ui", label: "Use for design/UI", detail: "frontend and styling work" },
@@ -43,7 +43,12 @@ export function selectModelLaneEntry(app: AppState, index: number): void {
   const choice = app.modelLanePicker.options[index];
   const selected = app.modelLanePicker.model;
   if (!choice || !selected) return;
+  if (choice.slot === "default") {
+    app.onModelSelect?.(selected.providerId, selected.modelId);
+  }
   app.onModelAssign?.(selected.providerId, selected.modelId, choice.slot);
+  app.modelPicker = null;
+  app.input.clear();
   app.modelLanePicker = null;
   app.drawNow();
 }

@@ -23,7 +23,7 @@ describe("picker menus", () => {
     expect(after.slice(0, menuStart).join("\n")).toContain("line 17");
   });
 
-  it("scrolls through long file menus with the mouse wheel", () => {
+  it("ignores mouse wheel input in long file menus", () => {
     const app = new App() as any;
     app.messages = [{ role: "user", content: "hello" }];
     app.filePicker = {
@@ -37,8 +37,8 @@ describe("picker menus", () => {
     app.drawImmediate();
     for (let i = 0; i < 8; i++) app.handleKey({ name: "scrolldown", char: "", ctrl: false, meta: false, shift: false });
     app.drawImmediate();
-    expect(app.filePicker.cursor).toBe(8);
-    expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("src/file-8.ts");
+    expect(app.filePicker.cursor).toBe(0);
+    expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("src/file-0.ts");
   });
 
   it("lets visible picker rows be selected with a click", () => {
@@ -69,9 +69,9 @@ describe("picker menus", () => {
     app.screen = { height: 16, width: 60, hasSidebar: false, mainWidth: 60, sidebarWidth: 20, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
     app.drawImmediate();
     const pickerText = rendered.map((line) => stripAnsi(line)).join("\n");
-    expect(pickerText).toContain("enter switch");
+    expect(pickerText).toContain("enter choose use");
     expect(pickerText).toContain("space favorite");
-    expect(pickerText).toContain("a assign lane");
+    expect(pickerText).not.toContain("a assign lane");
     expect(pickerText).not.toContain("Scope:");
 
     const originalTheme = getSettings().theme;
@@ -189,7 +189,7 @@ describe("picker menus", () => {
     expect(output.join("\n")).not.toContain("Model 5");
   });
 
-  it("opens an explicit lane assignment menu instead of numeric slot hints", () => {
+  it("opens the usage picker when you press enter on a model", () => {
     const app = new App() as any;
     app.openModelPicker(
       [{ providerId: "openai", providerName: "OpenAI", modelId: "gpt-5.4-mini", displayName: "GPT-5.4 mini", active: false }],
@@ -197,7 +197,7 @@ describe("picker menus", () => {
       () => {},
       () => {},
     );
-    app.handleKey({ name: "a", char: "a", ctrl: false, meta: false, shift: false });
+    app.handleKey({ name: "enter", char: "", ctrl: false, meta: false, shift: false });
     let rendered: string[] = [];
     app.screen = {
       height: 18,
@@ -214,7 +214,8 @@ describe("picker menus", () => {
     const output = rendered.map((line) => stripAnsi(line)).join("\n");
     expect(output).toContain("Assign selected model");
     expect(output).toContain("Use for design/UI");
-    expect(output).not.toContain("press 1 chat");
+    expect(output).toContain("Use for fast");
+    expect(output).toContain("chat naming");
   });
 });
 

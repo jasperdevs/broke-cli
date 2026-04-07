@@ -52,7 +52,7 @@ export class KeypressHandler {
     process.stdin.resume();
     process.stdin.setEncoding("utf-8");
 
-    // Enable bracketed paste and mouse tracking (scroll wheel)
+    // Enable bracketed paste and mouse tracking for clicks only.
     write(PASTE_MODE_ON);
     write(MODIFY_OTHER_KEYS_ON);
     // Track mouse sequences
@@ -104,8 +104,7 @@ export class KeypressHandler {
           const row = parseInt(match[3], 10);
           const release = match[4] === "m";
           if ((button & 64) === 64) {
-            const wheelDirection = button & 1;
-            this.onKey({ name: wheelDirection === 0 ? "scrollup" : "scrolldown", char: `${col},${row}`, ctrl: false, meta: false, shift: false });
+            continue;
           } else if (button === 0 && release) {
             this.onKey({ name: "click", char: `${col},${row}`, ctrl: false, meta: false, shift: false });
           }

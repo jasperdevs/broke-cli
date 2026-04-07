@@ -46,7 +46,7 @@ describe("command aliases", () => {
 });
 
 describe("sidebar scrolling", () => {
-  it("enables mouse tracking for split-pane chats so the sidebar can own wheel input", () => {
+  it("enables mouse tracking for split-pane chats so clicks still work with separate panes", () => {
     const app = new App() as any;
     app.messages = [{ role: "user", content: "hello" }];
     app.screen = { height: 18, width: 100, hasSidebar: true, mainWidth: 73, sidebarWidth: 24, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
@@ -92,7 +92,7 @@ describe("sidebar scrolling", () => {
     expect(lines).toContain("  ▾ src/");
   });
 
-  it("handles transcript and sidebar wheel behavior while hiding the sidebar footer during active menus", () => {
+  it("ignores wheel input while hiding the sidebar footer during active menus", () => {
     const originalShowTokens = getSettings().showTokens;
     updateSetting("showTokens", true);
     const app = new App() as any;
@@ -115,7 +115,7 @@ describe("sidebar scrolling", () => {
     app.openItemPicker("Theme", listThemes().slice(0, 5).map((theme) => ({ id: theme.key, label: theme.label })), () => {});
     app.handleKey({ name: "scrolldown", char: "", ctrl: false, meta: false, shift: false });
     expect(app.sidebarScrollOffset).toBe(0);
-    expect(app.itemPicker.cursor).toBe(1);
+    expect(app.itemPicker.cursor).toBe(0);
 
     app.sidebarFocused = false;
     app.handleKey({ name: "pagedown", char: "", ctrl: false, meta: false, shift: false });
@@ -245,7 +245,7 @@ describe("sidebar scrolling", () => {
     expect(app.scrollOffset).toBe(8);
   });
 
-  it("scrolls the sidebar from wheel coordinates without requiring a prior click focus", () => {
+  it("ignores sidebar wheel coordinates without requiring a prior click focus", () => {
     const app = new App() as any;
     app.messages = [{ role: "user", content: "hello" }];
     app.screen = { height: 18, width: 100, hasSidebar: true, mainWidth: 73, sidebarWidth: 24, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
@@ -266,11 +266,11 @@ describe("sidebar scrolling", () => {
 
     expect(app.sidebarScrollOffset).toBe(0);
     app.handleKey({ name: "scrolldown", char: "95,8", ctrl: false, meta: false, shift: false });
-    expect(app.sidebarFocused).toBe(true);
-    expect(app.sidebarScrollOffset).toBeGreaterThan(0);
+    expect(app.sidebarFocused).toBe(false);
+    expect(app.sidebarScrollOffset).toBe(0);
   });
 
-  it("decodes wheel-style sidebar scroll packets even when terminals set modifier bits", () => {
+  it("ignores wheel-style sidebar packets even when terminals set modifier bits", () => {
     const app = new App() as any;
     app.messages = [{ role: "user", content: "hello" }];
     app.screen = { height: 18, width: 100, hasSidebar: true, mainWidth: 73, sidebarWidth: 24, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
@@ -288,7 +288,7 @@ describe("sidebar scrolling", () => {
       ...Array.from({ length: 18 }, (_, i) => `    file-${i}.ts`),
     ];
     app.handleKey({ name: "scrolldown", char: "95,8", ctrl: false, meta: false, shift: false });
-    expect(app.sidebarScrollOffset).toBeGreaterThan(0);
+    expect(app.sidebarScrollOffset).toBe(0);
   });
 
   it("keeps the sidebar footer visible while composing plain text but hides it while streaming", () => {

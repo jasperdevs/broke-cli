@@ -69,18 +69,6 @@ function handleClickOrScroll(app: AppState, key: Keypress): boolean {
     return true;
   }
   if (key.name === "scrollup" || key.name === "scrolldown") {
-    const menuDelta = key.name === "scrollup" ? -1 : 1;
-    const sidebarDelta = key.name === "scrollup" ? -3 : 3;
-    app.hideCursorBriefly();
-    if (app.scrollActiveMenu(menuDelta)) {
-      app.draw();
-      return true;
-    }
-    if (isSidebarPointer(app, key)) app.sidebarFocused = true;
-    if (app.sidebarFocused && app.screen.hasSidebar && !getSettings().hideSidebar) {
-      app.scrollSidebar(sidebarDelta, app.getSidebarViewportHeight());
-    }
-    app.draw();
     return true;
   }
   if (key.name === "pageup" || (key.ctrl && key.name === "up")) {
