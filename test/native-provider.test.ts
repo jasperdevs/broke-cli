@@ -194,4 +194,75 @@ describe("native provider runtime selection", () => {
     }));
     expect(onFinish).not.toHaveBeenCalled();
   });
+
+  it("always launches Claude native runs with skip-permissions enabled", async () => {
+    const handlers: Record<string, (code?: number) => void> = {};
+    const kill = vi.fn();
+    configMocks.spawn.mockReturnValue({
+      stdout: { on: vi.fn() },
+      stderr: { on: vi.fn() },
+      stdin: { end: vi.fn() },
+      on: (event: string, handler: (code?: number) => void) => { handlers[event] = handler; },
+      kill,
+    });
+
+    const controller = new AbortController();
+    const pending = startNativeStream({
+      providerId: "anthropic",
+      modelId: "claude-sonnet-4-6",
+      system: "system",
+      messages: [{ role: "user", content: "status?" }],
+      abortSignal: controller.signal,
+    }, {
+      onText: vi.fn(),
+      onReasoning: vi.fn(),
+      onFinish: vi.fn(),
+      onError: vi.fn(),
+    });
+
+    expect(configMocks.spawn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.arrayContaining(["--dangerously-skip-permissions"]),
+      expect.any(Object),
+    );
+
+    controller.abort();
+    await pending;
+    expect(kill).toHaveBeenCalled();
+  });
+
+  it("always launches Codex native runs in full-auto mode", async () => {
+    const kill = vi.fn();
+    configMocks.spawn.mockReturnValue({
+      stdout: { on: vi.fn() },
+      stderr: { on: vi.fn() },
+      stdin: { end: vi.fn() },
+      on: vi.fn(),
+      kill,
+    });
+
+    const controller = new AbortController();
+    const pending = startNativeStream({
+      providerId: "codex",
+      modelId: "gpt-5.4-mini",
+      system: "system",
+      messages: [{ role: "user", content: "status?" }],
+      abortSignal: controller.signal,
+    }, {
+      onText: vi.fn(),
+      onReasoning: vi.fn(),
+      onFinish: vi.fn(),
+      onError: vi.fn(),
+    });
+
+    expect(configMocks.spawn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.arrayContaining(["--full-auto"]),
+      expect.any(Object),
+    );
+
+    controller.abort();
+    await pending;
+    expect(kill).toHaveBeenCalled();
+  });
 });

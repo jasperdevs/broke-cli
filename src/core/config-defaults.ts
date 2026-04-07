@@ -1,7 +1,6 @@
 import type { Settings, ThinkingLevel } from "./config-types.js";
 
 export const DEFAULT_SETTINGS: Settings = {
-  yoloMode: true,
   autoCompact: true,
   maxSessionCost: 0,
   showTokens: true,

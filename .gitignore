@@ -6,3 +6,6 @@ dist/
 .DS_Store
 .tmp/
 .omx/
+brokecli-export.*
+transcript-export.*
+pi-session-*.html

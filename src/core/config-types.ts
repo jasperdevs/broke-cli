@@ -48,7 +48,6 @@ export interface MarkdownSettings {
 }
 
 export interface Settings {
-  yoloMode: boolean;
   autoCompact: boolean;
   maxSessionCost: number;
   showTokens: boolean;

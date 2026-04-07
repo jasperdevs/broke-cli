@@ -35,7 +35,6 @@ vi.mock("../src/core/config.js", () => ({
     enableThinking: false,
     thinkingLevel: "off",
     cavemanLevel: "auto",
-    yoloMode: false,
     autoFixValidation: false,
   }),
 }));
