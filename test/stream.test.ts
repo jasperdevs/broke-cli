@@ -5,6 +5,10 @@ const { streamTextMock, stepCountIsMock } = vi.hoisted(() => ({
   stepCountIsMock: vi.fn((count: number) => ({ count })),
 }));
 
+const { routeMessageMock } = vi.hoisted(() => ({
+  routeMessageMock: vi.fn(() => "main"),
+}));
+
 vi.mock("ai", () => ({
   streamText: streamTextMock,
   stepCountIs: stepCountIsMock,
@@ -26,7 +30,7 @@ vi.mock("../src/core/config.js", () => ({
     thinkingBudgets: {},
     images: { blockImages: false },
     autoCompact: false,
-    autoRoute: false,
+    autoRoute: true,
     notifyOnResponse: false,
     enableThinking: false,
     thinkingLevel: "off",
@@ -34,6 +38,10 @@ vi.mock("../src/core/config.js", () => ({
     yoloMode: false,
     autoFixValidation: false,
   }),
+}));
+
+vi.mock("../src/ai/router.js", () => ({
+  routeMessage: routeMessageMock,
 }));
 
 import { startStream } from "../src/ai/stream.js";
@@ -83,6 +91,8 @@ describe("stream tool steps", () => {
   beforeEach(() => {
     streamTextMock.mockReset();
     stepCountIsMock.mockClear();
+    routeMessageMock.mockReset();
+    routeMessageMock.mockReturnValue("main");
     streamTextMock.mockReturnValue({
       fullStream: (async function* () {})(),
       usage: Promise.resolve({ inputTokens: 1, outputTokens: 1 }),
@@ -230,5 +240,75 @@ describe("stream tool steps", () => {
     expect(app.appendToLastMessage).not.toHaveBeenCalledWith("Checking the repo root before writing.");
     expect(app.addToolCall).toHaveBeenCalledWith("readFile", "...");
     expect(app.updateToolCallArgs).toHaveBeenCalledWith("readFile", "README.md", { path: "README.md" });
+  });
+
+  it("escalates a cheap empty turn to the main model once", async () => {
+    routeMessageMock.mockReturnValue("small");
+    let assistantContent = "";
+    const app = {
+      addMessage: vi.fn(),
+      appendToLastMessage: vi.fn((delta: string) => { assistantContent += delta; }),
+      appendThinking: vi.fn(),
+      setThinkingRequested: vi.fn(),
+      getLastAssistantContent: vi.fn(() => assistantContent),
+      setStreaming: vi.fn(),
+      setStreamTokens: vi.fn(),
+      updateUsage: vi.fn(),
+      setContextUsage: vi.fn(),
+      setCompacting: vi.fn(),
+      setStatus: vi.fn(),
+      addToolCall: vi.fn(),
+      updateToolCallArgs: vi.fn(),
+      addToolResult: vi.fn(),
+      onAbortRequest: vi.fn(),
+      hasPendingMessages: vi.fn(() => false),
+      flushPendingMessages: vi.fn(),
+    };
+    const session = {
+      getTotalCost: () => 0,
+      getChatMessages: () => [{ role: "user", content: "hey" }],
+      addMessage: vi.fn(),
+      addUsage: vi.fn(),
+      recordTurn: vi.fn(),
+      recordIdleCacheCliff: vi.fn(),
+      replaceConversation: vi.fn(),
+      recordCompaction: vi.fn(),
+      getContextOptimizer: () => ({ optimizeMessages: (messages: any[]) => messages, nextTurn: vi.fn() }),
+      getTotalInputTokens: () => 0,
+      getTotalOutputTokens: () => 0,
+    } as any;
+
+    streamTextMock
+      .mockReturnValueOnce({
+        fullStream: (async function* () {})(),
+        usage: Promise.resolve({ inputTokens: 1, outputTokens: 1 }),
+      })
+      .mockReturnValueOnce({
+        fullStream: (async function* () {
+          yield { type: "text-delta", text: "real answer" };
+        })(),
+        usage: Promise.resolve({ inputTokens: 2, outputTokens: 3 }),
+      });
+
+    await runModelTurn({
+      app: app as any,
+      session,
+      text: "hey",
+      activeModel: { provider: { id: "openai", name: "OpenAI", defaultModel: "gpt-5.4-mini", models: [] }, runtime: "sdk", model: {} as any, modelId: "gpt-5.4-mini" },
+      currentModelId: "gpt-5.4-mini",
+      smallModel: { provider: { id: "openai", name: "OpenAI", defaultModel: "gpt-5-mini", models: [] }, runtime: "sdk", model: {} as any, modelId: "gpt-5-mini" },
+      smallModelId: "gpt-5-mini",
+      currentMode: "build",
+      systemPrompt: "system",
+      buildTools: () => ({}),
+      hooks: { emit: () => {} },
+      lastToolCalls: [],
+      lastActivityTime: Date.now(),
+    });
+
+    expect(streamTextMock).toHaveBeenCalledTimes(2);
+    expect(app.setStatus).toHaveBeenCalledWith("small model empty - retrying main");
+    expect(session.addMessage).toHaveBeenCalledWith("assistant", "real answer");
+    expect(app.addMessage).not.toHaveBeenCalledWith("system", "No response from model. Try again or switch models with /model.");
   });
 });

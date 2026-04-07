@@ -80,8 +80,9 @@ export async function runModelTurn(options: {
   lastActivityTime: number;
   alreadyAddedUserMessage?: boolean;
   repairDepth?: number;
+  forceRoute?: "main" | "small";
 }): Promise<{ lastToolCalls: string[]; lastActivityTime: number }> {
-  const { app, session, text, images, activeModel, currentModelId, smallModel, smallModelId, currentMode, systemPrompt, buildTools, hooks, lastToolCalls, lastActivityTime, alreadyAddedUserMessage, repairDepth = 0 } = options;
+  const { app, session, text, images, activeModel, currentModelId, smallModel, smallModelId, currentMode, systemPrompt, buildTools, hooks, lastToolCalls, lastActivityTime, alreadyAddedUserMessage, repairDepth = 0, forceRoute } = options;
   const getContextOptimizer = (): ReturnType<Session["getContextOptimizer"]> => session.getContextOptimizer();
   const settings = getSettings();
   const effectiveImages = settings.images.blockImages ? undefined : images;
@@ -168,7 +169,7 @@ export async function runModelTurn(options: {
 
   app.setStreaming(true);
   clearTodo();
-  const { nextToolCalls, lastActivityTime: streamedActivityTime, steeringInterrupted } = await executeTurn({
+  let result = await executeTurn({
     app,
     session,
     text,
@@ -186,17 +187,45 @@ export async function runModelTurn(options: {
     contextLimit,
     activeSystemPrompt: turnSystemPrompt,
     optimizeMessages: (messages) => selectMessagesForTurn(messages, policy, (msgs) => getContextOptimizer().optimizeMessages(msgs)),
+    forceRoute,
   });
-  nextActivityTime = streamedActivityTime;
+  nextActivityTime = result.lastActivityTime;
 
-  if (steeringInterrupted) {
+  if (result.resolvedRoute === "small" && !forceRoute && !result.toolActivity && (result.completion === "empty" || result.completion === "error")) {
+    app.setStatus(result.completion === "error"
+      ? `small model failed - retrying main`
+      : "small model empty - retrying main");
+    result = await executeTurn({
+      app,
+      session,
+      text,
+      activeModel,
+      currentModelId,
+      smallModel,
+      smallModelId,
+      currentMode,
+      selectedMessages,
+      policy,
+      effectiveImages,
+      buildTools,
+      hooks,
+      lastToolCalls,
+      contextLimit,
+      activeSystemPrompt: turnSystemPrompt,
+      optimizeMessages: (messages) => selectMessagesForTurn(messages, policy, (msgs) => getContextOptimizer().optimizeMessages(msgs)),
+      forceRoute: "main",
+    });
+    nextActivityTime = result.lastActivityTime;
+  }
+
+  if (result.steeringInterrupted) {
     app.setThinkingRequested(false);
     app.setStreaming(false);
     app.flushPendingMessages("steering");
-    return { lastToolCalls: nextToolCalls, lastActivityTime: Date.now() };
+    return { lastToolCalls: result.nextToolCalls, lastActivityTime: Date.now() };
   }
 
-  const validation = runValidationSuite(nextToolCalls.some((name) => name === "writeFile" || name === "editFile"));
+  const validation = runValidationSuite(result.nextToolCalls.some((name) => name === "writeFile" || name === "editFile"));
   if (validation.attempted) {
     app.addMessage("system", validation.report);
     if (validation.failed && getSettings().autoFixValidation && repairDepth < 1) {
@@ -213,7 +242,7 @@ export async function runModelTurn(options: {
         systemPrompt,
         buildTools,
         hooks,
-        lastToolCalls: nextToolCalls,
+        lastToolCalls: result.nextToolCalls,
         lastActivityTime: nextActivityTime,
         alreadyAddedUserMessage: false,
         repairDepth: repairDepth + 1,
@@ -223,5 +252,5 @@ export async function runModelTurn(options: {
 
   if (app.hasPendingMessages("followup")) app.flushPendingMessages("followup");
 
-  return { lastToolCalls: nextToolCalls, lastActivityTime: nextActivityTime };
+  return { lastToolCalls: result.nextToolCalls, lastActivityTime: nextActivityTime };
 }

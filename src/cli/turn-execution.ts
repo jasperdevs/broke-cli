@@ -75,7 +75,16 @@ export async function executeTurn(options: {
   contextLimit: number;
   activeSystemPrompt: string;
   optimizeMessages: (messages: Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }>) => Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }>;
-}): Promise<{ nextToolCalls: string[]; lastActivityTime: number; steeringInterrupted: boolean }> {
+  forceRoute?: "main" | "small";
+}): Promise<{
+  nextToolCalls: string[];
+  lastActivityTime: number;
+  steeringInterrupted: boolean;
+  resolvedRoute: "main" | "small";
+  completion: "success" | "empty" | "error";
+  toolActivity: boolean;
+  errorMessage?: string;
+}> {
   const {
     app,
     session,
@@ -94,6 +103,7 @@ export async function executeTurn(options: {
     contextLimit,
     activeSystemPrompt,
     optimizeMessages,
+    forceRoute,
   } = options;
 
   let turnSystemPrompt = activeSystemPrompt;
@@ -107,10 +117,10 @@ export async function executeTurn(options: {
   const canAutoRoute = !!smallModel
     && settings.autoRoute
     && !(activeModel.provider.id === "codex" && activeModel.runtime === "native-cli");
-  const requestedRoute = canAutoRoute
+  const requestedRoute = forceRoute ?? (canAutoRoute
     ? routeMessage(text, session.getChatMessages().length, lastToolCalls)
-    : "main" as const;
-  const forceSmallExecutor = canAutoRoute
+    : "main" as const);
+  const forceSmallExecutor = !forceRoute && canAutoRoute
     && !!smallModel
     && shouldPreferSmallExecutor(policy, session.getChatMessages().length, !!effectiveImages?.length);
   const resolvedRoute = forceSmallExecutor ? "small" : requestedRoute;
@@ -152,6 +162,8 @@ export async function executeTurn(options: {
   }
 
   let streamTokenFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  let completion: "success" | "empty" | "error" = "success";
+  let errorMessage: string | undefined;
   const scheduleStreamTokenUpdate = (): void => {
     if (streamTokenFlushTimer) return;
     streamTokenFlushTimer = setTimeout(() => {
@@ -196,15 +208,6 @@ export async function executeTurn(options: {
         app.appendToLastMessage(bufferedLeadText);
       }
       const content = app.getLastAssistantContent();
-      if (content) {
-        session.addMessage("assistant", content);
-      } else if (looksLikeRawToolPayload(streamedText)) {
-        session.addMessage("assistant", "[raw tool payload hidden]");
-        app.addMessage("system", "Model emitted raw tool syntax. Hidden from chat.");
-      } else {
-        session.addMessage("assistant", "[empty response]");
-        app.addMessage("system", "No response from model. Try again or switch models with /model.");
-      }
       session.addUsage(usage.inputTokens, usage.outputTokens, usage.cost);
       session.recordTurn({
         smallModel: resolvedRoute === "small",
@@ -220,8 +223,27 @@ export async function executeTurn(options: {
       app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
       abortController = null;
       nextActivityTime = Date.now();
+      if (content) {
+        session.addMessage("assistant", content);
+        if (getSettings().notifyOnResponse) sendResponseNotification();
+        if (app.hasPendingMessages("steering")) app.flushPendingMessages("steering");
+        completion = "success";
+        return;
+      }
+      if (resolvedRoute === "small" && !sawToolActivity) {
+        completion = "empty";
+        return;
+      }
+      if (looksLikeRawToolPayload(streamedText)) {
+        session.addMessage("assistant", "[raw tool payload hidden]");
+        app.addMessage("system", "Model emitted raw tool syntax. Hidden from chat.");
+      } else {
+        session.addMessage("assistant", "[empty response]");
+        app.addMessage("system", "No response from model. Try again or switch models with /model.");
+      }
       if (getSettings().notifyOnResponse) sendResponseNotification();
       if (app.hasPendingMessages("steering")) app.flushPendingMessages("steering");
+      completion = "empty";
     },
     onError: (err: Error) => {
       flushStreamTokenUpdate();
@@ -234,7 +256,6 @@ export async function executeTurn(options: {
         providerName: activeModel.provider.name,
         executionModelId,
       });
-      session.addMessage("assistant", `[error: ${msg}]`);
       session.recordTurn({
         smallModel: resolvedRoute === "small",
         toolsExposed: exposedToolCount,
@@ -244,8 +265,13 @@ export async function executeTurn(options: {
         plannerOutputTokens: policy.plannerUsage?.outputTokens,
       });
       app.setStreaming(false);
-      app.addMessage("system", msg);
       abortController = null;
+      errorMessage = msg;
+      completion = "error";
+      if (!(resolvedRoute === "small" && !sawToolActivity)) {
+        session.addMessage("assistant", `[error: ${msg}]`);
+        app.addMessage("system", msg);
+      }
     },
     onAfterResponse: () => {},
   };
@@ -351,5 +377,9 @@ export async function executeTurn(options: {
     nextToolCalls,
     lastActivityTime: steeringInterruptRequested ? Date.now() : nextActivityTime,
     steeringInterrupted: steeringInterruptRequested,
+    resolvedRoute,
+    completion,
+    toolActivity: sawToolActivity || nextToolCalls.length > 0,
+    errorMessage,
   };
 }
