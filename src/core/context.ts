@@ -61,7 +61,7 @@ export function buildSystemPrompt(cwd: string, providerId?: string, mode?: Mode,
 - Follow existing patterns. Match the project's style, naming, and conventions.
 - Do not re-read files already in context.
 - Only explore the project when the task requires it. Do NOT list files unprompted.
-- If a task is ambiguous, make a reasonable assumption and proceed. Use askUser for real decisions (preferences, destructive confirmations, choosing between options).
+- If a task is ambiguous, make a reasonable assumption and proceed. Ask the user only for real decisions (preferences, destructive confirmations, choosing between options).
 </guidelines>`);
   }
 
@@ -81,7 +81,6 @@ editFile: EXACT match old_string. Enough context for uniqueness.
 writeFile: New files only. readFile first if exists.
 listFiles: Explore code. Depth 3.
 grep: Exact strings/defs/usages. Use include glob.
-askUser: Only for user decisions.
 todoWrite: Task checklist for 3+ step work.
 </tool-tips>`);
   } else if (profile === "full") {
@@ -95,7 +94,6 @@ listFiles: Start here when exploring unfamiliar code. Default depth is 3.
 grep: For exact strings, definitions, usages, and regex patterns across the codebase. Use include glob to narrow search.
 webSearch: For current docs, APIs, recent events. Not for things you already know.
 webFetch: For reading specific URLs — docs pages, API references. Content is stripped of HTML.
-askUser: Use when you need the user's preference or decision. Good for: "which color?", "option A or B?", "delete these files?". Not for: things you can figure out yourself.
 todoWrite: Create or update a task checklist for multi-step work. Use at the start of complex tasks (3+ steps) to show your plan, then update status as you complete each step. Helps the user track progress.
 </tool-tips>`);
   }

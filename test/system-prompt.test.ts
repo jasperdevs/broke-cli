@@ -26,4 +26,10 @@ describe("system prompt", () => {
     expect(casualPrompt).not.toContain("--- AGENTS.md ---");
     expect(casualPrompt.length).toBeLessThan(fullPrompt.length);
   });
+
+  it("does not advertise tools that are not registered in the normal runtime", () => {
+    const prompt = buildSystemPrompt(process.cwd(), "openai", "build", "off");
+
+    expect(prompt).not.toContain("askUser");
+  });
 });

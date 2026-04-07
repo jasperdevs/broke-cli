@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { tool } from "ai";
 
+const MAX_WEB_FETCH_CHARS = 6000;
+
 export const webSearchTool = tool({
   description: "Search the web via DuckDuckGo. Use for: current docs, recent events, API references, things you don't know. Do NOT search for things you already know or can find in the codebase with grep.",
   inputSchema: z.object({
@@ -41,7 +43,7 @@ export const webSearchTool = tool({
 });
 
 export const webFetchTool = tool({
-  description: "Fetch and read a web page's text content. HTML is stripped automatically. Use for: reading docs, API references, or specific URLs the user provides. Truncated at ~2000 tokens.",
+  description: "Fetch and read a web page's text content. HTML is stripped automatically. Use for: reading docs, API references, or specific URLs the user provides. Truncated at ~1500 tokens.",
   inputSchema: z.object({
     url: z.string().describe("URL to fetch"),
   }),
@@ -65,8 +67,8 @@ export const webFetchTool = tool({
       text = text.replace(/<[^>]+>/g, " ");
       text = text.replace(/\s+/g, " ").trim();
       // Truncate to avoid massive context
-      if (text.length > 8000) {
-        text = text.slice(0, 8000) + "\n[truncated]";
+      if (text.length > MAX_WEB_FETCH_CHARS) {
+        text = text.slice(0, MAX_WEB_FETCH_CHARS) + "\n[truncated]";
       }
       return { success: true as const, content: text };
     } catch (err) {

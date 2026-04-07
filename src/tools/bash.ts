@@ -8,8 +8,8 @@ import { assessCommand } from "../core/safety.js";
 import { filterCommandOutput, rewriteCommand } from "./command-filter.js";
 import { grepDirect, listFilesDirect, readFileDirect } from "./file-ops.js";
 
-/** Max chars sent back to LLM context (~2000 tokens) */
-const MAX_OUTPUT_CHARS = 8000;
+/** Max chars sent back to LLM context (~1500 tokens) */
+const MAX_OUTPUT_CHARS = 6000;
 /** Max chars kept in memory for UI display */
 const MAX_UI_CHARS = 100_000;
 

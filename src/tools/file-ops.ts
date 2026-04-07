@@ -3,8 +3,8 @@ import { basename, join, relative } from "path";
 import { assessFileWrite } from "../core/safety.js";
 import { createCheckpoint } from "../core/git.js";
 
-/** Max chars to return from file reads (~2000 tokens) */
-const MAX_READ_CHARS = 8000;
+/** Max chars to return from file reads (~1500 tokens) */
+const MAX_READ_CHARS = 6000;
 /** Max lines from grep matches */
 const MAX_GREP_MATCHES = 18;
 /** Max file entries from listFiles */

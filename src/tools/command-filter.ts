@@ -10,6 +10,8 @@ export interface CommandFilterResult {
   executedCommand: string;
 }
 
+const RAW_OUTPUT_TEE_THRESHOLD = 6000;
+
 function stripAnsi(text: string): string {
   return text.replace(/\x1b\[[0-9;]*m/g, "");
 }
@@ -131,7 +133,7 @@ export function filterCommandOutput(
   }
 
   let rawPath: string | undefined;
-  if (filtered || combined.length > 8000 || exitCode !== 0) {
+  if (filtered || combined.length > RAW_OUTPUT_TEE_THRESHOLD || exitCode !== 0) {
     rawPath = saveRawOutput(executedCommand, combined);
   }
 

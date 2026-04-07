@@ -1,4 +1,5 @@
 import { execSync } from "child_process";
+import { getSettings } from "./config.js";
 
 let lastCheckpointHash: string | null = null;
 
@@ -12,6 +13,7 @@ function isGitRepo(): boolean {
 }
 
 export function createCheckpoint(): boolean {
+  if (!getSettings().gitCheckpoints) return false;
   if (!isGitRepo()) return false;
   try {
     // Stage all changes and create a checkpoint commit

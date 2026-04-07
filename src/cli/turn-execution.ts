@@ -45,11 +45,15 @@ interface ExtensionHooks {
   emit(event: string, payload: Record<string, unknown>): void;
 }
 
+const MAX_TOOL_RESULT_SERIALIZED_CHARS = 6000;
+
 function estimateToolResultTokens(result: unknown): number {
   try {
     const serialized = JSON.stringify(result);
     if (!serialized) return 0;
-    const capped = serialized.length > 12000 ? `${serialized.slice(0, 12000)}…` : serialized;
+    const capped = serialized.length > MAX_TOOL_RESULT_SERIALIZED_CHARS
+      ? `${serialized.slice(0, MAX_TOOL_RESULT_SERIALIZED_CHARS)}…`
+      : serialized;
     return estimateTextTokens(capped);
   } catch {
     return 0;

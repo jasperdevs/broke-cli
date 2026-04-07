@@ -62,7 +62,7 @@ export function filterFiles(files: string[], query: string, limit = 10): string[
 }
 
 /** Read file contents (truncated for injection) */
-export function readFileForContext(root: string, relPath: string, maxChars = 8000): string {
+export function readFileForContext(root: string, relPath: string, maxChars = 4000): string {
   try {
     const content = readFileSync(join(root, relPath), "utf-8");
     if (content.length > maxChars) {
