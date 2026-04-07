@@ -31,7 +31,7 @@ vi.mock("fs", async () => {
 });
 
 import { createModel, shouldUseNativeProvider } from "../src/ai/providers.js";
-import { resolveNativeSpawnCommand } from "../src/ai/native-stream.js";
+import { normalizeNativeUsage, resolveNativeSpawnCommand } from "../src/ai/native-stream.js";
 
 describe("native provider runtime selection", () => {
   beforeEach(() => {
@@ -124,5 +124,29 @@ describe("native provider runtime selection", () => {
   it("prefers a GPT-5 default for the Codex provider", () => {
     const model = createModel("codex");
     expect(model.modelId).toBe("gpt-5-mini");
+  });
+
+  it("clamps wildly inflated native Codex input usage back to estimated prompt size", () => {
+    const usage = normalizeNativeUsage({
+      providerId: "codex",
+      reported: { inputTokens: 80234, outputTokens: 247 },
+      estimatedInputTokens: 1342,
+      estimatedOutputTokens: 19,
+    });
+
+    expect(usage.inputTokens).toBe(1342);
+    expect(usage.outputTokens).toBe(247);
+  });
+
+  it("keeps plausible native Codex usage when it stays near the estimated prompt size", () => {
+    const usage = normalizeNativeUsage({
+      providerId: "codex",
+      reported: { inputTokens: 1810, outputTokens: 55 },
+      estimatedInputTokens: 1342,
+      estimatedOutputTokens: 20,
+    });
+
+    expect(usage.inputTokens).toBe(1810);
+    expect(usage.outputTokens).toBe(55);
   });
 });

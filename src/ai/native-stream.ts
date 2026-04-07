@@ -62,6 +62,32 @@ function extractUsage(usage: unknown): { inputTokens: number; outputTokens: numb
   };
 }
 
+export function normalizeNativeUsage(options: {
+  providerId: NativeStreamOptions["providerId"];
+  reported: { inputTokens: number; outputTokens: number };
+  estimatedInputTokens: number;
+  estimatedOutputTokens: number;
+}): { inputTokens: number; outputTokens: number } {
+  const { providerId, reported, estimatedInputTokens, estimatedOutputTokens } = options;
+  let inputTokens = reported.inputTokens > 0 ? reported.inputTokens : estimatedInputTokens;
+  let outputTokens = reported.outputTokens > 0 ? reported.outputTokens : estimatedOutputTokens;
+
+  if (providerId === "codex") {
+    // Native Codex can report hidden/orchestration input usage that is far above the
+    // visible prompt we actually build. Keep session totals grounded in the prompt
+    // BrokeCLI controls instead of letting one trivial turn explode lifetime usage.
+    const maxTrustedInput = Math.max(estimatedInputTokens * 3, estimatedInputTokens + 4096);
+    if (inputTokens > maxTrustedInput) {
+      inputTokens = estimatedInputTokens;
+    }
+  }
+
+  if (outputTokens < 0) outputTokens = estimatedOutputTokens;
+  if (inputTokens < 0) inputTokens = estimatedInputTokens;
+
+  return { inputTokens, outputTokens };
+}
+
 function extractClaudeText(message: unknown, blockType: "text" | "thinking"): string {
   const record = typeof message === "object" && message !== null ? message as Record<string, unknown> : {};
   const content = Array.isArray(record.content) ? record.content : [];
@@ -233,12 +259,17 @@ export async function startNativeStream(
     const finishWithUsage = (usageData?: unknown) => {
       if (finished) return;
       finished = true;
-      const usage = extractUsage(usageData);
+      const usage = normalizeNativeUsage({
+        providerId: opts.providerId,
+        reported: extractUsage(usageData),
+        estimatedInputTokens,
+        estimatedOutputTokens: estimateTextTokens(emittedText + emittedReasoning, opts.modelId),
+      });
       callbacks.onAfterResponse?.();
       callbacks.onFinish(calculateCost(
         opts.modelId,
-        usage.inputTokens > 0 ? usage.inputTokens : estimatedInputTokens,
-        usage.outputTokens > 0 ? usage.outputTokens : estimateTextTokens(emittedText + emittedReasoning, opts.modelId),
+        usage.inputTokens,
+        usage.outputTokens,
         opts.providerId,
       ));
       resolve();
