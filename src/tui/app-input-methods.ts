@@ -19,15 +19,29 @@ type AppState = any;
 
 export { handlePaste } from "./app-input-routes.js";
 
+function getPointerPosition(key: Keypress): { col: number; row: number } | null {
+  if (!key.char || !key.char.includes(",")) return null;
+  const [colStr, rowStr] = key.char.split(",");
+  const col = parseInt(colStr, 10);
+  const row = parseInt(rowStr, 10);
+  if (!Number.isFinite(col) || !Number.isFinite(row)) return null;
+  return { col, row };
+}
+
+function isSidebarPointer(app: AppState, key: Keypress): boolean {
+  const pointer = getPointerPosition(key);
+  if (!pointer || !app.shouldShowSidebar()) return false;
+  return pointer.col > app.screen.mainWidth;
+}
+
 function handleClickOrScroll(app: AppState, key: Keypress): boolean {
   if (key.name === "click" && key.char) {
-    const [colStr, rowStr] = key.char.split(",");
-    const col = parseInt(colStr, 10);
-    const row = parseInt(rowStr, 10);
-    if (app.shouldShowSidebar() && col > app.screen.mainWidth) {
+    const pointer = getPointerPosition(key);
+    if (!pointer) return false;
+    if (isSidebarPointer(app, key)) {
       app.sidebarFocused = true;
       const sidebarLines = app.renderSidebar(app.getSidebarViewportHeight());
-      const clickedLine = row <= sidebarLines.length ? sidebarLines[row - 1] : undefined;
+      const clickedLine = pointer.row <= sidebarLines.length ? sidebarLines[pointer.row - 1] : undefined;
       if (clickedLine) {
         const plain = stripAnsi(clickedLine).trim();
         if (plain.startsWith("▾ Files") || plain.startsWith("▸ Files")) {
@@ -37,7 +51,7 @@ function handleClickOrScroll(app: AppState, key: Keypress): boolean {
           if (app.sidebarExpandedDirs.has(dirName)) app.sidebarExpandedDirs.delete(dirName);
           else app.sidebarExpandedDirs.add(dirName);
         } else if (plain.match(/^▸ \+\d+ more$/)) {
-          for (let i = row - 2; i >= 0; i--) {
+          for (let i = pointer.row - 2; i >= 0; i--) {
             const prevPlain = stripAnsi(sidebarLines[i] ?? "").trim();
             if (prevPlain.match(/^▾ .+\/$/)) {
               const dirName = prevPlain.slice(2).replace(/\/$/, "");
@@ -50,7 +64,7 @@ function handleClickOrScroll(app: AppState, key: Keypress): boolean {
       app.draw();
     } else {
       app.sidebarFocused = false;
-      app.activeMenuClickTargets.get(row)?.();
+      app.activeMenuClickTargets.get(pointer.row)?.();
     }
     return true;
   }
@@ -62,6 +76,7 @@ function handleClickOrScroll(app: AppState, key: Keypress): boolean {
       app.draw();
       return true;
     }
+    if (isSidebarPointer(app, key)) app.sidebarFocused = true;
     if (app.sidebarFocused && app.screen.hasSidebar && !getSettings().hideSidebar) {
       app.scrollSidebar(sidebarDelta, app.getSidebarViewportHeight());
     }

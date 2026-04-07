@@ -46,12 +46,10 @@ describe("command aliases", () => {
 });
 
 describe("sidebar scrolling", () => {
-  it("keeps passive sidebar mode out of mouse-capture until a modal is active", () => {
+  it("enables mouse tracking for split-pane chats so the sidebar can own wheel input", () => {
     const app = new App() as any;
     app.messages = [{ role: "user", content: "hello" }];
     app.screen = { height: 18, width: 100, hasSidebar: true, mainWidth: 73, sidebarWidth: 24, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
-    expect(app.shouldEnableMenuMouse()).toBe(false);
-    app.openItemPicker("Theme", [{ id: "dark", label: "Dark" }], () => {});
     expect(app.shouldEnableMenuMouse()).toBe(true);
   });
 
@@ -242,6 +240,31 @@ describe("sidebar scrolling", () => {
     app.handleKey({ name: "pageup", char: "", ctrl: false, meta: false, shift: false });
     app.handleKey({ name: "pagedown", char: "", ctrl: false, meta: false, shift: false });
     expect(app.scrollOffset).toBe(8);
+  });
+
+  it("scrolls the sidebar from wheel coordinates without requiring a prior click focus", () => {
+    const app = new App() as any;
+    app.messages = [{ role: "user", content: "hello" }];
+    app.screen = { height: 18, width: 100, hasSidebar: true, mainWidth: 73, sidebarWidth: 24, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
+    app.sidebarTreeOpen = true;
+    app.buildSidebarLines = () => [
+      "New Session",
+      "v0.0.1",
+      "",
+      "provider/model",
+      "",
+      "Directory",
+      "  ~/repo",
+      "",
+      "▾ Files",
+      "  ▾ src/",
+      ...Array.from({ length: 18 }, (_, i) => `    file-${i}.ts`),
+    ];
+
+    expect(app.sidebarScrollOffset).toBe(0);
+    app.handleKey({ name: "scrolldown", char: "95,8", ctrl: false, meta: false, shift: false });
+    expect(app.sidebarFocused).toBe(true);
+    expect(app.sidebarScrollOffset).toBeGreaterThan(0);
   });
 
   it("hides the sidebar footer while composing or streaming so the prompt stays at the real bottom", () => {

@@ -100,14 +100,14 @@ export class KeypressHandler {
           hasMouseData = true;
           lastMouseTime = Date.now();
           const button = parseInt(match[1], 10);
+          const col = parseInt(match[2], 10);
+          const row = parseInt(match[3], 10);
           const release = match[4] === "m";
           if (button === 64) {
-            this.onKey({ name: "scrollup", char: "", ctrl: false, meta: false, shift: false });
+            this.onKey({ name: "scrollup", char: `${col},${row}`, ctrl: false, meta: false, shift: false });
           } else if (button === 65) {
-            this.onKey({ name: "scrolldown", char: "", ctrl: false, meta: false, shift: false });
+            this.onKey({ name: "scrolldown", char: `${col},${row}`, ctrl: false, meta: false, shift: false });
           } else if (button === 0 && release) {
-            const col = parseInt(match[2], 10);
-            const row = parseInt(match[3], 10);
             this.onKey({ name: "click", char: `${col},${row}`, ctrl: false, meta: false, shift: false });
           }
         }

@@ -34,8 +34,6 @@ describe("mouse reporting mode", () => {
     const app = new App() as any;
     app.messages = [{ role: "user", content: "hello" }];
     app.screen = { height: 18, width: 100, hasSidebar: true, mainWidth: 73, sidebarWidth: 24, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
-    expect(app.shouldEnableMenuMouse()).toBe(false);
-    app.openItemPicker("Theme", [{ id: "dark", label: "Dark" }], () => {});
     expect(app.shouldEnableMenuMouse()).toBe(true);
   });
 });
