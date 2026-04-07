@@ -39,10 +39,9 @@ export function buildVisibleRuntimeModelOptions(
 ): Array<{ providerId: string; providerName: string; modelId: string; active: boolean; badges?: string[] }> {
   const fallbackProviderId = activeModel?.provider.id ?? providers[0]?.id ?? "openai";
   const preferences = listResolvedModelPreferences(fallbackProviderId);
-  const preserved = Object.values(preferences).map((entry) => entry.key);
   const currentKey = activeModel ? `${activeModel.provider.id}/${currentModelId}` : "";
   return providerRegistry
-    .buildVisibleModelOptions(activeModel, currentModelId, getSettings().scopedModels, preserved)
+    .buildVisibleModelOptions(activeModel, currentModelId, getSettings().scopedModels)
     .map((option) => {
       const key = `${option.providerId}/${option.modelId}`;
       const badges: string[] = [];

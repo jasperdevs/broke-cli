@@ -26,7 +26,7 @@ function handleClickOrScroll(app: AppState, key: Keypress): boolean {
     const row = parseInt(rowStr, 10);
     if (app.shouldShowSidebar() && col > app.screen.mainWidth) {
       app.sidebarFocused = true;
-      const sidebarLines = app.renderSidebar(app.getChatHeight());
+      const sidebarLines = app.renderSidebar(app.getSidebarViewportHeight());
       const clickedLine = row <= sidebarLines.length ? sidebarLines[row - 1] : undefined;
       if (clickedLine) {
         const plain = stripAnsi(clickedLine).trim();
@@ -63,7 +63,7 @@ function handleClickOrScroll(app: AppState, key: Keypress): boolean {
       return true;
     }
     if (app.sidebarFocused && app.screen.hasSidebar && !getSettings().hideSidebar) {
-      app.scrollSidebar(sidebarDelta, app.getChatHeight());
+      app.scrollSidebar(sidebarDelta, app.getSidebarViewportHeight());
     }
     app.draw();
     return true;
@@ -76,7 +76,8 @@ function handleClickOrScroll(app: AppState, key: Keypress): boolean {
       return true;
     }
     if (app.sidebarFocused && app.screen.hasSidebar && !getSettings().hideSidebar) {
-      app.scrollSidebar(-Math.max(1, app.getChatHeight() - 2), app.getChatHeight());
+      const sidebarHeight = app.getSidebarViewportHeight();
+      app.scrollSidebar(-Math.max(1, sidebarHeight - 2), sidebarHeight);
     }
     app.draw();
     return true;
@@ -89,7 +90,8 @@ function handleClickOrScroll(app: AppState, key: Keypress): boolean {
       return true;
     }
     if (app.sidebarFocused && app.screen.hasSidebar && !getSettings().hideSidebar) {
-      app.scrollSidebar(Math.max(1, app.getChatHeight() - 2), app.getChatHeight());
+      const sidebarHeight = app.getSidebarViewportHeight();
+      app.scrollSidebar(Math.max(1, sidebarHeight - 2), sidebarHeight);
     }
     app.draw();
     return true;

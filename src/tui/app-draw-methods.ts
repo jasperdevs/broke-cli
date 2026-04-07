@@ -55,7 +55,6 @@ export function drawImmediate(app: AppState): void {
   const { height, width } = app.screen;
   const hasSidebar = app.shouldShowSidebar();
   const mainW = hasSidebar ? app.screen.mainWidth : width;
-  const footerLines = hasSidebar ? app.renderSidebarFooter() : [];
   const inputLayout = app.getInputCursorLayout(app.input.getText(), app.input.getCursor(), mainW);
   const isHome = app.messages.length === 0;
   const separatorColor = app.getModeAccent();
@@ -77,52 +76,39 @@ export function drawImmediate(app: AppState): void {
   appendBottomMenus(app, bottomLines, bottomMenuClicks, height, mainW, separatorColor);
   bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
   bottomLines.push(buildInfoBar(app, hasSidebar, mainW));
-  const bottomTopPad = hasSidebar ? Math.max(0, footerLines.length - bottomLines.length) : 0;
+  const footerLines = hasSidebar ? app.renderSidebarFooter() : [];
+  const sidebarColumnLines = hasSidebar ? buildSidebarColumnLines(app, height, footerLines) : [];
+  const mainTopHeight = Math.max(0, height - bottomLines.length);
 
   const frameLines = buildFrameLines(app, {
     height,
-    width,
     mainW,
     hasSidebar,
-    footerLines,
+    sidebarColumnLines,
     bottomLines,
-    bottomTopPad,
     bottomMenuClicks,
     isHome,
   });
   app.screen.render(frameLines.map((line) => app.decorateFrameLine(line, width)));
-
-  const effectiveBottomHeight = hasSidebar ? Math.max(bottomLines.length, footerLines.length) : bottomLines.length;
-  const mainTopHeight = Math.max(0, height - effectiveBottomHeight);
-  const sidebarTopHeight = hasSidebar
-    ? (footerLines.length > 0 ? Math.max(0, height - footerLines.length) : mainTopHeight)
-    : mainTopHeight;
-  const bottomStartRow = hasSidebar ? Math.max(mainTopHeight, sidebarTopHeight) : mainTopHeight;
-  app.screen.setCursor(Math.min(height, bottomStartRow + bottomTopPad + inputStartIndex + 1 + inputLayout.row), Math.min(width, 1 + inputLayout.col));
+  app.screen.setCursor(Math.min(height, mainTopHeight + inputStartIndex + 1 + inputLayout.row), Math.min(width, 1 + inputLayout.col));
 }
 
-function buildFrameLines(app: AppState, opts: { height: number; width: number; mainW: number; hasSidebar: boolean; footerLines: string[]; bottomLines: string[]; bottomTopPad: number; bottomMenuClicks: Array<{ lineIndex: number; action: () => void }>; isHome: boolean; }): string[] {
-  const { height, mainW, hasSidebar, footerLines, bottomLines, bottomTopPad, bottomMenuClicks, isHome } = opts;
+function buildFrameLines(app: AppState, opts: { height: number; mainW: number; hasSidebar: boolean; sidebarColumnLines: string[]; bottomLines: string[]; bottomMenuClicks: Array<{ lineIndex: number; action: () => void }>; isHome: boolean; }): string[] {
+  const { height, mainW, hasSidebar, sidebarColumnLines, bottomLines, bottomMenuClicks, isHome } = opts;
   const frameLines: string[] = [];
-  const paddedBottomLines = bottomTopPad > 0 ? [...Array.from({ length: bottomTopPad }, () => ""), ...bottomLines] : bottomLines;
-  const mainBottomHeight = paddedBottomLines.length;
+  const mainBottomHeight = bottomLines.length;
   const mainTopHeight = Math.max(0, height - mainBottomHeight);
-  const sidebarFooterHeight = hasSidebar ? footerLines.length : 0;
-  const sidebarTopHeight = hasSidebar
-    ? (sidebarFooterHeight > 0 ? Math.max(0, height - sidebarFooterHeight) : mainTopHeight)
-    : 0;
-  const bottomStartRow = hasSidebar ? Math.max(mainTopHeight, sidebarTopHeight) : mainTopHeight;
-  app.activeMenuClickTargets = new Map(bottomMenuClicks.map(({ lineIndex, action }) => [bottomStartRow + bottomTopPad + lineIndex + 1, action]));
+  app.activeMenuClickTargets = new Map(bottomMenuClicks.map(({ lineIndex, action }) => [mainTopHeight + lineIndex + 1, action]));
   const showCompactHeader = !isHome && !hasSidebar && app.modelName !== "none";
   const bannerLines = opts.isHome ? app.renderUpdateBanner(mainW) : [];
   const reservedBannerLines = bannerLines.slice(0, mainTopHeight);
   const fixedTopLines = [...reservedBannerLines];
   if (showCompactHeader && fixedTopLines.length < mainTopHeight) fixedTopLines.push(app.renderCompactHeader());
+  const mainTopLines: string[] = [];
 
   if (isHome) {
     const homeLines = app.renderHomeView(mainW, Math.max(0, mainTopHeight - fixedTopLines.length));
-    mergeMainAndSidebar(app, frameLines, [...fixedTopLines, ...homeLines], [], mainW, hasSidebar, sidebarTopHeight, false);
-    while (frameLines.length < mainTopHeight) frameLines.push("");
+    mainTopLines.push(...fixedTopLines, ...homeLines);
   } else {
     const chatH = Math.max(1, mainTopHeight - fixedTopLines.length);
     const messageLines = app.renderMessages(mainW);
@@ -135,23 +121,21 @@ function buildFrameLines(app: AppState, opts: { height: number; width: number; m
     if (app.scrollOffset < 0) app.scrollOffset = 0;
     app.lastChatHeight = chatH;
     const visibleMsgs = messageLines.slice(app.scrollOffset, app.scrollOffset + chatH);
-    mergeMainAndSidebar(app, frameLines, [...fixedTopLines, ...visibleMsgs], [], mainW, hasSidebar, sidebarTopHeight, false);
-    while (frameLines.length < mainTopHeight) {
-      if (hasSidebar) frameLines.push(`${app.padLine("", mainW)} ${app.getSidebarBorder()} ${app.padLine("", app.screen.sidebarWidth)}`);
-      else frameLines.push("");
-    }
+    mainTopLines.push(...fixedTopLines, ...visibleMsgs);
   }
 
-  if (hasSidebar) {
+  while (mainTopLines.length < mainTopHeight) mainTopLines.push("");
+
+  if (!hasSidebar) {
+    frameLines.push(...mainTopLines, ...bottomLines);
+  } else {
     const border = app.getSidebarBorder();
     const sideW = app.screen.sidebarWidth;
-    for (let i = 0; i < mainBottomHeight; i++) {
-      const row = frameLines.length;
-      const footerLine = row >= sidebarTopHeight ? footerLines[row - sidebarTopHeight] ?? "" : "";
-      frameLines.push(`${app.padLine(paddedBottomLines[i] ?? "", mainW)} ${border} ${app.padLine(footerLine, sideW)}`);
+    for (let row = 0; row < height; row++) {
+      const mainLine = row < mainTopHeight ? mainTopLines[row] ?? "" : bottomLines[row - mainTopHeight] ?? "";
+      const sidebarLine = sidebarColumnLines[row] ?? "";
+      frameLines.push(`${app.padLine(mainLine, mainW)} ${border} ${app.padLine(sidebarLine, sideW)}`);
     }
-  } else {
-    frameLines.push(...paddedBottomLines);
   }
 
   while (frameLines.length < height) frameLines.push("");
@@ -159,17 +143,16 @@ function buildFrameLines(app: AppState, opts: { height: number; width: number; m
   return frameLines;
 }
 
-function mergeMainAndSidebar(app: AppState, frameLines: string[], mainLines: string[], _unused: string[], mainW: number, hasSidebar: boolean, sidebarTopHeight: number, showCompactHeader: boolean): void {
-  if (!hasSidebar) {
-    frameLines.push(...mainLines);
-    return;
-  }
-  const sidebarLines = app.renderSidebar(Math.max(1, sidebarTopHeight - (showCompactHeader ? 1 : 0)));
-  const border = app.getSidebarBorder();
-  const rowCount = Math.max(mainLines.length, sidebarLines.length);
-  for (let i = 0; i < rowCount; i++) {
-    frameLines.push(`${app.padLine(mainLines[i] ?? "", mainW)} ${border} ${app.padLine(sidebarLines[i] ?? "", app.screen.sidebarWidth)}`);
-  }
+function buildSidebarColumnLines(app: AppState, height: number, footerLines: string[]): string[] {
+  const footerHeight = footerLines.length;
+  const contentHeight = Math.max(1, height - footerHeight);
+  const sidebarLines = app.renderSidebar(contentHeight);
+  const columnLines = [...sidebarLines];
+  while (columnLines.length < contentHeight) columnLines.push("");
+  columnLines.push(...footerLines);
+  while (columnLines.length < height) columnLines.push("");
+  if (columnLines.length > height) columnLines.length = height;
+  return columnLines;
 }
 
 export function sparkleSpinner(app: AppState, frame: number, color?: string): string {
@@ -206,7 +189,8 @@ export function appendModelPicker(app: AppState, lines: string[], _maxTotal: num
   const scopedLabel = picker.scope === "scoped" ? `${TXT()}${BOLD}pinned${RESET}` : `${MUTED()}pinned${RESET}`;
   lines.push(` ${DIM}Scope:${RESET} ${allLabel} ${DIM}|${RESET} ${scopedLabel}`);
   lines.push(` ${DIM}enter use · space pin · tab scope${RESET}`);
-  lines.push(` ${DIM}1 chat · 2 small auto · 3 review · 4 plan · 5 ui · 6 arch${RESET}`);
+  lines.push(` ${DIM}assign selected: 1 chat · 2 auto-small · 3 review${RESET}`);
+  lines.push(` ${DIM}4 planning · 5 ui · 6 architecture${RESET}`);
   if (app.getFilteredModels().length === 0) {
     lines.push(`  ${DIM}no matches${RESET}`);
     return;

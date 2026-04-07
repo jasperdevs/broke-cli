@@ -5,6 +5,7 @@ import {
   getActiveMenuPromptKind,
   getBottomLineCount,
   getChatHeight,
+  getSidebarViewportHeight,
   getCommandSuggestionEntries,
   getFilePickerEntries,
   getFilteredItems,
@@ -46,6 +47,7 @@ type AppState = any;
 export interface AppMenuMethods {
   scrollToBottom(): void;
   getChatHeight(): number;
+  getSidebarViewportHeight(): number;
   getBottomLineCount(mainW: number, maxHeight: number): number;
   getWrappedInputLines(text: string, width: number): string[];
   getInputCursorLayout(text: string, cursor: number, width: number): { lines: string[]; row: number; col: number };
@@ -87,6 +89,7 @@ export interface AppMenuMethods {
 export const appMenuMethods: AppMenuMethods = {
   scrollToBottom(this: AppState) { return scrollToBottom(this); },
   getChatHeight(this: AppState) { return getChatHeight(this); },
+  getSidebarViewportHeight(this: AppState) { return getSidebarViewportHeight(this); },
   getBottomLineCount(this: AppState, mainW: number, maxHeight: number) { return getBottomLineCount(this, mainW, maxHeight); },
   getWrappedInputLines(this: AppState, text: string, width: number) { return getWrappedInputLines(this, text, width); },
   getInputCursorLayout(this: AppState, text: string, cursor: number, width: number) { return getInputCursorLayout(this, text, cursor, width); },

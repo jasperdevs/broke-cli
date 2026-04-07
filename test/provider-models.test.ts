@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { filterModelIdsForDisplay, resolveVisibleProviderModelId, supportsProviderModel, syncCloudProviderModelsFromCatalog } from "../src/ai/providers.js";
 import { ProviderRegistry } from "../src/ai/provider-registry.js";
+import { buildVisibleRuntimeModelOptions } from "../src/cli/runtime-models.js";
 import * as config from "../src/core/config.js";
 
 describe("provider model filtering", () => {
@@ -112,5 +113,29 @@ describe("provider model filtering", () => {
     const modelIds = options.filter((option) => option.providerId === "codex").map((option) => option.modelId);
     expect(modelIds).not.toContain("gpt-4.1");
     expect(modelIds).toContain("gpt-5-mini");
+  });
+
+  it("does not force routed-but-unavailable providers into the model picker", () => {
+    const registry = new ProviderRegistry() as any;
+    registry.providers = [
+      { id: "codex", name: "Codex", available: true, reason: "native login" },
+    ];
+
+    const previousReview = config.getConfiguredModelPreference("review");
+    try {
+      config.updateModelPreference("review", "llamacpp/qwen2.5-coder");
+      const options = buildVisibleRuntimeModelOptions(
+        registry,
+        { provider: { id: "codex", name: "Codex", defaultModel: "gpt-5-mini", models: ["gpt-5-mini"] }, modelId: "gpt-5-mini", runtime: "native-cli" },
+        "gpt-5-mini",
+        [{ id: "codex", name: "Codex", available: true, reason: "native login" }] as any,
+      );
+
+      const providerIds = new Set(options.map((option) => option.providerId));
+      expect(providerIds.has("codex")).toBe(true);
+      expect(providerIds.has("llamacpp")).toBe(false);
+    } finally {
+      config.updateModelPreference("review", previousReview ?? null);
+    }
   });
 });

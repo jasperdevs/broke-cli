@@ -95,7 +95,7 @@ export class Screen {
       buf += moveToRow(i + 1) + CLEAR_LINE + next;
     }
     if (!dirty) return;
-    buf += moveTo(1, 1) + SYNC_END;
+    buf += SYNC_END;
     write(buf);
     this.prev = Array.from({ length: this.rows }, (_, i) => lines[i] ?? "");
   }

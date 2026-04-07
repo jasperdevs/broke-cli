@@ -74,6 +74,7 @@ describe("screen buffer mode", () => {
       const output = writes.join("");
       expect(output).toContain(SYNC_START);
       expect(output).not.toContain(CURSOR_HIDE);
+      expect(output).not.toContain(`${"\x1b[1;1H"}${"\x1b[?2026l"}`);
     } finally {
       (process.stdout.write as unknown as typeof process.stdout.write) = originalWrite;
     }

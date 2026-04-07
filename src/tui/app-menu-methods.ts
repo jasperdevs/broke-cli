@@ -27,8 +27,12 @@ export function getChatHeight(app: AppState): number {
   const hasSidebar = app.shouldShowSidebar();
   const mainW = hasSidebar ? app.screen.mainWidth : app.screen.width;
   const bottomBase = app.getBottomLineCount(mainW, app.screen.height);
-  const footerBase = hasSidebar ? app.renderSidebarFooter().length : 0;
-  return Math.max(1, app.screen.height - Math.max(bottomBase, footerBase) - headerLines);
+  return Math.max(1, app.screen.height - bottomBase - headerLines);
+}
+
+export function getSidebarViewportHeight(app: AppState): number {
+  if (!app.shouldShowSidebar()) return app.screen.height;
+  return Math.max(1, app.screen.height - app.renderSidebarFooter().length);
 }
 
 export function getBottomLineCount(app: AppState, mainW: number, maxHeight: number): number {

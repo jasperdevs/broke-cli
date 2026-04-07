@@ -209,6 +209,29 @@ describe("sidebar scrolling", () => {
     expect(commandRows.length).toBeLessThanOrEqual(5);
   });
 
+  it("keeps the sidebar column visible while slash menus are open in active chats", () => {
+    const app = new App() as any;
+    let rendered: string[] = [];
+    app.messages = [{ role: "user", content: "hello" }];
+    app.input.setText("/");
+    app.screen = {
+      height: 18,
+      width: 100,
+      hasSidebar: true,
+      mainWidth: 73,
+      sidebarWidth: 24,
+      render: (lines: string[]) => { rendered = lines; },
+      setCursor: () => {},
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+    app.drawImmediate();
+    const output = rendered.map((line) => stripAnsi(line)).join("\n");
+    expect(output).toContain("Commands");
+    expect(output).toContain("Files");
+    expect(output).toContain("Directory");
+  });
+
   it("does not scroll transcript lines with wheel or page keys", () => {
     const app = new App() as any;
     app.messages = Array.from({ length: 40 }, (_, i) => ({ role: "assistant", content: `line ${i}` }));
