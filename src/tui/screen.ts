@@ -83,9 +83,6 @@ export class Screen {
    * to prevent flicker. Always does a full write for reliability.
    */
   render(lines: string[]): void {
-    // Keep cursor visibility under explicit control via setCursor()/hideCursor().
-    // Re-hiding it every frame makes the composer cursor disappear during
-    // streaming-heavy redraws even when the input should stay interactive.
     let buf = SYNC_START;
     let dirty = false;
     for (let i = 0; i < this.rows; i++) {
@@ -95,6 +92,9 @@ export class Screen {
       buf += moveToRow(i + 1) + CLEAR_LINE + next;
     }
     if (!dirty) return;
+    // Hide the hardware cursor while flushing changed rows so terminals do not
+    // briefly show a second caret at the last painted cell during streaming.
+    buf = CURSOR_HIDE + buf;
     buf += SYNC_END;
     write(buf);
     this.prev = Array.from({ length: this.rows }, (_, i) => lines[i] ?? "");
