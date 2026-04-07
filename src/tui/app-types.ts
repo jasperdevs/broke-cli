@@ -23,9 +23,10 @@ export interface ModelOption {
 
 export interface ModelLaneOption {
   id: string;
-  slot: "default" | "small" | "review" | "planning" | "ui" | "architecture";
+  slot: "all" | "default" | "small" | "review" | "planning" | "ui" | "architecture";
   label: string;
   detail: string;
+  assignedModelLabel?: string;
 }
 
 export interface SettingEntry {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { App } from "../src/tui/app.js";
 import { currentTheme, listThemes, setPreviewTheme } from "../src/core/themes.js";
-import { getSettings, updateSetting } from "../src/core/config.js";
+import { getConfiguredModelPreference, getSettings, updateModelPreference, updateSetting } from "../src/core/config.js";
 import stripAnsi from "strip-ansi";
 
 describe("picker menus", () => {
@@ -200,7 +200,7 @@ describe("picker menus", () => {
     app.handleKey({ name: "enter", char: "", ctrl: false, meta: false, shift: false });
     let rendered: string[] = [];
     app.screen = {
-      height: 18,
+      height: 24,
       width: 72,
       hasSidebar: false,
       mainWidth: 72,
@@ -213,9 +213,80 @@ describe("picker menus", () => {
     app.drawImmediate();
     const output = rendered.map((line) => stripAnsi(line)).join("\n");
     expect(output).toContain("Assign selected model");
-    expect(output).toContain("Use for design/UI");
+    expect(output).toContain("Use everywhere");
     expect(output).toContain("Use for fast");
     expect(output).toContain("chat naming");
+  });
+
+  it("shows current lane ownership and lets one action assign every lane", () => {
+    const app = new App() as any;
+    const selectedCalls: Array<[string, string]> = [];
+    const assignedCalls: Array<[string, string, string]> = [];
+    const originalPrefs = {
+      default: getConfiguredModelPreference("default") ?? null,
+      small: getConfiguredModelPreference("small") ?? null,
+      review: getConfiguredModelPreference("review") ?? null,
+      planning: getConfiguredModelPreference("planning") ?? null,
+      ui: getConfiguredModelPreference("ui") ?? null,
+      architecture: getConfiguredModelPreference("architecture") ?? null,
+    };
+    app.modelProviderId = "openai";
+    try {
+      updateModelPreference("default", "openai/gpt-5.4-mini");
+      updateModelPreference("small", "openai/gpt-4o-mini");
+      updateModelPreference("review", "openai/gpt-4.1");
+      updateModelPreference("planning", "openai/o3");
+      updateModelPreference("ui", "openai/gpt-5.4-mini");
+      updateModelPreference("architecture", "openai/o4-mini");
+      app.openModelPicker(
+        [{ providerId: "openai", providerName: "OpenAI", modelId: "gpt-5.4-mini", displayName: "GPT-5.4 mini", active: false }],
+        (providerId: string, modelId: string) => selectedCalls.push([providerId, modelId]),
+        () => {},
+        (providerId: string, modelId: string, slot: string) => assignedCalls.push([providerId, modelId, slot]),
+        () => {},
+      );
+      app.handleKey({ name: "enter", char: "", ctrl: false, meta: false, shift: false });
+      let rendered: string[] = [];
+      app.screen = {
+        height: 24,
+        width: 100,
+        hasSidebar: false,
+        mainWidth: 100,
+        sidebarWidth: 20,
+        render: (lines: string[]) => { rendered = lines; },
+        setCursor: () => {},
+        hideCursor: () => {},
+        forceRedraw: () => {},
+      };
+      app.drawImmediate();
+      const output = rendered.map((line) => stripAnsi(line)).join("\n");
+      expect(output).toContain("Use everywhere");
+      expect(output).toContain("Use for fast (GPT-4o mini)");
+      expect(output).toContain("Use for chat (already selected)");
+      app.handleKey({ name: "down", char: "", ctrl: false, meta: false, shift: false });
+      app.handleKey({ name: "down", char: "", ctrl: false, meta: false, shift: false });
+      app.handleKey({ name: "down", char: "", ctrl: false, meta: false, shift: false });
+      app.drawImmediate();
+      const scrolledOutput = rendered.map((line) => stripAnsi(line)).join("\n");
+      expect(scrolledOutput).toContain("Use for design/UI (already selected)");
+      app.selectModelLaneEntry(0);
+      expect(selectedCalls).toEqual([["openai", "gpt-5.4-mini"]]);
+      expect(assignedCalls).toEqual([
+        ["openai", "gpt-5.4-mini", "default"],
+        ["openai", "gpt-5.4-mini", "small"],
+        ["openai", "gpt-5.4-mini", "review"],
+        ["openai", "gpt-5.4-mini", "planning"],
+        ["openai", "gpt-5.4-mini", "ui"],
+        ["openai", "gpt-5.4-mini", "architecture"],
+      ]);
+    } finally {
+      updateModelPreference("default", originalPrefs.default);
+      updateModelPreference("small", originalPrefs.small);
+      updateModelPreference("review", originalPrefs.review);
+      updateModelPreference("planning", originalPrefs.planning);
+      updateModelPreference("ui", originalPrefs.ui);
+      updateModelPreference("architecture", originalPrefs.architecture);
+    }
   });
 });
 
