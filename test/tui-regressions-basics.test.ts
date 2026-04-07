@@ -3,7 +3,7 @@ import { Session } from "../src/core/session.js";
 import { buildBudgetReport } from "../src/core/budget-insights.js";
 import { App } from "../src/tui/app.js";
 import { MOUSE_OFF, MOUSE_ON } from "../src/utils/ansi.js";
-import { ALT_SCREEN_OFF, ALT_SCREEN_ON, CURSOR_HIDE, SYNC_START } from "../src/utils/ansi.js";
+import { ALT_SCREEN_OFF, ALT_SCREEN_ON, CURSOR_HIDE, MENU_MOUSE_OFF, MENU_MOUSE_ON, SYNC_START } from "../src/utils/ansi.js";
 import { visibleWidth } from "../src/utils/terminal-width.js";
 import { getSettings, updateSetting } from "../src/core/config.js";
 import { currentTheme } from "../src/core/themes.js";
@@ -35,6 +35,11 @@ describe("mouse reporting mode", () => {
     app.messages = [{ role: "user", content: "hello" }];
     app.screen = { height: 18, width: 100, hasSidebar: true, mainWidth: 73, sidebarWidth: 24, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
     expect(app.shouldEnableMenuMouse()).toBe(true);
+  });
+
+  it("uses button-event mouse tracking for interactive panes so wheel scrolling can reach the TUI", () => {
+    expect(MENU_MOUSE_ON).toContain("?1002h");
+    expect(MENU_MOUSE_OFF).toContain("?1002l");
   });
 });
 

@@ -32,8 +32,8 @@ export const MODIFY_OTHER_KEYS_OFF = `${CSI}>4;0m`;
 // Keyboard scrolling/navigation remains available in the TUI.
 export const MOUSE_ON = "";
 export const MOUSE_OFF = "";
-export const MENU_MOUSE_ON = `${CSI}?1000h${CSI}?1006h`;
-export const MENU_MOUSE_OFF = `${CSI}?1000l${CSI}?1006l`;
+export const MENU_MOUSE_ON = `${CSI}?1000h${CSI}?1002h${CSI}?1006h`;
+export const MENU_MOUSE_OFF = `${CSI}?1000l${CSI}?1002l${CSI}?1006l`;
 
 // Move cursor to row,col (1-based)
 export function moveTo(row: number, col: number): string {
