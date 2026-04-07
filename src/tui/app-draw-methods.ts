@@ -11,7 +11,7 @@ import { fmtCost, fmtTokens, wordWrap } from "./render/formatting.js";
 import { APP_BG, ERR, MUTED, OK, P, T, TXT, WARN } from "./app-shared.js";
 import { drawQuestionView } from "./question-view.js";
 import { drawBudgetView } from "./fullscreen-views.js";
-import { appendBottomMenus, buildInfoBar } from "./bottom-ui.js";
+import { appendBottomMenus, buildInfoBar, getPendingImagePromptLines } from "./bottom-ui.js";
 import { getTreePickerEntries, getVisibleTreeRows } from "./tree-view.js";
 
 type AppState = any;
@@ -61,10 +61,12 @@ export function drawImmediate(app: AppState): void {
   const separatorColor = app.getModeAccent();
   const bottomLines: string[] = [];
   const bottomMenuClicks: Array<{ lineIndex: number; action: () => void }> = [];
+  const pendingImageLines = getPendingImagePromptLines(app, mainW);
 
   bottomLines.push("");
-  bottomLines.push("");
+  bottomLines.push(...pendingImageLines);
   bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
+  const inputStartIndex = bottomLines.length;
   bottomLines.push(...inputLayout.lines);
 
   appendBottomMenus(app, bottomLines, bottomMenuClicks, height, mainW, separatorColor);
@@ -84,12 +86,12 @@ export function drawImmediate(app: AppState): void {
   });
   app.screen.render(frameLines.map((line) => app.decorateFrameLine(line, width)));
 
-  if (app.isStreaming || app.isCompacting || app.modelPicker || app.settingsPicker || app.itemPicker || app.treeView || Date.now() < app.hideCursorUntil) {
+  if (Date.now() < app.hideCursorUntil) {
     app.screen.hideCursor();
     return;
   }
   const mainTopHeight = Math.max(0, height - bottomLines.length);
-  app.screen.setCursor(Math.min(height, mainTopHeight + 4 + inputLayout.row), Math.min(width, 1 + inputLayout.col));
+  app.screen.setCursor(Math.min(height, mainTopHeight + inputStartIndex + 1 + inputLayout.row), Math.min(width, 1 + inputLayout.col));
 }
 
 function buildFrameLines(app: AppState, opts: { height: number; width: number; mainW: number; hasSidebar: boolean; footerLines: string[]; bottomLines: string[]; bottomMenuClicks: Array<{ lineIndex: number; action: () => void }>; isHome: boolean; }): string[] {

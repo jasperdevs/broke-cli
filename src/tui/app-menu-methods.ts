@@ -8,6 +8,7 @@ import { T, TXT, MUTED } from "./app-shared.js";
 import { wordWrap } from "./render/formatting.js";
 import type { MenuEntry, MenuPromptKind, ModelOption, PickerItem, SettingEntry } from "./app-types.js";
 import { moveTreeSelection } from "./tree-view.js";
+import { getPendingImagePromptLines } from "./bottom-ui.js";
 
 type AppState = any;
 
@@ -32,8 +33,9 @@ export function getChatHeight(app: AppState): number {
 
 export function getBottomLineCount(app: AppState, mainW: number, maxHeight: number): number {
   const inputLineCount = app.getWrappedInputLines(app.input.getText(), mainW).length;
+  const pendingImageLineCount = getPendingImagePromptLines(app, mainW).length;
   const tailReserve = 2 + (app.statusMessage ? 1 : 0);
-  let count = 3 + inputLineCount;
+  let count = 2 + pendingImageLineCount + inputLineCount;
   const baseCount = count;
 
   if (app.filePicker) {

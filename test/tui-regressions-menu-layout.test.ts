@@ -30,6 +30,29 @@ describe("menu layout regressions", () => {
     expect(output).toContain("build");
   });
 
+  it("keeps multiple slash suggestions visible in a short pane", () => {
+    const app = new App() as any;
+    let rendered: string[] = [];
+    app.screen = {
+      height: 10,
+      width: 60,
+      hasSidebar: false,
+      mainWidth: 60,
+      sidebarWidth: 0,
+      render: (lines: string[]) => { rendered = lines; },
+      setCursor: () => {},
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+    app.input.setText("/m");
+    app.drawImmediate();
+    const output = rendered.map((line) => stripAnsi(line)).join("\n");
+    expect(output).toContain("Commands");
+    expect(output).toContain("model");
+    expect(output).toContain("mode");
+    expect(output).toContain("build");
+  });
+
   it("does not crash when compaction starts from the tree summarize flow", () => {
     const app = new App() as any;
     app.screen = { height: 12, width: 40, hasSidebar: false, mainWidth: 40, sidebarWidth: 0, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };

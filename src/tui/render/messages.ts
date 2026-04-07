@@ -47,7 +47,7 @@ export function renderStaticMessages(options: {
       let content = msg.content;
       if (getSettings().terminal.showImages && msg.images && msg.images.length > 0) {
         for (let i = 0; i < msg.images.length; i++) {
-          const tag = `${colors.imageTagBg}${bold}${colors.text}[IMAGE ${i + 1}]${reset}`;
+          const tag = `${colors.imageTagBg}${bold}${colors.text}[Image #${i + 1}]${reset}`;
           content += ` ${tag}`;
         }
       }

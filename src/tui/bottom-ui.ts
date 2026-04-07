@@ -1,12 +1,32 @@
+import { currentTheme } from "../core/themes.js";
 import { getSettings } from "../core/config.js";
 import { BOLD, DIM, RESET } from "../utils/ansi.js";
 import { fmtCost } from "./render/formatting.js";
-import { ERR, P, T, WARN } from "./app-shared.js";
+import { ERR, P, T, TXT, WARN } from "./app-shared.js";
+import { visibleWidth } from "../utils/terminal-width.js";
 
 type AppState = any;
 
 function renderMenuCount(current: number, total: number): string {
   return `${DIM}(${current}/${total})${RESET}`;
+}
+
+export function getPendingImagePromptLines(app: AppState, mainW: number): string[] {
+  if (!getSettings().terminal.showImages || !app.pendingImages || app.pendingImages.length === 0) return [];
+  const lines: string[] = [];
+  let current = "";
+  for (let i = 0; i < app.pendingImages.length; i++) {
+    const tag = `${currentTheme().imageTagBg}${BOLD}${TXT()}[Image #${i + 1}]${RESET}`;
+    const candidate = current ? `${current} ${tag}` : ` ${tag}`;
+    if (current && visibleWidth(candidate) > mainW) {
+      lines.push(current);
+      current = ` ${tag}`;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
 }
 
 export function appendBottomMenus(

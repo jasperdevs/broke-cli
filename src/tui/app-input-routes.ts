@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "fs";
+import { fileURLToPath } from "url";
 import { renderBudgetDashboard } from "../core/budget-insights.js";
 import { filterFiles } from "./file-picker.js";
 import type { Keypress } from "./keypress.js";
@@ -7,6 +8,21 @@ import { T } from "./app-shared.js";
 import { getSelectedTreeItem, getVisibleTreeRows, moveTreeSelection, pageTreeSelection, toggleTreeFilter, toggleTreeFold, toggleTreeLabel, toggleTreeTimestampMode } from "./tree-view.js";
 
 type AppState = any;
+
+function normalizePastedPath(text: string): string {
+  let normalized = text.trim();
+  if ((normalized.startsWith('"') && normalized.endsWith('"')) || (normalized.startsWith("'") && normalized.endsWith("'"))) {
+    normalized = normalized.slice(1, -1).trim();
+  }
+  if (/^file:\/\//i.test(normalized)) {
+    try {
+      normalized = fileURLToPath(normalized);
+    } catch {
+      // Fall back to the original text if URL parsing fails.
+    }
+  }
+  return normalized;
+}
 
 function isPlainBackspace(key: Keypress): boolean {
   return key.name === "backspace" && !key.ctrl && !key.meta && !key.shift;
@@ -269,17 +285,16 @@ export function handlePaste(app: AppState, text: string): void {
   }
 
   const imageExtensions = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"];
-  const trimmed = text.trim();
-  const isImagePath = imageExtensions.some((ext) => trimmed.toLowerCase().endsWith(ext));
-  if (isImagePath && (trimmed.includes("/") || trimmed.includes("\\"))) {
+  const normalizedPath = normalizePastedPath(text);
+  const isImagePath = imageExtensions.some((ext) => normalizedPath.toLowerCase().endsWith(ext));
+  if (isImagePath && (normalizedPath.includes("/") || normalizedPath.includes("\\"))) {
     try {
-      if (existsSync(trimmed)) {
-        const data = readFileSync(trimmed);
-        const ext = trimmed.split(".").pop()?.toLowerCase() || "png";
+      if (existsSync(normalizedPath)) {
+        const data = readFileSync(normalizedPath);
+        const ext = normalizedPath.split(".").pop()?.toLowerCase() || "png";
         const mimeType = `image/${ext === "jpg" ? "jpeg" : ext}`;
         const base64 = data.toString("base64");
         app.pendingImages.push({ mimeType, data: base64 });
-        app.input.paste(` ${T()}[IMAGE ${app.pendingImages.length}]${RESET} `);
         app.statusMessage = `${T()}✓ Image loaded${RESET}`;
         setTimeout(() => { app.statusMessage = undefined; app.draw(); }, 1500);
         app.draw();
@@ -294,7 +309,7 @@ export function handlePaste(app: AppState, text: string): void {
 function submitQueuedInput(app: AppState, delivery: "steering" | "followup"): void {
   const text = app.input.submit();
   const images = app.takePendingImages();
-  if (!text || !app.onSubmit) return;
+  if ((!text && images.length === 0) || !app.onSubmit) return;
   if (!app.isStreaming) {
     if (images.length > 0) (app.onSubmit as (text: string, images?: Array<{ mimeType: string; data: string }>) => void)(text, images);
     else app.onSubmit(text);
