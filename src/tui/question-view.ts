@@ -6,6 +6,7 @@ import { T, TXT, MUTED, OK } from "./app-shared.js";
 import { wordWrap } from "./render/formatting.js";
 
 type AppState = any;
+const OTHER_OPTION_VALUE = "__other__";
 
 function questionAnswered(view: QuestionView, fieldId: string): boolean {
   return !!view.answers[fieldId];
@@ -24,10 +25,18 @@ export function isQuestionSubmitTab(view: QuestionView): boolean {
 }
 
 function normalizeEditorForField(view: QuestionView, field: QuestionField): void {
-  if (field.kind !== "text") return;
+  if (field.kind !== "text" && !view.inputMode) return;
   const existing = view.answers[field.id];
   if (typeof existing?.value === "string") view.editor.setText(existing.value);
   else view.editor.setText("");
+}
+
+function renderedOptions(field: QuestionField): QuestionOption[] {
+  if (!field.allowOther || field.kind === "text") return field.options;
+  return [
+    ...field.options,
+    { value: OTHER_OPTION_VALUE, label: "Type something." },
+  ];
 }
 
 export function createQuestionView(request: QuestionRequest, resolve: (result: QuestionResult) => void): QuestionView {
@@ -38,6 +47,7 @@ export function createQuestionView(request: QuestionRequest, resolve: (result: Q
     questions: request.questions,
     activeIndex: 0,
     optionCursor: 0,
+    inputMode: false,
     answers: {},
     editor,
     resolve,
@@ -52,6 +62,7 @@ function moveQuestion(view: QuestionView, delta: number): void {
   const maxIndex = view.questions.length;
   view.activeIndex = Math.max(0, Math.min(maxIndex, view.activeIndex + delta));
   view.optionCursor = 0;
+  view.inputMode = false;
   const field = currentQuestionField(view);
   if (field) normalizeEditorForField(view, field);
 }
@@ -159,7 +170,10 @@ function buildFooter(view: QuestionView): string {
   if (isQuestionSubmitTab(view)) return `${DIM}enter submit · esc cancel${RESET}`;
   const field = currentQuestionField(view);
   if (!field) return `${DIM}esc cancel${RESET}`;
-  if (field.kind === "text") return `${DIM}shift+enter newline · enter next · tab switch · esc cancel${RESET}`;
+  if (field.kind === "text" || view.inputMode) {
+    const submitHint = field.kind === "text" ? "enter next" : "enter save";
+    return `${DIM}shift+enter newline · ${submitHint} · tab switch · esc back${RESET}`;
+  }
   if (field.kind === "multi") return `${DIM}↑↓ move · space toggle · enter next · tab switch · esc cancel${RESET}`;
   return `${DIM}↑↓ move · enter select · tab switch · esc cancel${RESET}`;
 }
@@ -167,7 +181,24 @@ function buildFooter(view: QuestionView): string {
 export function getQuestionHeader(view: QuestionView): string {
   const total = view.questions.length + (view.questions.length > 1 ? 1 : 0);
   const current = Math.min(total, Math.max(1, view.activeIndex + 1));
-  return ` ${T()}${BOLD}${view.title}${RESET} ${DIM}(${current}/${total})${RESET}`;
+  const tabs = view.questions.map((field, index) => {
+    const active = index === view.activeIndex && !isQuestionSubmitTab(view);
+    const answered = questionAnswered(view, field.id);
+    const marker = answered ? `${OK()}[x]${RESET}` : `${DIM}[ ]${RESET}`;
+    const label = active ? `${TXT()}${BOLD}${field.label}${RESET}` : `${TXT()}${field.label}${RESET}`;
+    return `${marker} ${label}`;
+  });
+  if (view.questions.length > 1) {
+    const submitActive = isQuestionSubmitTab(view);
+    const submitReady = allRequiredAnswered(view);
+    const submitMarker = submitReady ? `${OK()}[ready]${RESET}` : `${DIM}[wait]${RESET}`;
+    const submitLabel = submitActive
+      ? `${TXT()}${BOLD}${view.submitLabel}${RESET}`
+      : `${TXT()}${view.submitLabel}${RESET}`;
+    tabs.push(`${submitMarker} ${submitLabel}`);
+  }
+  const tabLine = tabs.join(` ${DIM}·${RESET} `);
+  return ` ${T()}${BOLD}${view.title}${RESET} ${DIM}(${current}/${total})${RESET}\n ${tabLine}`;
 }
 
 export function getQuestionBodyLines(view: QuestionView, width: number): string[] {
@@ -190,7 +221,8 @@ export function getQuestionBodyLines(view: QuestionView, width: number): string[
   if (!field) return [` ${buildFooter(view)}`];
 
   const lines: string[] = [` ${TXT()}${BOLD}${field.prompt}${RESET}`];
-  if (field.kind === "text") {
+  if (field.kind === "text" || view.inputMode) {
+    if (view.inputMode) lines.push(` ${MUTED()}Custom answer${RESET}`);
     const editorText = view.editor.getText();
     const wrapped = editorText.length > 0
       ? appWrap(editorText, width)
@@ -201,7 +233,7 @@ export function getQuestionBodyLines(view: QuestionView, width: number): string[
   }
 
   const selectedValue = view.answers[field.id]?.value;
-  const optionEntries: MenuEntry[] = field.options.map((option, index) => {
+  const optionEntries: MenuEntry[] = renderedOptions(field).map((option, index) => {
     const isCursor = index === view.optionCursor;
     const selected = field.kind === "multi"
       ? Array.isArray(selectedValue) && selectedValue.includes(option.value)
@@ -222,9 +254,9 @@ export function getQuestionBodyLines(view: QuestionView, width: number): string[
 export function getQuestionOptionEntries(view: QuestionView): MenuEntry[] {
   if (isQuestionSubmitTab(view)) return [];
   const field = currentQuestionField(view);
-  if (!field || field.kind === "text") return [];
+  if (!field || field.kind === "text" || view.inputMode) return [];
   const selectedValue = view.answers[field.id]?.value;
-  return field.options.map((option, index) => {
+  return renderedOptions(field).map((option, index) => {
     const isCursor = index === view.optionCursor;
     const selected = field.kind === "multi"
       ? Array.isArray(selectedValue) && selectedValue.includes(option.value)
@@ -242,10 +274,10 @@ export function getQuestionCursor(app: AppState, width: number): { rowOffset: nu
   const view = app.questionView as QuestionView;
   if (!view || isQuestionSubmitTab(view)) return null;
   const field = currentQuestionField(view);
-  if (!field || field.kind !== "text") return null;
+  if (!field || (field.kind !== "text" && !view.inputMode)) return null;
   const layout = app.getInputCursorLayout(view.editor.getText(), view.editor.getCursor(), width);
   return {
-    rowOffset: 1 + layout.row,
+    rowOffset: 1 + (view.inputMode ? 1 : 0) + layout.row,
     col: 2 + layout.col,
   };
 }
@@ -254,7 +286,18 @@ export function handleQuestionViewKey(app: AppState, key: Keypress): void {
   const view = app.questionView as QuestionView;
   if (!view) return;
 
-  if (key.name === "escape" || (key.ctrl && key.name === "c")) {
+  if ((key.ctrl && key.name === "c")) {
+    finishQuestionView(app, true);
+    return;
+  }
+
+  if (key.name === "escape") {
+    if (view.inputMode) {
+      view.inputMode = false;
+      view.editor.setText("");
+      app.draw();
+      return;
+    }
     finishQuestionView(app, true);
     return;
   }
@@ -285,7 +328,7 @@ export function handleQuestionViewKey(app: AppState, key: Keypress): void {
     return;
   }
 
-  if (field.kind === "text") {
+  if (field.kind === "text" || view.inputMode) {
     if (key.name === "up" || key.name === "down") {
       app.draw();
       return;
@@ -300,18 +343,19 @@ export function handleQuestionViewKey(app: AppState, key: Keypress): void {
     return;
   }
 
+  const options = renderedOptions(field);
   if (key.name === "up") {
     view.optionCursor = Math.max(0, view.optionCursor - 1);
     app.draw();
     return;
   }
   if (key.name === "down") {
-    view.optionCursor = Math.min(field.options.length - 1, view.optionCursor + 1);
+    view.optionCursor = Math.min(options.length - 1, view.optionCursor + 1);
     app.draw();
     return;
   }
 
-  const option = field.options[view.optionCursor];
+  const option = options[view.optionCursor];
   if (!option) {
     app.draw();
     return;
@@ -324,6 +368,12 @@ export function handleQuestionViewKey(app: AppState, key: Keypress): void {
   }
 
   if ((key.name === "return" || key.name === "enter") && !key.shift && !key.meta && !key.ctrl) {
+    if (option.value === OTHER_OPTION_VALUE) {
+      view.inputMode = true;
+      normalizeEditorForField(view, field);
+      app.draw();
+      return;
+    }
     if (field.kind === "single") {
       storeSingleAnswer(view, field, option);
       advanceAfterAnswer(app);

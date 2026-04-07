@@ -98,6 +98,7 @@ export interface QuestionView {
   questions: QuestionField[];
   activeIndex: number;
   optionCursor: number;
+  inputMode: boolean;
   answers: Record<string, QuestionAnswer>;
   editor: InputWidget;
   resolve: (result: QuestionResult) => void;
