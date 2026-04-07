@@ -215,7 +215,13 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
       return { handled: true };
     }
     case "caveman": {
-      app.cycleCavemanMode();
+      const requested = restText.toLowerCase();
+      if (requested === "off" || requested === "lite" || requested === "auto" || requested === "ultra") {
+        updateSetting("cavemanLevel", requested);
+        app.setStatus?.(`Caveman: ${requested}`);
+      } else {
+        app.cycleCavemanMode();
+      }
       reloadContext();
       const level = getSettings().cavemanLevel ?? "auto";
       onSystemPromptChange(buildSystemPrompt(process.cwd(), activeModel?.provider?.id, currentMode, level));

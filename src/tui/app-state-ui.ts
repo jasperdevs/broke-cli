@@ -228,6 +228,12 @@ export function appendBtwBubble(app: AppState, delta: string): void {
   app.draw();
 }
 
+export function replaceBtwBubbleAnswer(app: AppState, text: string): void {
+  if (!app.btwBubble) return;
+  app.btwBubble.answer = text;
+  app.draw();
+}
+
 export function finishBtwBubble(app: AppState, options?: { error?: string }): void {
   if (!app.btwBubble) return;
   app.btwBubble.pending = false;
@@ -271,6 +277,7 @@ export interface AppStateUiMethods {
   assignModelSlot(cursor: number, slot: ModelPreferenceSlot): void;
   openBtwBubble(bubble: Omit<BtwBubble, "answer"> & { answer?: string }): void;
   appendBtwBubble(delta: string): void;
+  replaceBtwBubbleAnswer(text: string): void;
   finishBtwBubble(options?: { error?: string }): void;
   dismissBtwBubble(): void;
 }
@@ -300,6 +307,7 @@ export const appStateUiMethods: AppStateUiMethods = {
   assignModelSlot(this: AppState, cursor, slot) { return assignModelSlot(this, cursor, slot); },
   openBtwBubble(this: AppState, bubble) { return openBtwBubble(this, bubble); },
   appendBtwBubble(this: AppState, delta) { return appendBtwBubble(this, delta); },
+  replaceBtwBubbleAnswer(this: AppState, text) { return replaceBtwBubbleAnswer(this, text); },
   finishBtwBubble(this: AppState, options) { return finishBtwBubble(this, options); },
   dismissBtwBubble(this: AppState) { return dismissBtwBubble(this); },
 };

@@ -120,8 +120,8 @@ program.action(async (promptParts, opts) => {
   let currentMode: Mode = getSettings().mode;
   let lastActivityTime = Date.now(); // Track for cache expiry warning
 
-  const buildRuntimeSystemPrompt = (providerId?: string): string => {
-    const base = buildSystemPrompt(process.cwd(), providerId, currentMode, getSettings().cavemanLevel ?? "off");
+  const buildRuntimeSystemPrompt = (providerId?: string, cavemanLevel = getSettings().cavemanLevel ?? "off"): string => {
+    const base = buildSystemPrompt(process.cwd(), providerId, currentMode, cavemanLevel);
     if (opts.systemPrompt) return opts.systemPrompt;
     if (opts.appendSystemPrompt) return `${base}\n\n${opts.appendSystemPrompt}`;
     return base;
@@ -260,7 +260,6 @@ program.action(async (promptParts, opts) => {
       currentModelId,
       model: btwModel,
       modelId: btwModelId,
-      systemPrompt,
       buildRuntimeSystemPrompt,
       onUsage: (usage) => {
         session.addUsage(usage.inputTokens, usage.outputTokens, usage.cost);

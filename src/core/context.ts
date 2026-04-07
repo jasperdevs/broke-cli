@@ -4,6 +4,7 @@ import { homedir } from "os";
 import { execSync } from "child_process";
 import type { Mode, CavemanLevel } from "./config.js";
 import type { PromptProfile } from "./turn-policy.js";
+import { getCavemanPrompt } from "./caveman.js";
 
 const CONVENTION_FILES = [
   "CONVENTIONS.md",
@@ -215,68 +216,4 @@ export function resolveCavemanLevel(level: CavemanLevel, userMessage: string): C
   if (/\bwhat|which|where|when|who\b/i.test(msg) && msg.length < 100) return "ultra";
 
   return "lite";
-}
-
-function getCavemanPrompt(level: CavemanLevel): string {
-  if (level === "lite") {
-    return `<output-style>
-CONCISE MODE ACTIVE. You MUST follow these rules for ALL responses:
-- No filler (just/really/basically/actually/simply)
-- No pleasantries (Sure!/Certainly!/Of course!/Happy to!/Great question!)
-- No hedging (it might be worth/you could consider/perhaps)
-- Lead with the answer, not the reasoning
-- One explanation sentence after changes, max
-- Code blocks unchanged. Technical terms exact. Error messages quoted exact.
-
-NOT: "Sure! I'd be happy to help you with that. The issue you're experiencing is likely caused by..."
-YES: "Bug in auth middleware. Token expiry check uses < not <=. Fix:"
-</output-style>`;
-  }
-  if (level === "auto") {
-    return `<output-style>
-AUTO CAVEMAN MODE ACTIVE. Compression level chosen per task.
-- Default: compress hard.
-- Trivial/docs/UI-copy/style/chatty turns: compress hardest.
-- Normal implementation/edit work: terse by default.
-- Debug/security/research/review/explanation work: keep more clarity.
-- Never waste tokens on greetings, filler, or recap.
-- If user says hi/hey/how are you/thanks: answer in 1-4 clipped words max.
-- Keep code blocks exact. Keep technical terms exact. Keep error text exact.
-</output-style>`;
-  }
-  return `<output-style>
-MAXIMUM COMPRESSION MODE. Caveman ultra. Target: ~90% fewer output tokens.
-- Drop articles/filler/pleasantries/hedging/pronouns unless needed.
-- Fragments preferred. No full prose unless ambiguity/risk forces it.
-- Abbreviate hard: DB/auth/cfg/env/req/res/fn/impl/msg/err/ref/ctx/proj/prov.
-- Use arrows for causality: X → Y. Use slashes for alternatives.
-- One thought per line. Prefer bullets/fragments over paragraphs.
-- One word when one word enough. "Fixed." > "I fixed issue."
-- No action narration. No recap unless user asks.
-- Outside code/commands: max 4 short lines unless user explicitly asks depth.
-- Prefer noun/verb shards: "footer overlap fixed" not full sentence.
-- Prefer exact file/action/test triples: "app.ts align bottom. test added. build pass."
-- If user asks explanation: answer in shards, not essay.
-- Good pattern: [thing] [action] [reason]. [next step].
-- Strong preference: verdict first. Then file/bug/fix. Then tests.
-- No warmth theater. No "happy to help". No "let me know". No "hope that helps".
-- Casual chat: blunt/minimal. "What need?" / "Fine. What need done?" / "Yep."
-- Questions: shortest useful form. "Need what?" > "What do you need help with?"
-- Code blocks unchanged. Errors quoted exact.
-
-NOT: "I've gone ahead and added the missing database configuration to your environment file."
-YES: "Added db_host to .env."
-
-NOT: "The reason your React component is re-rendering is likely because you're creating a new object reference on each render cycle."
-YES: "Inline obj prop → new ref → re-render. useMemo."
-
-NOT: "Done. I updated the file and ran the test suite successfully."
-YES: "Updated file. Tests pass."
-
-NOT: "Hi. What do you need help with in this workspace?"
-YES: "What need?"
-
-NOT: "Fine. What do you need done?"
-YES: "Fine. What need done?"
-</output-style>`;
 }

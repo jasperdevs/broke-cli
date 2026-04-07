@@ -41,6 +41,15 @@ export function appendToLastMessage(app: AppState, text: string): void {
   app.draw();
 }
 
+export function replaceLastAssistantMessage(app: AppState, text: string): void {
+  const last = app.messages[app.messages.length - 1];
+  if (last && last.role === "assistant") last.content = text;
+  else app.messages.push({ role: "assistant", content: text });
+  app.invalidateMsgCache();
+  app.scrollToBottom();
+  app.draw();
+}
+
 export function appendThinking(app: AppState, delta: string): void {
   if (!app.thinkingBuffer && delta) app.thinkingStartTime = Date.now();
   app.thinkingBuffer += delta;
@@ -254,6 +263,7 @@ export interface AppStateMessageMethods {
   setDraft(text: string): void;
   addMessage(role: "user" | "assistant" | "system", content: string, images?: PendingImage[]): void;
   appendToLastMessage(text: string): void;
+  replaceLastAssistantMessage(text: string): void;
   appendThinking(delta: string): void;
   updateTodo(items: TodoItem[]): void;
   addToolCall(name: string, preview: string, args?: unknown): void;
@@ -286,6 +296,7 @@ export const appStateMessageMethods: AppStateMessageMethods = {
   setDraft(this: AppState, text) { return setDraft(this, text); },
   addMessage(this: AppState, role, content, images) { return addMessage(this, role, content, images); },
   appendToLastMessage(this: AppState, text) { return appendToLastMessage(this, text); },
+  replaceLastAssistantMessage(this: AppState, text) { return replaceLastAssistantMessage(this, text); },
   appendThinking(this: AppState, delta) { return appendThinking(this, delta); },
   updateTodo(this: AppState, items) { return updateTodo(this, items); },
   addToolCall(this: AppState, name, preview, args) { return addToolCall(this, name, preview, args); },

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildSystemPrompt, resolveCavemanLevel } from "../src/core/context.js";
+import { rewriteAssistantForCaveman } from "../src/core/caveman.js";
 import { ContextOptimizer } from "../src/core/context-optimizer.js";
 import { DEFAULT_SETTINGS, updateSetting } from "../src/core/config.js";
 
@@ -33,11 +34,10 @@ describe("caveman mode resolution", () => {
   it("makes ultra prompt much harsher", () => {
     const prompt = buildSystemPrompt(process.cwd(), "openai", "build", "ultra");
 
-    expect(prompt).toContain("Target: ~90% fewer output tokens.");
-    expect(prompt).toContain("Caveman ultra.");
-    expect(prompt).toContain("Use arrows for causality");
-    expect(prompt).toContain("No warmth theater.");
-    expect(prompt).toContain("What need?");
+    expect(prompt).toContain("CAVEMAN ULTRA ACTIVE.");
+    expect(prompt).toContain("Mouth small. Brain same.");
+    expect(prompt).toContain("Use verdict first.");
+    expect(prompt).toContain("Code blocks unchanged.");
   });
 
   it("compresses old context more aggressively in ultra", () => {
@@ -61,5 +61,24 @@ describe("caveman mode resolution", () => {
 
   it("defaults caveman to auto", () => {
     expect(DEFAULT_SETTINGS.cavemanLevel).toBe("auto");
+  });
+
+  it("rewrites verbose assistant prose into obvious caveman output", () => {
+    const input = "Sure! I'd be happy to help with that. The reason your React component is re-rendering is because you're creating a new object reference on each render cycle. I would recommend using `useMemo`.";
+    const output = rewriteAssistantForCaveman(input, "ultra");
+
+    expect(output).toContain("React component is re-rendering bc");
+    expect(output).toContain("Use `useMemo`");
+    expect(output).not.toContain("happy to help");
+    expect(output).not.toContain("I would recommend");
+  });
+
+  it("keeps code fences unchanged while compressing surrounding text", () => {
+    const input = "Sure, use this fix.\n```ts\nconst value = 1;\n```\nIt should solve the issue because the old path was wrong.";
+    const output = rewriteAssistantForCaveman(input, "ultra");
+
+    expect(output).toContain("```ts\nconst value = 1;\n```");
+    expect(output).toContain("solve issue bc old path was wrong");
+    expect(output).not.toContain("Sure");
   });
 });

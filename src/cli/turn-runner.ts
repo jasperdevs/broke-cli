@@ -32,6 +32,7 @@ type PendingDelivery = "steering" | "followup";
 interface TurnRunnerApp {
   addMessage(role: "user" | "assistant" | "system", content: string, images?: Array<{ mimeType: string; data: string }>): void;
   appendToLastMessage(delta: string): void;
+  replaceLastAssistantMessage?(content: string): void;
   appendThinking(delta: string): void;
   setThinkingRequested(requested: boolean): void;
   getLastAssistantContent(): string;

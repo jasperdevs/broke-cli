@@ -2,6 +2,7 @@ import { startNativeStream } from "../ai/native-stream.js";
 import { startStream } from "../ai/stream.js";
 import { estimateTextTokens } from "../ai/tokens.js";
 import type { ModelHandle } from "../ai/providers.js";
+import { rewriteAssistantForCaveman } from "../core/caveman.js";
 import { buildSystemPrompt, resolveCavemanLevel } from "../core/context.js";
 import { getTotalContextTokens } from "../core/compact.js";
 import { getSettings, type Mode } from "../core/config.js";
@@ -26,6 +27,7 @@ type PendingDelivery = "steering" | "followup";
 interface TurnExecutionApp {
   addMessage(role: "user" | "assistant" | "system", content: string, images?: Array<{ mimeType: string; data: string }>): void;
   appendToLastMessage(delta: string): void;
+  replaceLastAssistantMessage?(content: string): void;
   appendThinking(delta: string): void;
   setThinkingRequested(requested: boolean): void;
   getLastAssistantContent(): string;
@@ -208,7 +210,14 @@ export async function executeTurn(options: {
     onFinish: (usage: { inputTokens: number; outputTokens: number; cost: number }) => {
       flushStreamTokenUpdate();
       app.setThinkingRequested(false);
-      const content = streamedText.trim();
+      let content = streamedText.trim();
+      if (effectiveCavemanLevel !== "off" && content) {
+        const compressed = rewriteAssistantForCaveman(content, effectiveCavemanLevel);
+        if (compressed && compressed !== content) {
+          app.replaceLastAssistantMessage?.(compressed);
+          content = compressed;
+        }
+      }
       session.addUsage(usage.inputTokens, usage.outputTokens, usage.cost);
       session.recordTurn({
         smallModel: resolvedRoute === "small",

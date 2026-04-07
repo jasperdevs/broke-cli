@@ -3,9 +3,15 @@ import { getPrettyModelName } from "../ai/model-catalog.js";
 import { startNativeStream } from "../ai/native-stream.js";
 import { startStream } from "../ai/stream.js";
 import { getSettings } from "../core/config.js";
+import { rewriteAssistantForCaveman } from "../core/caveman.js";
+import { resolveCavemanLevel } from "../core/context.js";
 import type { Session } from "../core/session.js";
 
-export function buildBtwPrompt(question: string): string {
+export function buildBtwPrompt(question: string, cavemanLevel: "off" | "lite" | "auto" | "ultra" = "off"): string {
+  const cavemanReminder = cavemanLevel === "off"
+    ? ""
+    : `\n- Match the current caveman output style (${cavemanLevel}) exactly\n- Drop filler and pleasantries\n- Keep code blocks normal and error text exact`;
+
   return `<system-reminder>This is a side question from the user. You must answer this question directly in a single response.
 
 IMPORTANT CONTEXT:
@@ -20,6 +26,7 @@ CRITICAL CONSTRAINTS:
 - You can ONLY provide information based on what you already know from the conversation context
 - NEVER say things like "Let me try...", "I'll now...", "Let me check...", or promise to take any action
 - If you don't know the answer, say so - do not offer to look it up or investigate
+${cavemanReminder}
 
 Simply answer the question with the information you have.</system-reminder>
 
@@ -29,8 +36,9 @@ ${question.trim()}`;
 export function buildBtwMessages(
   session: Session,
   question: string,
+  cavemanLevel: "off" | "lite" | "auto" | "ultra" = "off",
 ): Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }> {
-  return [...session.getChatMessages(), { role: "user" as const, content: buildBtwPrompt(question) }];
+  return [...session.getChatMessages(), { role: "user" as const, content: buildBtwPrompt(question, cavemanLevel) }];
 }
 
 export interface RunBtwQuestionOptions {
@@ -40,12 +48,12 @@ export interface RunBtwQuestionOptions {
   currentModelId: string;
   model: ModelHandle;
   modelId: string;
-  systemPrompt: string;
-  buildRuntimeSystemPrompt: (providerId?: string) => string;
+  buildRuntimeSystemPrompt: (providerId?: string, cavemanLevel?: "off" | "lite" | "auto" | "ultra") => string;
   onUsage: (usage: { inputTokens: number; outputTokens: number; cost: number }) => void;
   app: {
     openBtwBubble: (bubble: { question: string; modelLabel: string; pending: boolean; abort: () => void }) => void;
     appendBtwBubble: (delta: string) => void;
+    replaceBtwBubbleAnswer: (text: string) => void;
     finishBtwBubble: (options?: { error?: string }) => void;
   };
 }
@@ -58,7 +66,6 @@ export async function runBtwQuestion(options: RunBtwQuestionOptions): Promise<vo
     currentModelId,
     model,
     modelId,
-    systemPrompt,
     buildRuntimeSystemPrompt,
     onUsage,
     app,
@@ -66,9 +73,12 @@ export async function runBtwQuestion(options: RunBtwQuestionOptions): Promise<vo
 
   const modelLabel = getPrettyModelName(modelId, model.provider.id);
   const abortController = new AbortController();
-  const sideMessages = buildBtwMessages(session, question);
+  const cavemanLevel = resolveCavemanLevel(getSettings().cavemanLevel ?? "auto", question);
+  const sideMessages = buildBtwMessages(session, question, cavemanLevel);
   const useDedicatedModel = model.provider.id !== activeModel.provider.id || modelId !== currentModelId;
-  const sideSystemPrompt = useDedicatedModel ? buildRuntimeSystemPrompt(model.provider.id) : systemPrompt;
+  const sideSystemPrompt = useDedicatedModel
+    ? buildRuntimeSystemPrompt(model.provider.id, cavemanLevel)
+    : buildRuntimeSystemPrompt(activeModel.provider.id, cavemanLevel);
   const useThinking = getSettings().enableThinking;
   const thinkingLevel = getSettings().thinkingLevel || "low";
 
@@ -81,6 +91,9 @@ export async function runBtwQuestion(options: RunBtwQuestionOptions): Promise<vo
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   const onFinish = (usage: { inputTokens: number; outputTokens: number; cost: number }) => {
+    if (cavemanLevel !== "off" && app.replaceBtwBubbleAnswer) {
+      app.replaceBtwBubbleAnswer(rewriteAssistantForCaveman(applyBtwDraft(), cavemanLevel));
+    }
     onUsage(usage);
     app.finishBtwBubble();
   };
@@ -89,6 +102,9 @@ export async function runBtwQuestion(options: RunBtwQuestionOptions): Promise<vo
     if (error.name === "AbortError") return;
     app.finishBtwBubble({ error: error.message || "Failed to answer side question." });
   };
+
+  let btwDraft = "";
+  const applyBtwDraft = () => btwDraft;
 
   if (model.runtime === "native-cli") {
     await startNativeStream({
@@ -102,7 +118,10 @@ export async function runBtwQuestion(options: RunBtwQuestionOptions): Promise<vo
       cwd: process.cwd(),
       denyToolUse: true,
     }, {
-      onText: (delta) => app.appendBtwBubble(delta),
+      onText: (delta) => {
+        btwDraft += delta;
+        app.appendBtwBubble(delta);
+      },
       onReasoning: () => {},
       onFinish,
       onError,
@@ -120,7 +139,10 @@ export async function runBtwQuestion(options: RunBtwQuestionOptions): Promise<vo
     enableThinking: useThinking,
     thinkingLevel,
   }, {
-    onText: (delta) => app.appendBtwBubble(delta),
+    onText: (delta) => {
+      btwDraft += delta;
+      app.appendBtwBubble(delta);
+    },
     onReasoning: () => {},
     onFinish,
     onError,

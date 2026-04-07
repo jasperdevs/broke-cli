@@ -36,9 +36,10 @@ describe("/btw runtime", () => {
   });
 
   it("wraps the side question in the Claude-style reminder block", () => {
-    const prompt = buildBtwPrompt("does this touch tests?");
+    const prompt = buildBtwPrompt("does this touch tests?", "ultra");
     expect(prompt).toContain("<system-reminder>");
     expect(prompt).toContain("You have NO tools available");
+    expect(prompt).toContain("Match the current caveman output style (ultra) exactly");
     expect(prompt).toContain("does this touch tests?");
   });
 
@@ -47,7 +48,7 @@ describe("/btw runtime", () => {
     session.addMessage("user", "hello");
     session.addMessage("assistant", "working on it");
 
-    const messages = buildBtwMessages(session, "status?");
+    const messages = buildBtwMessages(session, "status?", "lite");
 
     expect(messages).toHaveLength(3);
     expect(messages[0]?.role).toBe("user");
@@ -62,6 +63,7 @@ describe("/btw runtime", () => {
     const app = {
       openBtwBubble: vi.fn(),
       appendBtwBubble: vi.fn(),
+      replaceBtwBubbleAnswer: vi.fn(),
       finishBtwBubble: vi.fn(),
     };
     const model = { provider: { id: "openai", name: "OpenAI", defaultModel: "gpt-5.4-mini", models: [] }, runtime: "sdk", model: {} } as any;
@@ -73,7 +75,6 @@ describe("/btw runtime", () => {
       currentModelId: "gpt-5.4-mini",
       model,
       modelId: "gpt-5.4-mini",
-      systemPrompt: "system",
       buildRuntimeSystemPrompt: () => "system",
       onUsage: vi.fn(),
       app,
@@ -91,6 +92,7 @@ describe("/btw runtime", () => {
     const app = {
       openBtwBubble: vi.fn(),
       appendBtwBubble: vi.fn(),
+      replaceBtwBubbleAnswer: vi.fn(),
       finishBtwBubble: vi.fn(),
     };
     const model = { provider: { id: "anthropic", name: "Claude Code", defaultModel: "claude-sonnet-4-6", models: [] }, runtime: "native-cli" } as any;
@@ -102,7 +104,6 @@ describe("/btw runtime", () => {
       currentModelId: "claude-sonnet-4-6",
       model,
       modelId: "claude-sonnet-4-6",
-      systemPrompt: "system",
       buildRuntimeSystemPrompt: () => "system",
       onUsage: vi.fn(),
       app,
