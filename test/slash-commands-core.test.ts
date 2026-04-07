@@ -274,6 +274,34 @@ describe("slash command handling", () => {
 
     expect(result.handled).toBe(true);
     expect(asked).toBe("does this touch the tests?");
+    expect(app.statusMessage).toBe("Asking side question...");
+  });
+
+  it("does not block the slash handler while /btw is running", async () => {
+    const app = createAppStub();
+    let release!: () => void;
+    let asked = "";
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    const resultPromise = handleSlashCommand({
+      text: "/btw still running?",
+      app,
+      session: new Session(`test-btw-nonblocking-${Date.now()}`),
+      ...createSlashArgs({
+        onBtw: async (question: string) => {
+          asked = question;
+          await pending;
+        },
+      }),
+    });
+
+    await expect(resultPromise).resolves.toEqual({ handled: true });
+    expect(asked).toBe("still running?");
+    expect(app.statusMessage).toBe("Asking side question...");
+    release();
+    await pending;
   });
 
   it("opens /model with the typed query prefilled", async () => {
@@ -300,5 +328,6 @@ describe("slash command handling", () => {
     expect(result.handled).toBe(true);
     expect(pickerQuery).toBe("haiku");
     expect(pickerCursor).toBe(1);
+    expect(app.statusMessage).toBe('Showing 1 match for "haiku".');
   });
 });

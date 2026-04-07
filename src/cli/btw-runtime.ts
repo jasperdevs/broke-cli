@@ -78,6 +78,7 @@ export async function runBtwQuestion(options: RunBtwQuestionOptions): Promise<vo
     pending: true,
     abort: () => abortController.abort(),
   });
+  await new Promise((resolve) => setTimeout(resolve, 0));
 
   const onFinish = (usage: { inputTokens: number; outputTokens: number; cost: number }) => {
     onUsage(usage);

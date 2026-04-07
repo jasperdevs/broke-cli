@@ -92,6 +92,13 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
           option.providerId === filteredOptions[0]!.providerId
           && option.modelId === filteredOptions[0]!.modelId)
         : 0;
+      if (normalizedQuery) {
+        app.setStatus?.(
+          filteredOptions.length > 0
+            ? `Showing ${filteredOptions.length} match${filteredOptions.length === 1 ? "" : "es"} for "${restText}".`
+            : `No models match "${restText}".`,
+        );
+      }
       app.openModelPicker(allOptions, (provId, modId) => {
         try {
           const key = `${provId}/${modId}`;
@@ -136,7 +143,10 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
         app.setStatus?.("/btw is unavailable in this runtime.");
         return { handled: true };
       }
-      await onBtw(restText);
+      app.setStatus?.("Asking side question...");
+      void onBtw(restText).catch((err) => {
+        app.setStatus?.(`BTW failed: ${(err as Error).message}`);
+      });
       return { handled: true };
     }
     case "settings": {

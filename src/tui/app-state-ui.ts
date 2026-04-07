@@ -25,7 +25,8 @@ export function openModelPicker(
   app.onModelPin = onPin ?? null;
   app.onModelAssign = onAssign ?? null;
   app.input.setText(`/model ${initialQuery}`.trimEnd());
-  if (initialQuery.length === 0) app.openMenuPrompt("model");
+  app.openMenuPrompt("model");
+  if (initialQuery.length > 0) app.input.setText(`/model ${initialQuery}`.trimEnd());
   app.drawNow();
 }
 
