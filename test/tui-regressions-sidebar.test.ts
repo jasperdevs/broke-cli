@@ -92,7 +92,7 @@ describe("sidebar scrolling", () => {
     expect(lines).toContain("  ▾ src/");
   });
 
-  it("handles transcript and sidebar wheel behavior while keeping the sidebar footer token-only", () => {
+  it("handles transcript and sidebar wheel behavior while hiding the sidebar footer during active menus", () => {
     const originalShowTokens = getSettings().showTokens;
     updateSetting("showTokens", true);
     const app = new App() as any;
@@ -124,6 +124,8 @@ describe("sidebar scrolling", () => {
     app.mode = "plan";
     app.setContextUsage(120_000, 128_000);
     app.updateUsage(0.0021, 8_200, 621);
+    expect(app.renderSidebarFooter()).toEqual([]);
+    app.closeItemPicker();
     const footer = app.renderSidebarFooter();
     const footerText = footer.map((line: string) => stripAnsi(line)).join("\n");
     expect(footerText).toContain("8.8k total");
@@ -172,6 +174,8 @@ describe("sidebar scrolling", () => {
       expect(output).toContain("Commands");
       expect(output).toContain("settings");
       expect(output).toContain("help");
+      expect(output).not.toContain("120k ctx");
+      expect(output).not.toContain("621 out");
       expect(stripAnsi(rendered[cursorRow - 1] ?? "")).toContain("/");
     } finally {
       updateSetting("showTokens", original.showTokens);
@@ -191,6 +195,26 @@ describe("sidebar scrolling", () => {
     app.handleKey({ name: "pageup", char: "", ctrl: false, meta: false, shift: false });
     app.handleKey({ name: "pagedown", char: "", ctrl: false, meta: false, shift: false });
     expect(app.scrollOffset).toBe(8);
+  });
+
+  it("hides the sidebar footer while composing or streaming so the prompt stays at the real bottom", () => {
+    const app = new App() as any;
+    const originalShowTokens = getSettings().showTokens;
+    updateSetting("showTokens", true);
+    try {
+      app.messages = [{ role: "assistant", content: "working" }];
+      app.setContextUsage(120_000, 128_000);
+      app.updateUsage(0.0021, 8_200, 621);
+      app.input.setText("hi");
+      expect(app.renderSidebarFooter()).toEqual([]);
+
+      app.input.clear();
+      app.setStreaming(true);
+      expect(app.renderSidebarFooter()).toEqual([]);
+      if (app.spinnerTimer) clearInterval(app.spinnerTimer);
+    } finally {
+      updateSetting("showTokens", originalShowTokens);
+    }
   });
 });
 

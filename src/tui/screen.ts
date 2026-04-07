@@ -83,7 +83,10 @@ export class Screen {
    * to prevent flicker. Always does a full write for reliability.
    */
   render(lines: string[]): void {
-    let buf = `${getSettings().showHardwareCursor ? "" : CURSOR_HIDE}${SYNC_START}`;
+    // Keep cursor visibility under explicit control via setCursor()/hideCursor().
+    // Re-hiding it every frame makes the composer cursor disappear during
+    // streaming-heavy redraws even when the input should stay interactive.
+    let buf = SYNC_START;
     let dirty = false;
     for (let i = 0; i < this.rows; i++) {
       const next = lines[i] ?? "";

@@ -3,7 +3,7 @@ import { Session } from "../src/core/session.js";
 import { buildBudgetReport } from "../src/core/budget-insights.js";
 import { App } from "../src/tui/app.js";
 import { MOUSE_OFF, MOUSE_ON } from "../src/utils/ansi.js";
-import { ALT_SCREEN_OFF, ALT_SCREEN_ON } from "../src/utils/ansi.js";
+import { ALT_SCREEN_OFF, ALT_SCREEN_ON, CURSOR_HIDE, SYNC_START } from "../src/utils/ansi.js";
 import { visibleWidth } from "../src/utils/terminal-width.js";
 import { getSettings, updateSetting } from "../src/core/config.js";
 import { currentTheme } from "../src/core/themes.js";
@@ -53,6 +53,25 @@ describe("screen buffer mode", () => {
       screen.exit();
       expect(writes.join("")).toContain(ALT_SCREEN_ON);
       expect(writes.join("")).toContain(ALT_SCREEN_OFF);
+    } finally {
+      (process.stdout.write as unknown as typeof process.stdout.write) = originalWrite;
+    }
+  });
+
+  it("does not hide the cursor again on every render frame", () => {
+    const writes: string[] = [];
+    const originalWrite = process.stdout.write;
+    (process.stdout.write as unknown as (chunk: any, ...args: any[]) => boolean) = ((chunk: any, ...args: any[]) => {
+      writes.push(String(chunk));
+      return true;
+    }) as typeof process.stdout.write;
+
+    try {
+      const screen = new Screen();
+      screen.forceRedraw(["hello"]);
+      const output = writes.join("");
+      expect(output).toContain(SYNC_START);
+      expect(output).not.toContain(CURSOR_HIDE);
     } finally {
       (process.stdout.write as unknown as typeof process.stdout.write) = originalWrite;
     }

@@ -94,7 +94,9 @@ export function drawImmediate(app: AppState): void {
   }
   const effectiveBottomHeight = hasSidebar ? Math.max(bottomLines.length, footerLines.length) : bottomLines.length;
   const mainTopHeight = Math.max(0, height - effectiveBottomHeight);
-  const sidebarTopHeight = hasSidebar ? Math.max(0, height - footerLines.length) : mainTopHeight;
+  const sidebarTopHeight = hasSidebar
+    ? (footerLines.length > 0 ? Math.max(0, height - footerLines.length) : mainTopHeight)
+    : mainTopHeight;
   const bottomStartRow = hasSidebar ? Math.max(mainTopHeight, sidebarTopHeight) : mainTopHeight;
   app.screen.setCursor(Math.min(height, bottomStartRow + bottomTopPad + inputStartIndex + 1 + inputLayout.row), Math.min(width, 1 + inputLayout.col));
 }
@@ -106,7 +108,9 @@ function buildFrameLines(app: AppState, opts: { height: number; width: number; m
   const mainBottomHeight = paddedBottomLines.length;
   const mainTopHeight = Math.max(0, height - mainBottomHeight);
   const sidebarFooterHeight = hasSidebar ? footerLines.length : 0;
-  const sidebarTopHeight = hasSidebar ? Math.max(0, height - sidebarFooterHeight) : 0;
+  const sidebarTopHeight = hasSidebar
+    ? (sidebarFooterHeight > 0 ? Math.max(0, height - sidebarFooterHeight) : mainTopHeight)
+    : 0;
   const bottomStartRow = hasSidebar ? Math.max(mainTopHeight, sidebarTopHeight) : mainTopHeight;
   app.activeMenuClickTargets = new Map(bottomMenuClicks.map(({ lineIndex, action }) => [bottomStartRow + bottomTopPad + lineIndex + 1, action]));
   const showCompactHeader = !isHome && !hasSidebar && app.modelName !== "none";

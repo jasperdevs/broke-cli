@@ -84,8 +84,17 @@ export function getModeAccent(app: AppState): string {
   return app.mode === "plan" ? P() : T();
 }
 
+function shouldHideSidebarFooter(app: AppState): boolean {
+  if (app.isStreaming || app.isCompacting) return true;
+  if (app.filePicker || app.itemPicker || app.settingsPicker || app.modelPicker || app.treeView) return true;
+  if (app.pendingImages?.length > 0) return true;
+  if (app.input.getText().length > 0) return true;
+  return app.getCommandSuggestionEntries().length > 0;
+}
+
 export function renderSidebarFooter(app: AppState): string[] {
   const settings = getSettings();
+  if (shouldHideSidebarFooter(app)) return [];
   const width = app.screen.sidebarWidth;
   const statusParts: string[] = [];
   const modeLabel = app.mode === "plan" ? "plan" : "build";
