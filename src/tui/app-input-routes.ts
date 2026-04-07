@@ -174,9 +174,25 @@ export function handlePickerKey(app: AppState, key: Keypress): void {
     return;
   }
   if (app.modelPicker) {
+    if (app.modelLanePicker) {
+      const total = app.modelLanePicker.options.length;
+      if (key.name === "up") app.modelLanePicker.cursor = app.clampMenuCursor(app.modelLanePicker.cursor - 1, total);
+      else if (key.name === "down") app.modelLanePicker.cursor = app.clampMenuCursor(app.modelLanePicker.cursor + 1, total);
+      else if (key.name === "home") app.modelLanePicker.cursor = 0;
+      else if (key.name === "end") app.modelLanePicker.cursor = app.clampMenuCursor(total - 1, total);
+      else if ((key.name === "return" || key.name === "enter") && !key.shift && !key.meta && !key.ctrl) {
+        app.selectModelLaneEntry(app.modelLanePicker.cursor);
+        return;
+      } else if (key.name === "escape" || (isPlainBackspace(key) && app.getMenuFilterQuery().length === 0)) {
+        app.modelLanePicker = null;
+        app.drawNow();
+        return;
+      }
+      app.draw();
+      return;
+    }
     const filtered = app.getFilteredModels();
     const page = Math.max(1, app.screen.height - 8);
-    const queryEmpty = app.getMenuFilterQuery().length === 0;
     if (key.name === "up") app.modelPicker.cursor = app.clampMenuCursor(app.modelPicker.cursor - 1, filtered.length);
     else if (key.name === "down") app.modelPicker.cursor = app.clampMenuCursor(app.modelPicker.cursor + 1, filtered.length);
     else if (key.name === "scrollup") app.modelPicker.cursor = app.clampMenuCursor(app.modelPicker.cursor - 1, filtered.length);
@@ -186,12 +202,7 @@ export function handlePickerKey(app: AppState, key: Keypress): void {
     else if (key.name === "home") app.modelPicker.cursor = 0;
     else if (key.name === "end") app.modelPicker.cursor = app.clampMenuCursor(filtered.length - 1, filtered.length);
     else if (key.name === "space") app.toggleModelPin(app.modelPicker.cursor);
-    else if (!key.ctrl && !key.meta && queryEmpty && key.char === "1") app.assignModelSlot(app.modelPicker.cursor, "default");
-    else if (!key.ctrl && !key.meta && queryEmpty && key.char === "2") app.assignModelSlot(app.modelPicker.cursor, "small");
-    else if (!key.ctrl && !key.meta && queryEmpty && key.char === "3") app.assignModelSlot(app.modelPicker.cursor, "review");
-    else if (!key.ctrl && !key.meta && queryEmpty && key.char === "4") app.assignModelSlot(app.modelPicker.cursor, "planning");
-    else if (!key.ctrl && !key.meta && queryEmpty && key.char === "5") app.assignModelSlot(app.modelPicker.cursor, "ui");
-    else if (!key.ctrl && !key.meta && queryEmpty && key.char === "6") app.assignModelSlot(app.modelPicker.cursor, "architecture");
+    else if (!key.ctrl && !key.meta && key.char?.toLowerCase() === "a") app.openModelLanePicker(app.modelPicker.cursor);
     else if ((key.name === "return" || key.name === "enter") && !key.shift && !key.meta && !key.ctrl) {
       app.selectModelEntry(app.modelPicker.cursor);
       return;

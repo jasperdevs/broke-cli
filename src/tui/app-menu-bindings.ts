@@ -39,6 +39,7 @@ import {
   toggleSettingEntry,
   applyCommandSuggestion,
 } from "./app-menu-methods.js";
+import { getModelLanePickerEntries, openModelLanePicker, selectModelLaneEntry } from "./model-lane-picker.js";
 import type { Keypress } from "./keypress.js";
 import type { MenuEntry, MenuPromptKind, ModelOption, PickerItem, SettingEntry } from "./app-types.js";
 
@@ -70,6 +71,7 @@ export interface AppMenuMethods {
   getSettingsPickerEntries(): MenuEntry[];
   getItemPickerEntries(): MenuEntry[];
   getModelPickerEntries(): MenuEntry[];
+  getModelLanePickerEntries(): MenuEntry[];
   getCommandSuggestionEntries(): MenuEntry[];
   scrollSidebar(delta: number, visibleHeight: number): void;
   scrollActiveMenu(delta: number): boolean;
@@ -77,6 +79,8 @@ export interface AppMenuMethods {
   selectItemEntry(index: number): void;
   toggleModelPin(index: number): void;
   selectModelEntry(index: number): void;
+  openModelLanePicker(index: number): void;
+  selectModelLaneEntry(index: number): void;
   selectTreeEntry(): void;
   selectFileEntry(index: number): void;
   applyCommandSuggestion(index: number, submitOnReturn?: boolean): void;
@@ -112,6 +116,7 @@ export const appMenuMethods: AppMenuMethods = {
   getSettingsPickerEntries(this: AppState) { return getSettingsPickerEntries(this); },
   getItemPickerEntries(this: AppState) { return getItemPickerEntries(this); },
   getModelPickerEntries(this: AppState) { return getModelPickerEntries(this); },
+  getModelLanePickerEntries(this: AppState) { return getModelLanePickerEntries(this); },
   getCommandSuggestionEntries(this: AppState) { return getCommandSuggestionEntries(this); },
   scrollSidebar(this: AppState, delta: number, visibleHeight: number) { return scrollSidebar(this, delta, visibleHeight); },
   scrollActiveMenu(this: AppState, delta: number) { return scrollActiveMenu(this, delta); },
@@ -119,6 +124,8 @@ export const appMenuMethods: AppMenuMethods = {
   selectItemEntry(this: AppState, index: number) { return selectItemEntry(this, index); },
   toggleModelPin(this: AppState, index: number) { return toggleModelPin(this, index); },
   selectModelEntry(this: AppState, index: number) { return selectModelEntry(this, index); },
+  openModelLanePicker(this: AppState, index: number) { return openModelLanePicker(this, index); },
+  selectModelLaneEntry(this: AppState, index: number) { return selectModelLaneEntry(this, index); },
   selectTreeEntry(this: AppState) { return selectTreeEntry(this); },
   selectFileEntry(this: AppState, index: number) { return selectFileEntry(this, index); },
   applyCommandSuggestion(this: AppState, index: number, submitOnReturn?: boolean) { return applyCommandSuggestion(this, index, submitOnReturn); },

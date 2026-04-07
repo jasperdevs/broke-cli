@@ -71,8 +71,7 @@ describe("picker menus", () => {
     const pickerText = rendered.map((line) => stripAnsi(line)).join("\n");
     expect(pickerText).toContain("enter switch");
     expect(pickerText).toContain("space favorite");
-    expect(pickerText).toContain("press 1 chat");
-    expect(pickerText).toContain("press 4 planning");
+    expect(pickerText).toContain("a assign lane");
     expect(pickerText).not.toContain("Scope:");
 
     const originalTheme = getSettings().theme;
@@ -188,6 +187,34 @@ describe("picker menus", () => {
     const visibleModels = output.filter((line) => /Model \d+/.test(line));
     expect(visibleModels.length).toBeLessThanOrEqual(5);
     expect(output.join("\n")).not.toContain("Model 5");
+  });
+
+  it("opens an explicit lane assignment menu instead of numeric slot hints", () => {
+    const app = new App() as any;
+    app.openModelPicker(
+      [{ providerId: "openai", providerName: "OpenAI", modelId: "gpt-5.4-mini", displayName: "GPT-5.4 mini", active: false }],
+      () => {},
+      () => {},
+      () => {},
+    );
+    app.handleKey({ name: "a", char: "a", ctrl: false, meta: false, shift: false });
+    let rendered: string[] = [];
+    app.screen = {
+      height: 18,
+      width: 72,
+      hasSidebar: false,
+      mainWidth: 72,
+      sidebarWidth: 20,
+      render: (lines: string[]) => { rendered = lines; },
+      setCursor: () => {},
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+    app.drawImmediate();
+    const output = rendered.map((line) => stripAnsi(line)).join("\n");
+    expect(output).toContain("Assign selected model");
+    expect(output).toContain("Use for design/UI");
+    expect(output).not.toContain("press 1 chat");
   });
 });
 

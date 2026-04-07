@@ -197,6 +197,16 @@ export function shimmerText(_app: AppState, text: string, frame: number, color =
 }
 
 export function appendModelPicker(app: AppState, lines: string[], _maxTotal: number, clickTargets: Array<{ lineIndex: number; action: () => void }>): void {
+  if (app.modelLanePicker) {
+    const total = app.modelLanePicker.options.length;
+    lines.push(` ${T()}${BOLD}Assign selected model${RESET} ${renderMenuCount(app.modelLanePicker.cursor + 1, total)}`);
+    lines.push(` ${DIM}${app.modelLanePicker.model.displayName ?? app.modelLanePicker.model.modelId}${RESET}`);
+    for (const entry of app.buildMenuView(app.getModelLanePickerEntries(), app.modelLanePicker.cursor, Math.max(1, _maxTotal))) {
+      if (entry.selectIndex !== undefined) app.registerMenuClickTarget(clickTargets, lines, () => app.selectModelLaneEntry(entry.selectIndex!));
+      lines.push(entry.text);
+    }
+    return;
+  }
   const picker = app.modelPicker!;
   const total = app.getFilteredModels().length;
   const maxItems = Math.max(1, _maxTotal);

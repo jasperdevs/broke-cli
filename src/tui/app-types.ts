@@ -21,6 +21,13 @@ export interface ModelOption {
   isHeader?: boolean;
 }
 
+export interface ModelLaneOption {
+  id: string;
+  slot: "default" | "small" | "review" | "planning" | "ui" | "architecture";
+  label: string;
+  detail: string;
+}
+
 export interface SettingEntry {
   key: string;
   label: string;

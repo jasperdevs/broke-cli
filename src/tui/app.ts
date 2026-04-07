@@ -23,7 +23,7 @@ import type { AppStateUiMethods } from "./app-state-ui.js";
 import { appStateUiMethods } from "./app-state-ui.js";
 import { AnimCounter, HOME_TIPS } from "./app-shared.js";
 import { APP_VERSION } from "../core/app-meta.js";
-import type { BudgetView, ChatMessage, ModelOption, PendingImage, PendingMessage, PickerItem, QuestionView, SettingEntry, TodoItem, TreeView, UpdateNotice } from "./app-types.js";
+import type { BudgetView, ChatMessage, ModelLaneOption, ModelOption, PendingImage, PendingMessage, PickerItem, QuestionView, SettingEntry, TodoItem, TreeView, UpdateNotice } from "./app-types.js";
 import type { ModelPreferenceSlot } from "../core/config.js";
 import type { ModelRuntime } from "../ai/providers.js";
 
@@ -76,6 +76,7 @@ export class App {
   private onModelSelect: ((providerId: string, modelId: string) => void) | null = null;
   private onModelPin: ((providerId: string, modelId: string, pinned: boolean) => void) | null = null;
   private onModelAssign: ((providerId: string, modelId: string, slot: ModelPreferenceSlot) => void) | null = null;
+  private modelLanePicker: { model: ModelOption; options: ModelLaneOption[]; cursor: number } | null = null;
   private settingsPicker: { entries: SettingEntry[]; cursor: number } | null = null;
   private onSettingToggle: ((key: string) => void) | null = null;
   private filePicker: { files: string[]; filtered: string[]; query: string; cursor: number } | null = null;

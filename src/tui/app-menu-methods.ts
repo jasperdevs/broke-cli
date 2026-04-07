@@ -10,7 +10,7 @@ import type { MenuEntry, MenuPromptKind, ModelOption, PickerItem, SettingEntry }
 import { moveTreeSelection } from "./tree-view.js";
 import { getPendingImagePromptLines } from "./bottom-ui.js";
 import { getQuestionMenuLineCount, scrollQuestionMenu } from "./question-menu.js";
-import { getPrettyModelName } from "../ai/model-catalog.js";
+import { getModelLanePickerEntries, openModelLanePicker, selectModelLaneEntry } from "./model-lane-picker.js";
 type AppState = any;
 function getMenuVisibleRows(maxHeight: number, baseCount: number, tailReserve: number, chromeLines: number): number {
   return Math.max(1, maxHeight - baseCount - tailReserve - 1 - chromeLines);
@@ -27,7 +27,6 @@ export function getChatHeight(app: AppState): number {
   const bottomBase = app.getBottomLineCount(mainW, app.screen.height);
   return Math.max(1, app.screen.height - bottomBase - headerLines);
 }
-
 export function getSidebarViewportHeight(app: AppState): number {
   if (!app.shouldShowSidebar()) return app.screen.height;
   return Math.max(1, app.screen.height - app.renderSidebarFooter().length);
@@ -89,7 +88,6 @@ export function getBottomLineCount(app: AppState, mainW: number, maxHeight: numb
   count += tailReserve;
   return count;
 }
-
 export function getWrappedInputLines(app: AppState, text: string, width: number): string[] {
   const padX = Math.max(0, getSettings().editorPaddingX | 0);
   const usableWidth = Math.max(1, width - 2 - (padX * 2));
@@ -109,7 +107,6 @@ export function getInputCursorLayout(app: AppState, text: string, cursor: number
   const currentLine = cursorLines[cursorLines.length - 1] ?? "";
   return { lines, row: Math.max(0, cursorLines.length - 1), col: currentLine.length };
 }
-
 export function getFilteredModels(app: AppState): ModelOption[] {
   if (!app.modelPicker) return [];
   const q = app.getMenuFilterQuery().toLowerCase();
@@ -177,6 +174,7 @@ export function getMenuPromptPrefix(_app: AppState, kind: MenuPromptKind): strin
 }
 
 export function getActiveMenuPromptKind(app: AppState): MenuPromptKind | null {
+  if (app.modelLanePicker) return "model";
   if (app.settingsPicker) return "settings";
   if (app.modelPicker) return "model";
   if (app.treeView) return "tree";
@@ -305,9 +303,7 @@ export function getModelPickerEntries(app: AppState): MenuEntry[] {
   const entries: MenuEntry[] = [];
   let currentIdx = 0;
   const showProviderHeaders = byProvider.size > 1;
-  entries.push({ text: ` ${DIM}enter switch · space favorite · type filter${RESET}` });
-  entries.push({ text: ` ${DIM}press 1 chat · 2 fast · 3 review${RESET}` });
-  entries.push({ text: ` ${DIM}press 4 planning · 5 design/UI · 6 architecture${RESET}` });
+  entries.push({ text: ` ${DIM}enter switch · space favorite · a assign lane · type filter${RESET}` });
   for (const [provider, opts] of byProvider) {
     if (showProviderHeaders) entries.push({ text: ` ${DIM}${provider}${RESET}` });
     for (const opt of opts) {
@@ -344,6 +340,10 @@ export function scrollSidebar(app: AppState, delta: number, visibleHeight: numbe
 }
 
 export function scrollActiveMenu(app: AppState, delta: number): boolean {
+  if (app.modelLanePicker) {
+    app.modelLanePicker.cursor = app.clampMenuCursor(app.modelLanePicker.cursor + delta, app.modelLanePicker.options.length);
+    return true;
+  }
   if (app.settingsPicker) {
     app.settingsPicker.cursor = app.clampMenuCursor(app.settingsPicker.cursor + delta, app.getFilteredSettings().length);
     return true;
