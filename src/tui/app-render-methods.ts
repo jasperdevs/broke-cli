@@ -71,8 +71,9 @@ export function renderMessages(app: AppState, maxWidth: number): string[] {
   return renderMessageOverlays({
     staticLines: app.renderStaticMessages(maxWidth),
     maxWidth,
-    thinkingBuffer: settings.hideThinkingBlock ? "" : app.thinkingBuffer,
-    thinkingRequested: settings.hideThinkingBlock ? false : app.thinkingRequested,
+    thinkingBuffer: app.thinkingBuffer,
+    thinkingRequested: app.thinkingRequested,
+    hideThinkingBlock: settings.hideThinkingBlock,
     isStreaming: app.isStreaming,
     todoItems: app.todoItems,
     spinnerFrame: app.spinnerFrame,

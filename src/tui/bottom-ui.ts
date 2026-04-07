@@ -115,7 +115,7 @@ export function buildInfoBar(app: AppState, hasSidebar: boolean, mainW: number):
   if ((settings.showCost && app.sessionCost > 0) || (settings.showTokens && !hasSidebar && liveTokens > 0)) {
     const costPart = settings.showCost && app.sessionCost > 0 ? fmtCost(app.animCost.get()) : "";
     const tokenPart = settings.showTokens && !hasSidebar && liveTokens > 0
-      ? app.renderTokenSummaryParts().filter((part: string) => !(settings.showCost && (part.startsWith("$") || part === "local"))).join(" ")
+      ? app.renderTokenSummaryParts().filter((part: string) => !(settings.showCost && (part.startsWith("$") || part === "local/unpriced"))).join(" ")
       : "";
     const statStr = [costPart, tokenPart].filter(Boolean).join(" · ");
     parts.push({ text: `${DIM}${statStr}${RESET}`, plain: statStr });

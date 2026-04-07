@@ -82,6 +82,8 @@ export class KeypressHandler {
           "\x1b\r": { name: "return", char: "", ctrl: false, meta: true, shift: false },
           "\x1b[127;5u": { name: "backspace", char: "", ctrl: true, meta: false, shift: false },
           "\x1b[8;5u": { name: "backspace", char: "", ctrl: true, meta: false, shift: false },
+          "\x1b\b": { name: "backspace", char: "", ctrl: false, meta: true, shift: false },
+          "\x1b\x7f": { name: "backspace", char: "", ctrl: false, meta: true, shift: false },
         };
         if (specialEnterSequences[s]) {
           this.onKey(specialEnterSequences[s]);

@@ -185,6 +185,7 @@ export function renderMessageOverlays(options: {
   maxWidth: number;
   thinkingBuffer: string;
   thinkingRequested: boolean;
+  hideThinkingBlock?: boolean;
   isStreaming: boolean;
   todoItems: TodoRenderItem[];
   spinnerFrame: number;
@@ -214,6 +215,7 @@ export function renderMessageOverlays(options: {
     maxWidth,
     thinkingBuffer,
     thinkingRequested,
+    hideThinkingBlock,
     isStreaming,
     todoItems,
     spinnerFrame,
@@ -235,11 +237,15 @@ export function renderMessageOverlays(options: {
 
   if (thinkingBuffer) {
     ensureOverlayGap(lines);
-    const thinkLines = thinkingBuffer.split("\n").slice(-8);
-    lines.push(`  ${colors.dim}${isStreaming ? "Reasoning" : "Reasoned"}${colors.reset}`);
-    for (const line of thinkLines) {
-      for (const wrappedLine of wrapVisibleText(line, Math.max(8, maxWidth - 4))) {
-        lines.push(`  ${colors.dim}${wrappedLine}${colors.reset}`);
+    if (hideThinkingBlock) {
+      lines.push(`  ${colors.dim}Thinking...${colors.reset}`);
+    } else {
+      const thinkLines = thinkingBuffer.split("\n").slice(-8);
+      lines.push(`  ${colors.dim}${isStreaming ? "Reasoning" : "Reasoned"}${colors.reset}`);
+      for (const line of thinkLines) {
+        for (const wrappedLine of wrapVisibleText(line, Math.max(8, maxWidth - 4))) {
+          lines.push(`  ${colors.dim}${wrappedLine}${colors.reset}`);
+        }
       }
     }
     lines.push("");

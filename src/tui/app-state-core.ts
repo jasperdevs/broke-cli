@@ -76,7 +76,7 @@ export function renderTokenSummaryParts(app: AppState): string[] {
   const total = app.getLiveTotalTokens();
   const parts: string[] = [];
   if (getSettings().showCost) {
-    parts.push(app.sessionCost > 0 ? fmtCost(app.animCost.get()) : "local");
+    parts.push(app.sessionCost > 0 ? fmtCost(app.animCost.get()) : "local/unpriced");
   }
   parts.push(`${fmtTokens(total)} total`);
   parts.push(`${fmtTokens(app.getLiveInputTokens())} in`);

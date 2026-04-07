@@ -65,7 +65,7 @@ export class InputWidget {
   }
 
   private applyDeletionKey(key: Keypress): boolean {
-    if ((key.ctrl && key.name === "backspace") || (key.ctrl && key.name === "w") || (key.ctrl && key.name === "h")) {
+    if ((key.ctrl && key.name === "backspace") || (key.meta && key.name === "backspace") || (key.ctrl && key.name === "w") || (key.ctrl && key.name === "h")) {
       this.deletePreviousWord();
       return true;
     }

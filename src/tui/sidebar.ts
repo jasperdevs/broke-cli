@@ -99,7 +99,7 @@ export function buildSidebarFooterLines(options: {
 }): string[] {
   const { width, tokenParts, contextUsed, contextTokens, colors } = options;
   const lines: string[] = [];
-  const costLine = tokenParts.find((part) => part.startsWith("$") || part === "local");
+  const costLine = tokenParts.find((part) => part.startsWith("$") || part === "local/unpriced");
   const valueLines = tokenParts.filter((part) => part !== costLine);
 
   if (costLine) {

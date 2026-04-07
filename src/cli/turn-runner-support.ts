@@ -15,7 +15,7 @@ export function supportsThinking(model: ModelHandle): boolean {
 }
 
 export function shouldRequestThinkTags(model: ModelHandle, thinkingRequested: boolean): boolean {
-  return thinkingRequested && supportsThinking(model) && model.runtime === "sdk";
+  return thinkingRequested && model.runtime === "sdk";
 }
 
 export function canUseSdkTools(model: ModelHandle): boolean {
@@ -70,7 +70,7 @@ export function resolveExecutionTarget(options: {
     && !effectiveImages?.length;
   const resolvedRoute = forceSmallExecutor ? "small" : requestedRoute;
   if (resolvedRoute === "small" && smallModel) {
-    const thinkingRequested = false;
+    const thinkingRequested = settings.enableThinking;
     return {
       resolvedRoute,
       executionModel: smallModel,
@@ -88,7 +88,7 @@ export function resolveExecutionTarget(options: {
     : planningModel;
   const executionModel = specialist?.model ?? activeModel;
   const executionModelId = specialist?.modelId ?? currentModelId;
-  const thinkingRequested = settings.enableThinking && supportsThinking(executionModel);
+  const thinkingRequested = settings.enableThinking;
   return {
     resolvedRoute: "main",
     executionModel,
