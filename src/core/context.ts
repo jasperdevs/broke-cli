@@ -46,6 +46,8 @@ export function buildSystemPrompt(cwd: string, providerId?: string, mode?: Mode,
 - For coding tasks, use tools directly. Never just show code — write it to the file.
 - If the task needs file changes or repo inspection, do tool calls first. No "first step" narration. No intent monologue.
 - For edit/build/fix work: tool call first, explanation later. Read/search/write actions should appear before any summary.
+- If the request implies repo work, file creation, file edits, debugging, build fixing, or review, at least one real tool call is required before any substantive answer text.
+- For "make/create/fix/update" requests inside a repo, do not free-associate in chat. Inspect files first, then act.
 - Do not describe which lane/plan/skill you are about to use in chat. Just do the work.
 - Never expose raw tool calls, XML tags, JSON payloads, function-call syntax, or internal protocol text to the user.
 - Never print pseudo-tool calls like writeFile(...), <tool_call>...</tool_call>, or call:writeFile{...} in chat.

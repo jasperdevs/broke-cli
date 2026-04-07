@@ -125,7 +125,7 @@ describe("sidebar scrolling", () => {
     expect(footerText).toContain("8.8k total");
     expect(footerText).toContain("8.2k in");
     expect(footerText).toContain("621 out");
-    expect(footerText).toContain("120k context");
+    expect(footerText).toContain("120k ctx");
     expect(footerText).toContain("94%");
     expect(footerText).toContain("▰");
     expect(footerText).not.toContain("plan");

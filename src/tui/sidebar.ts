@@ -26,8 +26,8 @@ function formatContextPercentLabel(contextPercent: number): string {
 
 function buildContextMeter(width: number, contextPercent: number, colors: SidebarFooterColors): string {
   const percent = formatContextPercentLabel(contextPercent);
-  const available = Math.max(4, width - percent.length - 6);
-  const fillWidth = Math.max(4, Math.min(6, available));
+  const available = Math.max(5, width - percent.length - 5);
+  const fillWidth = Math.max(5, Math.min(8, available));
   const ratio = Math.max(0, Math.min(1, contextPercent / 100));
   const filled = ratio > 0
     ? Math.max(1, Math.min(fillWidth, Math.round(ratio * fillWidth)))
@@ -99,13 +99,19 @@ export function buildSidebarFooterLines(options: {
 }): string[] {
   const { width, tokenParts, contextUsed, contextTokens, colors } = options;
   const lines: string[] = [];
+  const costLine = tokenParts.find((part) => part.startsWith("$") || part === "local");
+  const valueLines = tokenParts.filter((part) => part !== costLine);
 
-  for (const part of tokenParts) {
+  if (costLine) {
+    lines.push(`${colors.text}${costLine}${RESET}`);
+  }
+
+  for (const part of valueLines) {
     lines.push(`${colors.muted}${part}${RESET}`);
   }
 
   if (contextUsed !== undefined && contextTokens) {
-    lines.push(`${colors.text}${contextTokens} context${RESET}`);
+    lines.push(`${colors.text}${contextTokens} ctx${RESET}`);
     lines.push(buildContextMeter(width, contextUsed, colors));
   }
 

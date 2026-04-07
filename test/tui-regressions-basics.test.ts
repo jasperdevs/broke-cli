@@ -81,7 +81,7 @@ describe("sidebar token summary", () => {
     const app = new App() as any;
     app.setContextUsage(132, 344_000);
     app.updateUsage(0.0016, 150, 60);
-    expect(app.renderTokenSummaryParts()).toEqual(["210 total", "$0.0016", "150 in", "60 out"]);
+    expect(app.renderTokenSummaryParts()).toEqual(["$0.0016", "210 total", "150 in", "60 out"]);
   });
 
   it("shows only lifetime totals plus current context usage in the sidebar footer", () => {
@@ -97,7 +97,7 @@ describe("sidebar token summary", () => {
     expect(footer).toContain("$0.0016");
     expect(footer).toContain("150 in");
     expect(footer).toContain("60 out");
-    expect(footer).toContain("132 context");
+    expect(footer).toContain("132 ctx");
     expect(footer).toContain("<1%");
     expect(footer).toContain("▰");
     updateSetting("showTokens", originalShowTokens);
@@ -116,7 +116,7 @@ describe("sidebar token summary", () => {
     expect(footer.some((line: string) => line.trim() === "$0.0016")).toBe(true);
     expect(footer.some((line: string) => line.trim() === "150 in")).toBe(true);
     expect(footer.some((line: string) => line.trim() === "60 out")).toBe(true);
-    expect(footer.some((line: string) => line.trim() === "132k context")).toBe(true);
+    expect(footer.some((line: string) => line.trim() === "132k ctx")).toBe(true);
     expect(footer.some((line: string) => line.includes("38%"))).toBe(true);
     expect(footer.some((line: string) => line.includes("▰") || line.includes("▱"))).toBe(true);
     updateSetting("cavemanLevel", "off");
@@ -130,7 +130,7 @@ describe("sidebar token summary", () => {
     app.setContextUsage(822, 400_000);
     app.updateUsage(0.0016, 150, 60);
     const footer = app.renderSidebarFooter().map((line: string) => stripAnsi(line)).join("\n");
-    expect(footer).toContain("822 context");
+    expect(footer).toContain("822 ctx");
     expect(footer).toContain("<1%");
     expect(footer).toContain("▰");
     updateSetting("showTokens", originalShowTokens);

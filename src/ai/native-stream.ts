@@ -80,7 +80,7 @@ export function normalizeNativeUsage(options: {
   if (providerId === "codex") {
     // Native Codex can report hidden/orchestration input usage that is far above the
     // visible prompt we actually build. Keep session totals grounded in the prompt
-    // BrokeCLI controls instead of letting one trivial turn explode lifetime usage.
+    // layer instead of letting one trivial turn explode lifetime usage.
     const maxTrustedInput = Math.max(estimatedInputTokens * 3, estimatedInputTokens + 4096);
     if (inputTokens > maxTrustedInput) {
       inputTokens = estimatedInputTokens;

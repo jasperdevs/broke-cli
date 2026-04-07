@@ -48,7 +48,7 @@ export const THEME_PALETTES_A: ThemePalette[] = [
     imageTagBg: [34, 136, 34],
   },
   {
-    key: "codex",
+    key: "blue-steel",
     label: "Blue Steel",
     dark: true,
     primary: [84, 154, 255],
@@ -71,7 +71,7 @@ export const THEME_PALETTES_A: ThemePalette[] = [
     imageTagBg: [84, 154, 255],
   },
   {
-    key: "opencode",
+    key: "night-signal",
     label: "Night Signal",
     dark: true,
     primary: [122, 162, 247],
@@ -94,7 +94,7 @@ export const THEME_PALETTES_A: ThemePalette[] = [
     imageTagBg: [122, 162, 247],
   },
   {
-    key: "pi",
+    key: "paper-sky",
     label: "Paper Sky",
     dark: false,
     primary: [41, 114, 255],

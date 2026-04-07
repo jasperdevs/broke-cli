@@ -8,6 +8,11 @@ import type { Theme, ThemePalette } from "./theme-types.js";
 export type { Theme } from "./theme-types.js";
 
 const PALETTES: ThemePalette[] = [...THEME_PALETTES_A, ...THEME_PALETTES_B];
+const THEME_KEY_ALIASES: Record<string, string> = {
+  codex: "blue-steel",
+  opencode: "night-signal",
+  pi: "paper-sky",
+};
 function buildThemeMap(): Map<string, Theme> {
   const map = new Map<string, Theme>(PALETTES.map((palette) => [palette.key, toTheme(palette)]));
   for (const resource of listThemeResources()) {
@@ -50,7 +55,10 @@ export function listThemes(): Theme[] {
 
 export function getTheme(themeKey?: string | null): Theme {
   const themeMap = buildThemeMap();
-  return themeMap.get(themeKey ?? "") ?? themeMap.get("brokecli-dark")!;
+  const requested = themeKey ?? "";
+  return themeMap.get(requested)
+    ?? themeMap.get(THEME_KEY_ALIASES[requested] ?? "")
+    ?? themeMap.get("brokecli-dark")!;
 }
 
 export function getThemeNames(): string[] {

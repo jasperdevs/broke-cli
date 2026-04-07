@@ -70,10 +70,11 @@ export function getLiveTotalTokens(app: AppState): number {
 
 export function renderTokenSummaryParts(app: AppState): string[] {
   const total = app.getLiveTotalTokens();
-  const parts = [`${fmtTokens(total)} total`];
+  const parts: string[] = [];
   if (getSettings().showCost) {
     parts.push(app.sessionCost > 0 ? fmtCost(app.animCost.get()) : "local");
   }
+  parts.push(`${fmtTokens(total)} total`);
   parts.push(`${fmtTokens(app.getLiveInputTokens())} in`);
   parts.push(`${fmtTokens(app.getLiveOutputTokens())} out`);
   return parts;
