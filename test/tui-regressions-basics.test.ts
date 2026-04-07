@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createDefaultSessionName, Session } from "../src/core/session.js";
 import { buildBudgetReport } from "../src/core/budget-insights.js";
 import { App } from "../src/tui/app.js";
-import { MOUSE_OFF, MOUSE_ON } from "../src/utils/ansi.js";
+import { MOUSE_OFF, MOUSE_ON, sanitizeWindowTitle } from "../src/utils/ansi.js";
 import { ALT_SCREEN_OFF, ALT_SCREEN_ON, CURSOR_HIDE, MENU_MOUSE_OFF, MENU_MOUSE_ON, SYNC_START } from "../src/utils/ansi.js";
 import { visibleWidth } from "../src/utils/terminal-width.js";
 import { getSettings, updateSetting } from "../src/core/config.js";
@@ -124,6 +124,48 @@ describe("default session naming", () => {
 
   it("can generate a stable placeholder name for resets", () => {
     expect(createDefaultSessionName(new Date("2026-04-07T12:00:00Z"), 4821)).toBe("Apr 7 #4821");
+  });
+});
+
+describe("terminal window title", () => {
+  it("sanitizes control bytes out of the native terminal title", () => {
+    expect(sanitizeWindowTitle("hello\x1b]2;bad\x07 title")).toBe("hello ]2;bad title");
+  });
+
+  it("tracks the session name in the native terminal title", () => {
+    const writes: string[] = [];
+    const originalWrite = process.stdout.write;
+    (process.stdout.write as unknown as (chunk: any, ...args: any[]) => boolean) = ((chunk: any, ...args: any[]) => {
+      writes.push(String(chunk));
+      return true;
+    }) as typeof process.stdout.write;
+
+    try {
+      const app = new App() as any;
+      app.setSessionName("Bug bash");
+      expect(writes.join("")).toContain("\x1b]2;Bug bash\x07");
+    } finally {
+      (process.stdout.write as unknown as typeof process.stdout.write) = originalWrite;
+    }
+  });
+
+  it("uses the same spinner glyph family in the native terminal title while streaming", () => {
+    const writes: string[] = [];
+    const originalWrite = process.stdout.write;
+    (process.stdout.write as unknown as (chunk: any, ...args: any[]) => boolean) = ((chunk: any, ...args: any[]) => {
+      writes.push(String(chunk));
+      return true;
+    }) as typeof process.stdout.write;
+
+    try {
+      const app = new App() as any;
+      app.setSessionName("Bug bash");
+      app.setStreaming(true);
+      expect(writes.join("")).toContain("\x1b]2;· Bug bash\x07");
+      if (app.spinnerTimer) clearInterval(app.spinnerTimer);
+    } finally {
+      (process.stdout.write as unknown as typeof process.stdout.write) = originalWrite;
+    }
   });
 });
 

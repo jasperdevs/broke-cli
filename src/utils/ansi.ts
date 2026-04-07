@@ -2,6 +2,7 @@
 
 export const ESC = "\x1b";
 export const CSI = `${ESC}[`;
+export const OSC = `${ESC}]`;
 
 // Screen
 export const ALT_SCREEN_ON = `${CSI}?1049h`;
@@ -34,6 +35,8 @@ export const MOUSE_ON = "";
 export const MOUSE_OFF = "";
 export const MENU_MOUSE_ON = `${CSI}?1000h${CSI}?1002h${CSI}?1006h`;
 export const MENU_MOUSE_OFF = `${CSI}?1000l${CSI}?1002l${CSI}?1006l`;
+
+export const WINDOW_TITLE_TERMINATOR = "\x07";
 
 // Move cursor to row,col (1-based)
 export function moveTo(row: number, col: number): string {
@@ -75,6 +78,16 @@ export const BOX = {
 /** Write directly to stdout without newline */
 export function write(s: string): void {
   process.stdout.write(s);
+}
+
+export function sanitizeWindowTitle(title: string): string {
+  return title.replace(/[\x00-\x1f\x7f\x1b\x07]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+export function setWindowTitle(title: string): void {
+  const safe = sanitizeWindowTitle(title);
+  if (!safe) return;
+  write(`${OSC}2;${safe}${WINDOW_TITLE_TERMINATOR}`);
 }
 
 /** Get terminal dimensions */

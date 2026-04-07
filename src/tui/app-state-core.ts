@@ -3,12 +3,25 @@ import { getSettings, type CavemanLevel, type Mode, type ThinkingLevel } from ".
 import { getEffectiveThinkingLevel } from "../ai/thinking.js";
 import { buildSidebarFooter } from "./render/sidebar-view.js";
 import { fmtCost, fmtTokens } from "./render/formatting.js";
-import { DIM, RESET } from "../utils/ansi.js";
+import { DIM, RESET, setWindowTitle } from "../utils/ansi.js";
 import { MUTED, OK, P, T, TXT } from "./app-shared.js";
 import type { ModelOption, UpdateNotice } from "./app-types.js";
 import type { ModelRuntime } from "../ai/providers.js";
 
 type AppState = any;
+
+const WINDOW_TITLE_SPINNER = ["·", "✧", "✦", "✧"];
+
+function formatWindowTitle(app: AppState): string {
+  const baseName = (app.sessionName?.trim?.() || "broke-cli").replace(/\s+/g, " ").trim();
+  if (!app.isStreaming && !app.isCompacting) return baseName;
+  const spinner = WINDOW_TITLE_SPINNER[app.spinnerFrame % WINDOW_TITLE_SPINNER.length] ?? WINDOW_TITLE_SPINNER[0];
+  return `${spinner} ${baseName}`;
+}
+
+export function refreshWindowTitle(app: AppState): void {
+  setWindowTitle(formatWindowTitle(app));
+}
 
 export function invalidateMsgCache(app: AppState): void {
   app.msgCacheLines = null;
@@ -223,12 +236,14 @@ export function setStreaming(app: AppState, streaming: boolean): void {
       app.animCost.tick();
       app.animStreamTokens.tick();
       app.animContext.tick();
+      refreshWindowTitle(app);
       app.draw();
     }, app.constructor.ANIMATION_INTERVAL_MS);
   } else if (app.spinnerTimer) {
     clearInterval(app.spinnerTimer);
     app.spinnerTimer = null;
   }
+  refreshWindowTitle(app);
   app.invalidateMsgCache();
   if (streaming) app.drawNow();
   else app.draw();
@@ -242,7 +257,10 @@ export function setThinkingRequested(app: AppState, requested: boolean): void {
 }
 
 export function setDetectedProviders(app: AppState, providers: string[]): void { app.detectedProviders = providers; }
-export function setSessionName(app: AppState, name: string): void { app.sessionName = name; }
+export function setSessionName(app: AppState, name: string): void {
+  app.sessionName = name;
+  refreshWindowTitle(app);
+}
 export function setVersion(app: AppState, v: string): void { app.appVersion = v; }
 export function setMcpConnections(app: AppState, conns: string[]): void { app.mcpConnections = conns; }
 export function setUpdateNotice(app: AppState, notice: UpdateNotice | null): void {
@@ -272,6 +290,7 @@ export interface AppStateCoreMethods {
   setContextUsage(tokens: number, limit: number): void;
   setStreaming(streaming: boolean): void;
   setThinkingRequested(requested: boolean): void;
+  refreshWindowTitle(): void;
   setDetectedProviders(providers: string[]): void;
   setSessionName(name: string): void;
   setVersion(v: string): void;
@@ -298,6 +317,7 @@ export const appStateCoreMethods: AppStateCoreMethods = {
   setContextUsage(this: AppState, tokens: number, limit: number) { return setContextUsage(this, tokens, limit); },
   setStreaming(this: AppState, streaming: boolean) { return setStreaming(this, streaming); },
   setThinkingRequested(this: AppState, requested: boolean) { return setThinkingRequested(this, requested); },
+  refreshWindowTitle(this: AppState) { return refreshWindowTitle(this); },
   setDetectedProviders(this: AppState, providers: string[]) { return setDetectedProviders(this, providers); },
   setSessionName(this: AppState, name: string) { return setSessionName(this, name); },
   setVersion(this: AppState, v: string) { return setVersion(this, v); },

@@ -320,6 +320,7 @@ export function start(app: AppState): void {
   try { app.gitDirty = execSync("git status --porcelain", { encoding: "utf-8", timeout: 3000 }).trim().length > 0; } catch {}
   app.screen.enter();
   app.keypress.start();
+  app.refreshWindowTitle();
   app.draw();
   process.stdout.on("resize", app.handleResize);
 }
@@ -330,6 +331,7 @@ export function stop(app: AppState): void {
   clearRuntimeSettings();
   if (app.spinnerTimer) clearInterval(app.spinnerTimer);
   app.clearInterruptPrompt();
+  app.setSessionName("broke-cli");
   process.stdout.off("resize", app.handleResize);
   app.keypress.stop();
   app.screen.exit();
@@ -351,6 +353,7 @@ export function runExternalCommand(app: AppState, _title: string, commandName: s
   const result = spawnSync(spawnTarget.command, spawnTarget.args, { stdio: "inherit" });
   app.screen.enter();
   app.keypress.start();
+  app.refreshWindowTitle();
   app.drawNow();
   if (typeof result.status === "number") return result.status;
   return result.error ? 1 : 0;
