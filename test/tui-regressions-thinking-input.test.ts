@@ -24,6 +24,7 @@ describe("thinking and input regressions", () => {
       app.appendThinking("private chain of thought");
       const output = app.renderMessages(60).map((line: string) => stripAnsi(line)).join("\n");
       expect(output).toContain("Thinking...");
+      expect(output).toContain("working through the request");
       expect(output).not.toContain("private chain of thought");
       expect(output).not.toContain("Reasoning");
     } finally {

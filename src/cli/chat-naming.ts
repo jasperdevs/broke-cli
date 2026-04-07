@@ -20,15 +20,31 @@ function sanitizeTitle(raw: string): string {
     .slice(0, 48);
 }
 
-function deriveFallbackTitle(userText: string): string {
-  const cleaned = userText
-    .replace(/[^\w\s./-]/g, " ")
+function normalizeTitleSource(text: string): string {
+  return text
+    .replace(/[^\w\s./!?-]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-  const words = cleaned.split(" ").filter(Boolean).slice(0, 5);
-  if (words.length === 0) return "";
-  const titled = words.join(" ").replace(/\b\w/g, (char) => char.toUpperCase());
-  return titled.slice(0, 48);
+}
+
+function clipPiStyleTitle(text: string): string {
+  const cleaned = normalizeTitleSource(text);
+  if (!cleaned) return "";
+  const sentenceEnd = cleaned.search(/[.!?]/);
+  if (sentenceEnd > 0 && sentenceEnd <= 50) return cleaned.substring(0, sentenceEnd + 1);
+  return cleaned.length <= 50 ? cleaned : `${cleaned.substring(0, 47)}...`;
+}
+
+function isGreetingOnly(text: string): boolean {
+  const cleaned = normalizeTitleSource(text).toLowerCase();
+  if (!cleaned) return false;
+  return /^(?:hi|hey|hello|yo|sup|test|thanks|thank you|help)(?:\s+\w+){0,2}[.!?]*$/.test(cleaned);
+}
+
+function deriveFallbackTitle(userText: string, assistantText: string): string {
+  const primary = clipPiStyleTitle(userText);
+  if (primary && !isGreetingOnly(primary)) return primary;
+  return clipPiStyleTitle(assistantText) || primary;
 }
 
 async function generateTitleWithModel(model: ModelHandle, modelId: string, userText: string, assistantText: string): Promise<string | null> {
@@ -82,7 +98,7 @@ export async function maybeAutoNameSession(options: {
     nextTitle = null;
   }
 
-  const finalTitle = sanitizeTitle(nextTitle ?? deriveFallbackTitle(userText));
+  const finalTitle = sanitizeTitle(nextTitle ?? deriveFallbackTitle(userText, assistantText));
   if (!finalTitle || isDefaultSessionName(finalTitle)) return;
   session.setName?.(finalTitle);
   app.setSessionName?.(finalTitle);

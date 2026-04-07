@@ -21,6 +21,33 @@ export interface PendingRenderMessage {
   delivery: "steering" | "followup";
 }
 
+function stripHiddenThinkingNoise(text: string): string {
+  return text
+    .replace(/<[^>]+>/g, " ")
+    .replace(/[`*_>#-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function summarizeHiddenThinking(thinkingBuffer: string, isStreaming: boolean): string {
+  const normalized = stripHiddenThinkingNoise(thinkingBuffer).toLowerCase();
+  let summary = "working through the request";
+  if (/\b(read|scan|inspect|grep|search|context|repo|file|files|directory|codebase)\b/.test(normalized)) {
+    summary = "scanning the repo";
+  } else if (/\b(plan|approach|decide|tradeoff|compare|option|evaluate)\b/.test(normalized)) {
+    summary = "weighing the approach";
+  } else if (/\b(write|edit|patch|change|refactor|update|implement)\b/.test(normalized)) {
+    summary = "planning the changes";
+  } else if (/\b(test|verify|check|validate|regression|assert)\b/.test(normalized)) {
+    summary = "checking the result";
+  } else if (/\b(error|bug|fail|issue|broken|fix|debug)\b/.test(normalized)) {
+    summary = "checking the failure";
+  } else if (/\b(answer|respond|explain|summary|final)\b/.test(normalized)) {
+    summary = "shaping the response";
+  }
+  return isStreaming ? `Thinking... ${summary}` : `Reasoned through ${summary}`;
+}
+
 function compactPreview(text: string, maxLength = 88): string {
   const normalized = text.replace(/\s+/g, " ").trim();
   return normalized.length <= maxLength ? normalized : `${normalized.slice(0, maxLength - 3)}...`;
@@ -238,7 +265,7 @@ export function renderMessageOverlays(options: {
   if (thinkingBuffer) {
     ensureOverlayGap(lines);
     if (hideThinkingBlock) {
-      lines.push(`  ${colors.dim}${isStreaming ? "Thinking..." : "Reasoned"}${colors.reset}`);
+      lines.push(`  ${colors.dim}${summarizeHiddenThinking(thinkingBuffer, isStreaming)}${colors.reset}`);
     } else {
       const thinkLines = thinkingBuffer.split("\n").slice(-8);
       lines.push(`  ${colors.dim}${isStreaming ? "Reasoning" : "Reasoned"}${colors.reset}`);

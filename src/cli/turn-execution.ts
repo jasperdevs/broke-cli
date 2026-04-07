@@ -117,10 +117,7 @@ export async function executeTurn(options: {
   let turnSystemPrompt = activeSystemPrompt;
   let streamedText = "";
   let streamedReasoning = "";
-  let bufferedLeadText = "";
-  let flushedLeadText = "";
   let sawToolActivity = false;
-  let leadTextFlushTimer: ReturnType<typeof setTimeout> | null = null;
   session.getContextOptimizer().nextTurn();
 
   const settings = getSettings();
@@ -190,24 +187,6 @@ export async function executeTurn(options: {
     streamTokenFlushTimer = null;
     app.setStreamTokens(estimateTextTokens(streamedText + streamedReasoning, executionModelId));
   };
-  const flushBufferedLeadText = (): void => {
-    if (leadTextFlushTimer) {
-      clearTimeout(leadTextFlushTimer);
-      leadTextFlushTimer = null;
-    }
-    if (!bufferedLeadText.trim()) return;
-    app.appendToLastMessage(bufferedLeadText);
-    flushedLeadText += bufferedLeadText;
-    bufferedLeadText = "";
-  };
-  const scheduleBufferedLeadTextFlush = (): void => {
-    if (leadTextFlushTimer || sawToolActivity) return;
-    leadTextFlushTimer = setTimeout(() => {
-      leadTextFlushTimer = null;
-      if (!sawToolActivity) flushBufferedLeadText();
-    }, 900);
-  };
-
   let nextActivityTime = Date.now();
   app.setThinkingRequested(thinkingRequested);
   const streamCallbacks = {
@@ -215,13 +194,6 @@ export async function executeTurn(options: {
       const nextText = streamedText + delta;
       if (looksLikeRawToolPayload(nextText) || shouldSuppressPlanningNarration(nextText, policy)) {
         streamedText = nextText;
-        return;
-      }
-      if ((policy.archetype === "edit" || policy.archetype === "bugfix") && !sawToolActivity) {
-        streamedText = nextText;
-        bufferedLeadText += delta;
-        scheduleStreamTokenUpdate();
-        scheduleBufferedLeadTextFlush();
         return;
       }
       app.appendToLastMessage(delta);
@@ -236,8 +208,7 @@ export async function executeTurn(options: {
     onFinish: (usage: { inputTokens: number; outputTokens: number; cost: number }) => {
       flushStreamTokenUpdate();
       app.setThinkingRequested(false);
-      if (!sawToolActivity && bufferedLeadText.trim()) flushBufferedLeadText();
-      const content = (streamedText || flushedLeadText).trim();
+      const content = streamedText.trim();
       session.addUsage(usage.inputTokens, usage.outputTokens, usage.cost);
       session.recordTurn({
         smallModel: resolvedRoute === "small",
@@ -288,10 +259,6 @@ export async function executeTurn(options: {
     },
     onError: (err: Error) => {
       flushStreamTokenUpdate();
-      if (leadTextFlushTimer) {
-        clearTimeout(leadTextFlushTimer);
-        leadTextFlushTimer = null;
-      }
       app.setThinkingRequested(false);
       let msg = err.message;
       const data = (err as any).data;
@@ -351,12 +318,6 @@ export async function executeTurn(options: {
       ...streamCallbacks,
       onToolCallStart: (name) => {
         sawToolActivity = true;
-        if (leadTextFlushTimer) {
-          clearTimeout(leadTextFlushTimer);
-          leadTextFlushTimer = null;
-        }
-        bufferedLeadText = "";
-        flushedLeadText = "";
         if (name !== "todoWrite") app.addToolCall(name, "...");
       },
       onToolCall: (name, args) => {
@@ -421,7 +382,7 @@ export async function executeTurn(options: {
     resolvedRoute,
     completion,
     toolActivity: sawToolActivity || nextToolCalls.length > 0,
-    assistantText: (streamedText || flushedLeadText).trim(),
+    assistantText: streamedText.trim(),
     errorMessage,
   };
 }

@@ -179,7 +179,7 @@ describe("stream tool steps", () => {
     expect(app.appendToLastMessage).not.toHaveBeenCalled();
   });
 
-  it("hides buffered edit narration once real tool activity starts", async () => {
+  it("streams ordinary assistant text immediately before tool activity starts", async () => {
     const app = {
       addMessage: vi.fn(),
       appendToLastMessage: vi.fn(),
@@ -215,7 +215,7 @@ describe("stream tool steps", () => {
 
     streamTextMock.mockReturnValueOnce({
       fullStream: (async function* () {
-        yield { type: "text-delta", text: "Checking the repo root before writing." };
+        yield { type: "text-delta", text: "I can update README.md after a quick read." };
         yield { type: "tool-input-start", toolName: "readFile" };
         yield { type: "tool-call", toolName: "readFile", input: { path: "README.md" } };
       })(),
@@ -238,7 +238,7 @@ describe("stream tool steps", () => {
       lastActivityTime: Date.now(),
     });
 
-    expect(app.appendToLastMessage).not.toHaveBeenCalledWith("Checking the repo root before writing.");
+    expect(app.appendToLastMessage).toHaveBeenCalledWith("I can update README.md after a quick read.");
     expect(app.addToolCall).toHaveBeenCalledWith("readFile", "...");
     expect(app.updateToolCallArgs).toHaveBeenCalledWith("readFile", "README.md", { path: "README.md" });
   });

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { Session } from "../src/core/session.js";
 import { handleSlashCommand } from "../src/cli/slash-commands.js";
-import { loadConfig, updateProviderConfig, updateSetting } from "../src/core/config.js";
+import { loadConfig, updateModelPreference, updateProviderConfig, updateSetting } from "../src/core/config.js";
 import {
   cleanupSlashCommandFixtures,
   coreTemplatePath,
@@ -236,5 +236,52 @@ describe("slash command handling", () => {
     expect(opened?.reports.session.idleCacheCliffs).toBe(1);
     expect(opened?.reports.session.freshThreadCarryForwards).toBe(1);
     expect(opened?.reports.all.sessionCount).toBeGreaterThanOrEqual(1);
+  });
+
+  it("offers only sidebar-listed models in /switch and switches to the selected one", async () => {
+    const app = createAppStub();
+    let pickerTitle = "";
+    let pickerItems: Array<{ id: string; label: string; detail?: string }> = [];
+    let switched: { providerName: string; modelId: string } | null = null;
+    app.openItemPicker = (title: string, items: Array<{ id: string; label: string; detail?: string }>, onSelect: (id: string) => void) => {
+      pickerTitle = title;
+      pickerItems = items;
+      onSelect("anthropic/claude-sonnet-4.6-fast");
+    };
+    app.setModel = (providerName: string, modelId: string) => {
+      switched = { providerName, modelId };
+    };
+
+    const previousSmall = loadConfig().settings?.modelPreferences?.small ?? null;
+    try {
+      updateModelPreference("small", "anthropic/claude-sonnet-4.6-fast");
+      const session = new Session(`test-switch-${Date.now()}`);
+      const result = await handleSlashCommand({
+        text: "/switch",
+        app,
+        session,
+        ...createSlashArgs({
+          activeModel: { provider: { id: "anthropic", name: "Anthropic" } },
+          currentModelId: "claude-sonnet-4.6",
+          providerRegistry: {
+            createModel: (providerId: string, modelId: string) => ({
+              provider: { id: providerId, name: providerId === "anthropic" ? "Anthropic" : providerId },
+              runtime: "sdk",
+              model: {},
+            }),
+          } as any,
+        }),
+      });
+
+      expect(result.handled).toBe(true);
+      expect(pickerTitle).toBe("Switch model");
+      expect(pickerItems.some((item) => item.id === "anthropic/claude-sonnet-4.6")).toBe(true);
+      expect(pickerItems.some((item) => item.id === "anthropic/claude-sonnet-4.6-fast")).toBe(true);
+      expect(pickerItems.some((item) => item.detail?.includes("Chat"))).toBe(true);
+      expect(pickerItems.some((item) => item.detail?.includes("Fast"))).toBe(true);
+      expect(switched).toEqual({ providerName: "Anthropic", modelId: "claude-sonnet-4.6-fast" });
+    } finally {
+      updateModelPreference("small", previousSmall);
+    }
   });
 });

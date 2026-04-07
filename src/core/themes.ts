@@ -20,7 +20,7 @@ function mixRgb(a: [number, number, number], b: [number, number, number], ratio:
 
 function getSidebarBackground(palette: ThemePalette): string {
   const base = palette.background ?? palette.userBubble;
-  const mixed = mixRgb(base, palette.userBubble, palette.dark ? 0.35 : 0.18);
+  const mixed = mixRgb(base, palette.sidebarBorder, palette.dark ? 0.22 : 0.12);
   return bg(...mixed);
 }
 

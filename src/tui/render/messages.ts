@@ -53,15 +53,12 @@ export function renderStaticMessages(options: {
         }
       }
       const accent = "▌";
-      const availW = Math.max(1, maxWidth - 5);
-      lines.push(`${colors.userBg}${colors.userAccent}${accent}${reset}${colors.userBg}${" ".repeat(Math.max(0, maxWidth - 1))}${reset}`);
+      const availW = Math.max(1, maxWidth - 3);
       for (const contentLine of content.split("\n")) {
         for (const text of wordWrap(contentLine, availW)) {
-          const padW = Math.max(0, maxWidth - text.length - 5);
-          lines.push(`${colors.userBg}${colors.userAccent}${accent}${reset}${colors.userBg}${colors.userText} ${text}${" ".repeat(padW)}  ${reset}`);
+          lines.push(`${colors.userAccent}${accent}${reset} ${colors.userText}${text}${reset}`);
         }
       }
-      lines.push(`${colors.userBg}${colors.userAccent}${accent}${reset}${colors.userBg}${" ".repeat(Math.max(0, maxWidth - 1))}${reset}`);
       lines.push("");
     } else if (msg.role === "assistant") {
       const rendered = renderMarkdown(msg.content);

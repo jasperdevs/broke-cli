@@ -124,6 +124,7 @@ export function buildSidebarLines(options: {
     }
   }
 
+  lines.push("");
   lines.push(`${colors.text}Directory${colors.reset}`);
   for (const part of wrapSidebarPath(shortCwd, bodyWidth, 2)) {
     lines.push(`  ${colors.muted}${part}${colors.reset}`);

@@ -154,7 +154,7 @@ function buildFrameLines(app: AppState, opts: { height: number; mainW: number; h
       const sidebarBody = sidebarBg
         ? `${sidebarBg}${paddedSidebar.replaceAll(RESET, `${RESET}${sidebarBg}`)}${RESET}`
         : paddedSidebar;
-      const sidebarLead = sidebarBg ? `${sidebarBg}  ${RESET}` : "  ";
+      const sidebarLead = sidebarBg ? `${sidebarBg} ${RESET}` : " ";
       frameLines.push(`${app.padLine(mainLine, mainW)}${sidebarLead}${sidebarBody}`);
     }
   }

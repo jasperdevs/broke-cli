@@ -6,7 +6,7 @@ import { MOUSE_OFF, MOUSE_ON } from "../src/utils/ansi.js";
 import { ALT_SCREEN_OFF, ALT_SCREEN_ON, CURSOR_HIDE, MENU_MOUSE_OFF, MENU_MOUSE_ON, SYNC_START } from "../src/utils/ansi.js";
 import { visibleWidth } from "../src/utils/terminal-width.js";
 import { getSettings, updateSetting } from "../src/core/config.js";
-import { currentTheme } from "../src/core/themes.js";
+import { currentTheme, getTheme } from "../src/core/themes.js";
 import stripAnsi from "strip-ansi";
 import type { Keypress } from "../src/tui/keypress.js";
 import { renderStaticMessages } from "../src/tui/render/messages.js";
@@ -255,6 +255,14 @@ describe("terminal cell width", () => {
     const framed = app.decorateFrameLine(`${padded} ${app.getSidebarBorder()} ${app.padLine("Directory", 10)}`, 31);
     expect(visibleWidth(framed)).toBe(31);
     expect(visibleWidth(app.decorateFrameLine(raw, 18))).toBe(18);
+  });
+});
+
+describe("theme-derived panels", () => {
+  it("derives a distinct sidebar panel background for light themes", () => {
+    const theme = getTheme("brokecli-light");
+    expect(theme.sidebarBackground).toBeTruthy();
+    expect(theme.sidebarBackground).not.toBe(theme.background);
   });
 });
 

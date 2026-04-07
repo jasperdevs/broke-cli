@@ -126,15 +126,15 @@ export class Screen {
   /** Width available for main content (excluding sidebar) */
   get mainWidth(): number {
     if (!this.hasSidebar) return this.cols;
-    const sideTotal = this.sidebarWidth + 3; // border + padding
+    const sideTotal = this.sidebarWidth + 1;
     return this.cols - sideTotal;
   }
 
   /** Sidebar width — scales with terminal */
   get sidebarWidth(): number {
-    if (this.cols >= 120) return 32;
-    if (this.cols >= 90) return 28;
-    if (this.cols >= 70) return 24;
-    return 20;
+    if (this.cols >= 120) return 34;
+    if (this.cols >= 90) return 30;
+    if (this.cols >= 70) return 26;
+    return 22;
   }
 }
