@@ -273,20 +273,42 @@ describe("wrapped input layout", () => {
     expect(layout.row).toBeGreaterThan(0);
   });
 
-  it("renders the input without the old left gutter and keeps question prompts out of the bottom overlay", async () => {
+  it("renders the input with a visible prompt marker and keeps question prompts out of the bottom overlay", async () => {
     const app = new App() as any;
     app.messages = [{ role: "user", content: "hello" }];
     app.input.paste("test");
     let rendered: string[] = [];
     app.screen = { height: 12, width: 40, hasSidebar: false, mainWidth: 40, sidebarWidth: 20, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
     app.drawImmediate();
-    const inputLine = rendered.find((line) => stripAnsi(line).trimEnd() === "test");
-    expect(stripAnsi(inputLine!).trimEnd()).toBe("test");
+    const inputLine = rendered.find((line) => stripAnsi(line).trimEnd() === "> test");
+    expect(stripAnsi(inputLine!).trimEnd()).toBe("> test");
     const before = app.getBottomLineCount(20, 20);
     const pending = app.showQuestion("Base URL");
     expect(app.getBottomLineCount(20, 20)).toBe(before);
     app.handleKey({ name: "escape", char: "", ctrl: false, meta: false, shift: false });
     await expect(pending).resolves.toBe("[user skipped]");
+  });
+
+  it("renders an explicit prompt marker and offset cursor in fullscreen sidebar chat mode", () => {
+    const app = new App() as any;
+    let rendered: string[] = [];
+    let cursorCol = 0;
+    app.messages = [{ role: "user", content: "hello" }];
+    app.screen = {
+      height: 18,
+      width: 100,
+      hasSidebar: true,
+      mainWidth: 73,
+      sidebarWidth: 24,
+      render: (lines: string[]) => { rendered = lines; },
+      setCursor: (_row: number, col: number) => { cursorCol = col; },
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+    app.drawImmediate();
+    const output = rendered.map((line) => stripAnsi(line));
+    expect(output.some((line) => line.startsWith("> "))).toBe(true);
+    expect(cursorCol).toBeGreaterThanOrEqual(3);
   });
 
   it("keeps the cursor on the real input row when the sidebar footer is taller than the prompt area", () => {

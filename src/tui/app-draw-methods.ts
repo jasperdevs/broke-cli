@@ -58,6 +58,10 @@ export function drawImmediate(app: AppState): void {
   const inputLayout = app.getInputCursorLayout(app.input.getText(), app.input.getCursor(), mainW);
   const isHome = app.messages.length === 0;
   const separatorColor = app.getModeAccent();
+  const inputLead = `${separatorColor}${BOLD}>${RESET} `;
+  const inputLeadWidth = 2;
+  const inputContinueLead = `${DIM}·${RESET} `;
+  const inputContinueLeadWidth = 2;
   const bottomLines: string[] = [];
   const bottomMenuClicks: Array<{ lineIndex: number; action: () => void }> = [];
   const pendingImageLines = getPendingImagePromptLines(app, mainW);
@@ -67,7 +71,7 @@ export function drawImmediate(app: AppState): void {
   bottomLines.push(...pendingImageLines);
   bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
   const inputStartIndex = bottomLines.length;
-  bottomLines.push(...inputLayout.lines);
+  bottomLines.push(...inputLayout.lines.map((line: string, index: number) => `${index === 0 ? inputLead : inputContinueLead}${line}`));
   if (statusLines.length > 0) {
     bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
     bottomLines.push(...statusLines);
@@ -90,7 +94,11 @@ export function drawImmediate(app: AppState): void {
     isHome,
   });
   app.screen.render(frameLines.map((line) => app.decorateFrameLine(line, width)));
-  app.screen.setCursor(Math.min(height, mainTopHeight + inputStartIndex + 1 + inputLayout.row), Math.min(width, 1 + inputLayout.col));
+  const inputLeadOffset = inputLayout.row === 0 ? inputLeadWidth : inputContinueLeadWidth;
+  app.screen.setCursor(
+    Math.min(height, mainTopHeight + inputStartIndex + 1 + inputLayout.row),
+    Math.min(width, 1 + inputLeadOffset + inputLayout.col),
+  );
 }
 
 function buildFrameLines(app: AppState, opts: { height: number; mainW: number; hasSidebar: boolean; sidebarColumnLines: string[]; bottomLines: string[]; bottomMenuClicks: Array<{ lineIndex: number; action: () => void }>; isHome: boolean; }): string[] {
