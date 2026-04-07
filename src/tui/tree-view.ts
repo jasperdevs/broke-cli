@@ -150,7 +150,7 @@ export function getTreePickerEntries(app: AppState): MenuEntry[] {
     const isCursor = index === selectedIndex;
     const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
     const text = isCursor ? `${TXT()}${BOLD}${row.text}${RESET}` : row.text;
-    return { text: ` ${arrow}${text}`, selectIndex: index };
+    return { lines: [` ${arrow}${text}`], selectIndex: index };
   });
 }
 

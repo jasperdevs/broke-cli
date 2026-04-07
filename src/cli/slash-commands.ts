@@ -4,7 +4,7 @@ import { getConfiguredModelPreference, getSettings, updateModelPreference, updat
 import { createDefaultSessionName } from "../core/session.js";
 import { runConnectFlow } from "./connect-flow.js";
 import { runLoginFlow } from "./login-flow.js";
-import { openExtensionsMenu, openSettingsMenu, openThemeMenu } from "./slash-command-menus.js";
+import { openExtensionsMenu, openSettingsMenu } from "./slash-command-menus.js";
 import type { HandleSlashCommandOptions, SlashCommandResult } from "./slash-command-types.js";
 import { handleUiSlashCommand } from "./slash-command-ui.js";
 import { getResolvedModelPreference } from "./model-routing.js";
@@ -36,6 +36,10 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
 
   const [cmd, ...restParts] = text.slice(1).split(" ");
   const restText = restParts.join(" ").trim();
+  const waitFor = async (ms: number) => {
+    if (ms <= 0) return;
+    await new Promise((resolve) => setTimeout(resolve, ms));
+  };
 
   switch (cmd) {
     case "help":
@@ -162,10 +166,6 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
       openExtensionsMenu(app, hooks);
       return { handled: true };
     }
-    case "theme": {
-      openThemeMenu(app);
-      return { handled: true };
-    }
     case "compact": {
       if (!activeModel) {
         app.setStatus?.("No model available for compaction.");
@@ -175,6 +175,7 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
       try {
         const chatMsgs = session.getChatMessages();
         const ctxTokens = getTotalContextTokens(chatMsgs, systemPrompt, currentModelId);
+        const compactStartedAt = Date.now();
         app.setCompacting?.(true, ctxTokens);
         const compacted = activeModel.runtime === "sdk" && activeModel.model
           ? await compactMessages(chatMsgs, activeModel.model, { customInstructions: restText || undefined })
@@ -183,11 +184,13 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
         if (parsed.summary) session.applyCompaction(parsed.summary, parsed.messages, ctxTokens);
         else session.replaceConversation(parsed.messages);
         session.recordCompaction();
+        await waitFor(Math.max(0, 650 - (Date.now() - compactStartedAt)));
         app.setCompacting?.(false);
         app.clearMessages();
         for (const msg of session.getMessages()) app.addMessage(msg.role, msg.content);
         app.updateUsage?.(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
-        app.setStatus?.(`Compacted older context. Kept ${session.getMessages().length} visible messages.`);
+        (app as any).setContextUsage?.(-1, (app as any).contextLimitTokens || 0);
+        app.setStatus?.("Compaction complete.");
       } catch (err) {
         app.setCompacting?.(false);
         app.setStatus?.(`Compact failed: ${(err as Error).message}`);

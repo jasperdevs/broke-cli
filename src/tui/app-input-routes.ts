@@ -38,6 +38,7 @@ export function handleBudgetViewKey(app: AppState, key: Keypress): void {
     contextTokens: app.contextTokenCount,
     contextLimit: app.contextLimitTokens,
     showContext: app.budgetView.scope === "session",
+    section: app.budgetView.section,
   }).length;
   const maxScroll = Math.max(0, lineCount - Math.max(1, app.screen.height - 6));
   if (key.name === "escape" || isPlainBackspace(key) || key.name === "q" || (key.ctrl && key.name === "c")) {
@@ -45,7 +46,17 @@ export function handleBudgetViewKey(app: AppState, key: Keypress): void {
     return;
   }
   if (key.name === "tab") {
+    const order = ["usage", "efficiency", "routing", "context"] as const;
+    const current = Math.max(0, order.indexOf(app.budgetView.section));
+    const direction = key.shift ? -1 : 1;
+    app.budgetView.section = order[(current + direction + order.length) % order.length]!;
+    app.budgetView.scrollOffset = 0;
+    app.drawNow();
+    return;
+  }
+  if (key.name === "s") {
     app.budgetView.scope = app.budgetView.scope === "all" ? "session" : "all";
+    if (app.budgetView.scope === "all" && app.budgetView.section === "context") app.budgetView.section = "usage";
     app.budgetView.scrollOffset = 0;
     app.drawNow();
     return;

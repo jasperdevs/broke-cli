@@ -83,7 +83,7 @@ export function appendBottomMenus(
       const entries = app.buildMenuView(getQuestionOptionEntries(app.questionView), app.questionView.optionCursor, maxVisible);
       const body = getQuestionBodyLines(app.questionView, mainW);
       bottomLines.push(body[0] ?? "");
-      for (const entry of entries) bottomLines.push(entry.text);
+      for (const entry of entries) bottomLines.push(...entry.lines);
       bottomLines.push(body[body.length - 1] ?? "");
     } else {
       const body = getQuestionBodyLines(app.questionView, mainW);
@@ -104,7 +104,7 @@ export function appendBottomMenus(
     if (entry.selectIndex !== undefined) {
       app.registerMenuClickTarget(bottomMenuClicks, bottomLines, () => app.applyCommandSuggestion(entry.selectIndex!));
     }
-    bottomLines.push(entry.text);
+    bottomLines.push(...entry.lines);
   }
 }
 

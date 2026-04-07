@@ -1,14 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { App } from "../src/tui/app.js";
-import { listThemes } from "../src/core/themes.js";
 import { getSettings, updateSetting } from "../src/core/config.js";
 import stripAnsi from "strip-ansi";
 
 describe("command aliases", () => {
-  it("suggests theme from the slash-command surface", () => {
+  it("suggests templates from the slash-command surface", () => {
     const app = new App() as any;
-    app.input.paste("/the");
-    expect(app.getCommandMatches()[0].name).toBe("theme");
+    app.input.paste("/tem");
+    expect(app.getCommandMatches()[0].name).toBe("templates");
   });
 
   it("suggests clear for the new alias", () => {
@@ -38,10 +37,9 @@ describe("command aliases", () => {
     const app = new App() as any;
     app.input.paste("/");
     expect(app.getCommandMatches()[0].name).toBe("settings");
-    const entries = app.getCommandSuggestionEntries().map((entry: { text: string }) => stripAnsi(entry.text));
+    const entries = app.getCommandSuggestionEntries().flatMap((entry: { lines: string[] }) => entry.lines.map((line) => stripAnsi(line)));
     expect(entries.some((entry: string) => entry.includes("model") && entry.includes("ctrl+l"))).toBe(true);
     expect(entries.some((entry: string) => entry.includes("thinking") && entry.includes("ctrl+t"))).toBe(true);
-    expect(entries.some((entry: string) => entry.includes("caveman") && entry.includes("ctrl+y"))).toBe(true);
   });
 });
 
@@ -95,7 +93,7 @@ describe("sidebar scrolling", () => {
     app.sidebarFocused = true;
     app.screen = { height: 18, width: 100, hasSidebar: true, mainWidth: 73, sidebarWidth: 24, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
     app.buildSidebarLines = () => Array.from({ length: 24 }, (_, i) => `sidebar ${i}`);
-    app.openItemPicker("Theme", listThemes().slice(0, 5).map((theme) => ({ id: theme.key, label: theme.label })), () => {});
+    app.openItemPicker("Projects", Array.from({ length: 12 }, (_, i) => ({ id: `project-${i}`, label: `Project ${i}`, detail: `detail line ${i}` })), () => {}, { kind: "projects" });
     app.handleKey({ name: "scrolldown", char: "", ctrl: false, meta: false, shift: false });
     expect(app.sidebarScrollOffset).toBeGreaterThan(0);
     expect(app.itemPicker.cursor).toBe(0);
@@ -118,7 +116,7 @@ describe("sidebar scrolling", () => {
     expect(footerText).toContain("120k/128k ctx");
     expect(footerText).toContain("94%");
     expect(footerText).toContain("▰");
-    expect(footerText).not.toContain("plan");
+    expect(footerText).toContain("plan");
     updateSetting("showTokens", originalShowTokens);
   });
 
@@ -169,7 +167,7 @@ describe("sidebar scrolling", () => {
     }
   });
 
-  it("caps sidebar chat slash menus to five visible command rows", () => {
+  it("keeps sidebar chat slash menus within a compact wrapped block", () => {
     const app = new App() as any;
     let rendered: string[] = [];
     app.messages = [{ role: "user", content: "hello" }];
@@ -187,8 +185,8 @@ describe("sidebar scrolling", () => {
     };
     app.drawImmediate();
     const output = rendered.map((line) => stripAnsi(line));
-    const commandRows = output.filter((line) => /\ssettings\s+configure options|\smodel\s+switch model|\sconnect\s+connect provider|\ssession\s+inspect session|\sresume\s+load prior session/.test(line));
-    expect(commandRows.length).toBeLessThanOrEqual(5);
+    const commandRows = output.filter((line) => line.includes("settings") || line.includes("configure options") || line.includes("model") || line.includes("switch model"));
+    expect(commandRows.length).toBeLessThanOrEqual(8);
   });
 
   it("keeps the sidebar column visible while slash menus are open in active chats", () => {

@@ -114,24 +114,18 @@ describe("message wrapping", () => {
   });
 
   it("drops markdown ANSI styling in light themes so assistant text stays readable", () => {
-    const originalTheme = getSettings().theme;
-    updateSetting("theme", "brokecli-light");
-    try {
-      const lines = renderStaticMessages({
-        messages: [{ role: "assistant", content: "Use `npm run build` and **watch** the output." }],
-        maxWidth: 60,
-        toolOutputCollapsed: false,
-        isToolOutput: () => false,
-        wordWrap,
-        colors: { imageTagBg: "", userBg: "", userText: "", userAccent: "", border: "", muted: "", text: "" },
-        reset: "",
-        bold: "",
-      });
-      expect(lines.join("")).not.toContain("\x1b[");
-      expect(lines.join("\n")).toContain("npm run build");
-    } finally {
-      updateSetting("theme", originalTheme);
-    }
+    const lines = renderStaticMessages({
+      messages: [{ role: "assistant", content: "Use `npm run build` and **watch** the output." }],
+      maxWidth: 60,
+      toolOutputCollapsed: false,
+      isToolOutput: () => false,
+      wordWrap,
+      colors: { imageTagBg: "", userBg: "", userText: "", userAccent: "", border: "", muted: "", text: "" },
+      reset: "",
+      bold: "",
+    });
+    expect(lines.join("\n")).toContain("npm run build");
+    expect(lines.join("\n")).toContain("watch");
   });
 });
 

@@ -24,6 +24,11 @@ type AppState = any;
 function getMenuVisibleRows(maxHeight: number, baseCount: number, tailReserve: number, chromeLines: number): number {
   return Math.max(1, maxHeight - baseCount - tailReserve - 1 - chromeLines);
 }
+
+function getVisibleMenuLineCount(app: AppState, entries: Array<{ lines: string[] }>, cursor: number, maxHeight: number, baseCount: number, tailReserve: number, chromeLines: number): number {
+  const visible = app.buildMenuView(entries, cursor, getMenuVisibleRows(maxHeight, baseCount, tailReserve, chromeLines));
+  return Math.max(1, visible.reduce((sum: number, entry: { lines: string[] }) => sum + Math.max(1, entry.lines.length), 0));
+}
 export function scrollToBottom(app: AppState): void {
   const chatHeight = app.getChatHeight();
   const messageLines = app.renderMessages(app.screen.mainWidth - 2);
@@ -53,44 +58,32 @@ export function getBottomLineCount(app: AppState, mainW: number, maxHeight: numb
 
   if (app.filePicker) {
     const entries = app.getFilePickerEntries();
-    const visible = entries.length === 0
-      ? 1
-      : Math.min(entries.length, maxVisibleRows, getMenuVisibleRows(maxHeight, baseCount, tailReserve, 1));
+    const visible = entries.length === 0 ? 1 : getVisibleMenuLineCount(app, entries, app.filePicker.cursor, maxHeight, baseCount, tailReserve, 1);
     count += 2 + visible;
   } else if (app.itemPicker) {
     const entries = app.getItemPickerEntries();
-    const visible = entries.length === 0
-      ? 1
-      : Math.min(entries.length, maxVisibleRows, getMenuVisibleRows(maxHeight, baseCount, tailReserve, 1));
+    const visible = entries.length === 0 ? 1 : getVisibleMenuLineCount(app, entries, app.itemPicker.cursor, maxHeight, baseCount, tailReserve, 1);
     count += 2 + visible;
   } else if (app.settingsPicker) {
     const entries = app.getSettingsPickerEntries();
-    const visible = entries.length === 0
-      ? 1
-      : Math.min(entries.length, maxVisibleRows, getMenuVisibleRows(maxHeight, baseCount, tailReserve, 1));
+    const visible = entries.length === 0 ? 1 : getVisibleMenuLineCount(app, entries, app.settingsPicker.cursor, maxHeight, baseCount, tailReserve, 1);
     count += 2 + visible;
   } else if (app.modelPicker) {
     const entries = app.getModelPickerEntries();
-    const visible = entries.length === 0
-      ? 1
-      : Math.min(entries.length, maxVisibleRows, getMenuVisibleRows(maxHeight, baseCount, tailReserve, 4));
+    const visible = entries.length === 0 ? 1 : getVisibleMenuLineCount(app, entries, app.modelPicker.cursor, maxHeight, baseCount, tailReserve, 4);
     count += 5 + visible;
   } else if (app.treeView) {
     const rows = app.getVisibleTreeRows();
-    const visible = rows.length === 0
-      ? 1
-      : Math.min(rows.length, maxVisibleRows, getMenuVisibleRows(maxHeight, baseCount, tailReserve, 2));
+    const entries = app.getTreePickerEntries();
+    const selectedIndex = Math.max(0, rows.findIndex((row: any) => row.item.id === app.treeView?.selectedId));
+    const visible = rows.length === 0 ? 1 : getVisibleMenuLineCount(app, entries, selectedIndex, maxHeight, baseCount, tailReserve, 2);
     count += 3 + visible;
   } else if (app.questionView) {
     count += getQuestionMenuLineCount(app, maxVisibleRows, getMenuVisibleRows(maxHeight, baseCount, tailReserve, 2));
   } else {
     const allSuggestions = app.getCommandSuggestionEntries();
     if (allSuggestions.length > 0) {
-      const visible = Math.min(
-        allSuggestions.length,
-        maxVisibleRows,
-        Math.max(1, getMenuVisibleRows(maxHeight, baseCount, tailReserve, 1)),
-      );
+      const visible = getVisibleMenuLineCount(app, allSuggestions, app.cmdSuggestionCursor, maxHeight, baseCount, tailReserve, 1);
       count += 2 + visible;
     }
   }
@@ -168,7 +161,6 @@ export function getMenuPromptPrefix(_app: AppState, kind: MenuPromptKind): strin
     case "connect": return "/connect ";
     case "settings": return "/settings ";
     case "extensions": return "/extensions ";
-    case "theme": return "/theme ";
     case "export": return "/export ";
     case "resume": return "/resume ";
     case "session": return "/session ";
@@ -180,6 +172,7 @@ export function getMenuPromptPrefix(_app: AppState, kind: MenuPromptKind): strin
     case "projects": return "/projects ";
     case "logout": return "/logout ";
   }
+  return "/";
 }
 
 export function getActiveMenuPromptKind(app: AppState): MenuPromptKind | null {

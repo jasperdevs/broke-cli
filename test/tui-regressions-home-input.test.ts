@@ -9,16 +9,10 @@ import type { Keypress } from "../src/tui/keypress.js";
 import { getCommandMatches } from "../src/tui/command-surface.js";
 
 describe("theme-derived panels", () => {
-  it("derives a distinct sidebar panel background for light themes", () => {
-    const originalTheme = getSettings().theme;
-    updateSetting("theme", "brokecli-light");
-    try {
-      const theme = currentTheme();
-      expect(theme.sidebarBackground).toBeTruthy();
-      expect(theme.sidebarBackground).not.toBe(theme.background);
-    } finally {
-      updateSetting("theme", originalTheme);
-    }
+  it("keeps the sidebar panel background distinct from the main app background", () => {
+    const theme = currentTheme();
+    expect(theme.sidebarBackground).toBeTruthy();
+    expect(theme.sidebarBackground).not.toBe(theme.background);
   });
 });
 
@@ -126,16 +120,16 @@ describe("input editing", () => {
 
   it("uses the normal prompt box as the filter input for picker menus", () => {
     const app = new App() as any;
-    app.openItemPicker("Theme", [
-      { id: "brokecli-dark", label: "Default Dark", detail: "dark" },
-      { id: "brokecli-light", label: "Default Light", detail: "light" },
-    ], () => {}, { kind: "theme" });
-    expect(app.input.getText()).toBe("/theme ");
+    app.openItemPicker("Projects", [
+      { id: "alpha", label: "Alpha Project", detail: "main app shell" },
+      { id: "lightbox", label: "Lightbox", detail: "asset browser" },
+    ], () => {}, { kind: "projects" });
+    expect(app.input.getText()).toBe("/projects ");
     for (const char of "light") app.handleKey({ name: char, char, ctrl: false, meta: false, shift: false });
-    expect(app.input.getText()).toBe("/theme light");
-    expect(app.getFilteredItems().map((item: any) => item.id)).toEqual(["brokecli-light"]);
+    expect(app.input.getText()).toBe("/projects light");
+    expect(app.getFilteredItems().map((item: any) => item.id)).toEqual(["lightbox"]);
     for (let i = 0; i < "light".length; i++) app.handleKey({ name: "backspace", char: "", ctrl: false, meta: false, shift: false });
-    expect(app.input.getText()).toBe("/theme ");
+    expect(app.input.getText()).toBe("/projects ");
     app.handleKey({ name: "backspace", char: "", ctrl: false, meta: false, shift: false });
     expect(app.itemPicker).toBeNull();
     expect(app.input.getText()).toBe("");

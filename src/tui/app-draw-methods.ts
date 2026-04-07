@@ -214,7 +214,7 @@ export function appendModelPicker(app: AppState, lines: string[], _maxTotal: num
     lines.push(` ${DIM}${app.modelLanePicker.model.displayName ?? app.modelLanePicker.model.modelId}${RESET}`);
     for (const entry of app.buildMenuView(app.getModelLanePickerEntries(), app.modelLanePicker.cursor, Math.max(1, _maxTotal))) {
       if (entry.selectIndex !== undefined) app.registerMenuClickTarget(clickTargets, lines, () => app.selectModelLaneEntry(entry.selectIndex!));
-      lines.push(entry.text);
+      lines.push(...entry.lines);
     }
     return;
   }
@@ -228,7 +228,7 @@ export function appendModelPicker(app: AppState, lines: string[], _maxTotal: num
   }
   for (const entry of app.buildMenuView(app.getModelPickerEntries(), picker.cursor, maxItems)) {
     if (entry.selectIndex !== undefined) app.registerMenuClickTarget(clickTargets, lines, () => app.selectModelEntry(entry.selectIndex!));
-    lines.push(entry.text);
+      lines.push(...entry.lines);
   }
 }
 
@@ -247,7 +247,7 @@ export function appendFilePicker(app: AppState, lines: string[], maxTotal: numbe
   const maxItems = Math.max(1, Math.min(getSettings().autocompleteMaxVisible, maxTotal));
   for (const entry of app.buildMenuView(app.getFilePickerEntries(), picker.cursor, maxItems)) {
     if (entry.selectIndex !== undefined) app.registerMenuClickTarget(clickTargets, lines, () => app.selectFileEntry(entry.selectIndex!));
-    lines.push(entry.text);
+      lines.push(...entry.lines);
   }
   if (picker.filtered.length === 0) lines.push(` ${DIM}  no matches${RESET}`);
 }
@@ -263,7 +263,7 @@ export function appendSettingsPicker(app: AppState, lines: string[], _maxTotal: 
   const maxItems = Math.max(1, Math.min(getSettings().autocompleteMaxVisible, _maxTotal));
   for (const entry of app.buildMenuView(app.getSettingsPickerEntries(), picker.cursor, maxItems)) {
     if (entry.selectIndex !== undefined) app.registerMenuClickTarget(clickTargets, lines, () => app.toggleSettingEntry(entry.selectIndex!));
-    lines.push(entry.text);
+      lines.push(...entry.lines);
   }
 }
 
@@ -278,7 +278,7 @@ export function appendItemPicker(app: AppState, lines: string[], _maxTotal: numb
   const maxItems = Math.max(1, Math.min(getSettings().autocompleteMaxVisible, _maxTotal));
   for (const entry of app.buildMenuView(app.getItemPickerEntries(), picker.cursor, maxItems)) {
     if (entry.selectIndex !== undefined) app.registerMenuClickTarget(clickTargets, lines, () => app.selectItemEntry(entry.selectIndex!));
-    lines.push(entry.text);
+    lines.push(...entry.lines);
   }
 }
 
@@ -301,7 +301,7 @@ export function appendTreePicker(app: AppState, lines: string[], maxItems: numbe
         app.selectTreeEntry();
       });
     }
-    lines.push(entry.text);
+    lines.push(...entry.lines);
   }
 }
 

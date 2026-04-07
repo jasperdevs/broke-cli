@@ -7,7 +7,6 @@ import { listProjects } from "../core/projects.js";
 import { listExtensions } from "../core/extensions.js";
 import { toggleExtensionEnabled } from "../core/permissions.js";
 import { Session } from "../core/session.js";
-import { listThemes, setPreviewTheme } from "../core/themes.js";
 import type { Keypress } from "../tui/keypress.js";
 import { buildHtmlExport, buildMarkdownExport, formatRelativeMinutes } from "./exports.js";
 import { SessionManager } from "../core/session-manager.js";
@@ -78,7 +77,6 @@ export function openSettingsMenu(args: {
       { key: "discoverExtensions", label: "Discover extensions", value: String(s.discoverExtensions), description: "Load extensions from configured paths" },
       { key: "discoverSkills", label: "Discover skills", value: String(s.discoverSkills), description: "Load skills from configured paths" },
       { key: "discoverPrompts", label: "Discover templates", value: String(s.discoverPrompts), description: "Load prompt templates from configured paths" },
-      { key: "discoverThemes", label: "Discover themes", value: String(s.discoverThemes), description: "Load themes from configured paths" },
       { key: "terminal.showImages", label: "Show image tags", value: String(s.terminal.showImages), description: "Show pasted image markers in chat" },
       { key: "images.blockImages", label: "Block images", value: String(s.images.blockImages), description: "Do not send pasted images to models" },
       { key: "autoLint", label: "Auto lint", value: String(s.autoLint), description: `Run ${s.lintCommand || "lint"} after model edits` },
@@ -151,39 +149,6 @@ export function openExtensionsMenu(app: AnyApp, hooks: AnyHooks): boolean {
     app.updateItemPickerItems?.(buildExtensionItems(), id);
   }, { closeOnSelect: false, kind: "extensions" });
   return true;
-}
-
-export function openThemeMenu(app: AnyApp): void {
-  const themes = listThemes();
-  const previousTheme = getSettings().theme;
-  const buildThemeItems = () => {
-    const favoriteThemes = getSettings().favoriteThemes ?? [];
-    const order = [...themes].sort((a, b) => {
-      const aDefault = a.key === "brokecli-dark" || a.key === "brokecli-light" ? 0 : 1;
-      const bDefault = b.key === "brokecli-dark" || b.key === "brokecli-light" ? 0 : 1;
-      if (aDefault !== bDefault) return aDefault - bDefault;
-      const aFav = favoriteThemes.includes(a.key) ? 0 : 1;
-      const bFav = favoriteThemes.includes(b.key) ? 0 : 1;
-      if (aFav !== bFav) return aFav - bFav;
-      return themes.findIndex((theme) => theme.key === a.key) - themes.findIndex((theme) => theme.key === b.key);
-    });
-    return order.map((theme) => ({
-      id: theme.key,
-      label: theme.label,
-      detail: `${favoriteThemes.includes(theme.key) ? "★ " : ""}${theme.dark ? "dark" : "light"}`,
-    }));
-  };
-  const themeItems = buildThemeItems();
-  const currentIdx = Math.max(0, themeItems.findIndex((theme) => theme.id === previousTheme));
-  app.openItemPicker("Theme", themeItems, (themeId: string) => {
-    setPreviewTheme(null);
-    updateSetting("theme", themeId);
-  }, {
-    initialCursor: currentIdx,
-    kind: "theme",
-    onPreview: (themeId: string) => setPreviewTheme(themeId),
-    onCancel: () => setPreviewTheme(null),
-  });
 }
 
 export function openExportMenu(args: { app: AnyApp; session: Session; activeModel: any; currentModelId: string; text: string; }): void {

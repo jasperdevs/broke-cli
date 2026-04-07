@@ -194,38 +194,41 @@ export function renderBudgetDashboard(options: {
   contextTokens?: number;
   contextLimit?: number;
   showContext?: boolean;
+  section?: "usage" | "efficiency" | "routing" | "context";
 }): string[] {
-  const { report, width, scopeLabel, contextTokens = 0, contextLimit = 0, showContext = false } = options;
+  const { report, width, scopeLabel, contextTokens = 0, contextLimit = 0, showContext = false, section = "usage" } = options;
   const innerWidth = Math.max(40, width - 2);
   const chartWidth = Math.max(12, Math.min(28, Math.floor(innerWidth / 3)));
   const totalTokenBase = Math.max(report.totalTokens, 1);
   const totalTurns = Math.max(report.totalTurns, 1);
-  const lines: string[] = [
+  const header = [
     "BUDGET",
     metric("scope", scopeLabel),
     metric("sessions", report.sessionCount.toLocaleString()),
     "",
-    "TOKENS",
+  ];
+  const usageLines = [
+    "USAGE",
     metric("Σ total", report.totalTokens.toLocaleString()),
     metric("↑ input", `${report.inputTokens.toLocaleString()}  ${pct(report.inputTokens, totalTokenBase)}`),
     metric("↓ output", `${report.outputTokens.toLocaleString()}  ${pct(report.outputTokens, totalTokenBase)}`),
     metric("input bar", bar(report.inputTokens, totalTokenBase, chartWidth)),
     metric("output bar", bar(report.outputTokens, totalTokenBase, chartWidth)),
     "",
-    "SCAFFOLDS",
+    "WORK SPLIT",
     metric("planner", `${report.plannerTokens.toLocaleString()}  ${pct(report.plannerTokens, totalTokenBase)}`),
     metric("executor", `${report.executorTokens.toLocaleString()}  ${pct(report.executorTokens, totalTokenBase)}`),
     metric("planner bar", bar(report.plannerTokens, totalTokenBase, chartWidth)),
     metric("exec bar", bar(report.executorTokens, totalTokenBase, chartWidth)),
   ];
-
-  if (showContext) {
-    lines.push(metric("live ctx", contextTokens.toLocaleString()));
-    lines.push(metric("% limit", contextLimit > 0 ? pct(contextTokens, contextLimit) : "n/a"));
-    lines.push(metric("ctx bar", bar(contextTokens, Math.max(contextLimit, 1), chartWidth)));
-  }
-
-  lines.push(
+  const efficiencyLines = [
+    "EFFICIENCY",
+    metric("turns", String(report.totalTurns)),
+    metric("avg / turn", report.avgTokensPerTurn.toLocaleString()),
+    metric("tools exposed", `${report.toolsExposed} (${(report.toolsExposed / totalTurns).toFixed(1)}/turn)`),
+    metric("tools used", `${report.toolsUsed} (${(report.toolsUsed / totalTurns).toFixed(1)}/turn)`),
+    metric("shell saves", String(report.shellRecoveries)),
+    metric("carry forwards", String(report.freshThreadCarryForwards)),
     "",
     "BLEED",
     metric("tool waste", `${report.toolExposureWaste}  ${pct(report.toolExposureWaste, Math.max(report.toolsExposed, 1))}`),
@@ -234,32 +237,42 @@ export function renderBudgetDashboard(options: {
     metric("compactions", `${report.autoCompactions}  ${pct(report.autoCompactions, totalTurns)}`),
     metric("tool bar", bar(report.toolExposureWaste, Math.max(report.toolsExposed, 1), chartWidth)),
     metric("plan bar", bar(report.plannerCacheMisses, Math.max(report.plannerCacheHits + report.plannerCacheMisses, 1), chartWidth)),
-    "",
-    "EFFICIENCY",
-    metric("turns", String(report.totalTurns)),
-    metric("avg / turn", report.avgTokensPerTurn.toLocaleString()),
-    metric("tools exposed", `${report.toolsExposed} (${(report.toolsExposed / totalTurns).toFixed(1)}/turn)`),
-    metric("tools used", `${report.toolsUsed} (${(report.toolsUsed / totalTurns).toFixed(1)}/turn)`),
-    metric("shell saves", String(report.shellRecoveries)),
-    metric("carry forwards", String(report.freshThreadCarryForwards)),
-  "",
-  "ROUTING",
+  ];
+  const routingLines = [
+    "ROUTING",
     metric("small turns", `${report.smallModelTurns}  ${pct(report.smallModelTurns, totalTurns)}`),
     metric("reuse", pct(report.plannerCacheHits, Math.max(report.plannerCacheHits + report.plannerCacheMisses, 1))),
     metric("plan hits", String(report.plannerCacheHits)),
     metric("plan misses", String(report.plannerCacheMisses)),
     metric("top bleed", `${report.topBleed.key}  ${report.topBleed.value}  ${report.topBleed.pct}`),
     metric("small bar", bar(report.smallModelTurns, totalTurns, chartWidth)),
-  );
-
+  ];
   if ((report.topToolBleeds ?? []).length > 0) {
-    lines.push("", "HOT TOOLS");
+    routingLines.push("", "HOT TOOLS");
     for (const entry of report.topToolBleeds ?? []) {
-      lines.push(metric(entry.tool, `${entry.tokens.toLocaleString()} tok  ${entry.calls} calls`));
+      routingLines.push(metric(entry.tool, `${entry.tokens.toLocaleString()} tok  ${entry.calls} calls`));
     }
   }
+  const contextLines = [
+    "CONTEXT",
+    metric("current", contextTokens > 0 ? contextTokens.toLocaleString() : "?"),
+    metric("limit", contextLimit > 0 ? contextLimit.toLocaleString() : "unknown"),
+    metric("% limit", contextLimit > 0 && contextTokens >= 0 ? pct(contextTokens, contextLimit) : "n/a"),
+    metric("ctx bar", contextLimit > 0 && contextTokens >= 0 ? bar(contextTokens, Math.max(contextLimit, 1), chartWidth) : "░".repeat(chartWidth)),
+    "",
+    "SESSION",
+    metric("turns", String(report.totalTurns)),
+    metric("input", report.inputTokens.toLocaleString()),
+    metric("output", report.outputTokens.toLocaleString()),
+    metric("top bleed", `${report.topBleed.key}  ${report.topBleed.pct}`),
+  ];
 
-  return lines;
+  let sectionLines = usageLines;
+  if (section === "efficiency") sectionLines = efficiencyLines;
+  else if (section === "routing") sectionLines = routingLines;
+  else if (section === "context") sectionLines = showContext ? contextLines : usageLines;
+
+  return [...header, ...sectionLines];
 }
 
 export function summarizeBudgetMetrics(metrics: SessionBudgetMetrics): string {

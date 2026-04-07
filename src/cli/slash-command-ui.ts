@@ -174,14 +174,31 @@ export async function handleUiSlashCommand(options: {
     case "hotkeys": {
       let bindings = loadKeybindings();
       let rebinding: keyof Keybindings | null = null;
-      const buildItems = () => getHotkeyLabels(bindings).map((entry) => ({
-        id: entry.id,
-        label: entry.label,
-        detail: rebinding === entry.id
-          ? "press shortcut · enter stop · backspace clear"
-          : entry.detail,
-      }));
+      const buildItems = () => [
+        ...getHotkeyLabels(bindings).map((entry) => ({
+          id: entry.id,
+          label: entry.label,
+          detail: rebinding === entry.id
+            ? "press shortcut · enter stop · backspace clear"
+            : entry.detail,
+        })),
+        {
+          id: "__reset__",
+          label: "Reset hotkeys",
+          detail: "restore defaults and clear custom bindings",
+          tone: "danger" as const,
+        },
+      ];
       app.openItemPicker("Hotkeys", buildItems(), (id: string) => {
+        if (id === "__reset__") {
+          for (const entry of getHotkeyLabels(bindings)) updateKeybinding(entry.id, "");
+          reloadKeybindings();
+          bindings = loadKeybindings();
+          rebinding = null;
+          app.updateItemPickerItems?.(buildItems(), "__reset__");
+          app.setStatus?.("Reset custom hotkeys.");
+          return;
+        }
         const key = id as keyof Keybindings;
         rebinding = rebinding === key ? null : key;
         app.updateItemPickerItems?.(buildItems(), id);

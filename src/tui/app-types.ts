@@ -40,6 +40,7 @@ export interface PickerItem {
   id: string;
   label: string;
   detail?: string;
+  tone?: "default" | "danger";
 }
 
 export interface BtwBubble {
@@ -58,6 +59,7 @@ export interface BudgetView {
     session: BudgetReport;
   };
   scope: "all" | "session";
+  section: "usage" | "efficiency" | "routing" | "context";
   scrollOffset: number;
 }
 
@@ -132,7 +134,6 @@ export type MenuPromptKind =
   | "connect"
   | "settings"
   | "extensions"
-  | "theme"
   | "export"
   | "resume"
   | "session"
@@ -153,7 +154,7 @@ export interface TreeRow {
 }
 
 export interface MenuEntry {
-  text: string;
+  lines: string[];
   selectIndex?: number;
 }
 

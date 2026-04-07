@@ -243,10 +243,10 @@ export function getQuestionBodyLines(view: QuestionView, width: number): string[
       ? selected ? `${OK()}[x]${RESET}` : `${DIM}[ ]${RESET}`
       : selected ? `${OK()}(•)${RESET}` : `${DIM}( )${RESET}`;
     const label = isCursor ? `${TXT()}${BOLD}${option.label}${RESET}` : `${TXT()}${option.label}${RESET}`;
-    return { text: ` ${arrow} ${mark} ${label}`, selectIndex: index };
+    return { lines: [` ${arrow} ${mark} ${label}`], selectIndex: index };
   });
 
-  lines.push(...optionEntries.map((entry) => entry.text));
+  lines.push(...optionEntries.flatMap((entry) => entry.lines));
   lines.push(` ${buildFooter(view)}`);
   return lines;
 }
@@ -266,7 +266,7 @@ export function getQuestionOptionEntries(view: QuestionView): MenuEntry[] {
       ? selected ? `${OK()}[x]${RESET}` : `${DIM}[ ]${RESET}`
       : selected ? `${OK()}(•)${RESET}` : `${DIM}( )${RESET}`;
     const label = isCursor ? `${TXT()}${BOLD}${option.label}${RESET}` : `${TXT()}${option.label}${RESET}`;
-    return { text: ` ${arrow} ${mark} ${label}`, selectIndex: index };
+    return { lines: [` ${arrow} ${mark} ${label}`], selectIndex: index };
   });
 }
 

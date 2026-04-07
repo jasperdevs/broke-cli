@@ -31,7 +31,13 @@ export function getModelLanePickerEntries(app: AppState): MenuEntry[] {
     const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
     const labelCol = isCursor ? `${TXT()}` : T();
     const assignment = option.assignedModelLabel ? ` ${DIM}(${option.assignedModelLabel})${RESET}` : "";
-    return { text: ` ${arrow}${labelCol}${option.label}${RESET}${assignment} ${DIM}${option.detail}${RESET}`, selectIndex: i };
+    return {
+      lines: [
+        ` ${arrow}${labelCol}${option.label}${RESET}${assignment}`,
+        `    ${DIM}${option.detail}${RESET}`,
+      ],
+      selectIndex: i,
+    };
   });
 }
 

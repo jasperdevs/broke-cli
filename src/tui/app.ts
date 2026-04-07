@@ -88,7 +88,7 @@ export class App {
     title: string;
     items: PickerItem[];
     cursor: number;
-    kind?: "model" | "mode" | "name" | "login" | "connect" | "settings" | "extensions" | "theme" | "export" | "resume" | "session" | "hotkeys" | "tree" | "templates" | "skills" | "changelog" | "projects" | "logout";
+    kind?: "model" | "mode" | "name" | "login" | "connect" | "settings" | "extensions" | "export" | "resume" | "session" | "hotkeys" | "tree" | "templates" | "skills" | "changelog" | "projects" | "logout";
     previewHint?: string;
     onPreview?: (id: string) => void;
     onCancel?: () => void;

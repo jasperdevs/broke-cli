@@ -1,18 +1,60 @@
 import { currentTheme } from "../core/themes.js";
 import { BOLD, DIM, RESET } from "../utils/ansi.js";
-import { T, TXT } from "./app-shared.js";
+import { ERR, MUTED, T, TXT } from "./app-shared.js";
+import { wordWrap } from "./render/formatting.js";
 import type { MenuEntry, ModelOption, PickerItem, SettingEntry } from "./app-types.js";
 
 type AppState = any;
 
-export function buildMenuView(_app: AppState, entries: MenuEntry[], cursor: number, maxVisible: number): MenuEntry[] {
-  if (entries.length <= maxVisible) return entries;
+function lineCount(entry: MenuEntry): number {
+  return Math.max(1, entry.lines.length);
+}
+
+function getMenuBodyWidth(app: AppState): number {
+  return Math.max(18, app.screen.mainWidth - 6);
+}
+
+function buildSelectableEntry(prefix: string, primary: string, detail: string | undefined, width: number, detailColor = DIM): string[] {
+  const firstLine = `${prefix}${primary}${RESET}`;
+  if (!detail) return [firstLine];
+  const detailLines = wordWrap(detail, Math.max(12, width)).map((line) => `    ${detailColor}${line}${RESET}`);
+  return [firstLine, ...detailLines];
+}
+
+function wrapMenuLabel(prefix: string, label: string, width: number): string[] {
+  const wrapped = wordWrap(label, Math.max(10, width));
+  return wrapped.map((line, index) => index === 0 ? `${prefix}${line}${RESET}` : `    ${line}${RESET}`);
+}
+
+export function buildMenuView(_app: AppState, entries: MenuEntry[], cursor: number, maxVisibleLines: number): MenuEntry[] {
+  if (entries.length === 0) return entries;
+  const totalLines = entries.reduce((sum, entry) => sum + lineCount(entry), 0);
+  if (totalLines <= maxVisibleLines) return entries;
   let cursorEntryIndex = entries.findIndex((entry) => entry.selectIndex === cursor);
   if (cursorEntryIndex < 0) cursorEntryIndex = entries.findIndex((entry) => entry.selectIndex !== undefined);
   if (cursorEntryIndex < 0) cursorEntryIndex = 0;
-  let start = Math.max(0, cursorEntryIndex - Math.floor(maxVisible / 2));
-  if (start + maxVisible > entries.length) start = Math.max(0, entries.length - maxVisible);
-  return entries.slice(start, start + maxVisible);
+  let start = cursorEntryIndex;
+  let end = cursorEntryIndex + 1;
+  let used = lineCount(entries[cursorEntryIndex]!);
+
+  while (start > 0 || end < entries.length) {
+    const canGrowUp = start > 0;
+    const canGrowDown = end < entries.length;
+    const nextUp = canGrowUp ? lineCount(entries[start - 1]!) : Number.POSITIVE_INFINITY;
+    const nextDown = canGrowDown ? lineCount(entries[end]!) : Number.POSITIVE_INFINITY;
+    const pickUp = canGrowUp && (!canGrowDown || nextUp <= nextDown);
+    const nextCount = pickUp ? nextUp : nextDown;
+    if (used + nextCount > maxVisibleLines) break;
+    if (pickUp) {
+      start--;
+      used += nextUp;
+    } else {
+      used += nextDown;
+      end++;
+    }
+  }
+
+  return entries.slice(start, end);
 }
 
 export function registerMenuClickTarget(_app: AppState, targets: Array<{ lineIndex: number; action: () => void }>, lines: string[], action: () => void): void {
@@ -21,35 +63,50 @@ export function registerMenuClickTarget(_app: AppState, targets: Array<{ lineInd
 
 export function getFilePickerEntries(app: AppState): MenuEntry[] {
   if (!app.filePicker) return [];
+  const width = getMenuBodyWidth(app);
   return app.filePicker.filtered.map((file: string, i: number) => {
     const isCursor = i === app.filePicker.cursor;
     const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
     const color = isCursor ? `${TXT()}${BOLD}` : DIM;
-    return { text: ` ${arrow}${color}${file}${RESET}`, selectIndex: i };
+    return { lines: wrapMenuLabel(` ${arrow}${color}`, file, width), selectIndex: i };
   });
 }
 
 export function getSettingsPickerEntries(app: AppState): MenuEntry[] {
   if (!app.settingsPicker) return [];
+  const width = getMenuBodyWidth(app);
   const filtered = app.getFilteredSettings();
   return filtered.map((entry: SettingEntry, i: number) => {
     const isCursor = i === app.settingsPicker.cursor;
     const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
     const nameCol = isCursor ? `${TXT()}${BOLD}` : T();
-    const pad = " ".repeat(Math.max(1, 22 - entry.label.length));
     const valColor = entry.value === "true" ? T() : DIM;
-    return { text: ` ${arrow}${nameCol}${entry.label}${RESET}${pad}${valColor}${entry.value}${RESET}`, selectIndex: i };
+    return {
+      lines: buildSelectableEntry(
+        ` ${arrow}${nameCol}`,
+        `${entry.label}${DIM} · ${valColor}${entry.value}`,
+        entry.description,
+        width,
+      ),
+      selectIndex: i,
+    };
   });
 }
 
 export function getItemPickerEntries(app: AppState): MenuEntry[] {
   if (!app.itemPicker) return [];
+  const width = getMenuBodyWidth(app);
   const filtered = app.getFilteredItems();
   return filtered.map((item: PickerItem, i: number) => {
     const isCursor = i === app.itemPicker.cursor;
     const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
-    const labelCol = isCursor ? `${TXT()}${BOLD}` : T();
-    return { text: ` ${arrow}${labelCol}${item.label}${RESET}${item.detail ? ` ${DIM}${item.detail}${RESET}` : ""}`, selectIndex: i };
+    const labelCol = item.tone === "danger"
+      ? ERR()
+      : isCursor ? `${TXT()}${BOLD}` : T();
+    return {
+      lines: buildSelectableEntry(` ${arrow}${labelCol}`, item.label, item.detail, width, item.tone === "danger" ? ERR() : MUTED()),
+      selectIndex: i,
+    };
   });
 }
 
@@ -74,18 +131,27 @@ export function getModelPickerEntries(app: AppState): MenuEntry[] {
   const entries: MenuEntry[] = [];
   let currentIdx = 0;
   const showProviderHeaders = byProvider.size > 1;
-  entries.push({ text: ` ${DIM}enter choose use · space favorite · type filter${RESET}` });
+  const width = getMenuBodyWidth(app);
+  entries.push({ lines: [` ${DIM}enter choose use · space favorite · type filter${RESET}`] });
   for (const [provider, opts] of byProvider) {
-    if (showProviderHeaders) entries.push({ text: ` ${DIM}${provider}${RESET}` });
+    if (showProviderHeaders) entries.push({ lines: [` ${DIM}${provider}${RESET}`] });
     for (const opt of opts) {
       const isCursor = currentIdx === app.modelPicker.cursor;
       const pin = opt.active ? ` ${T()}*${RESET}` : "";
       const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
       const nameCol = isCursor ? `${TXT()}${BOLD}` : T();
       const badges = opt.badges && opt.badges.length > 0
-        ? ` ${DIM}${opt.badges.map((badge) => badgeLabels[badge] ?? badge).join(" · ")}${RESET}`
-        : "";
-      entries.push({ text: `  ${arrow}${nameCol}${opt.displayName ?? opt.modelId}${RESET}${pin}${badges}`, selectIndex: currentIdx });
+        ? opt.badges.map((badge) => badgeLabels[badge] ?? badge).join(" · ")
+        : undefined;
+      entries.push({
+        lines: buildSelectableEntry(
+          `  ${arrow}${nameCol}`,
+          `${opt.displayName ?? opt.modelId}${pin}`,
+          badges,
+          width,
+        ),
+        selectIndex: currentIdx,
+      });
       currentIdx++;
     }
   }
@@ -96,12 +162,15 @@ export function getCommandSuggestionEntries(app: AppState): MenuEntry[] {
   const matches = app.getCommandMatches();
   if (matches.length === 0) return [];
   const cursor = Math.min(app.cmdSuggestionCursor, matches.length - 1);
+  const width = getMenuBodyWidth(app);
   return matches.map((entry: any, i: number) => {
     const arrow = i === cursor ? `${T()}> ${RESET}` : "  ";
     const nameColor = i === cursor ? `${TXT()}${BOLD}` : T();
-    const pad = " ".repeat(Math.max(1, 16 - entry.name.length));
     const detail = entry.hotkey ? `${entry.desc} (${entry.hotkey})` : entry.desc;
-    return { text: ` ${arrow}${nameColor}${entry.name}${RESET}${pad}${DIM}${detail}${RESET}`, selectIndex: i };
+    return {
+      lines: buildSelectableEntry(` ${arrow}${nameColor}`, entry.name, detail, width),
+      selectIndex: i,
+    };
   });
 }
 

@@ -3,7 +3,8 @@ import stripAnsi from "strip-ansi";
 import type { Keypress } from "../src/tui/keypress.js";
 import { App } from "../src/tui/app.js";
 import { Session } from "../src/core/session.js";
-import { currentTheme, setPreviewTheme } from "../src/core/themes.js";
+import { currentTheme } from "../src/core/themes.js";
+import { getSettings, updateSetting } from "../src/core/config.js";
 import { renderStaticMessages } from "../src/tui/render/messages.js";
 import { wordWrap } from "../src/tui/render/formatting.js";
 
@@ -39,12 +40,14 @@ describe("budget inspector", () => {
     app.openBudgetView("Budget Inspector", { all: { ...report, sessionCount: 4 }, session: report }, "all");
     app.drawImmediate();
     expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("Budget Inspector");
-    expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("tab current");
+    expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("s current");
+    expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("tab next");
     expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("all sessions");
     expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("BUDGET");
-    app.handleKey({ name: "tab", char: "", ctrl: false, meta: false, shift: false } as Keypress);
+    app.handleKey({ name: "s", char: "s", ctrl: false, meta: false, shift: false } as Keypress);
     expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("current session");
-    expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("tab all");
+    app.handleKey({ name: "tab", char: "", ctrl: false, meta: false, shift: false } as Keypress);
+    expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("[Efficiency]");
     app.handleKey({ name: "escape", char: "", ctrl: false, meta: false, shift: false } as Keypress);
     expect(rendered.map((line) => stripAnsi(line)).join("\n")).not.toContain("Budget Inspector");
   });
@@ -93,9 +96,10 @@ describe("session tree", () => {
 });
 
 describe("theme rendering", () => {
-  it("applies theme text color to assistant markdown on light themes", () => {
-    setPreviewTheme("brokecli-light");
+  it("keeps markdown rendering bound to the active palette and plan mode tint", () => {
+    const previousMode = getSettings().mode;
     try {
+      updateSetting("mode", "plan");
       const lines = renderStaticMessages({
         messages: [{ role: "assistant", content: "Plain assistant text" }],
         maxWidth: 40,
@@ -107,8 +111,9 @@ describe("theme rendering", () => {
         bold: "\u001b[1m",
       });
       expect(lines.join("\n")).toContain(currentTheme().text);
+      expect(currentTheme().plan).toBe(currentTheme().primary);
     } finally {
-      setPreviewTheme(null);
+      updateSetting("mode", previousMode);
     }
   });
 });

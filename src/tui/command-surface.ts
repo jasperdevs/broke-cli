@@ -28,7 +28,6 @@ export const COMMANDS: CommandEntry[] = [
   { name: "model", desc: "switch model and assign routing slots", hotkey: "ctrl+l" },
   { name: "btw", desc: "ask an ephemeral side question" },
   { name: "mode", desc: "switch build or plan mode" },
-  { name: "theme", desc: "change color theme" },
   { name: "compact", desc: "compress context" },
   { name: "update", desc: "update app" },
   { name: "budget", desc: "inspect token pressure" },

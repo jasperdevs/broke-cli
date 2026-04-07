@@ -110,7 +110,7 @@ export function openBudgetView(
   reports: { all: BudgetReport; session: BudgetReport },
   scope: "all" | "session" = "all",
 ): void {
-  app.budgetView = { title, reports, scope, scrollOffset: 0 };
+  app.budgetView = { title, reports, scope, section: scope === "session" ? "context" : "usage", scrollOffset: 0 };
   app.drawNow();
 }
 

@@ -40,7 +40,7 @@ export interface SlashCommandApp {
       onKey?: (key: Keypress) => boolean;
       secondaryHint?: string;
       closeOnSelect?: boolean;
-      kind?: "login" | "connect" | "mode" | "name" | "extensions" | "theme" | "export" | "resume" | "session" | "hotkeys" | "tree" | "templates" | "skills" | "changelog" | "projects" | "logout";
+      kind?: "login" | "connect" | "mode" | "name" | "extensions" | "export" | "resume" | "session" | "hotkeys" | "tree" | "templates" | "skills" | "changelog" | "projects" | "logout";
     },
   ): void;
   openTreeView?(title: string, session: Session, onSelect: (entryId: string) => void | Promise<void>): void;

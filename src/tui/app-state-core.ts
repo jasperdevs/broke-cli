@@ -148,8 +148,10 @@ export function renderSidebarFooter(app: AppState): string[] {
     showTokens: settings.showTokens,
     statusParts,
     tokenParts: app.renderTokenSummaryParts(),
-    contextUsed: app.contextLimitTokens > 0 ? app.contextUsed : undefined,
-    contextTokens: app.contextLimitTokens > 0 ? `${fmtTokens(app.contextTokenCount)}/${fmtTokens(app.contextLimitTokens)}` : undefined,
+    contextUsed: app.contextLimitTokens > 0 && app.contextTokenCount >= 0 ? app.contextUsed : undefined,
+    contextTokens: app.contextLimitTokens > 0
+      ? `${app.contextTokenCount >= 0 ? fmtTokens(app.contextTokenCount) : "?"}/${fmtTokens(app.contextLimitTokens)}`
+      : undefined,
     colors: {
       accent: app.getModeAccent(),
       muted: MUTED(),
@@ -209,9 +211,9 @@ export function primeEscapeTree(app: AppState): void {
 export function setContextUsage(app: AppState, tokens: number, limit: number): void {
   app.contextTokenCount = tokens;
   app.contextLimitTokens = limit;
-  app.contextUsed = limit > 0 ? Math.min(100, (tokens / limit) * 100) : 0;
+  app.contextUsed = limit > 0 && tokens >= 0 ? Math.min(100, (tokens / limit) * 100) : 0;
   app.animContext.set(app.contextUsed);
-  if (!app.isStreaming) app.animContext.sync();
+  if (!app.isStreaming && tokens >= 0) app.animContext.sync();
   app.draw();
 }
 

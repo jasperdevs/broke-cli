@@ -56,11 +56,11 @@ export function buildSidebarFooter(options: {
     dim: string;
   };
 }): string[] {
-  const { showTokens, width, tokenParts, contextUsed, contextTokens, colors } = options;
+  const { showTokens, width, statusParts, tokenParts, contextUsed, contextTokens, colors } = options;
   if (!showTokens) return [];
   const footer = buildSidebarFooterLines({
     width,
-    statusParts: [],
+    statusParts,
     tokenParts,
     contextUsed,
     contextTokens,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { App } from "../src/tui/app.js";
-import { currentTheme, listThemes, setPreviewTheme } from "../src/core/themes.js";
+import { currentTheme, listThemes } from "../src/core/themes.js";
 import { getConfiguredModelPreference, getSettings, updateModelPreference, updateSetting } from "../src/core/config.js";
 import stripAnsi from "strip-ansi";
 
@@ -55,7 +55,7 @@ describe("picker menus", () => {
     expect(app.itemPicker).toBeNull();
   });
 
-  it("uses plain-language model picker copy and restores theme preview on escape", () => {
+  it("uses plain-language model picker copy", () => {
     const app = new App() as any;
     app.openModelPicker(
       [
@@ -73,24 +73,6 @@ describe("picker menus", () => {
     expect(pickerText).toContain("space favorite");
     expect(pickerText).not.toContain("a assign lane");
     expect(pickerText).not.toContain("Scope:");
-
-    const originalTheme = getSettings().theme;
-    const themes = listThemes().slice(0, 4);
-    try {
-      updateSetting("theme", themes[0].key);
-      app.openItemPicker("Theme", themes.map((theme) => ({ id: theme.key, label: theme.label })), () => {}, {
-        initialCursor: 0,
-        onPreview: (themeId: string) => setPreviewTheme(themeId),
-        onCancel: () => setPreviewTheme(null),
-      });
-      app.handleKey({ name: "down", char: "", ctrl: false, meta: false, shift: false });
-      expect(currentTheme().key).toBe(themes[1].key);
-      app.handleKey({ name: "escape", char: "", ctrl: false, meta: false, shift: false });
-      expect(currentTheme().key).toBe(themes[0].key);
-    } finally {
-      setPreviewTheme(null);
-      updateSetting("theme", originalTheme);
-    }
   });
 
   it("keeps pickers usable at the bottom of the list instead of dropping the cursor out of range", () => {
@@ -214,8 +196,12 @@ describe("picker menus", () => {
     const output = rendered.map((line) => stripAnsi(line)).join("\n");
     expect(output).toContain("Assign selected model");
     expect(output).toContain("Use everywhere");
-    expect(output).toContain("Use for fast");
-    expect(output).toContain("chat naming");
+    app.handleKey({ name: "down", char: "", ctrl: false, meta: false, shift: false });
+    app.handleKey({ name: "down", char: "", ctrl: false, meta: false, shift: false });
+    app.drawImmediate();
+    const scrolledOutput = rendered.map((line) => stripAnsi(line)).join("\n");
+    expect(scrolledOutput).toContain("Use for fast");
+    expect(scrolledOutput).toContain("chat naming");
   });
 
   it("shows current lane ownership and lets one action assign every lane", () => {
@@ -263,17 +249,14 @@ describe("picker menus", () => {
       app.drawImmediate();
       const output = rendered.map((line) => stripAnsi(line)).join("\n");
       expect(output).toContain("Use everywhere");
-      expect(output).toContain("Use for fast (GPT-4o mini)");
       expect(output).toContain("Use for chat (already selected)");
-      expect(output).toContain("Use for /btw");
-      app.handleKey({ name: "down", char: "", ctrl: false, meta: false, shift: false });
       app.handleKey({ name: "down", char: "", ctrl: false, meta: false, shift: false });
       app.handleKey({ name: "down", char: "", ctrl: false, meta: false, shift: false });
       app.handleKey({ name: "down", char: "", ctrl: false, meta: false, shift: false });
       app.handleKey({ name: "down", char: "", ctrl: false, meta: false, shift: false });
       app.drawImmediate();
       const scrolledOutput = rendered.map((line) => stripAnsi(line)).join("\n");
-      expect(scrolledOutput).toContain("Use for design/UI (already selected)");
+      expect(scrolledOutput).toContain("Use for /btw");
       app.selectModelLaneEntry(0);
       expect(selectedCalls).toEqual([["openai", "gpt-5.4-mini"]]);
       expect(assignedCalls).toEqual([
@@ -321,29 +304,24 @@ describe("thinking preview", () => {
 });
 
 describe("theme catalog", () => {
-  it("keeps BrokeCLI dark and light at the top of the picker", () => {
+  it("collapses to the single built-in palette while switching is disabled", () => {
     const themes = listThemes();
-    expect(themes[0]?.key).toBe("brokecli-dark");
-    expect(themes[1]?.key).toBe("brokecli-light");
-    expect(themes.length).toBeGreaterThan(10);
+    expect(themes).toHaveLength(1);
+    expect(themes[0]?.key).toBe("brokecli");
   });
 
-  it("applies the active theme background across rendered rows and keeps dark background empty", () => {
-    const app = new App() as any;
-    const previousTheme = getSettings().theme;
-    let rendered: string[] = [];
+  it("tints the built-in palette when plan mode is active", () => {
+    const previousMode = getSettings().mode;
     try {
-      updateSetting("theme", "brokecli-light");
-      app.messages = [{ role: "user", content: "hello" }];
-      app.input.paste("test");
-      app.screen = { height: 12, width: 40, hasSidebar: false, mainWidth: 40, sidebarWidth: 20, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
-      app.drawImmediate();
-      expect(rendered[0]).toContain(currentTheme().background);
-      updateSetting("theme", "brokecli-dark");
-      setPreviewTheme(null);
-      expect(currentTheme().background).toBe("");
+      updateSetting("mode", "build");
+      const buildTheme = currentTheme();
+      updateSetting("mode", "plan");
+      const planTheme = currentTheme();
+      expect(planTheme.primary).not.toBe(buildTheme.primary);
+      expect(planTheme.background).not.toBe(buildTheme.background);
+      expect(planTheme.sidebarBackground).not.toBe(buildTheme.sidebarBackground);
     } finally {
-      updateSetting("theme", previousTheme);
+      updateSetting("mode", previousMode);
     }
   });
 });

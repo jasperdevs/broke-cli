@@ -26,8 +26,8 @@ function formatContextPercentLabel(contextPercent: number): string {
 
 function buildContextMeter(width: number, contextPercent: number, colors: SidebarFooterColors): string {
   const percent = formatContextPercentLabel(contextPercent);
-  const available = Math.max(8, width - percent.length - 3);
-  const fillWidth = Math.max(8, Math.min(12, available));
+  const available = Math.max(10, width - percent.length - 3);
+  const fillWidth = Math.max(10, Math.min(16, available));
   const ratio = Math.max(0, Math.min(1, contextPercent / 100));
   const filled = ratio > 0
     ? Math.max(1, Math.min(fillWidth, Math.round(ratio * fillWidth)))
@@ -97,7 +97,7 @@ export function buildSidebarFooterLines(options: {
   contextTokens?: string;
   colors: SidebarFooterColors;
 }): string[] {
-  const { width, tokenParts, contextUsed, contextTokens, colors } = options;
+  const { width, statusParts, tokenParts, contextUsed, contextTokens, colors } = options;
   const lines: string[] = [];
   const costLine = tokenParts.find((part) => part.startsWith("$") || part === "local/unpriced");
   const valueLines = tokenParts.filter((part) => part !== costLine);
@@ -111,6 +111,8 @@ export function buildSidebarFooterLines(options: {
   }
 
   if (costLine) {
+    if (statusParts.length > 0) lines.push(`${colors.dim}${statusParts.join(" · ")}${RESET}`);
+    if (statusParts.length > 0) lines.push("");
     lines.push(`${colors.text}${costLine}${RESET}`);
   }
 
@@ -118,10 +120,14 @@ export function buildSidebarFooterLines(options: {
     lines.push(`${colors.muted}${part}${RESET}`);
   }
 
-  if (contextUsed !== undefined && contextTokens) {
+  if (!costLine && statusParts.length > 0) {
+    lines.push(`${colors.dim}${statusParts.join(" · ")}${RESET}`);
+  }
+
+  if (contextTokens) {
     if (valueLines.length > 0 || costLine) lines.push("");
     lines.push(`${colors.text}${contextTokens} ctx${RESET}`);
-    lines.push(buildContextMeter(width, contextUsed, colors));
+    lines.push(contextUsed !== undefined ? buildContextMeter(width, contextUsed, colors) : `${colors.dim}${"▱".repeat(Math.max(10, Math.min(16, width - 6)))}${RESET} ${colors.dim}?${RESET}`);
   }
 
   return lines;
