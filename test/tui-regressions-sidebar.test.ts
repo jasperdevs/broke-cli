@@ -53,43 +53,31 @@ describe("sidebar scrolling", () => {
     expect(app.shouldEnableMenuMouse()).toBe(true);
   });
 
-  it("still supports expanding directories through keyboard-driven sidebar state", () => {
-    const app = new App() as any;
-    app.messages = [{ role: "user", content: "hello" }];
-    app.screen = { height: 18, width: 100, hasSidebar: true, mainWidth: 73, sidebarWidth: 24, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
-    app.sidebarTreeOpen = true;
-    app.sidebarFileTree = [{ name: "src", isDir: true, children: ["app.ts"], depth: 0 }];
-    app.sidebarExpandedDirs.add("src");
-    expect(app.sidebarExpandedDirs.has("src")).toBe(true);
-  });
-
-  it("keeps long file trees scrollable and uses unicode disclosure triangles", () => {
+  it("keeps long sidebar summaries scrollable", () => {
     const app = new App() as any;
     app.messages = [{ role: "user", content: "hi" }];
-    app.sidebarTreeOpen = true;
     app.sidebarFocused = true;
     app.buildSidebarLines = () => [
-      "New Session",
+      "Apr 7 #4821",
       "v0.0.1",
       "",
-      "provider/model",
+      "Chat provider/model",
+      "Fast provider/model",
+      "Review provider/model",
+      "Planning provider/model",
+      "Design/UI provider/model",
+      "Architecture provider/model",
       "",
       "Directory",
       "  ~/repo",
-      "",
-      "▾ Files",
-      "  ▾ src/",
-      ...Array.from({ length: 12 }, (_, i) => `    file-${i}.ts`),
+      ...Array.from({ length: 12 }, (_, i) => `Connection ${i}`),
     ];
     const before = app.renderSidebar(12).map((line: string) => stripAnsi(line));
     app.scrollSidebar(4, 12);
     const after = app.renderSidebar(12).map((line: string) => stripAnsi(line));
-    expect(before.join("\n")).toContain("src/");
+    expect(before.join("\n")).toContain("Directory");
     expect(after[0]).toContain("^ more");
-    expect(after.join("\n")).toContain("file-");
-    const lines = app.buildSidebarLines().map((line: string) => stripAnsi(line));
-    expect(lines).toContain("▾ Files");
-    expect(lines).toContain("  ▾ src/");
+    expect(after.join("\n")).toContain("Connection");
   });
 
   it("scrolls transcript outside menus and still keeps the sidebar footer visible during active menus", () => {
@@ -106,10 +94,7 @@ describe("sidebar scrolling", () => {
     app.messages = [{ role: "user", content: "hello" }];
     app.sidebarFocused = true;
     app.screen = { height: 18, width: 100, hasSidebar: true, mainWidth: 73, sidebarWidth: 24, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
-    app.sidebarTreeOpen = true;
-    app.sidebarFileTree = [{ name: "src", isDir: true, children: Array.from({ length: 12 }, (_, i) => `file-${i}.ts`), depth: 0 }];
-    app.sidebarExpandedDirs.add("src");
-    app.sidebarExpandedDirs.add("src:all");
+    app.buildSidebarLines = () => Array.from({ length: 24 }, (_, i) => `sidebar ${i}`);
     app.openItemPicker("Theme", listThemes().slice(0, 5).map((theme) => ({ id: theme.key, label: theme.label })), () => {});
     app.handleKey({ name: "scrolldown", char: "", ctrl: false, meta: false, shift: false });
     expect(app.sidebarScrollOffset).toBeGreaterThan(0);
@@ -228,7 +213,8 @@ describe("sidebar scrolling", () => {
     expect(output).toContain("Commands");
     expect(output).toContain("Directory");
     expect(output).toContain("Design/UI");
-    expect(output).toContain("same as chat");
+    expect(output).not.toContain("same as chat");
+    expect(output).not.toContain("Files");
   });
 
   it("scrolls transcript lines with wheel and page keys", () => {
@@ -245,19 +231,15 @@ describe("sidebar scrolling", () => {
     const app = new App() as any;
     app.messages = [{ role: "user", content: "hello" }];
     app.screen = { height: 18, width: 100, hasSidebar: true, mainWidth: 73, sidebarWidth: 24, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
-    app.sidebarTreeOpen = true;
     app.buildSidebarLines = () => [
-      "New Session",
+      "Apr 7 #4821",
       "v0.0.1",
       "",
       "provider/model",
       "",
       "Directory",
       "  ~/repo",
-      "",
-      "▾ Files",
-      "  ▾ src/",
-      ...Array.from({ length: 18 }, (_, i) => `    file-${i}.ts`),
+      ...Array.from({ length: 18 }, (_, i) => `lane ${i}`),
     ];
 
     expect(app.sidebarScrollOffset).toBe(0);
@@ -271,23 +253,20 @@ describe("sidebar scrolling", () => {
     app.messages = [{ role: "user", content: "hello" }];
     app.screen = { height: 18, width: 100, hasSidebar: true, mainWidth: 73, sidebarWidth: 24, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
     app.buildSidebarLines = () => [
-      "New Session",
+      "Apr 7 #4821",
       "v0.0.1",
       "",
       "provider/model",
       "",
       "Directory",
       "  ~/repo",
-      "",
-      "▾ Files",
-      "  ▾ src/",
-      ...Array.from({ length: 18 }, (_, i) => `    file-${i}.ts`),
+      ...Array.from({ length: 18 }, (_, i) => `lane ${i}`),
     ];
     app.handleKey({ name: "scrolldown", char: "95,8", ctrl: false, meta: false, shift: false });
     expect(app.sidebarScrollOffset).toBeGreaterThan(0);
   });
 
-  it("keeps the sidebar footer visible while composing plain text but hides it while streaming", () => {
+  it("keeps the sidebar footer visible while composing plain text and while streaming", () => {
     const app = new App() as any;
     const originalShowTokens = getSettings().showTokens;
     updateSetting("showTokens", true);
@@ -302,7 +281,9 @@ describe("sidebar scrolling", () => {
 
       app.input.clear();
       app.setStreaming(true);
-      expect(app.renderSidebarFooter()).toEqual([]);
+      const footerWhileStreaming = app.renderSidebarFooter().map((line: string) => stripAnsi(line)).join("\n");
+      expect(footerWhileStreaming).toContain("8.8k total");
+      expect(footerWhileStreaming).toContain("120k ctx");
       if (app.spinnerTimer) clearInterval(app.spinnerTimer);
     } finally {
       updateSetting("showTokens", originalShowTokens);

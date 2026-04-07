@@ -26,6 +26,7 @@ import { APP_VERSION } from "../core/app-meta.js";
 import type { BudgetView, ChatMessage, ModelLaneOption, ModelOption, PendingImage, PendingMessage, PickerItem, QuestionView, SettingEntry, TodoItem, TreeView, UpdateNotice } from "./app-types.js";
 import type { ModelPreferenceSlot } from "../core/config.js";
 import type { ModelRuntime } from "../ai/providers.js";
+import { createDefaultSessionName } from "../core/session.js";
 
 export interface App extends AppStateCoreMethods, AppStateMessageMethods, AppStateUiMethods, AppMenuMethods, AppInputMethods, AppRenderMethods, AppDrawMethods {}
 
@@ -105,7 +106,7 @@ export class App {
   private pendingImages: PendingImage[] = [];
   private gitBranch = "";
   private gitDirty = false;
-  private sessionName = "New Session";
+  private sessionName = createDefaultSessionName();
   private appVersion = APP_VERSION;
   private updateNotice: UpdateNotice | null = null;
   private mcpConnections: string[] = [];
@@ -128,7 +129,7 @@ export class App {
   private compactTokens = 0;
   private sidebarFileTree: SidebarTreeItem[] | null = null;
   private sidebarExpandedDirs = new Set<string>();
-  private sidebarTreeOpen = true;
+  private sidebarTreeOpen = false;
   private sidebarScrollOffset = 0;
   private sidebarFocused = false;
   private hideCursorUntil = 0;

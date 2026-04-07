@@ -14,7 +14,6 @@ import { renderHomeBox as buildRenderHomeBox, renderHomeView as buildRenderHomeV
 import { renderStaticMessages as buildStaticMessages } from "./render/messages.js";
 import { renderToolCallBlock as buildToolCallBlock, renderMessageOverlays } from "./render/chat.js";
 import { buildSidebarLines as composeSidebarLines, renderSidebarViewport } from "./render/sidebar-view.js";
-import { loadSidebarFileTree } from "./sidebar.js";
 import { fmtTokens, wordWrap } from "./render/formatting.js";
 import { ACCENT_2, APP_DIR, BORDER, ERR, HOME_TIPS, MUTED, OK, T, TXT, USER_BG, USER_TXT, WARN } from "./app-shared.js";
 
@@ -36,6 +35,7 @@ export function renderStaticMessages(app: AppState, maxWidth: number): string[] 
       imageTagBg: currentTheme().imageTagBg,
       userBg: USER_BG(),
       userText: USER_TXT(),
+      userAccent: OK(),
       border: BORDER(),
       muted: MUTED(),
       text: TXT(),
@@ -263,10 +263,9 @@ export function renderUpdateBanner(app: AppState, width: number): string[] {
 }
 
 export function buildSidebarLines(app: AppState): string[] {
-  if (app.sidebarTreeOpen) app.sidebarFileTree = loadSidebarFileTree(app.cwd);
   const resolveSlotLabel = (slot: "default" | "small" | "review" | "planning" | "ui" | "architecture"): string => {
     const configured = getConfiguredModelPreference(slot);
-    if (!configured) return "same as chat";
+    if (!configured) return getPrettyModelName(app.modelName, app.modelProviderId);
     const slashIndex = configured.indexOf("/");
     const providerId = slashIndex > 0 ? configured.slice(0, slashIndex) : app.modelProviderId;
     const modelId = slashIndex > 0 ? configured.slice(slashIndex + 1) : configured;
@@ -288,9 +287,6 @@ export function buildSidebarLines(app: AppState): string[] {
     shortCwd: app.formatShortCwd(Math.max(4, app.screen.sidebarWidth - 2)),
     gitBranch: app.gitBranch,
     gitDirty: app.gitDirty,
-    sidebarTreeOpen: app.sidebarTreeOpen,
-    sidebarFileTree: app.sidebarFileTree,
-    sidebarExpandedDirs: app.sidebarExpandedDirs,
     colors: {
       text: TXT(),
       muted: MUTED(),

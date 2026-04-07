@@ -6,7 +6,7 @@ import { checkBudget } from "../core/budget.js";
 import { getModelContextLimitOverride, getSettings, type Mode } from "../core/config.js";
 import { resolveTurnPolicy } from "../core/turn-policy.js";
 import { clearTodo } from "../tools/todo.js";
-import type { Session } from "../core/session.js";
+import { isDefaultSessionName, type Session } from "../core/session.js";
 import { runValidationSuite } from "./auto-validate.js";
 import type { ToolName } from "../tools/registry.js";
 import { executeTurn } from "./turn-execution.js";
@@ -310,7 +310,7 @@ export async function runModelTurn(options: {
 
   if (app.hasPendingMessages("followup")) app.flushPendingMessages("followup");
 
-  if (typeof (session as any).getName !== "function" || session.getName() === "New Session") {
+  if (typeof (session as any).getName !== "function" || isDefaultSessionName(session.getName())) {
     const assistantText = result.assistantText.trim();
     if (assistantText) {
       void maybeAutoNameSession({

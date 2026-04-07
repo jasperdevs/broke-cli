@@ -1,6 +1,7 @@
 import { buildSystemPrompt, reloadContext } from "../core/context.js";
 import { compactMessages, getTotalContextTokens, splitCompactedMessages } from "../core/compact.js";
-import { getSettings, updateModelPreference, updateSetting, type Mode, type ModelPreferenceSlot } from "../core/config.js";
+import { getConfiguredModelPreference, getSettings, updateModelPreference, updateSetting, type Mode, type ModelPreferenceSlot } from "../core/config.js";
+import { createDefaultSessionName } from "../core/session.js";
 import { runConnectFlow } from "./connect-flow.js";
 import { runLoginFlow } from "./login-flow.js";
 import { openExtensionsMenu, openPermissionsMenu, openSettingsMenu, openThemeMenu } from "./slash-command-menus.js";
@@ -43,8 +44,10 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
     case "new":
     case "clear":
       session.clear();
+      session.resetName?.();
       app.clearMessages();
       app.resetCost();
+      app.setSessionName?.(session.getName?.() ?? createDefaultSessionName());
       getContextOptimizer().reset();
       return { handled: true };
     case "connect":
@@ -73,6 +76,7 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
       }
       app.openModelPicker(allOptions, (provId, modId) => {
         try {
+          const key = `${provId}/${modId}`;
           const nextModel = providerRegistry.createModel(provId, modId);
           onModelChange(nextModel, modId);
           app.setModel(nextModel.provider.name, modId, {
@@ -80,7 +84,11 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
             runtime: nextModel.runtime,
           });
           session.setProviderModel(nextModel.provider.name, modId);
-          updateSetting("lastModel", `${provId}/${modId}`);
+          updateSetting("lastModel", key);
+          for (const slot of ["default", "small", "review", "planning", "ui", "architecture"] as const) {
+            if (!getConfiguredModelPreference(slot)) updateModelPreference(slot, key);
+          }
+          onModelRoutingChange?.();
         } catch (err) {
           app.setStatus?.(`Failed: ${(err as Error).message}`);
         }
@@ -191,11 +199,12 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
       const currentName = session.getName();
       app.openItemPicker("Session name", [
         { id: "rename", label: "Rename", detail: currentName },
-        { id: "clear", label: "Reset", detail: "New Session" },
+        { id: "clear", label: "Reset", detail: "Generated name" },
       ], (id: string) => {
         if (id === "clear") {
-          session.setName("New Session");
-          app.setSessionName?.("New Session");
+          const nextName = createDefaultSessionName();
+          session.setName(nextName);
+          app.setSessionName?.(nextName);
           app.setStatus?.("Session name reset.");
           return;
         }

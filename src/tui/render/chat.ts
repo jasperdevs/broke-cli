@@ -238,7 +238,7 @@ export function renderMessageOverlays(options: {
   if (thinkingBuffer) {
     ensureOverlayGap(lines);
     if (hideThinkingBlock) {
-      lines.push(`  ${colors.dim}Thinking...${colors.reset}`);
+      lines.push(`  ${colors.dim}${isStreaming ? "Thinking..." : "Reasoned"}${colors.reset}`);
     } else {
       const thinkLines = thinkingBuffer.split("\n").slice(-8);
       lines.push(`  ${colors.dim}${isStreaming ? "Reasoning" : "Reasoned"}${colors.reset}`);

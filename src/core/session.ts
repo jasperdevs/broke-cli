@@ -99,9 +99,25 @@ function matchesTreeFilter(entry: SessionEntry, mode: TreeFilterMode): boolean {
   }
 }
 
+const DEFAULT_SESSION_NAME_RE = /^[A-Z][a-z]{2} \d{1,2} #\d{4}$/;
+
+export function createDefaultSessionName(now = new Date(), randomNumber = Math.floor(1000 + Math.random() * 9000)): string {
+  const stamp = now.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+  const safeNumber = Math.max(1000, Math.min(9999, Math.floor(randomNumber)));
+  return `${stamp} #${safeNumber}`;
+}
+
+export function isDefaultSessionName(name: string | null | undefined): boolean {
+  const trimmed = name?.trim() ?? "";
+  return !trimmed || trimmed === "New Session" || DEFAULT_SESSION_NAME_RE.test(trimmed);
+}
+
 export class Session {
   private id: string;
-  private name = "New Session";
+  private name = createDefaultSessionName();
   private entries: SessionEntry[] = [];
   private leafId: string | null = null;
   private totalInputTokens = 0;
@@ -122,7 +138,11 @@ export class Session {
   getId(): string { return this.id; }
   getName(): string { return this.name; }
   setName(name: string): void {
-    this.name = name.trim() || "New Session";
+    this.name = name.trim() || createDefaultSessionName();
+    this.save();
+  }
+  resetName(): void {
+    this.name = createDefaultSessionName();
     this.save();
   }
   getCwd(): string { return this.cwd; }
@@ -436,7 +456,7 @@ export class Session {
     const data = loadSessionData(id);
     if (!data) return null;
     const session = new Session(data.id);
-    session.name = data.name?.trim() || "New Session";
+    session.name = data.name?.trim() || createDefaultSessionName();
     if (data.entries) {
       session.entries = data.entries;
       session.leafId = data.leafId ?? data.entries[data.entries.length - 1]?.id ?? null;

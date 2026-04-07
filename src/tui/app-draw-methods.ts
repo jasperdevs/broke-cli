@@ -8,7 +8,7 @@ import { resolveNativeCommand } from "../ai/native-cli.js";
 import { resolveNativeSpawnCommand } from "../ai/native-stream.js";
 import { getCommandMatches as findCommandMatches } from "./command-surface.js";
 import { fmtCost, fmtTokens, wordWrap } from "./render/formatting.js";
-import { APP_BG, ERR, MUTED, OK, P, T, TXT, WARN } from "./app-shared.js";
+import { APP_BG, ERR, MUTED, OK, P, SIDEBAR_BG, T, TXT, WARN } from "./app-shared.js";
 import { getQuestionCursor } from "./question-view.js";
 import { drawBudgetView } from "./fullscreen-views.js";
 import { appendBottomMenus, buildInfoBar, getPendingImagePromptLines, getStatusPromptLines } from "./bottom-ui.js";
@@ -145,12 +145,17 @@ function buildFrameLines(app: AppState, opts: { height: number; mainW: number; h
   if (!hasSidebar) {
     frameLines.push(...mainTopLines, ...bottomLines);
   } else {
-    const border = app.getSidebarBorder();
     const sideW = app.screen.sidebarWidth;
+    const sidebarBg = SIDEBAR_BG();
     for (let row = 0; row < height; row++) {
       const mainLine = row < mainTopHeight ? mainTopLines[row] ?? "" : bottomLines[row - mainTopHeight] ?? "";
       const sidebarLine = sidebarColumnLines[row] ?? "";
-      frameLines.push(`${app.padLine(mainLine, mainW)} ${border} ${app.padLine(sidebarLine, sideW)}`);
+      const paddedSidebar = app.padLine(sidebarLine, sideW);
+      const sidebarBody = sidebarBg
+        ? `${sidebarBg}${paddedSidebar.replaceAll(RESET, `${RESET}${sidebarBg}`)}${RESET}`
+        : paddedSidebar;
+      const sidebarLead = sidebarBg ? `${sidebarBg}   ${RESET}` : "   ";
+      frameLines.push(`${app.padLine(mainLine, mainW)}${sidebarLead}${sidebarBody}`);
     }
   }
 

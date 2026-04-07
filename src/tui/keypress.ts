@@ -52,11 +52,12 @@ export class KeypressHandler {
     process.stdin.resume();
     process.stdin.setEncoding("utf-8");
 
-    // Enable bracketed paste and mouse tracking for clicks only.
+    // Enable bracketed paste and mouse tracking.
     write(PASTE_MODE_ON);
     write(MODIFY_OTHER_KEYS_ON);
-    // Track mouse sequences
+    // Track SGR and legacy X10 mouse sequences.
     const mouseSeqRe = /\x1b\[<(\d+);(\d+);(\d+)([Mm])/g;
+    const legacyMouseSeqRe = /\x1b\[M([\x00-\xff])([\x00-\xff])([\x00-\xff])/g;
     let lastMouseTime = 0;
 
     // Intercept raw data BEFORE readline to handle mouse sequences
@@ -94,6 +95,7 @@ export class KeypressHandler {
           return false;
         }
         mouseSeqRe.lastIndex = 0;
+        legacyMouseSeqRe.lastIndex = 0;
         let match;
         let hasMouseData = false;
         while ((match = mouseSeqRe.exec(s)) !== null) {
@@ -110,9 +112,24 @@ export class KeypressHandler {
             this.onKey({ name: "click", char: `${col},${row}`, ctrl: false, meta: false, shift: false });
           }
         }
+        while ((match = legacyMouseSeqRe.exec(s)) !== null) {
+          hasMouseData = true;
+          lastMouseTime = Date.now();
+          const button = match[1].charCodeAt(0) - 32;
+          const col = match[2].charCodeAt(0) - 32;
+          const row = match[3].charCodeAt(0) - 32;
+          if ((button & 64) === 64) {
+            const wheelDown = (button & 1) === 1;
+            this.onKey({ name: wheelDown ? "scrolldown" : "scrollup", char: `${col},${row}`, ctrl: false, meta: false, shift: false });
+          } else if ((button & 3) === 0) {
+            this.onKey({ name: "click", char: `${col},${row}`, ctrl: false, meta: false, shift: false });
+          }
+        }
         // If entire data was mouse sequences, don't pass to readline
         if (hasMouseData) {
-          const stripped = s.replace(/\x1b\[<\d+;\d+;\d+[Mm]/g, "");
+          const stripped = s
+            .replace(/\x1b\[<\d+;\d+;\d+[Mm]/g, "")
+            .replace(/\x1b\[M[\x00-\xff][\x00-\xff][\x00-\xff]/g, "");
           if (!stripped) return false;
           return origEmit("data", stripped);
         }

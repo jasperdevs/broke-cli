@@ -31,6 +31,7 @@ export function renderStaticMessages(options: {
     imageTagBg: string;
     userBg: string;
     userText: string;
+    userAccent: string;
     border: string;
     muted: string;
     text: string;
@@ -51,15 +52,16 @@ export function renderStaticMessages(options: {
           content += ` ${tag}`;
         }
       }
-      const availW = Math.max(1, maxWidth - 4);
-      lines.push(`${colors.userBg}${" ".repeat(maxWidth)}${reset}`);
+      const accent = "▌";
+      const availW = Math.max(1, maxWidth - 5);
+      lines.push(`${colors.userBg}${colors.userAccent}${accent}${reset}${colors.userBg}${" ".repeat(Math.max(0, maxWidth - 1))}${reset}`);
       for (const contentLine of content.split("\n")) {
         for (const text of wordWrap(contentLine, availW)) {
-          const padW = Math.max(0, maxWidth - text.length - 4);
-          lines.push(`${colors.userBg}${colors.userText}  ${text}${" ".repeat(padW)}  ${reset}`);
+          const padW = Math.max(0, maxWidth - text.length - 5);
+          lines.push(`${colors.userBg}${colors.userAccent}${accent}${reset}${colors.userBg}${colors.userText} ${text}${" ".repeat(padW)}  ${reset}`);
         }
       }
-      lines.push(`${colors.userBg}${" ".repeat(maxWidth)}${reset}`);
+      lines.push(`${colors.userBg}${colors.userAccent}${accent}${reset}${colors.userBg}${" ".repeat(Math.max(0, maxWidth - 1))}${reset}`);
       lines.push("");
     } else if (msg.role === "assistant") {
       const rendered = renderMarkdown(msg.content);

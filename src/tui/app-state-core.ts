@@ -89,7 +89,7 @@ export function getModeAccent(app: AppState): string {
 }
 
 function shouldHideSidebarFooter(app: AppState): boolean {
-  if (app.isStreaming || app.isCompacting) return true;
+  void app;
   return false;
 }
 

@@ -1,6 +1,7 @@
 import { generateText } from "ai";
 import type { ModelHandle } from "../ai/providers.js";
 import type { Session } from "../core/session.js";
+import { isDefaultSessionName } from "../core/session.js";
 
 interface NamingApp {
   setSessionName?(name: string): void;
@@ -25,7 +26,7 @@ function deriveFallbackTitle(userText: string): string {
     .replace(/\s+/g, " ")
     .trim();
   const words = cleaned.split(" ").filter(Boolean).slice(0, 5);
-  if (words.length === 0) return "New Session";
+  if (words.length === 0) return "";
   const titled = words.join(" ").replace(/\b\w/g, (char) => char.toUpperCase());
   return titled.slice(0, 48);
 }
@@ -66,7 +67,7 @@ export async function maybeAutoNameSession(options: {
     activeModel,
     currentModelId,
   } = options;
-  if (typeof session.getName === "function" && session.getName() !== "New Session") return;
+  if (typeof session.getName === "function" && !isDefaultSessionName(session.getName())) return;
   if (!userText.trim() || !assistantText.trim()) return;
 
   let nextTitle: string | null = null;
@@ -82,7 +83,7 @@ export async function maybeAutoNameSession(options: {
   }
 
   const finalTitle = sanitizeTitle(nextTitle ?? deriveFallbackTitle(userText));
-  if (!finalTitle || finalTitle === "New Session") return;
+  if (!finalTitle || isDefaultSessionName(finalTitle)) return;
   session.setName?.(finalTitle);
   app.setSessionName?.(finalTitle);
 }

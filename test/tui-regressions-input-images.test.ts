@@ -118,7 +118,7 @@ describe("image attachments", () => {
       toolOutputCollapsed: false,
       isToolOutput: () => false,
       wordWrap,
-      colors: { imageTagBg: "", userBg: "", userText: "", border: "", muted: "", text: "" },
+      colors: { imageTagBg: "", userBg: "", userText: "", userAccent: "", border: "", muted: "", text: "" },
       reset: "",
       bold: "",
     }).map((line) => stripAnsi(line)).join("\n");

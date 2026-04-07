@@ -1,4 +1,3 @@
-import type { SidebarTreeItem } from "../sidebar.js";
 import { buildSidebarFooterLines } from "../sidebar.js";
 
 export function buildSidebarFooter(options: {
@@ -39,9 +38,6 @@ export function buildSidebarLines(options: {
   shortCwd: string;
   gitBranch: string;
   gitDirty: boolean;
-  sidebarTreeOpen: boolean;
-  sidebarFileTree: SidebarTreeItem[] | null;
-  sidebarExpandedDirs: Set<string>;
   colors: {
     text: string;
     muted: string;
@@ -60,9 +56,6 @@ export function buildSidebarLines(options: {
     shortCwd,
     gitBranch,
     gitDirty,
-    sidebarTreeOpen,
-    sidebarFileTree,
-    sidebarExpandedDirs,
     colors,
   } = options;
 
@@ -98,40 +91,6 @@ export function buildSidebarLines(options: {
   lines.push(`${colors.text}Directory${colors.reset}`);
   lines.push(`  ${colors.muted}${shortCwd}${colors.reset}`);
   if (gitBranch) lines.push(`  ${colors.muted}${gitBranch}${gitDirty ? " *" : ""}${colors.reset}`);
-  if (!compactModels) lines.push("");
-
-  const treeArrow = sidebarTreeOpen ? "▾" : "▸";
-  lines.push(`${colors.text}${treeArrow} Files${colors.reset}`);
-  if (sidebarTreeOpen) {
-    const tree = sidebarFileTree ?? [];
-    const rootCount = Math.min(tree.length, 5);
-    for (let itemIndex = 0; itemIndex < rootCount; itemIndex++) {
-      const item = tree[itemIndex];
-      if (item.isDir) {
-        const expanded = sidebarExpandedDirs.has(item.name);
-        const arrow = expanded ? "▾" : "▸";
-        const display = item.name.length > width - 6 ? item.name.slice(-(width - 7)) : item.name;
-        lines.push(`  ${colors.accent}${arrow} ${display}/${colors.reset}`);
-        if (expanded && item.children) {
-          const showCount = sidebarExpandedDirs.has(`${item.name}:all`) ? Math.min(item.children.length, 2) : Math.min(item.children.length, 1);
-          for (let i = 0; i < showCount; i++) {
-            const child = item.children[i];
-            const cDisplay = child.length > width - 8 ? child.slice(-(width - 9)) : child;
-            lines.push(`    ${colors.muted}${cDisplay}${colors.reset}`);
-          }
-          if (showCount < item.children.length) {
-            lines.push(`    ${colors.muted}▸ +${item.children.length - showCount} more${colors.reset}`);
-          }
-        }
-      } else {
-        const display = item.name.length > width - 4 ? item.name.slice(-(width - 5)) : item.name;
-        lines.push(`  ${colors.muted}${display}${colors.reset}`);
-      }
-    }
-    if (rootCount < tree.length) {
-      lines.push(`  ${colors.muted}▸ +${tree.length - rootCount} more${colors.reset}`);
-    }
-  }
 
   return lines;
 }

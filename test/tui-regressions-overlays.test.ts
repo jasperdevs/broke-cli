@@ -102,7 +102,7 @@ describe("theme rendering", () => {
         toolOutputCollapsed: false,
         isToolOutput: () => false,
         wordWrap,
-        colors: { imageTagBg: "", userBg: "", userText: "", border: "", muted: currentTheme().textMuted, text: currentTheme().text },
+        colors: { imageTagBg: "", userBg: "", userText: "", userAccent: "", border: "", muted: currentTheme().textMuted, text: currentTheme().text },
         reset: "\u001b[0m",
         bold: "\u001b[1m",
       });

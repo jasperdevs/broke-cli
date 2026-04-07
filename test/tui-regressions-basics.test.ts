@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Session } from "../src/core/session.js";
+import { createDefaultSessionName, Session } from "../src/core/session.js";
 import { buildBudgetReport } from "../src/core/budget-insights.js";
 import { App } from "../src/tui/app.js";
 import { MOUSE_OFF, MOUSE_ON } from "../src/utils/ansi.js";
@@ -92,13 +92,38 @@ describe("message wrapping", () => {
       toolOutputCollapsed: false,
       isToolOutput: () => false,
       wordWrap,
-      colors: { imageTagBg: "", userBg: "", userText: "", border: "", muted: "", text: "" },
+      colors: { imageTagBg: "", userBg: "", userText: "", userAccent: "", border: "", muted: "", text: "" },
       reset: "",
       bold: "",
     }).map((line) => stripAnsi(line));
     expect(lines.join("\n")).toContain("working");
     expect(lines.join("\n")).toContain("replaced");
     expect(lines.join("\n")).not.toContain("wor\nking");
+  });
+
+  it("renders a left accent rail for user messages", () => {
+    const lines = renderStaticMessages({
+      messages: [{ role: "user", content: "hello world" }],
+      maxWidth: 24,
+      toolOutputCollapsed: false,
+      isToolOutput: () => false,
+      wordWrap,
+      colors: { imageTagBg: "", userBg: "", userText: "", userAccent: "", border: "", muted: "", text: "" },
+      reset: "",
+      bold: "",
+    }).map((line) => stripAnsi(line));
+    expect(lines.some((line) => line.startsWith("▌"))).toBe(true);
+  });
+});
+
+describe("default session naming", () => {
+  it("starts sessions with a date-and-number placeholder name", () => {
+    const session = new Session("test-default-name");
+    expect(session.getName()).toMatch(/^[A-Z][a-z]{2} \d{1,2} #\d{4}$/);
+  });
+
+  it("can generate a stable placeholder name for resets", () => {
+    expect(createDefaultSessionName(new Date("2026-04-07T12:00:00Z"), 4821)).toBe("Apr 7 #4821");
   });
 });
 
