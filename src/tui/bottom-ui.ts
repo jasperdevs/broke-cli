@@ -5,6 +5,7 @@ import { BOLD, DIM, RESET } from "../utils/ansi.js";
 import { fmtCost } from "./render/formatting.js";
 import { ERR, P, T, TXT, WARN } from "./app-shared.js";
 import { visibleWidth } from "../utils/terminal-width.js";
+import { currentQuestionField, getQuestionBodyLines, getQuestionHeader, getQuestionOptionEntries, isQuestionSubmitTab } from "./question-view.js";
 
 type AppState = any;
 
@@ -71,6 +72,24 @@ export function appendBottomMenus(
   if (app.treeView) {
     bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
     app.appendTreePicker(bottomLines, getAvailableBodyRows(2), bottomMenuClicks);
+    return;
+  }
+  if (app.questionView) {
+    const maxVisible = Math.max(1, getAvailableBodyRows(2));
+    bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
+    bottomLines.push(getQuestionHeader(app.questionView));
+    const field = currentQuestionField(app.questionView);
+    if (field && field.kind !== "text" && !isQuestionSubmitTab(app.questionView)) {
+      const entries = app.buildMenuView(getQuestionOptionEntries(app.questionView), app.questionView.optionCursor, maxVisible);
+      const body = getQuestionBodyLines(app.questionView, mainW);
+      bottomLines.push(body[0] ?? "");
+      for (const entry of entries) bottomLines.push(entry.text);
+      bottomLines.push(body[body.length - 1] ?? "");
+    } else {
+      const body = getQuestionBodyLines(app.questionView, mainW);
+      const visibleBody = body.slice(0, Math.max(2, maxVisible + 1));
+      bottomLines.push(...visibleBody);
+    }
     return;
   }
 

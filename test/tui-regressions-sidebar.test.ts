@@ -211,6 +211,7 @@ describe("sidebar scrolling", () => {
     const app = new App() as any;
     let rendered: string[] = [];
     app.messages = [{ role: "user", content: "hello" }];
+    app.setDetectedProviders(["Claude Code", "GitHub Copilot"]);
     app.input.setText("/");
     app.screen = {
       height: 18,
@@ -228,6 +229,8 @@ describe("sidebar scrolling", () => {
     expect(output).toContain("Commands");
     expect(output).toContain("Files");
     expect(output).toContain("Directory");
+    expect(output).not.toContain("Providers");
+    expect(output).not.toContain("GitHub Copilot");
   });
 
   it("does not scroll transcript lines with wheel or page keys", () => {
@@ -298,7 +301,7 @@ describe("wrapped input layout", () => {
     expect(layout.row).toBeGreaterThan(0);
   });
 
-  it("renders the input with a visible prompt marker and keeps question prompts out of the bottom overlay", async () => {
+  it("renders the input with a visible prompt marker and reuses the bottom overlay for question prompts", async () => {
     const app = new App() as any;
     app.messages = [{ role: "user", content: "hello" }];
     app.input.paste("test");
@@ -309,7 +312,9 @@ describe("wrapped input layout", () => {
     expect(stripAnsi(inputLine!).trimEnd()).toBe("> test");
     const before = app.getBottomLineCount(20, 20);
     const pending = app.showQuestion("Base URL");
-    expect(app.getBottomLineCount(20, 20)).toBe(before);
+    app.drawImmediate();
+    expect(app.getBottomLineCount(20, 20)).toBeGreaterThan(before);
+    expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("Base URL");
     app.handleKey({ name: "escape", char: "", ctrl: false, meta: false, shift: false });
     await expect(pending).resolves.toBe("[user skipped]");
   });

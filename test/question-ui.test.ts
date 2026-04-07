@@ -14,7 +14,7 @@ function key(name: string, char = "", extra: Partial<{ ctrl: boolean; meta: bool
 }
 
 describe("question UI", () => {
-  it("renders questions fullscreen and cancels cleanly", async () => {
+  it("renders questions in the shared bottom composer area and cancels cleanly", async () => {
     const app = new App() as any;
     app.messages = [{ role: "assistant", content: "hello" }];
     let rendered: string[] = [];
@@ -35,7 +35,9 @@ describe("question UI", () => {
     const text = rendered.map((line) => stripAnsi(line)).join("\n");
     expect(text).toContain("Question");
     expect(text).toContain("Base URL");
+    expect(text).toContain("type response");
     expect(text).toContain("esc cancel");
+    expect(text).toContain("> ");
 
     app.handleKey(key("escape"));
     await expect(pending).resolves.toBe("[user skipped]");

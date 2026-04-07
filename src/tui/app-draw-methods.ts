@@ -9,7 +9,7 @@ import { resolveNativeSpawnCommand } from "../ai/native-stream.js";
 import { getCommandMatches as findCommandMatches } from "./command-surface.js";
 import { fmtCost, fmtTokens, wordWrap } from "./render/formatting.js";
 import { APP_BG, ERR, MUTED, OK, P, T, TXT, WARN } from "./app-shared.js";
-import { drawQuestionView } from "./question-view.js";
+import { getQuestionCursor } from "./question-view.js";
 import { drawBudgetView } from "./fullscreen-views.js";
 import { appendBottomMenus, buildInfoBar, getPendingImagePromptLines, getStatusPromptLines } from "./bottom-ui.js";
 import { getTreePickerEntries, getVisibleTreeRows } from "./tree-view.js";
@@ -46,10 +46,6 @@ export function drawImmediate(app: AppState): void {
   app.keypress.setMouseTracking(app.shouldEnableMenuMouse());
   if (app.budgetView) {
     drawBudgetView(app);
-    return;
-  }
-  if (app.questionView) {
-    drawQuestionView(app);
     return;
   }
   const { height, width } = app.screen;
@@ -94,6 +90,18 @@ export function drawImmediate(app: AppState): void {
     isHome,
   });
   app.screen.render(frameLines.map((line) => app.decorateFrameLine(line, width)));
+  if (app.questionView) {
+    const questionCursor = getQuestionCursor(app, mainW);
+    if (!questionCursor) {
+      app.screen.hideCursor();
+      return;
+    }
+    app.screen.setCursor(
+      Math.min(height, mainTopHeight + inputStartIndex + 3 + questionCursor.rowOffset),
+      Math.min(width, questionCursor.col),
+    );
+    return;
+  }
   const inputLeadOffset = inputLayout.row === 0 ? inputLeadWidth : inputContinueLeadWidth;
   app.screen.setCursor(
     Math.min(height, mainTopHeight + inputStartIndex + 1 + inputLayout.row),

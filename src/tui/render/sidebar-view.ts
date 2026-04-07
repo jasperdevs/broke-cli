@@ -36,7 +36,6 @@ export function buildSidebarLines(options: {
   appVersion: string;
   providerName: string;
   modelName: string;
-  detectedProviders: string[];
   mcpConnections: string[];
   shortCwd: string;
   gitBranch: string;
@@ -59,7 +58,6 @@ export function buildSidebarLines(options: {
     appVersion,
     providerName,
     modelName,
-    detectedProviders,
     mcpConnections,
     shortCwd,
     gitBranch,
@@ -76,12 +74,6 @@ export function buildSidebarLines(options: {
   lines.push("");
   lines.push(`${colors.accent}${providerName}/${modelName}${colors.reset}`);
   lines.push("");
-
-  if (detectedProviders.length > 0) {
-    lines.push(`${colors.text}Providers${colors.reset}`);
-    for (const provider of detectedProviders.slice(0, 4)) lines.push(`  ${colors.muted}${provider}${colors.reset}`);
-    if (detectedProviders.length > 4) lines.push(`  ${colors.muted}+${detectedProviders.length - 4} more${colors.reset}`);
-  }
 
   if (mcpConnections.length > 0) {
     if (lines[lines.length - 1] !== "") lines.push("");

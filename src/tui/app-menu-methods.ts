@@ -9,19 +9,16 @@ import { wordWrap } from "./render/formatting.js";
 import type { MenuEntry, MenuPromptKind, ModelOption, PickerItem, SettingEntry } from "./app-types.js";
 import { moveTreeSelection } from "./tree-view.js";
 import { getPendingImagePromptLines } from "./bottom-ui.js";
-
+import { getQuestionMenuLineCount, scrollQuestionMenu } from "./question-menu.js";
 type AppState = any;
-
 function getMenuVisibleRows(maxHeight: number, baseCount: number, tailReserve: number, chromeLines: number): number {
   return Math.max(1, maxHeight - baseCount - tailReserve - 1 - chromeLines);
 }
-
 export function scrollToBottom(app: AppState): void {
   const chatHeight = app.getChatHeight();
   const messageLines = app.renderMessages(app.screen.mainWidth - 2);
   app.scrollOffset = Math.max(0, messageLines.length - chatHeight);
 }
-
 export function getChatHeight(app: AppState): number {
   const headerLines = app.screen.hasSidebar ? 0 : 1;
   const hasSidebar = app.shouldShowSidebar();
@@ -74,6 +71,8 @@ export function getBottomLineCount(app: AppState, mainW: number, maxHeight: numb
       ? 1
       : Math.min(rows.length, maxVisibleRows, getMenuVisibleRows(maxHeight, baseCount, tailReserve, 2));
     count += 3 + visible;
+  } else if (app.questionView) {
+    count += getQuestionMenuLineCount(app, maxVisibleRows, getMenuVisibleRows(maxHeight, baseCount, tailReserve, 2));
   } else {
     const allSuggestions = app.getCommandSuggestionEntries();
     if (allSuggestions.length > 0) {
@@ -364,6 +363,9 @@ export function scrollActiveMenu(app: AppState, delta: number): boolean {
   if (app.treeView) {
     moveTreeSelection(app, delta);
     return true;
+  }
+  if (app.questionView) {
+    return scrollQuestionMenu(app, delta);
   }
   const suggestions = app.getCommandMatches();
   if (suggestions.length > 0) {

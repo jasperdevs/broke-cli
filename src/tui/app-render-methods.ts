@@ -269,7 +269,6 @@ export function buildSidebarLines(app: AppState): string[] {
     appVersion: app.appVersion,
     providerName: app.providerName,
     modelName: app.modelName,
-    detectedProviders: app.detectedProviders,
     mcpConnections: app.mcpConnections,
     shortCwd: app.formatShortCwd(Math.max(4, app.screen.sidebarWidth - 2)),
     gitBranch: app.gitBranch,

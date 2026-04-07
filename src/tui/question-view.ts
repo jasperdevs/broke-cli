@@ -1,17 +1,11 @@
 import type { Keypress } from "./keypress.js";
 import { InputWidget } from "./input.js";
-import type { QuestionAnswer, QuestionField, QuestionOption, QuestionRequest, QuestionResult, QuestionView } from "./app-types.js";
+import type { MenuEntry, QuestionAnswer, QuestionField, QuestionOption, QuestionRequest, QuestionResult, QuestionView } from "./app-types.js";
 import { BOLD, DIM, RESET } from "../utils/ansi.js";
-import { T, TXT, MUTED, OK, WARN } from "./app-shared.js";
-import { truncateVisible, visibleWidth } from "../utils/terminal-width.js";
+import { T, TXT, MUTED, OK } from "./app-shared.js";
 import { wordWrap } from "./render/formatting.js";
 
 type AppState = any;
-
-function padLine(line: string, width: number): string {
-  const visible = visibleWidth(line);
-  return visible >= width ? truncateVisible(line, width) : `${line}${" ".repeat(width - visible)}`;
-}
 
 function questionAnswered(view: QuestionView, fieldId: string): boolean {
   return !!view.answers[fieldId];
@@ -21,11 +15,11 @@ function allRequiredAnswered(view: QuestionView): boolean {
   return view.questions.every((field) => !field.required || questionAnswered(view, field.id));
 }
 
-function currentField(view: QuestionView): QuestionField | null {
+export function currentQuestionField(view: QuestionView): QuestionField | null {
   return view.activeIndex >= 0 && view.activeIndex < view.questions.length ? view.questions[view.activeIndex] : null;
 }
 
-function isSubmitTab(view: QuestionView): boolean {
+export function isQuestionSubmitTab(view: QuestionView): boolean {
   return view.questions.length > 1 && view.activeIndex === view.questions.length;
 }
 
@@ -48,7 +42,7 @@ export function createQuestionView(request: QuestionRequest, resolve: (result: Q
     editor,
     resolve,
   };
-  const first = currentField(view);
+  const first = currentQuestionField(view);
   if (first) normalizeEditorForField(view, first);
   return view;
 }
@@ -58,7 +52,7 @@ function moveQuestion(view: QuestionView, delta: number): void {
   const maxIndex = view.questions.length;
   view.activeIndex = Math.max(0, Math.min(maxIndex, view.activeIndex + delta));
   view.optionCursor = 0;
-  const field = currentField(view);
+  const field = currentQuestionField(view);
   if (field) normalizeEditorForField(view, field);
 }
 
@@ -145,87 +139,13 @@ function advanceAfterAnswer(app: AppState): void {
   if (view.activeIndex < view.questions.length) {
     view.activeIndex = Math.min(view.questions.length, view.activeIndex + 1);
     view.optionCursor = 0;
-    const field = currentField(view);
+    const field = currentQuestionField(view);
     if (field) normalizeEditorForField(view, field);
   }
   app.draw();
 }
 
-function formatTab(view: QuestionView, index: number, width: number): string {
-  const isActive = view.activeIndex === index;
-  const field = view.questions[index];
-  const done = questionAnswered(view, field.id);
-  const marker = done ? `${OK()}■${RESET}` : `${MUTED()}□${RESET}`;
-  const base = `${marker} ${field.label}`;
-  if (!isActive) return `${DIM}${truncateVisible(base, width)}${RESET}`;
-  return `${T()}${BOLD}${truncateVisible(base, width)}${RESET}`;
-}
-
-function renderTabs(view: QuestionView, width: number): string[] {
-  if (view.questions.length <= 1) return [];
-  const segments = view.questions.map((_, index) => formatTab(view, index, Math.max(8, Math.floor(width / Math.max(2, view.questions.length + 1)))));
-  const submitReady = allRequiredAnswered(view);
-  const submitText = view.activeIndex === view.questions.length
-    ? `${T()}${BOLD}✓ ${view.submitLabel}${RESET}`
-    : submitReady
-      ? `${OK()}✓ ${view.submitLabel}${RESET}`
-      : `${DIM}✓ ${view.submitLabel}${RESET}`;
-  return [` ${segments.join(`${DIM} · ${RESET}`)}${DIM} · ${RESET}${submitText}`];
-}
-
-function renderCurrentField(view: QuestionView, width: number): string[] {
-  if (isSubmitTab(view)) {
-    const lines: string[] = [` ${TXT()}${BOLD}${view.submitLabel}${RESET}`];
-    lines.push("");
-    for (const field of view.questions) {
-      const answer = view.answers[field.id];
-      const value = !answer
-        ? `${DIM}[required]${RESET}`
-        : Array.isArray(answer.label)
-          ? answer.label.join(", ")
-          : answer.label;
-      lines.push(` ${T()}${field.label}${RESET} ${value}`);
-    }
-    return lines;
-  }
-
-  const field = currentField(view);
-  if (!field) return [];
-  const lines: string[] = [];
-  lines.push(` ${TXT()}${BOLD}${field.prompt}${RESET}`);
-  lines.push("");
-
-  if (field.kind === "text") {
-    const editorText = view.editor.getText();
-    const wrapped = editorText.length > 0
-      ? appWrap(view, editorText, width)
-      : [`${DIM}${field.placeholder ?? "type response"}${RESET}`];
-    for (const line of wrapped) lines.push(` ${line}`);
-    return lines;
-  }
-
-  for (let i = 0; i < field.options.length; i++) {
-    const option = field.options[i];
-    const isCursor = i === view.optionCursor;
-    const selected = field.kind === "multi"
-      ? Array.isArray(view.answers[field.id]?.value) && view.answers[field.id].value.includes(option.value)
-      : view.answers[field.id]?.value === option.value;
-    const arrow = isCursor ? `${T()}>${RESET}` : " ";
-    const mark = field.kind === "multi"
-      ? selected ? `${OK()}[x]${RESET}` : `${DIM}[ ]${RESET}`
-      : selected ? `${OK()}(•)${RESET}` : `${DIM}( )${RESET}`;
-    lines.push(` ${arrow} ${mark} ${isCursor ? `${TXT()}${BOLD}${option.label}${RESET}` : `${TXT()}${option.label}${RESET}`}`);
-    if (option.description) {
-      for (const wrapped of wordWrap(option.description, Math.max(16, width - 8))) {
-        lines.push(`     ${MUTED()}${wrapped}${RESET}`);
-      }
-    }
-  }
-
-  return lines;
-}
-
-function appWrap(view: QuestionView, text: string, width: number): string[] {
+function appWrap(text: string, width: number): string[] {
   const lines = text.split("\n");
   const wrapped: string[] = [];
   for (const line of lines) {
@@ -236,50 +156,98 @@ function appWrap(view: QuestionView, text: string, width: number): string[] {
 }
 
 function buildFooter(view: QuestionView): string {
-  if (isSubmitTab(view)) return `${DIM}enter submit · esc cancel${RESET}`;
-  const field = currentField(view);
+  if (isQuestionSubmitTab(view)) return `${DIM}enter submit · esc cancel${RESET}`;
+  const field = currentQuestionField(view);
   if (!field) return `${DIM}esc cancel${RESET}`;
   if (field.kind === "text") return `${DIM}shift+enter newline · enter next · tab switch · esc cancel${RESET}`;
-  if (field.kind === "multi") return `${DIM}space toggle · enter next · tab switch · esc cancel${RESET}`;
+  if (field.kind === "multi") return `${DIM}↑↓ move · space toggle · enter next · tab switch · esc cancel${RESET}`;
   return `${DIM}↑↓ move · enter select · tab switch · esc cancel${RESET}`;
 }
 
-export function drawQuestionView(app: AppState): void {
-  const view = app.questionView as QuestionView;
-  const { width, height } = app.screen;
-  const separatorColor = app.getModeAccent();
-  const innerWidth = Math.max(24, width - 2);
-  const bodyHeight = Math.max(1, height - 4);
-  const lines: string[] = [];
-  lines.push(`${separatorColor}${"─".repeat(width)}${RESET}`);
-  const currentIndex = Math.min(view.questions.length + 1, Math.max(1, view.activeIndex + 1));
-  const headerLeft = `${T()}${BOLD}${view.title}${RESET} ${DIM}(${currentIndex}/${view.questions.length + 1})${RESET}`;
-  const headerRight = `${DIM}esc cancel${RESET}`;
-  const spacer = Math.max(1, innerWidth - visibleWidth(headerLeft) - visibleWidth(headerRight));
-  lines.push(` ${headerLeft}${" ".repeat(spacer)}${headerRight}`);
-  const body: string[] = [];
-  body.push(...renderTabs(view, innerWidth));
-  if (body.length > 0) body.push("");
-  body.push(...renderCurrentField(view, innerWidth));
-  body.push("");
-  body.push(buildFooter(view));
-  for (let i = 0; i < bodyHeight; i++) lines.push(padLine(body[i] ?? "", width));
-  while (lines.length < height) lines.push("");
-  app.screen.render(lines.map((line: string) => app.decorateFrameLine(line, width)));
+export function getQuestionHeader(view: QuestionView): string {
+  const total = view.questions.length + (view.questions.length > 1 ? 1 : 0);
+  const current = Math.min(total, Math.max(1, view.activeIndex + 1));
+  return ` ${T()}${BOLD}${view.title}${RESET} ${DIM}(${current}/${total})${RESET}`;
+}
 
-  const field = currentField(view);
-  if (field?.kind !== "text" || isSubmitTab(view)) {
-    app.screen.hideCursor();
-    return;
+export function getQuestionBodyLines(view: QuestionView, width: number): string[] {
+  if (isQuestionSubmitTab(view)) {
+    const lines: string[] = [` ${TXT()}${BOLD}${view.submitLabel}${RESET}`];
+    for (const field of view.questions) {
+      const answer = view.answers[field.id];
+      const value = !answer
+        ? `${DIM}[required]${RESET}`
+        : Array.isArray(answer.label)
+          ? answer.label.join(", ")
+          : answer.label;
+      lines.push(` ${T()}${field.label}${RESET} ${value}`);
+    }
+    lines.push(` ${buildFooter(view)}`);
+    return lines;
   }
 
-  const tabsOffset = view.questions.length > 1 ? 2 : 0;
-  const promptOffset = 2;
-  const editorOffset = tabsOffset + promptOffset;
-  const layout = app.getInputCursorLayout(view.editor.getText(), view.editor.getCursor(), innerWidth);
-  const row = Math.min(height, 3 + editorOffset + layout.row);
-  const col = Math.min(width, 2 + layout.col);
-  app.screen.setCursor(row, col);
+  const field = currentQuestionField(view);
+  if (!field) return [` ${buildFooter(view)}`];
+
+  const lines: string[] = [` ${TXT()}${BOLD}${field.prompt}${RESET}`];
+  if (field.kind === "text") {
+    const editorText = view.editor.getText();
+    const wrapped = editorText.length > 0
+      ? appWrap(editorText, width)
+      : [`${DIM}${field.placeholder ?? "type response"}${RESET}`];
+    for (const line of wrapped) lines.push(` ${line}`);
+    lines.push(` ${buildFooter(view)}`);
+    return lines;
+  }
+
+  const selectedValue = view.answers[field.id]?.value;
+  const optionEntries: MenuEntry[] = field.options.map((option, index) => {
+    const isCursor = index === view.optionCursor;
+    const selected = field.kind === "multi"
+      ? Array.isArray(selectedValue) && selectedValue.includes(option.value)
+      : selectedValue === option.value;
+    const arrow = isCursor ? `${T()}>${RESET}` : " ";
+    const mark = field.kind === "multi"
+      ? selected ? `${OK()}[x]${RESET}` : `${DIM}[ ]${RESET}`
+      : selected ? `${OK()}(•)${RESET}` : `${DIM}( )${RESET}`;
+    const label = isCursor ? `${TXT()}${BOLD}${option.label}${RESET}` : `${TXT()}${option.label}${RESET}`;
+    return { text: ` ${arrow} ${mark} ${label}`, selectIndex: index };
+  });
+
+  lines.push(...optionEntries.map((entry) => entry.text));
+  lines.push(` ${buildFooter(view)}`);
+  return lines;
+}
+
+export function getQuestionOptionEntries(view: QuestionView): MenuEntry[] {
+  if (isQuestionSubmitTab(view)) return [];
+  const field = currentQuestionField(view);
+  if (!field || field.kind === "text") return [];
+  const selectedValue = view.answers[field.id]?.value;
+  return field.options.map((option, index) => {
+    const isCursor = index === view.optionCursor;
+    const selected = field.kind === "multi"
+      ? Array.isArray(selectedValue) && selectedValue.includes(option.value)
+      : selectedValue === option.value;
+    const arrow = isCursor ? `${T()}>${RESET}` : " ";
+    const mark = field.kind === "multi"
+      ? selected ? `${OK()}[x]${RESET}` : `${DIM}[ ]${RESET}`
+      : selected ? `${OK()}(•)${RESET}` : `${DIM}( )${RESET}`;
+    const label = isCursor ? `${TXT()}${BOLD}${option.label}${RESET}` : `${TXT()}${option.label}${RESET}`;
+    return { text: ` ${arrow} ${mark} ${label}`, selectIndex: index };
+  });
+}
+
+export function getQuestionCursor(app: AppState, width: number): { rowOffset: number; col: number } | null {
+  const view = app.questionView as QuestionView;
+  if (!view || isQuestionSubmitTab(view)) return null;
+  const field = currentQuestionField(view);
+  if (!field || field.kind !== "text") return null;
+  const layout = app.getInputCursorLayout(view.editor.getText(), view.editor.getCursor(), width);
+  return {
+    rowOffset: 1 + layout.row,
+    col: 2 + layout.col,
+  };
 }
 
 export function handleQuestionViewKey(app: AppState, key: Keypress): void {
@@ -302,7 +270,7 @@ export function handleQuestionViewKey(app: AppState, key: Keypress): void {
     return;
   }
 
-  if (isSubmitTab(view)) {
+  if (isQuestionSubmitTab(view)) {
     if ((key.name === "return" || key.name === "enter") && !key.shift && !key.meta && !key.ctrl && allRequiredAnswered(view)) {
       finishQuestionView(app, false);
       return;
@@ -311,7 +279,7 @@ export function handleQuestionViewKey(app: AppState, key: Keypress): void {
     return;
   }
 
-  const field = currentField(view);
+  const field = currentQuestionField(view);
   if (!field) {
     app.draw();
     return;
@@ -323,11 +291,8 @@ export function handleQuestionViewKey(app: AppState, key: Keypress): void {
       return;
     }
     if ((key.name === "return" || key.name === "enter") && !key.shift && !key.meta && !key.ctrl) {
-      if (storeTextAnswer(view, field)) {
-        advanceAfterAnswer(app);
-      } else {
-        app.draw();
-      }
+      if (storeTextAnswer(view, field)) advanceAfterAnswer(app);
+      else app.draw();
       return;
     }
     view.editor.handleKey(key);
