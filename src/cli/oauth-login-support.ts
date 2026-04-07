@@ -3,9 +3,13 @@ import { spawnSync } from "child_process";
 import { saveCredentials } from "../core/auth.js";
 
 type LoginApp = {
-  addMessage(role: "user" | "assistant" | "system", content: string): void;
   showQuestion(prompt: string, options?: string[]): Promise<string>;
+  setStatus?(message: string): void;
 };
+
+function setLoginStatus(app: LoginApp, message: string): void {
+  app.setStatus?.(message);
+}
 
 const COPILOT_GITHUB_ENV_KEYS = ["COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"] as const;
 
@@ -313,17 +317,17 @@ async function runGoogleBrowserLogin(options: {
     : `Open this URL in your browser, finish ${label} login, then paste the full redirect URL here:\n\n${authUrl}`;
   const redirect = (await app.showQuestion(prompt, undefined)).trim();
   if (!redirect || redirect === "[user skipped]") {
-    app.addMessage("system", `${label} login cancelled.`);
+    setLoginStatus(app, `${label} login cancelled.`);
     return;
   }
 
   const parsed = parseRedirectUrl(redirect);
   if (!parsed.code) {
-    app.addMessage("system", `No authorization code found in the pasted ${label} redirect URL.`);
+    setLoginStatus(app, `No authorization code found in the pasted ${label} redirect URL.`);
     return;
   }
   if (parsed.state && parsed.state !== verifier) {
-    app.addMessage("system", `${label} login failed because the OAuth state did not match.`);
+    setLoginStatus(app, `${label} login failed because the OAuth state did not match.`);
     return;
   }
 
@@ -383,20 +387,20 @@ function readGitHubCliToken(hostname: string): string | null {
 export async function runGitHubCopilotLogin(app: LoginApp): Promise<void> {
   const hostChoice = await app.showQuestion("GitHub host", ["github.com", "custom"]);
   if (hostChoice === "[user skipped]") {
-    app.addMessage("system", "GitHub Copilot login cancelled.");
+    setLoginStatus(app, "GitHub Copilot login cancelled.");
     return;
   }
   let hostname = "github.com";
   if (hostChoice === "custom") {
     const input = await app.showQuestion("GitHub Enterprise URL/domain", undefined);
     if (input === "[user skipped]") {
-      app.addMessage("system", "GitHub Copilot login cancelled.");
+      setLoginStatus(app, "GitHub Copilot login cancelled.");
       return;
     }
     hostname = normalizeGitHubDomain(input.trim()) ?? "";
   }
   if (!hostname) {
-    app.addMessage("system", "Invalid GitHub Enterprise URL/domain.");
+    setLoginStatus(app, "Invalid GitHub Enterprise URL/domain.");
     return;
   }
 
@@ -405,13 +409,13 @@ export async function runGitHubCopilotLogin(app: LoginApp): Promise<void> {
     : ["auth", "login", "--hostname", hostname, "--web"];
   const result = spawnSync("gh", args, { stdio: "inherit" });
   if (result.status !== 0 || result.error) {
-    app.addMessage("system", "GitHub Copilot login failed or was cancelled.");
+    setLoginStatus(app, "GitHub Copilot login failed or was cancelled.");
     return;
   }
 
   const token = readGitHubCliToken(hostname);
   if (!token) {
-    app.addMessage("system", "GitHub auth succeeded, but no GitHub token could be read from gh.");
+    setLoginStatus(app, "GitHub auth succeeded, but no GitHub token could be read from gh.");
     return;
   }
   saveCredentials("github-copilot", token);

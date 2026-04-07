@@ -136,8 +136,13 @@ export function handlePickerKey(app: AppState, key: Keypress): void {
   }
   if (app.modelPicker) {
     const filtered = app.getFilteredModels();
+    const page = Math.max(1, app.screen.height - 8);
     if (key.name === "up") app.modelPicker.cursor = app.clampMenuCursor(app.modelPicker.cursor - 1, filtered.length);
     else if (key.name === "down") app.modelPicker.cursor = app.clampMenuCursor(app.modelPicker.cursor + 1, filtered.length);
+    else if (key.name === "scrollup") app.modelPicker.cursor = app.clampMenuCursor(app.modelPicker.cursor - 1, filtered.length);
+    else if (key.name === "scrolldown") app.modelPicker.cursor = app.clampMenuCursor(app.modelPicker.cursor + 1, filtered.length);
+    else if (key.name === "pageup") app.modelPicker.cursor = app.clampMenuCursor(app.modelPicker.cursor - page, filtered.length);
+    else if (key.name === "pagedown") app.modelPicker.cursor = app.clampMenuCursor(app.modelPicker.cursor + page, filtered.length);
     else if (key.name === "home") app.modelPicker.cursor = 0;
     else if (key.name === "end") app.modelPicker.cursor = app.clampMenuCursor(filtered.length - 1, filtered.length);
     else if (key.name === "tab") app.toggleModelScope();

@@ -13,10 +13,15 @@ interface LoginFlowItem {
 }
 
 interface LoginFlowApp {
-  addMessage(role: "user" | "assistant" | "system", content: string): void;
   showQuestion(prompt: string, options?: string[]): Promise<string>;
   openItemPicker(title: string, items: LoginFlowItem[], onSelect: (id: string) => void, options?: { kind?: "login" }): void;
   runExternalCommand?: (title: string, command: string, args: string[]) => number;
+  setStatus?(message: string): void;
+  clearStatus?(): void;
+}
+
+function setLoginStatus(app: LoginFlowApp, message: string): void {
+  app.setStatus?.(message);
 }
 
 function runNativeLoginCommand(commandName: string, args: string[]): number {
@@ -49,13 +54,13 @@ export async function runLoginFlow(options: {
 
   const provider = getOAuthProviderSpec(selectedProviderId);
   if (!provider) {
-    app.addMessage("system", `Unknown OAuth provider: ${selectedProviderId}`);
+    setLoginStatus(app, `Unknown OAuth provider: ${selectedProviderId}`);
     return;
   }
 
   if (provider.kind === "external-cli") {
     if (!provider.command || !provider.args || !resolveNativeCommand(provider.command)) {
-      app.addMessage("system", `${provider.label} requires the ${provider.command} CLI on PATH.`);
+      setLoginStatus(app, `${provider.label} requires the ${provider.command} CLI on PATH.`);
       return;
     }
 
@@ -65,17 +70,17 @@ export async function runLoginFlow(options: {
     const providers = await refreshProviderState(true);
     if (exitCode === 0 && providers.some((entry) => entry.id === provider.id)) {
       const providerName = providerRegistry.getProviderInfo(provider.id)?.name ?? provider.label;
-      app.addMessage("system", `Logged in to ${providerName}.`);
+      setLoginStatus(app, `Logged in to ${providerName}.`);
       return;
     }
-    app.addMessage("system", exitCode === 0
+    setLoginStatus(app, exitCode === 0
       ? `${provider.label} login finished, but credentials were not detected yet.`
       : `${provider.label} login failed or was cancelled.`);
     return;
   }
 
   if (provider.kind === "github-cli" && !resolveNativeCommand(provider.command ?? "gh")) {
-    app.addMessage("system", "GitHub Copilot login requires the gh CLI on PATH.");
+    setLoginStatus(app, "GitHub Copilot login requires the gh CLI on PATH.");
     return;
   }
 
@@ -86,16 +91,16 @@ export async function runLoginFlow(options: {
       label: provider.label,
     });
   } catch (error) {
-    app.addMessage("system", `${provider.label} login failed: ${(error as Error).message}`);
+    setLoginStatus(app, `${provider.label} login failed: ${(error as Error).message}`);
     return;
   }
 
   const providers = await refreshProviderState(true);
   if (providers.some((entry) => entry.id === provider.id)) {
     const providerName = providerRegistry.getProviderInfo(provider.id)?.name ?? provider.label;
-    app.addMessage("system", `Logged in to ${providerName}.`);
+    setLoginStatus(app, `Logged in to ${providerName}.`);
     return;
   }
 
-  app.addMessage("system", `${provider.label} login finished, but credentials were not detected yet.`);
+  setLoginStatus(app, `${provider.label} login finished, but credentials were not detected yet.`);
 }

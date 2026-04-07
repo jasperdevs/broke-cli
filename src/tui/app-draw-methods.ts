@@ -9,7 +9,7 @@ import { getCommandMatches as findCommandMatches } from "./command-surface.js";
 import { fmtCost, fmtTokens, wordWrap } from "./render/formatting.js";
 import { APP_BG, ERR, MUTED, OK, P, T, TXT, WARN } from "./app-shared.js";
 import { drawQuestionView } from "./question-view.js";
-import { drawAgentRunsView, drawBudgetView } from "./fullscreen-views.js";
+import { drawAgentRunsView, drawBudgetView, drawModelPickerView } from "./fullscreen-views.js";
 import { appendBottomMenus, buildInfoBar } from "./bottom-ui.js";
 
 type AppState = any;
@@ -61,6 +61,10 @@ export function drawImmediate(app: AppState): void {
   }
   if (app.questionView) {
     drawQuestionView(app);
+    return;
+  }
+  if (app.modelPicker) {
+    drawModelPickerView(app);
     return;
   }
   const { height, width } = app.screen;

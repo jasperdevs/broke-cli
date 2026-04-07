@@ -136,3 +136,55 @@ export function drawAgentRunsView(app: AppState): void {
   app.screen.render(frame.map((line) => app.decorateFrameLine(line, width)));
   app.screen.hideCursor();
 }
+
+export function drawModelPickerView(app: AppState): void {
+  const { width, height } = app.screen;
+  const separatorColor = app.getModeAccent();
+  const picker = app.modelPicker!;
+  const filtered = app.getFilteredModels();
+  const entries = app.getModelPickerEntries();
+  const total = filtered.length;
+  const current = total === 0 ? 0 : Math.min(total, picker.cursor + 1);
+  const count = renderMenuCount(current, total);
+  const scopeLabel = picker.scope === "all"
+    ? `${TXT()}${BOLD}all${RESET}${DIM} | ${RESET}${DIM}pinned${RESET}`
+    : `${DIM}all${RESET}${DIM} | ${RESET}${TXT()}${BOLD}pinned${RESET}`;
+  const prompt = app.input.getText() || app.getMenuPromptPrefix("model");
+  const leftPad = 2;
+  const bodyWidth = Math.max(20, width - leftPad - 4);
+  const bodyHeight = Math.max(1, height - 8);
+  let selectedEntryIndex = entries.findIndex((entry: { selectIndex?: number }) => entry.selectIndex === picker.cursor);
+  if (selectedEntryIndex < 0) selectedEntryIndex = Math.max(0, entries.findIndex((entry: { selectIndex?: number }) => entry.selectIndex !== undefined));
+  let scrollOffset = 0;
+  if (entries.length > bodyHeight) {
+    scrollOffset = Math.max(0, selectedEntryIndex - Math.floor(bodyHeight / 2));
+    if (scrollOffset + bodyHeight > entries.length) scrollOffset = Math.max(0, entries.length - bodyHeight);
+  }
+  const visible = entries.slice(scrollOffset, scrollOffset + bodyHeight);
+  const maxScroll = Math.max(0, entries.length - bodyHeight);
+  const thumbRow = maxScroll > 0
+    ? Math.round((scrollOffset / Math.max(maxScroll, 1)) * Math.max(0, bodyHeight - 1))
+    : -1;
+
+  const frame: string[] = [];
+  frame.push(`${separatorColor}${"─".repeat(width)}${RESET}`);
+  frame.push("");
+  frame.push(` ${T()}${BOLD}Select model${RESET} ${count}`);
+  frame.push(` ${DIM}Scope:${RESET} ${scopeLabel}${DIM} · space pin · tab scope · esc back${RESET}`);
+  frame.push(` ${DIM}${prompt}${RESET}`);
+  frame.push("");
+
+  if (visible.length === 0) {
+    frame.push(`${" ".repeat(leftPad)}${DIM}None${RESET}`);
+  } else {
+    for (let i = 0; i < bodyHeight; i++) {
+      const line = visible[i]?.text ?? "";
+      const indicator = maxScroll > 0 ? (i === thumbRow ? `${T()}█${RESET}` : `${DIM}│${RESET}`) : " ";
+      frame.push(`${" ".repeat(leftPad)}${app.padLine(line, bodyWidth)} ${indicator}`);
+    }
+  }
+
+  while (frame.length < height) frame.push("");
+  app.screen.render(frame.map((line) => app.decorateFrameLine(line, width)));
+  app.screen.hideCursor();
+}

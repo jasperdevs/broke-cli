@@ -28,6 +28,7 @@ describe("login flow", () => {
   it("shows the full Pi-style OAuth provider list in the expected order", async () => {
     const pickerCalls: Array<{ title: string; items: Array<{ id: string; label: string; detail?: string }> }> = [];
     const app = {
+      setStatus: vi.fn(),
       addMessage() {},
       async showQuestion() { return "github.com"; },
       openItemPicker(title: string, items: Array<{ id: string; label: string; detail?: string }>, onSelect: (id: string) => void) {
@@ -53,7 +54,8 @@ describe("login flow", () => {
 
   it("runs the existing codex CLI login path for codex", async () => {
     const app = {
-      addMessage() {},
+      addMessage: vi.fn(),
+      setStatus: vi.fn(),
       async showQuestion() { return ""; },
       openItemPicker() {},
       runExternalCommand: vi.fn(() => 0),
@@ -73,5 +75,7 @@ describe("login flow", () => {
       "codex",
       ["login"],
     );
+    expect(app.addMessage).not.toHaveBeenCalled();
+    expect(app.setStatus).toHaveBeenCalledWith("Logged in to Codex.");
   });
 });

@@ -104,6 +104,36 @@ describe("picker menus", () => {
     app.handleKey({ name: "down", char: "", ctrl: false, meta: false, shift: false });
     expect(app.modelPicker.cursor).toBe(0);
   });
+
+  it("renders long model lists in a scrollable fullscreen view so the last item stays reachable", () => {
+    const app = new App() as any;
+    const models = Array.from({ length: 18 }, (_, i) => ({
+      providerId: i < 9 ? "openai" : "anthropic",
+      providerName: i < 9 ? "OpenAI" : "Anthropic",
+      modelId: `model-${i}`,
+      active: false,
+    }));
+    app.openModelPicker(models, () => {});
+    let rendered: string[] = [];
+    app.screen = {
+      height: 14,
+      width: 72,
+      hasSidebar: false,
+      mainWidth: 72,
+      sidebarWidth: 20,
+      render: (lines: string[]) => { rendered = lines; },
+      setCursor: () => {},
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+    app.handleKey({ name: "end", char: "", ctrl: false, meta: false, shift: false });
+    app.drawImmediate();
+    const output = rendered.map((line) => stripAnsi(line)).join("\n");
+    expect(output).toContain("Select model");
+    expect(output).toContain("/model");
+    expect(output).toContain("model-17");
+    expect(output).not.toContain("no matches");
+  });
 });
 
 describe("thinking preview", () => {
