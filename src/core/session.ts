@@ -1,68 +1,29 @@
 import { randomUUID } from "crypto";
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from "fs";
-import { isAbsolute, join, resolve } from "path";
-import { homedir } from "os";
 import { ContextOptimizer } from "./context-optimizer.js";
 import { getSettings, type TreeFilterMode } from "./config.js";
+import {
+  createEmptySessionBudgetMetrics,
+  type Message,
+  type SessionBudgetMetrics,
+  type SessionData,
+  type SessionEntry,
+  type SessionListItem,
+  type SessionTreeItem,
+} from "./session-types.js";
+import {
+  listRecentSessions,
+  loadSessionData,
+  saveSessionData,
+} from "./session-storage.js";
 
-export interface Message {
-  role: "user" | "assistant" | "system";
-  content: string;
-  timestamp: number;
-  images?: Array<{ mimeType: string; data: string }>;
-}
-
-export interface SessionEntry extends Message {
-  id: string;
-  parentId: string | null;
-  label?: string;
-  labelTimestamp?: number;
-}
-
-export interface SessionTreeItem extends SessionEntry {
-  depth: number;
-  active: boolean;
-  hasChildren: boolean;
-}
-
-interface SessionData {
-  id: string;
-  name?: string;
-  cwd: string;
-  provider: string;
-  model: string;
-  messages?: Message[];
-  entries?: SessionEntry[];
-  leafId?: string | null;
-  totalInputTokens: number;
-  totalOutputTokens: number;
-  totalCost: number;
-  budgetMetrics?: SessionBudgetMetrics;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface SessionBudgetMetrics {
-  totalTurns: number;
-  smallModelTurns: number;
-  idleCacheCliffs: number;
-  autoCompactions: number;
-  freshThreadCarryForwards: number;
-  toolsExposed: number;
-  toolsUsed: number;
-  plannerCacheHits: number;
-  plannerCacheMisses: number;
-  plannerInputTokens: number;
-  plannerOutputTokens: number;
-  executorInputTokens: number;
-  executorOutputTokens: number;
-}
-
-function resolveSessionsDir(): string {
-  const configured = getSettings().sessionDir?.trim();
-  if (!configured) return join(homedir(), ".brokecli", "sessions");
-  return isAbsolute(configured) ? configured : resolve(process.cwd(), configured);
-}
+export type {
+  Message,
+  SessionBudgetMetrics,
+  SessionData,
+  SessionEntry,
+  SessionListItem,
+  SessionTreeItem,
+} from "./session-types.js";
 
 function makeEntry(message: Message, parentId: string | null): SessionEntry {
   return { ...message, id: randomUUID(), parentId };
@@ -125,14 +86,6 @@ function matchesTreeFilter(entry: SessionEntry, mode: TreeFilterMode): boolean {
   }
 }
 
-function getMessagesForData(data: SessionData): Message[] {
-  if (data.entries) {
-    return getActiveEntries(data.entries, data.leafId ?? data.entries[data.entries.length - 1]?.id ?? null)
-      .map(({ id: _id, parentId: _parentId, label: _label, labelTimestamp: _labelTimestamp, ...message }) => message);
-  }
-  return data.messages ?? [];
-}
-
 export class Session {
   private id: string;
   private name = "New Session";
@@ -141,21 +94,7 @@ export class Session {
   private totalInputTokens = 0;
   private totalOutputTokens = 0;
   private totalCost = 0;
-  private budgetMetrics: SessionBudgetMetrics = {
-    totalTurns: 0,
-    smallModelTurns: 0,
-    idleCacheCliffs: 0,
-    autoCompactions: 0,
-    freshThreadCarryForwards: 0,
-    toolsExposed: 0,
-    toolsUsed: 0,
-    plannerCacheHits: 0,
-    plannerCacheMisses: 0,
-    plannerInputTokens: 0,
-    plannerOutputTokens: 0,
-    executorInputTokens: 0,
-    executorOutputTokens: 0,
-  };
+  private budgetMetrics: SessionBudgetMetrics = createEmptySessionBudgetMetrics();
   private cwd = process.cwd();
   private provider = "";
   private model = "";
@@ -366,82 +305,55 @@ export class Session {
     this.totalInputTokens = 0;
     this.totalOutputTokens = 0;
     this.totalCost = 0;
-    this.budgetMetrics = {
-      totalTurns: 0,
-      smallModelTurns: 0,
-      idleCacheCliffs: 0,
-      autoCompactions: 0,
-      freshThreadCarryForwards: 0,
-      toolsExposed: 0,
-      toolsUsed: 0,
-      plannerCacheHits: 0,
-      plannerCacheMisses: 0,
-      plannerInputTokens: 0,
-      plannerOutputTokens: 0,
-      executorInputTokens: 0,
-      executorOutputTokens: 0,
-    };
+    this.budgetMetrics = createEmptySessionBudgetMetrics();
     this.contextOptimizer.reset();
     this.save();
   }
 
   private save(): void {
-    if (!getSettings().autoSaveSessions) return;
-    try {
-      const sessionsDir = resolveSessionsDir();
-      mkdirSync(sessionsDir, { recursive: true });
-      const data: SessionData = {
-        id: this.id,
-        name: this.name,
-        cwd: this.cwd,
-        provider: this.provider,
-        model: this.model,
-        messages: this.getMessages(),
-        entries: this.entries,
-        leafId: this.leafId,
-        totalInputTokens: this.totalInputTokens,
-        totalOutputTokens: this.totalOutputTokens,
-        totalCost: this.totalCost,
-        budgetMetrics: this.budgetMetrics,
-        createdAt: this.createdAt,
-        updatedAt: Date.now(),
-      };
-      writeFileSync(join(sessionsDir, `${this.id}.json`), JSON.stringify(data), "utf-8");
-    } catch {
-      // silently fail - sessions are optional
-    }
+    saveSessionData({
+      id: this.id,
+      name: this.name,
+      cwd: this.cwd,
+      provider: this.provider,
+      model: this.model,
+      messages: this.getMessages(),
+      entries: this.entries,
+      leafId: this.leafId,
+      totalInputTokens: this.totalInputTokens,
+      totalOutputTokens: this.totalOutputTokens,
+      totalCost: this.totalCost,
+      budgetMetrics: this.budgetMetrics,
+      createdAt: this.createdAt,
+      updatedAt: Date.now(),
+    });
   }
 
   static load(id: string): Session | null {
-    try {
-      const path = join(resolveSessionsDir(), `${id}.json`);
-      const raw = readFileSync(path, "utf-8");
-      const data: SessionData = JSON.parse(raw);
-      const session = new Session(data.id);
-      session.name = data.name?.trim() || "New Session";
-      if (data.entries) {
-        session.entries = data.entries;
-        session.leafId = data.leafId ?? data.entries[data.entries.length - 1]?.id ?? null;
-      } else {
-        const converted = entriesFromMessages(data.messages ?? []);
-        session.entries = converted.entries;
-        session.leafId = converted.leafId;
-      }
-      session.totalInputTokens = data.totalInputTokens;
-      session.totalOutputTokens = data.totalOutputTokens;
-      session.totalCost = data.totalCost;
-      session.budgetMetrics = {
-        ...session.budgetMetrics,
-        ...(data.budgetMetrics ?? {}),
-      };
-      session.cwd = data.cwd;
-      session.provider = data.provider;
-      session.model = data.model;
-      session.createdAt = data.createdAt;
-      return session;
-    } catch {
-      return null;
+    const data = loadSessionData(id);
+    if (!data) return null;
+    const session = new Session(data.id);
+    session.name = data.name?.trim() || "New Session";
+    if (data.entries) {
+      session.entries = data.entries;
+      session.leafId = data.leafId ?? data.entries[data.entries.length - 1]?.id ?? null;
+    } else {
+      const converted = entriesFromMessages(data.messages ?? []);
+      session.entries = converted.entries;
+      session.leafId = converted.leafId;
     }
+    session.totalInputTokens = data.totalInputTokens;
+    session.totalOutputTokens = data.totalOutputTokens;
+    session.totalCost = data.totalCost;
+    session.budgetMetrics = {
+      ...session.budgetMetrics,
+      ...(data.budgetMetrics ?? {}),
+    };
+    session.cwd = data.cwd;
+    session.provider = data.provider;
+    session.model = data.model;
+    session.createdAt = data.createdAt;
+    return session;
   }
 
   fork(): Session {
@@ -460,45 +372,7 @@ export class Session {
     return forked;
   }
 
-  static listRecent(limit = 10, query = "", cwd?: string): Array<{ id: string; cwd: string; model: string; cost: number; updatedAt: number; messageCount: number; preview: string }> {
-    if (!getSettings().autoSaveSessions) return [];
-    try {
-      const sessionsDir = resolveSessionsDir();
-      if (!existsSync(sessionsDir)) return [];
-      const files = readdirSync(sessionsDir).filter((f) => f.endsWith(".json"));
-      const normalized = query.trim().toLowerCase();
-      const sessions = files.map((f) => {
-        try {
-          const raw = readFileSync(join(sessionsDir, f), "utf-8");
-          const data: SessionData = JSON.parse(raw);
-          const messages = getMessagesForData(data);
-          const preview = messages.find((msg) => msg.role === "user")?.content?.split(/\r?\n/)[0]?.slice(0, 120) ?? "";
-          return {
-            id: data.id,
-            cwd: data.cwd,
-            model: `${data.provider}/${data.model}`,
-            cost: data.totalCost,
-            updatedAt: data.updatedAt,
-            messageCount: messages.length,
-            preview,
-          };
-        } catch {
-          return null;
-        }
-      }).filter(Boolean) as Array<{ id: string; cwd: string; model: string; cost: number; updatedAt: number; messageCount: number; preview: string }>;
-
-      return sessions
-        .filter((entry) => !cwd || entry.cwd === cwd)
-        .filter((entry) => {
-          if (!normalized) return true;
-          return entry.cwd.toLowerCase().includes(normalized)
-            || entry.model.toLowerCase().includes(normalized)
-            || entry.preview.toLowerCase().includes(normalized);
-        })
-        .sort((a, b) => b.updatedAt - a.updatedAt)
-        .slice(0, limit);
-    } catch {
-      return [];
-    }
+  static listRecent(limit = 10, query = "", cwd?: string): SessionListItem[] {
+    return listRecentSessions(limit, query, cwd);
   }
 }

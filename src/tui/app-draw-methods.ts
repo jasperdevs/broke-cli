@@ -1,7 +1,6 @@
 import stripAnsi from "strip-ansi";
 import { execSync, spawnSync } from "child_process";
 import { getSettings } from "../core/config.js";
-import { renderBudgetDashboard } from "../core/budget-insights.js";
 import { BOLD, DIM, RESET } from "../utils/ansi.js";
 import { truncateVisible, visibleWidth } from "../utils/terminal-width.js";
 import { resolveNativeCommand } from "../ai/native-cli.js";
@@ -10,6 +9,8 @@ import { getCommandMatches as findCommandMatches } from "./command-surface.js";
 import { fmtCost, fmtTokens, wordWrap } from "./render/formatting.js";
 import { APP_BG, ERR, MUTED, OK, P, T, TXT, WARN } from "./app-shared.js";
 import { drawQuestionView } from "./question-view.js";
+import { drawAgentRunsView, drawBudgetView } from "./fullscreen-views.js";
+import { appendBottomMenus, buildInfoBar } from "./bottom-ui.js";
 
 type AppState = any;
 
@@ -98,182 +99,6 @@ export function drawImmediate(app: AppState): void {
   }
   const mainTopHeight = Math.max(0, height - bottomLines.length);
   app.screen.setCursor(Math.min(height, mainTopHeight + 2 + inputLayout.row), Math.min(width, 1 + inputLayout.col));
-}
-
-function drawBudgetView(app: AppState): void {
-  const { width, height } = app.screen;
-  const separatorColor = app.getModeAccent();
-  const title = `${T()}${BOLD}${app.budgetView.title}${RESET}`;
-  const report = app.budgetView.reports[app.budgetView.scope];
-  const scopeLabel = app.budgetView.scope === "all" ? "all sessions" : "current session";
-  const scopeToggleHint = app.budgetView.scope === "all" ? "tab current" : "tab all";
-  const leftPad = 3;
-  const bodyWidth = Math.max(20, width - leftPad - 4);
-  const bodyHeight = Math.max(1, height - 8);
-  const allLines = renderBudgetDashboard({
-    report,
-    width: bodyWidth,
-    scopeLabel,
-    contextTokens: app.contextTokenCount,
-    contextLimit: app.contextLimitTokens,
-    showContext: app.budgetView.scope === "session",
-  });
-  const maxScroll = Math.max(0, allLines.length - bodyHeight);
-  if (app.budgetView.scrollOffset > maxScroll) app.budgetView.scrollOffset = maxScroll;
-  const visible = allLines.slice(app.budgetView.scrollOffset, app.budgetView.scrollOffset + bodyHeight);
-  const thumbRow = maxScroll > 0 ? Math.round((app.budgetView.scrollOffset / Math.max(maxScroll, 1)) * Math.max(0, bodyHeight - 1)) : -1;
-
-  const frame: string[] = [];
-  const topRule = `${separatorColor}${"─".repeat(width)}${RESET}`;
-  frame.push(topRule);
-  frame.push("");
-  frame.push("");
-  frame.push(`${" ".repeat(leftPad)}${title}`);
-  frame.push(`${" ".repeat(leftPad)}${DIM}${scopeLabel}${RESET}${DIM} · ${scopeToggleHint} · esc back${RESET}`);
-  frame.push("");
-  for (let i = 0; i < bodyHeight; i++) {
-    const line = visible[i] ?? "";
-    const indicator = maxScroll > 0 ? (i === thumbRow ? `${T()}█${RESET}` : `${DIM}│${RESET}`) : " ";
-    frame.push(`${" ".repeat(leftPad)}${app.padLine(line, bodyWidth)} ${indicator}`);
-  }
-  while (frame.length < height) frame.push("");
-  app.screen.render(frame.map((line) => app.decorateFrameLine(line, width)));
-  app.screen.hideCursor();
-}
-
-function drawAgentRunsView(app: AppState): void {
-  const { width, height } = app.screen;
-  const separatorColor = app.getModeAccent();
-  const title = `${T()}${BOLD}${app.agentRunView.title}${RESET}`;
-  const listWidth = Math.min(38, Math.max(24, Math.floor(width * 0.36)));
-  const detailWidth = Math.max(20, width - listWidth - 3);
-  const rows = Math.max(1, height - 3);
-  const runs = app.agentRunView.runs;
-  const selectedIndex = Math.max(0, Math.min(runs.length - 1, app.agentRunView.selectedIndex));
-  app.agentRunView.selectedIndex = selectedIndex;
-  const maxScroll = Math.max(0, runs.length - rows);
-  if (selectedIndex < app.agentRunView.scrollOffset) app.agentRunView.scrollOffset = selectedIndex;
-  if (selectedIndex >= app.agentRunView.scrollOffset + rows) app.agentRunView.scrollOffset = Math.max(0, selectedIndex - rows + 1);
-  if (app.agentRunView.scrollOffset > maxScroll) app.agentRunView.scrollOffset = maxScroll;
-
-  const frame: string[] = [];
-  const count = renderMenuCount(runs.length === 0 ? 0 : selectedIndex + 1, runs.length);
-  frame.push(`${separatorColor}${"─".repeat(width)}${RESET}`);
-  const headerRight = `${count} ${DIM}esc back${RESET}`;
-  frame.push(` ${title}${" ".repeat(Math.max(1, width - 2 - visibleWidth(title) - visibleWidth(headerRight)))}${headerRight}`);
-
-  const visibleRuns = runs.slice(app.agentRunView.scrollOffset, app.agentRunView.scrollOffset + rows);
-  const selectedRun = runs[selectedIndex];
-  const detailLines = selectedRun
-    ? buildAgentRunDetail(app, selectedRun, detailWidth)
-    : [`${DIM}no agent runs yet${RESET}`];
-
-  for (let i = 0; i < rows; i++) {
-    const run = visibleRuns[i];
-    const absoluteIndex = app.agentRunView.scrollOffset + i;
-    const selected = absoluteIndex === selectedIndex;
-    const left = run ? app.padLine(renderAgentRunListItem(run, selected, listWidth), listWidth) : app.padLine("", listWidth);
-    const right = app.padLine(detailLines[i] ?? "", detailWidth);
-    frame.push(`${left} ${app.getSidebarBorder()} ${right}`);
-  }
-
-  while (frame.length < height) frame.push("");
-  app.screen.render(frame.map((line) => app.decorateFrameLine(line, width)));
-  app.screen.hideCursor();
-}
-
-function renderAgentRunListItem(run: { prompt: string; status: "running" | "done" | "error"; detail?: string }, selected: boolean, width: number): string {
-  const statusColor = run.status === "error" ? ERR() : run.status === "done" ? DIM : OK();
-  const arrow = selected ? `${T()}>${RESET}` : `${DIM} ${RESET}`;
-  const label = selected ? `${TXT()}${BOLD}Task${RESET}` : `${DIM}Task${RESET}`;
-  const prompt = truncateVisible(run.prompt.replace(/\s+/g, " ").trim() || "[empty]", Math.max(8, width - 10));
-  const detail = run.detail ? ` ${DIM}${truncateVisible(run.detail, Math.max(8, width - 8))}${RESET}` : "";
-  return `${arrow} ${label} ${statusColor}${truncateVisible(prompt, Math.max(8, width - 10))}${RESET}${detail}`;
-}
-
-function buildAgentRunDetail(app: AppState, run: { prompt: string; status: "running" | "done" | "error"; detail?: string; result?: string }, width: number): string[] {
-  const lines: string[] = [];
-  const statusColor = run.status === "error" ? ERR() : run.status === "done" ? OK() : T();
-  const header = `${statusColor}${BOLD}${run.status === "running" ? "Working" : run.status === "error" ? "Error" : "Done"}${RESET}`;
-  lines.push(`${header}${run.detail ? ` ${DIM}${run.detail}${RESET}` : ""}`);
-  lines.push("");
-  lines.push(`${DIM}Task${RESET}`);
-  for (const line of wordWrap(run.prompt.replace(/\s+/g, " ").trim(), Math.max(8, width))) lines.push(`${TXT()}${line}${RESET}`);
-  lines.push("");
-  lines.push(`${DIM}Result${RESET}`);
-  const body = (run.result ?? (run.status === "running" ? "Preparing prompt..." : "[empty]")).trim();
-  for (const rawLine of body.split(/\r?\n/)) {
-    const wrapped = wordWrap(rawLine || " ", Math.max(8, width));
-    for (const line of wrapped) lines.push(`${TXT()}${line}${RESET}`);
-  }
-  return lines;
-}
-
-function appendBottomMenus(app: AppState, bottomLines: string[], bottomMenuClicks: Array<{ lineIndex: number; action: () => void }>, height: number, mainW: number, separatorColor: string): void {
-  if (app.filePicker) {
-    bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
-    app.appendFilePicker(bottomLines, height, bottomMenuClicks);
-    return;
-  }
-  if (app.itemPicker) {
-    bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
-    app.appendItemPicker(bottomLines, height, bottomMenuClicks);
-    return;
-  }
-  if (app.settingsPicker) {
-    bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
-    app.appendSettingsPicker(bottomLines, height, bottomMenuClicks);
-    return;
-  }
-  if (app.modelPicker) {
-    bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
-    app.appendModelPicker(bottomLines, height, bottomMenuClicks);
-    return;
-  }
-
-  const allSuggestions = app.getCommandSuggestionEntries();
-  const suggestions = app.buildMenuView(allSuggestions, app.cmdSuggestionCursor, Math.max(1, getSettings().autocompleteMaxVisible));
-  if (suggestions.length > 0) {
-    bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
-    bottomLines.push(` ${T()}${BOLD}Commands${RESET} ${renderMenuCount(Math.min(app.cmdSuggestionCursor, allSuggestions.length - 1) + 1, allSuggestions.length)}`);
-  }
-  for (const entry of suggestions) {
-    if (entry.selectIndex !== undefined) app.registerMenuClickTarget(bottomMenuClicks, bottomLines, () => app.applyCommandSuggestion(entry.selectIndex!));
-    bottomLines.push(entry.text);
-  }
-}
-
-function buildInfoBar(app: AppState, hasSidebar: boolean, mainW: number): string {
-  const parts: Array<{ text: string; plain: string }> = [];
-  if (app.ctrlCCount === 1) parts.push({ text: `${ERR()}Ctrl+C again to exit${RESET}`, plain: "Ctrl+C again to exit" });
-  else if (app.escPrimed) parts.push({ text: `${ERR()}Esc again to stop${RESET}`, plain: "Esc again to stop" });
-  if (app.isStreaming) parts.push({ text: `${DIM}esc${RESET} ${DIM}stop${RESET}`, plain: "esc stop" });
-
-  const settings = getSettings();
-  const modeLabel = app.mode === "plan" ? "plan" : "build";
-  parts.push({ text: `${app.mode === "plan" ? P() : T()}${modeLabel}${RESET}`, plain: modeLabel });
-  const thinkLevel = settings.thinkingLevel || (settings.enableThinking ? "low" : "off");
-  if (thinkLevel !== "off") parts.push({ text: `${T()}${thinkLevel}${RESET}`, plain: thinkLevel });
-  const caveLevel = settings.cavemanLevel ?? "auto";
-  if (caveLevel !== "off") parts.push({ text: `🪨 ${WARN()}${caveLevel}${RESET}`, plain: `rock ${caveLevel}` });
-  if (app.getAgentRuns && app.getAgentRuns().length > 0) parts.push({ text: `${DIM}alt+a${RESET} ${DIM}agents${RESET}`, plain: "alt+a agents" });
-
-  const liveTokens = app.getLiveTotalTokens();
-  if ((settings.showCost && app.sessionCost > 0) || (settings.showTokens && !hasSidebar && liveTokens > 0)) {
-    const costPart = settings.showCost && app.sessionCost > 0 ? fmtCost(app.animCost.get()) : "";
-    const tokenPart = settings.showTokens && !hasSidebar && liveTokens > 0 ? app.renderTokenSummaryParts().join(" ") : "";
-    const statStr = [costPart, tokenPart].filter(Boolean).join(" · ");
-    parts.push({ text: `${DIM}${statStr}${RESET}`, plain: statStr });
-  }
-
-  const visible = [...parts];
-  const sep = " | ";
-  while (visible.length > 1) {
-    const totalWidth = visible.reduce((s, p) => s + p.plain.length, 0) + (visible.length - 1) * sep.length + 2;
-    if (totalWidth <= mainW) break;
-    visible.pop();
-  }
-  return ` ${visible.map((p) => p.text).join(`${DIM}${sep}${RESET}`)}`;
 }
 
 function buildFrameLines(app: AppState, opts: { height: number; width: number; mainW: number; hasSidebar: boolean; footerLines: string[]; bottomLines: string[]; bottomMenuClicks: Array<{ lineIndex: number; action: () => void }>; isHome: boolean; }): string[] {

@@ -17,13 +17,15 @@ import type { AppDrawMethods } from "./app-draw-bindings.js";
 import { appDrawMethods } from "./app-draw-bindings.js";
 import type { AppStateCoreMethods } from "./app-state-core.js";
 import { appStateCoreMethods } from "./app-state-core.js";
+import type { AppStateMessageMethods } from "./app-state-messages.js";
+import { appStateMessageMethods } from "./app-state-messages.js";
 import type { AppStateUiMethods } from "./app-state-ui.js";
 import { appStateUiMethods } from "./app-state-ui.js";
 import { AnimCounter, HOME_TIPS } from "./app-shared.js";
 import { APP_VERSION } from "../core/app-meta.js";
 import type { AgentRun, AgentRunView, BudgetView, ChatMessage, ModelOption, PendingImage, PendingMessage, PickerItem, QuestionView, SettingEntry, TodoItem, UpdateNotice } from "./app-types.js";
 
-export interface App extends AppStateCoreMethods, AppStateUiMethods, AppMenuMethods, AppInputMethods, AppRenderMethods, AppDrawMethods {}
+export interface App extends AppStateCoreMethods, AppStateMessageMethods, AppStateUiMethods, AppMenuMethods, AppInputMethods, AppRenderMethods, AppDrawMethods {}
 
 export class App {
   private static readonly DRAW_THROTTLE_MS = 16;
@@ -158,6 +160,7 @@ export class App {
 Object.assign(
   App.prototype,
   appStateCoreMethods,
+  appStateMessageMethods,
   appStateUiMethods,
   appMenuMethods,
   appInputMethods,

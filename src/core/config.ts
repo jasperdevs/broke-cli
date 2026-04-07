@@ -2,222 +2,29 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { join, resolve } from "path";
 import { homedir } from "os";
 import { parse as parseJsonc } from "jsonc-parser";
-
-export type Mode = "build" | "plan";
-export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
-export type CavemanLevel = "off" | "lite" | "auto" | "ultra";
-export type TreeFilterMode = "default" | "no-tools" | "user-only" | "labeled-only" | "all";
-export type QueueDeliveryMode = "one-at-a-time" | "all";
-export type TransportMode = "auto" | "sse" | "websocket";
-
-export interface PackageFilterSource {
-  source: string;
-  extensions?: string[];
-  skills?: string[];
-  prompts?: string[];
-  themes?: string[];
-}
-
-export type PackageSource = string | PackageFilterSource;
-
-export interface CompactionSettings {
-  enabled: boolean;
-  reserveTokens: number;
-  keepRecentTokens: number;
-}
-
-export interface BranchSummarySettings {
-  reserveTokens: number;
-  skipPrompt: boolean;
-}
-
-export interface RetrySettings {
-  enabled: boolean;
-  maxRetries: number;
-  baseDelayMs: number;
-  maxDelayMs: number;
-}
-
-export interface TerminalSettings {
-  showImages: boolean;
-  clearOnShrink: boolean;
-}
-
-export interface ImageSettings {
-  autoResize: boolean;
-  blockImages: boolean;
-}
-
-export interface MarkdownSettings {
-  codeBlockIndent: string;
-}
-
-export interface Settings {
-  yoloMode: boolean;
-  autoCompact: boolean;
-  maxSessionCost: number;
-  showTokens: boolean;
-  showCost: boolean;
-  autoSaveSessions: boolean;
-  enableThinking: boolean;
-  thinkingLevel: ThinkingLevel;
-  gitCheckpoints: boolean;
-  notifyOnResponse: boolean;
-  hideSidebar: boolean;
-  autoRoute: boolean;
-  scopedModels: string[];
-  favoriteThemes: string[];
-  lastModel: string;
-  mode: Mode;
-  cavemanLevel: CavemanLevel;
-  theme: string;
-  autoLint: boolean;
-  autoTest: boolean;
-  autoFixValidation: boolean;
-  lintCommand: string;
-  testCommand: string;
-  deniedTools: string[];
-  disabledExtensions: string[];
-  quietStartup: boolean;
-  collapseChangelog: boolean;
-  treeFilterMode: TreeFilterMode;
-  editorPaddingX: number;
-  autocompleteMaxVisible: number;
-  showHardwareCursor: boolean;
-  sessionDir: string;
-  defaultThinkingLevel: ThinkingLevel;
-  hideThinkingBlock: boolean;
-  thinkingBudgets: Partial<Record<Exclude<ThinkingLevel, "off">, number>>;
-  compaction: CompactionSettings;
-  branchSummary: BranchSummarySettings;
-  retry: RetrySettings;
-  steeringMode: QueueDeliveryMode;
-  followUpMode: QueueDeliveryMode;
-  transport: TransportMode;
-  terminal: TerminalSettings;
-  images: ImageSettings;
-  shellPath: string;
-  shellCommandPrefix: string;
-  npmCommand: string[];
-  enabledModels: string[];
-  markdown: MarkdownSettings;
-  packages: PackageSource[];
-  extensions: string[];
-  skills: string[];
-  prompts: string[];
-  themes: string[];
-  enableSkillCommands: boolean;
-  verboseStartup: boolean;
-  discoverExtensions: boolean;
-  discoverSkills: boolean;
-  discoverPrompts: boolean;
-  discoverThemes: boolean;
-}
-
-export const DEFAULT_SETTINGS: Settings = {
-  yoloMode: true,
-  autoCompact: true,
-  maxSessionCost: 0,
-  showTokens: true,
-  showCost: true,
-  autoSaveSessions: true,
-  enableThinking: false,
-  thinkingLevel: "off" as ThinkingLevel,
-  gitCheckpoints: true,
-  notifyOnResponse: false,
-  hideSidebar: false,
-  autoRoute: true,
-  scopedModels: [],
-  favoriteThemes: [],
-  lastModel: "",
-  mode: "build",
-  cavemanLevel: "auto",
-  theme: "brokecli-dark",
-  autoLint: false,
-  autoTest: false,
-  autoFixValidation: false,
-  lintCommand: "npm run lint",
-  testCommand: "npm test",
-  deniedTools: [],
-  disabledExtensions: [],
-  quietStartup: false,
-  collapseChangelog: false,
-  treeFilterMode: "default",
-  editorPaddingX: 0,
-  autocompleteMaxVisible: 5,
-  showHardwareCursor: false,
-  sessionDir: "",
-  defaultThinkingLevel: "off",
-  hideThinkingBlock: false,
-  thinkingBudgets: {
-    minimal: 1024,
-    low: 4096,
-    medium: 10240,
-    high: 32768,
-    xhigh: 65536,
-  },
-  compaction: {
-    enabled: true,
-    reserveTokens: 16384,
-    keepRecentTokens: 20000,
-  },
-  branchSummary: {
-    reserveTokens: 16384,
-    skipPrompt: false,
-  },
-  retry: {
-    enabled: true,
-    maxRetries: 3,
-    baseDelayMs: 2000,
-    maxDelayMs: 60000,
-  },
-  steeringMode: "one-at-a-time",
-  followUpMode: "one-at-a-time",
-  transport: "auto",
-  terminal: {
-    showImages: true,
-    clearOnShrink: false,
-  },
-  images: {
-    autoResize: true,
-    blockImages: false,
-  },
-  shellPath: "",
-  shellCommandPrefix: "",
-  npmCommand: [],
-  enabledModels: [],
-  markdown: {
-    codeBlockIndent: "  ",
-  },
-  packages: [],
-  extensions: [],
-  skills: [],
-  prompts: [],
-  themes: [],
-  enableSkillCommands: true,
-  verboseStartup: false,
-  discoverExtensions: true,
-  discoverSkills: true,
-  discoverPrompts: true,
-  discoverThemes: true,
-};
-
-export interface BrokeConfig {
-  defaultProvider?: string;
-  defaultModel?: string;
-  budget?: { maxSessionCost?: number; maxMonthlyCost?: number };
-  providers?: Record<string, { apiKey?: string; baseUrl?: string; disabled?: boolean }>;
-  modelContextLimits?: Record<string, number>;
-  settings?: Partial<Settings>;
-}
-
-export type ProviderCredentialKind = "api_key" | "native_oauth" | "none";
-
-export interface ProviderCredential {
-  kind: ProviderCredentialKind;
-  value?: string;
-  source?: string;
-}
+export type {
+  Mode,
+  ThinkingLevel,
+  CavemanLevel,
+  TreeFilterMode,
+  QueueDeliveryMode,
+  TransportMode,
+  PackageFilterSource,
+  PackageSource,
+  CompactionSettings,
+  BranchSummarySettings,
+  RetrySettings,
+  TerminalSettings,
+  ImageSettings,
+  MarkdownSettings,
+  Settings,
+  BrokeConfig,
+  ProviderCredentialKind,
+  ProviderCredential,
+} from "./config-types.js";
+export { DEFAULT_SETTINGS } from "./config-defaults.js";
+import { DEFAULT_SETTINGS } from "./config-defaults.js";
+import type { BrokeConfig, ProviderCredential, Settings } from "./config-types.js";
 
 const CONFIG_DIR = join(homedir(), ".brokecli");
 const CONFIG_FILE = join(CONFIG_DIR, "config.json");

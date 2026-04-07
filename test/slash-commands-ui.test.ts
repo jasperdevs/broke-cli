@@ -1,0 +1,305 @@
+import { afterEach, describe, expect, it } from "vitest";
+import { getCredentials, saveCredentials } from "../src/core/auth.js";
+import { loadConfig, updateProviderConfig, updateSetting } from "../src/core/config.js";
+import { handleSlashCommand } from "../src/cli/slash-commands.js";
+import { Session } from "../src/core/session.js";
+import {
+  authPath,
+  cleanupSlashCommandFixtures,
+  configPath,
+  createAppStub,
+  createSlashArgs,
+  existsSync,
+  extDir,
+  extPath,
+  localTemplateDir,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  uiTemplatePath,
+  unlinkSync,
+  writeFileSync,
+} from "./slash-command-test-helpers.js";
+
+afterEach(() => {
+  cleanupSlashCommandFixtures();
+  rmSync(uiTemplatePath, { force: true });
+});
+
+describe("slash command UI surfaces", () => {
+  it("reloads extensions immediately when toggled with enter", async () => {
+    mkdirSync(extDir, { recursive: true });
+    writeFileSync(extPath, "exports.register = () => {};", "utf-8");
+
+    const app = createAppStub();
+    let reloaded = 0;
+    let latestItems: Array<{ id: string; label: string; detail?: string }> = [];
+    let onSelect: ((id: string) => void) | null = null;
+    app.openItemPicker = (_title: string, _items: any[], nextOnSelect: (id: string) => void) => {
+      onSelect = nextOnSelect;
+    };
+    app.updateItemPickerItems = (items: Array<{ id: string; label: string; detail?: string }>) => {
+      latestItems = items;
+    };
+
+    await handleSlashCommand({
+      text: "/extensions",
+      app,
+      session: new Session(`test-extensions-${Date.now()}`),
+      ...createSlashArgs({
+        hooks: { emit() {}, reload() { reloaded += 1; } },
+      }),
+    });
+
+    onSelect?.("slash-test-extension");
+
+    expect(reloaded).toBe(1);
+    expect(loadConfig().settings?.disabledExtensions).toContain("slash-test-extension");
+    expect(latestItems.length === 0 || latestItems.some((item) => item.id === "slash-test-extension")).toBe(true);
+  });
+
+  it("opens an empty extensions picker instead of writing a transcript message", async () => {
+    const app = createAppStub();
+    let pickerItems: Array<{ id: string; label: string; detail?: string }> = [];
+    app.openItemPicker = (_title: string, items: Array<{ id: string; label: string; detail?: string }>) => {
+      pickerItems = items;
+    };
+
+    const result = await handleSlashCommand({
+      text: "/extensions",
+      app,
+      session: new Session(`test-extensions-empty-${Date.now()}`),
+      ...createSlashArgs(),
+    });
+
+    expect(result.handled).toBe(true);
+    expect(app.messages).toEqual([]);
+    expect(pickerItems).toEqual([{ id: "__none__", label: "None", detail: "~/.brokecli/extensions is empty" }]);
+  });
+
+  it("opens templates and skills in pickers instead of dumping text into chat", async () => {
+    mkdirSync(localTemplateDir, { recursive: true });
+    writeFileSync(uiTemplatePath, "Template body", "utf-8");
+
+    const app = createAppStub();
+    const opened: Array<{ title: string; items: Array<{ id: string; label: string; detail?: string }> }> = [];
+    app.openItemPicker = (title: string, items: Array<{ id: string; label: string; detail?: string }>) => {
+      opened.push({ title, items });
+    };
+
+    const templateResult = await handleSlashCommand({
+      text: "/templates",
+      app,
+      session: new Session(`test-templates-picker-${Date.now()}`),
+      ...createSlashArgs(),
+    });
+
+    const skillsResult = await handleSlashCommand({
+      text: "/skills",
+      app,
+      session: new Session(`test-skills-picker-${Date.now()}`),
+      ...createSlashArgs(),
+    });
+
+    expect(templateResult.handled).toBe(true);
+    expect(skillsResult.handled).toBe(true);
+    expect(app.messages).toEqual([]);
+    expect(opened.find((entry) => entry.title === "Templates")?.items.some((item) => item.id === "slash-test-template-ui" || item.label.includes("slash-test-template-ui"))).toBe(true);
+    expect((opened.find((entry) => entry.title === "Skills")?.items.length ?? 0) > 0).toBe(true);
+  });
+
+  it("explains that /resume is unavailable when session persistence is off", async () => {
+    updateSetting("autoSaveSessions", false);
+
+    const app = createAppStub();
+    let pickerItems: Array<{ id: string; label: string; detail?: string }> = [];
+    app.openItemPicker = (_title: string, items: Array<{ id: string; label: string; detail?: string }>) => {
+      pickerItems = items;
+    };
+
+    try {
+      const result = await handleSlashCommand({
+        text: "/resume",
+        app,
+        session: new Session(`test-resume-disabled-${Date.now()}`),
+        ...createSlashArgs(),
+      });
+
+      expect(result.handled).toBe(true);
+      expect(app.messages).toEqual([]);
+      expect(pickerItems).toEqual([{ id: "__none__", label: "None", detail: "session history is off" }]);
+    } finally {
+      updateSetting("autoSaveSessions", true);
+    }
+  });
+
+  it("keeps /resume scoped to the current project", async () => {
+    updateSetting("autoSaveSessions", true);
+    const app = createAppStub();
+    let capturedItems: Array<{ id: string; label: string; detail?: string }> = [];
+    app.openItemPicker = (_title: string, items: Array<{ id: string; label: string; detail?: string }>) => {
+      capturedItems = items;
+    };
+
+    const local = new Session(`test-resume-local-${Date.now()}`);
+    local.addMessage("user", "local session");
+    const remote = new Session(`test-resume-remote-${Date.now()}`);
+    (remote as any).cwd = "C:\\other-project";
+    remote.addMessage("user", "remote session");
+
+    const result = await handleSlashCommand({
+      text: "/resume",
+      app,
+      session: new Session(`test-resume-query-${Date.now()}`),
+      ...createSlashArgs(),
+    });
+
+    expect(result.handled).toBe(true);
+    expect(capturedItems.some((item) => item.label.includes("local session"))).toBe(true);
+    expect(capturedItems.some((item) => item.label.includes("remote session"))).toBe(false);
+  });
+
+  it("opens the agent task inspector for /agents", async () => {
+    const app = createAppStub();
+    let opened: { title: string; runs: any[] } | null = null;
+    app.getAgentRuns = () => [{
+      id: "run-1",
+      prompt: "Review the failing tests",
+      status: "done",
+      result: "Tests fail in session-manager",
+      detail: "model openai/gpt-5.4 · tools readFile,grep",
+      createdAt: Date.now(),
+    }];
+    app.openAgentRunsView = (title: string, runs: any[]) => {
+      opened = { title, runs };
+    };
+
+    const result = await handleSlashCommand({
+      text: "/agents",
+      app,
+      session: new Session(`test-agents-${Date.now()}`),
+      ...createSlashArgs(),
+    });
+
+    expect(result.handled).toBe(true);
+    expect(opened?.title).toBe("Agent Tasks");
+    expect(opened?.runs).toHaveLength(1);
+  });
+
+  it("opens an empty agent task inspector for /agents with no runs", async () => {
+    const app = createAppStub();
+    let opened: { title: string; runs: any[] } | null = null;
+    app.openAgentRunsView = (title: string, runs: any[]) => {
+      opened = { title, runs };
+    };
+
+    const result = await handleSlashCommand({
+      text: "/agents",
+      app,
+      session: new Session(`test-agents-empty-${Date.now()}`),
+      ...createSlashArgs(),
+    });
+
+    expect(result.handled).toBe(true);
+    expect(opened?.title).toBe("Agent Tasks");
+    expect(opened?.runs).toEqual([]);
+    expect(app.messages).toEqual([]);
+  });
+
+  it("opens a session info picker for /session", async () => {
+    const app = createAppStub();
+    let sessionItems: Array<{ id: string; label: string; detail?: string }> = [];
+    app.openItemPicker = (_title: string, items: Array<{ id: string; label: string; detail?: string }>) => {
+      sessionItems = items;
+    };
+    const session = new Session(`test-session-info-${Date.now()}`);
+    session.setName("Test Session");
+    session.addMessage("user", "hello");
+
+    const result = await handleSlashCommand({
+      text: "/session",
+      app,
+      session,
+      ...createSlashArgs(),
+    });
+
+    expect(result.handled).toBe(true);
+    expect(sessionItems.some((item) => item.label === "Test Session")).toBe(true);
+    expect(sessionItems.some((item) => item.detail === "session dir")).toBe(true);
+  });
+
+  it("opens a hotkeys picker for /hotkeys", async () => {
+    const app = createAppStub();
+    let hotkeyItems: Array<{ id: string; label: string; detail?: string }> = [];
+    app.openItemPicker = (_title: string, items: Array<{ id: string; label: string; detail?: string }>) => {
+      hotkeyItems = items;
+    };
+
+    const result = await handleSlashCommand({
+      text: "/hotkeys",
+      app,
+      session: new Session(`test-hotkeys-${Date.now()}`),
+      ...createSlashArgs(),
+    });
+
+    expect(result.handled).toBe(true);
+    expect(hotkeyItems.some((item) => item.detail === "send")).toBe(true);
+    expect(hotkeyItems.some((item) => item.detail === "newline")).toBe(true);
+  });
+
+  it("reloads extensions and provider state for /reload", async () => {
+    const app = createAppStub();
+    let reloaded = 0;
+    let refreshed = 0;
+    const result = await handleSlashCommand({
+      text: "/reload",
+      app,
+      session: new Session(`test-reload-${Date.now()}`),
+      ...createSlashArgs({
+        refreshProviderState: async () => {
+          refreshed += 1;
+          return [];
+        },
+        hooks: { emit() {}, reload() { reloaded += 1; } },
+      }),
+    });
+
+    expect(result.handled).toBe(true);
+    expect(reloaded).toBe(1);
+    expect(refreshed).toBe(1);
+  });
+
+  it("clears stored auth for /logout <provider>", async () => {
+    const previousConfig = existsSync(configPath) ? readFileSync(configPath, "utf-8") : null;
+    const previousAuth = existsSync(authPath) ? readFileSync(authPath, "utf-8") : null;
+
+    try {
+      updateProviderConfig("openai", { apiKey: "sk-test-config-key" });
+      saveCredentials("openai", "test-auth-token");
+
+      const app = createAppStub();
+      const result = await handleSlashCommand({
+        text: "/logout openai",
+        app,
+        session: new Session(`test-logout-${Date.now()}`),
+        ...createSlashArgs(),
+      });
+
+      expect(result.handled).toBe(true);
+      expect(getCredentials("openai")).toBeNull();
+      expect(loadConfig().providers?.openai?.apiKey).toBeUndefined();
+      expect(app.messages.some((entry) => entry.content.includes("Cleared stored brokecli auth for: openai"))).toBe(true);
+    } finally {
+      if (previousConfig == null) {
+        if (existsSync(configPath)) unlinkSync(configPath);
+      } else {
+        writeFileSync(configPath, previousConfig, "utf-8");
+      }
+      if (previousAuth == null) {
+        if (existsSync(authPath)) unlinkSync(authPath);
+      } else {
+        writeFileSync(authPath, previousAuth, "utf-8");
+      }
+    }
+  });
+});

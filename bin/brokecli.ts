@@ -1,7 +1,6 @@
 import { Command } from "commander";
 import { execSync } from "child_process";
-import { existsSync, readFileSync, writeFileSync } from "fs";
-import { resolve } from "path";
+import { writeFileSync } from "fs";
 import { App } from "../src/tui/app.js";
 import type { DetectedProvider } from "../src/ai/detect.js";
 import type { ModelHandle } from "../src/ai/providers.js";
@@ -29,6 +28,14 @@ import { buildHtmlExport } from "../src/cli/exports.js";
 import { registerPackageCommands } from "../src/cli/package-commands.js";
 import { ensureConfiguredPackagesInstalled } from "../src/core/package-manager.js";
 import { checkForNewVersion } from "../src/core/update.js";
+import {
+  isSkippedPromptAnswer,
+  isValidHttpBaseUrl,
+  normalizeThinkingLevel,
+  normalizeProgramArgv,
+  readPromptArg,
+  splitModelArg,
+} from "../src/cli/cli-helpers.js";
 
 const program = new Command()
   .name("brokecli")
@@ -68,63 +75,6 @@ const program = new Command()
   .option("--rpc", "Non-interactive JSON RPC mode");
 
 registerPackageCommands(program);
-
-function isSkippedPromptAnswer(value: string | undefined | null): boolean {
-  const normalized = (value ?? "").trim().toLowerCase();
-  return normalized === "" || normalized === "[user skipped]" || normalized === "[no answer]";
-}
-
-function isValidHttpBaseUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return (url.protocol === "http:" || url.protocol === "https:") && !!url.host;
-  } catch {
-    return false;
-  }
-}
-
-function normalizeThinkingLevel(level: string | undefined): "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | undefined {
-  if (!level) return undefined;
-  const normalized = level.trim().toLowerCase();
-  if (["off", "minimal", "low", "medium", "high", "xhigh"].includes(normalized)) {
-    return normalized as "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
-  }
-  return undefined;
-}
-
-function splitModelArg(modelArg: string | undefined): { provider?: string; model?: string; thinking?: string } {
-  if (!modelArg) return {};
-  const [rawModel, thinking] = modelArg.split(":");
-  const parts = rawModel.split("/");
-  if (parts.length === 2) return { provider: parts[0], model: parts[1], thinking };
-  return { model: rawModel, thinking };
-}
-
-
-async function readPromptArg(promptParts: string[]): Promise<string> {
-  const stdinChunks: Buffer[] = [];
-  if (!process.stdin.isTTY) {
-    for await (const chunk of process.stdin) stdinChunks.push(Buffer.from(chunk));
-  }
-  const stdinText = stdinChunks.length > 0 ? Buffer.concat(stdinChunks).toString("utf-8").trim() : "";
-  const promptSegments = promptParts.map((part) => {
-    if (!part.startsWith("@")) return part;
-    const filePath = resolve(part.slice(1));
-    if (!existsSync(filePath)) return part;
-    try {
-      return `--- @${part.slice(1)} ---\n${readFileSync(filePath, "utf-8")}`;
-    } catch {
-      return part;
-    }
-  }).filter(Boolean);
-  const joinedPrompt = promptSegments.join(" ").trim();
-  if (joinedPrompt && stdinText) return `${joinedPrompt}\n\n${stdinText}`;
-  if (joinedPrompt) return joinedPrompt;
-  if (stdinText) return stdinText;
-  const chunks: Buffer[] = [];
-  for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
-  return Buffer.concat(chunks).toString("utf-8").trim();
-}
 
 program.action(async (promptParts, opts) => {
   clearRuntimeSettings();
@@ -582,9 +532,4 @@ program.action(async (promptParts, opts) => {
 // Close the program.action callback
 });
 
-const normalizedArgv = process.argv.map((arg, index, argv) => {
-  if (arg === "--session") return "--session-id";
-  return arg;
-});
-
-program.parse(normalizedArgv);
+program.parse(normalizeProgramArgv(process.argv));
