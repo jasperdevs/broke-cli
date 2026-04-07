@@ -123,7 +123,8 @@ export class ProviderRegistry {
       if (currentKey.startsWith(`${provider.id}/`)) {
         preserve.push(currentModelId);
       }
-      const visibleModels = [...new Set([...getDisplayModels(provider.id, preserve), ...preserve])];
+      const supportedPreserve = [...new Set(preserve.filter((modelId) => supportsProviderModel(provider.id, modelId)))];
+      const visibleModels = getDisplayModels(provider.id, supportedPreserve);
       for (const modelId of visibleModels) {
         options.push({
           providerId: provider.id,

@@ -96,4 +96,21 @@ describe("provider model filtering", () => {
   it("falls back to the provider default when a restored model id is no longer visible", () => {
     expect(resolveVisibleProviderModelId("codex", "gpt-4.1")).toBe("gpt-5-mini");
   });
+
+  it("does not surface stale pinned or current model ids that the provider no longer supports", () => {
+    const registry = new ProviderRegistry() as any;
+    registry.providers = [
+      { id: "codex", name: "Codex", available: true, reason: "native login" },
+    ];
+
+    const options = registry.buildVisibleModelOptions(
+      { provider: { id: "codex", name: "Codex", defaultModel: "gpt-5-mini", models: ["gpt-5-mini"] }, modelId: "gpt-5-mini", runtime: "native-cli" },
+      "gpt-4.1",
+      ["codex/gpt-4.1"],
+    );
+
+    const modelIds = options.filter((option) => option.providerId === "codex").map((option) => option.modelId);
+    expect(modelIds).not.toContain("gpt-4.1");
+    expect(modelIds).toContain("gpt-5-mini");
+  });
 });
