@@ -264,16 +264,26 @@ export function renderUpdateBanner(app: AppState, width: number): string[] {
 
 export function buildSidebarLines(app: AppState): string[] {
   if (app.sidebarTreeOpen) app.sidebarFileTree = loadSidebarFileTree(app.cwd);
-  const uiPref = getConfiguredModelPreference("ui");
+  const resolveSlotLabel = (slot: "default" | "small" | "review" | "planning" | "ui" | "architecture"): string => {
+    const configured = getConfiguredModelPreference(slot);
+    if (!configured) return "same as chat";
+    const slashIndex = configured.indexOf("/");
+    const providerId = slashIndex > 0 ? configured.slice(0, slashIndex) : app.modelProviderId;
+    const modelId = slashIndex > 0 ? configured.slice(slashIndex + 1) : configured;
+    return getPrettyModelName(modelId, providerId);
+  };
   return composeSidebarLines({
     width: app.screen.sidebarWidth,
     sessionName: app.sessionName,
     appVersion: app.appVersion,
-    providerName: app.providerName,
-    modelName: getPrettyModelName(app.modelName, app.modelProviderId),
-    uiModelName: uiPref
-      ? getPrettyModelName(uiPref, uiPref.includes("/") ? uiPref.slice(0, uiPref.indexOf("/")) : app.modelProviderId)
-      : "same as chat",
+    modelSlots: [
+      { label: "Chat", value: getPrettyModelName(app.modelName, app.modelProviderId) },
+      { label: "Fast", value: resolveSlotLabel("small") },
+      { label: "Review", value: resolveSlotLabel("review") },
+      { label: "Planning", value: resolveSlotLabel("planning") },
+      { label: "Design/UI", value: resolveSlotLabel("ui") },
+      { label: "Architecture", value: resolveSlotLabel("architecture") },
+    ],
     mcpConnections: app.mcpConnections,
     shortCwd: app.formatShortCwd(Math.max(4, app.screen.sidebarWidth - 2)),
     gitBranch: app.gitBranch,

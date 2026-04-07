@@ -34,9 +34,7 @@ export function buildSidebarLines(options: {
   width: number;
   sessionName: string;
   appVersion: string;
-  providerName: string;
-  modelName: string;
-  uiModelName?: string;
+  modelSlots: Array<{ label: string; value: string }>;
   mcpConnections: string[];
   shortCwd: string;
   gitBranch: string;
@@ -57,9 +55,7 @@ export function buildSidebarLines(options: {
     width,
     sessionName,
     appVersion,
-    providerName,
-    modelName,
-    uiModelName,
+    modelSlots,
     mcpConnections,
     shortCwd,
     gitBranch,
@@ -70,17 +66,25 @@ export function buildSidebarLines(options: {
     colors,
   } = options;
 
+  const compactModels = width < 28 || modelSlots.length > 4;
+  const formatSlotLine = (label: string, value: string): string => {
+    const available = Math.max(4, width - label.length - 1);
+    const displayValue = value.length > available ? value.slice(0, available) : value;
+    return `${colors.text}${label}${colors.reset} ${colors.accent}${displayValue}${colors.reset}`;
+  };
   const lines: string[] = [];
   lines.push(`${colors.text}${colors.bold}${sessionName.slice(0, width - 2)}${colors.reset}`);
   lines.push(`${colors.muted}v${appVersion}${colors.reset}`);
-  lines.push("");
-  lines.push(`${colors.text}Chat${colors.reset}`);
-  lines.push(`  ${colors.accent}${modelName}${colors.reset}`);
-  if (uiModelName && uiModelName !== modelName) {
-    lines.push(`${colors.text}Design/UI${colors.reset}`);
-    lines.push(`  ${colors.accent}${uiModelName}${colors.reset}`);
+  if (!compactModels) lines.push("");
+  for (const slot of modelSlots) {
+    if (compactModels) {
+      lines.push(formatSlotLine(slot.label, slot.value));
+      continue;
+    }
+    lines.push(`${colors.text}${slot.label}${colors.reset}`);
+    lines.push(`  ${colors.accent}${slot.value}${colors.reset}`);
   }
-  lines.push("");
+  if (!compactModels) lines.push("");
 
   if (mcpConnections.length > 0) {
     if (lines[lines.length - 1] !== "") lines.push("");
@@ -90,17 +94,17 @@ export function buildSidebarLines(options: {
     }
   }
 
-  if (lines[lines.length - 1] !== "") lines.push("");
+  if (!compactModels && lines[lines.length - 1] !== "") lines.push("");
   lines.push(`${colors.text}Directory${colors.reset}`);
   lines.push(`  ${colors.muted}${shortCwd}${colors.reset}`);
   if (gitBranch) lines.push(`  ${colors.muted}${gitBranch}${gitDirty ? " *" : ""}${colors.reset}`);
-  lines.push("");
+  if (!compactModels) lines.push("");
 
   const treeArrow = sidebarTreeOpen ? "▾" : "▸";
   lines.push(`${colors.text}${treeArrow} Files${colors.reset}`);
   if (sidebarTreeOpen) {
     const tree = sidebarFileTree ?? [];
-    const rootCount = Math.min(tree.length, 8);
+    const rootCount = Math.min(tree.length, 5);
     for (let itemIndex = 0; itemIndex < rootCount; itemIndex++) {
       const item = tree[itemIndex];
       if (item.isDir) {
@@ -109,7 +113,7 @@ export function buildSidebarLines(options: {
         const display = item.name.length > width - 6 ? item.name.slice(-(width - 7)) : item.name;
         lines.push(`  ${colors.accent}${arrow} ${display}/${colors.reset}`);
         if (expanded && item.children) {
-          const showCount = sidebarExpandedDirs.has(`${item.name}:all`) ? Math.min(item.children.length, 4) : Math.min(item.children.length, 2);
+          const showCount = sidebarExpandedDirs.has(`${item.name}:all`) ? Math.min(item.children.length, 2) : Math.min(item.children.length, 1);
           for (let i = 0; i < showCount; i++) {
             const child = item.children[i];
             const cDisplay = child.length > width - 8 ? child.slice(-(width - 9)) : child;
