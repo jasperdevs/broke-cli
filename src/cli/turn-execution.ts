@@ -126,6 +126,7 @@ export async function executeTurn(options: {
   } = resolveExecutionTarget({
     text,
     policy,
+    currentMode,
     sessionMessageCount: session.getChatMessages().length,
     lastToolCalls,
     forceRoute,

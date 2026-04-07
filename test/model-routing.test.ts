@@ -48,6 +48,7 @@ describe("specialist model routing", () => {
         promptProfile: "full",
         historyWindow: null,
       },
+      currentMode: "build",
       sessionMessageCount: 6,
       lastToolCalls: [],
       activeModel: mainModel as any,
@@ -61,6 +62,36 @@ describe("specialist model routing", () => {
 
     expect(resolved.resolvedRoute).toBe("main");
     expect(resolved.specialistRole).toBe("ui");
+    expect(resolved.executionModelId).toBe("claude-sonnet-4-6");
+  });
+
+  it("prefers the plan slot model while plan mode is active", () => {
+    const resolved = resolveExecutionTarget({
+      text: "make a step-by-step plan for rolling this out safely",
+      policy: {
+        archetype: "planning",
+        allowedTools: [],
+        maxToolSteps: 2,
+        scaffold: "lane cheap",
+        scaffoldSource: "builtin",
+        preferSmallExecutor: false,
+        promptProfile: "full",
+        historyWindow: null,
+      },
+      currentMode: "plan",
+      sessionMessageCount: 4,
+      lastToolCalls: [],
+      activeModel: mainModel as any,
+      currentModelId: "gpt-5.4-mini",
+      smallModel: null,
+      smallModelId: "",
+      resolveSpecialistModel: (role) => role === "planning"
+        ? { model: uiModel as any, modelId: "claude-sonnet-4-6" }
+        : null,
+    });
+
+    expect(resolved.resolvedRoute).toBe("main");
+    expect(resolved.specialistRole).toBe("planning");
     expect(resolved.executionModelId).toBe("claude-sonnet-4-6");
   });
 });

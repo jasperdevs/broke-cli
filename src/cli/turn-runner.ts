@@ -140,6 +140,7 @@ export async function runModelTurn(options: {
   const previewTarget = resolveExecutionTarget({
     text,
     policy,
+    currentMode,
     sessionMessageCount: session.getChatMessages().length,
     lastToolCalls,
     forceRoute,

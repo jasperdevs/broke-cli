@@ -1,6 +1,6 @@
 import { modelSupportsReasoning } from "../ai/model-catalog.js";
 import type { ModelHandle } from "../ai/providers.js";
-import { getSettings } from "../core/config.js";
+import { getSettings, type Mode } from "../core/config.js";
 import type { TurnPolicy } from "../core/turn-policy.js";
 import { resolvePreferredSpecialistRole, type SpecialistModelRole } from "./model-routing.js";
 import { routeMessage } from "../ai/router.js";
@@ -25,6 +25,7 @@ export function canUseSdkTools(model: ModelHandle): boolean {
 export function resolveExecutionTarget(options: {
   text: string;
   policy: TurnPolicy;
+  currentMode: Mode;
   sessionMessageCount: number;
   lastToolCalls: string[];
   forceRoute?: "main" | "small";
@@ -44,6 +45,7 @@ export function resolveExecutionTarget(options: {
   const {
     text,
     policy,
+    currentMode,
     sessionMessageCount,
     lastToolCalls,
     forceRoute,
@@ -78,7 +80,12 @@ export function resolveExecutionTarget(options: {
     };
   }
   const specialistRole = resolvePreferredSpecialistRole(text, policy.archetype);
-  const specialist = specialistRole ? resolveSpecialistModel?.(specialistRole) ?? null : null;
+  const planningModel = currentMode === "plan"
+    ? resolveSpecialistModel?.("planning") ?? null
+    : null;
+  const specialist = specialistRole
+    ? resolveSpecialistModel?.(specialistRole) ?? null
+    : planningModel;
   const executionModel = specialist?.model ?? activeModel;
   const executionModelId = specialist?.modelId ?? currentModelId;
   const thinkingRequested = settings.enableThinking && supportsThinking(executionModel);
