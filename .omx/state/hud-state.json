@@ -1,5 +1,5 @@
 {
-  "last_turn_at": "2026-04-06T18:44:28.828Z",
-  "turn_count": 129,
-  "last_agent_output": "Done. The budget view is now a real fullscreen dashboard instead of a plain text dump, with token-fo"
+  "last_turn_at": "2026-04-07T16:41:31.499Z",
+  "turn_count": 194,
+  "last_agent_output": "Not everything is done.\n\nBiggest unfinished items I can verify from the repo right now:\n\n- Task-spec"
 }
