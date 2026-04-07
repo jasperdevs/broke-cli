@@ -228,10 +228,9 @@ describe("sidebar scrolling", () => {
     app.drawImmediate();
     const output = rendered.map((line) => stripAnsi(line)).join("\n");
     expect(output).toContain("Commands");
-    expect(output).toContain("Files");
     expect(output).toContain("Directory");
-    expect(output).not.toContain("Providers");
-    expect(output).not.toContain("GitHub Copilot");
+    expect(output).toContain("Design/UI");
+    expect(output).toContain("same as chat");
   });
 
   it("does not scroll transcript lines with wheel or page keys", () => {

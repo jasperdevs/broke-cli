@@ -401,3 +401,20 @@ export function modelSupportsReasoning(modelId: string, providerId?: string): bo
   const spec = getModelSpec(modelId, providerId);
   return !!spec?.reasoning;
 }
+
+export function getPrettyModelName(modelId: string, providerId?: string): string {
+  const spec = getModelSpec(modelId, providerId);
+  if (spec?.name?.trim()) return spec.name.trim();
+  const base = modelId.includes("/") ? modelId.slice(modelId.lastIndexOf("/") + 1) : modelId;
+  return base
+    .replace(/-GGUF(:[^\s]*)?/gi, "")
+    .replace(/[-_]+/g, " ")
+    .replace(/\bo(\d)\b/gi, (_m, n) => `o${n}`)
+    .replace(/\bgpt (\d(?:\.\d+)?) mini\b/gi, "GPT-$1 mini")
+    .replace(/\bgpt (\d(?:\.\d+)?)\b/gi, "GPT-$1")
+    .replace(/\bui\b/g, "UI")
+    .replace(/\bapi\b/g, "API")
+    .replace(/\bux\b/g, "UX")
+    .replace(/\b([a-z])([a-z]*)/gi, (_m, a, b) => a.toUpperCase() + b.toLowerCase())
+    .trim();
+}

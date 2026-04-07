@@ -36,6 +36,7 @@ export function buildSidebarLines(options: {
   appVersion: string;
   providerName: string;
   modelName: string;
+  uiModelName?: string;
   mcpConnections: string[];
   shortCwd: string;
   gitBranch: string;
@@ -58,6 +59,7 @@ export function buildSidebarLines(options: {
     appVersion,
     providerName,
     modelName,
+    uiModelName,
     mcpConnections,
     shortCwd,
     gitBranch,
@@ -72,7 +74,12 @@ export function buildSidebarLines(options: {
   lines.push(`${colors.text}${colors.bold}${sessionName.slice(0, width - 2)}${colors.reset}`);
   lines.push(`${colors.muted}v${appVersion}${colors.reset}`);
   lines.push("");
-  lines.push(`${colors.accent}${providerName}/${modelName}${colors.reset}`);
+  lines.push(`${colors.text}Chat${colors.reset}`);
+  lines.push(`  ${colors.accent}${modelName}${colors.reset}`);
+  if (uiModelName && uiModelName !== modelName) {
+    lines.push(`${colors.text}Design/UI${colors.reset}`);
+    lines.push(`  ${colors.accent}${uiModelName}${colors.reset}`);
+  }
   lines.push("");
 
   if (mcpConnections.length > 0) {
@@ -93,14 +100,16 @@ export function buildSidebarLines(options: {
   lines.push(`${colors.text}${treeArrow} Files${colors.reset}`);
   if (sidebarTreeOpen) {
     const tree = sidebarFileTree ?? [];
-    for (const item of tree) {
+    const rootCount = Math.min(tree.length, 8);
+    for (let itemIndex = 0; itemIndex < rootCount; itemIndex++) {
+      const item = tree[itemIndex];
       if (item.isDir) {
         const expanded = sidebarExpandedDirs.has(item.name);
         const arrow = expanded ? "▾" : "▸";
         const display = item.name.length > width - 6 ? item.name.slice(-(width - 7)) : item.name;
         lines.push(`  ${colors.accent}${arrow} ${display}/${colors.reset}`);
         if (expanded && item.children) {
-          const showCount = sidebarExpandedDirs.has(`${item.name}:all`) ? item.children.length : Math.min(item.children.length, 4);
+          const showCount = sidebarExpandedDirs.has(`${item.name}:all`) ? Math.min(item.children.length, 4) : Math.min(item.children.length, 2);
           for (let i = 0; i < showCount; i++) {
             const child = item.children[i];
             const cDisplay = child.length > width - 8 ? child.slice(-(width - 9)) : child;
@@ -114,6 +123,9 @@ export function buildSidebarLines(options: {
         const display = item.name.length > width - 4 ? item.name.slice(-(width - 5)) : item.name;
         lines.push(`  ${colors.muted}${display}${colors.reset}`);
       }
+    }
+    if (rootCount < tree.length) {
+      lines.push(`  ${colors.muted}▸ +${tree.length - rootCount} more${colors.reset}`);
     }
   }
 

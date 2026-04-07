@@ -201,9 +201,6 @@ export function appendModelPicker(app: AppState, lines: string[], _maxTotal: num
   const total = app.getFilteredModels().length;
   const maxItems = Math.max(1, _maxTotal);
   lines.push(` ${T()}${BOLD}Select model${RESET} ${renderMenuCount(total === 0 ? 0 : picker.cursor + 1, total)}`);
-  lines.push(` ${DIM}enter switch · space favorite · type filter${RESET}`);
-  lines.push(` ${DIM}set selected as: 1 chat · 2 auto-small · 3 review${RESET}`);
-  lines.push(` ${DIM}4 planning · 5 UI · 6 architecture${RESET}`);
   if (app.getFilteredModels().length === 0) {
     lines.push(`  ${DIM}no matches${RESET}`);
     return;

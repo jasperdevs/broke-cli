@@ -243,7 +243,7 @@ describe("startup home view", () => {
     const firstCardLine = rendered.find((line) => stripAnsi(line).includes("╭")) ?? "";
     expect(stripAnsi(firstCardLine)).toContain("╭");
     expect(output).toContain("Welcome");
-    expect(output).toContain("openai/gpt-5.4-mini");
+    expect(output).toContain("GPT-5.4 mini");
     expect(output).toContain("~\\Downloads\\broke-cli");
     expect(output).toContain("Tip");
     expect(output).not.toContain("Files");
@@ -282,7 +282,8 @@ describe("startup home view", () => {
     expect(rendered.map((line) => stripAnsi(line)).join("\n")).not.toContain("Files");
     app.messages = [{ role: "user", content: "hello" }];
     app.drawImmediate();
-    expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("Files");
+    expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("Directory");
+    expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("Design/UI");
   });
 
   it("drops the startup card entirely on very narrow widths", () => {

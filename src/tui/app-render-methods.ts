@@ -3,11 +3,12 @@ import { join } from "path";
 import { BOX, BOLD, DIM, RESET } from "../utils/ansi.js";
 import { padVisible, visibleWidth } from "../utils/terminal-width.js";
 import { currentTheme } from "../core/themes.js";
-import { getSettings } from "../core/config.js";
+import { getConfiguredModelPreference, getSettings } from "../core/config.js";
 import { listExtensions } from "../core/extensions.js";
 import { listSkills } from "../core/skills.js";
 import { listTemplates } from "../core/templates.js";
 import { listInstalledPackages } from "../core/package-manager.js";
+import { getPrettyModelName } from "../ai/model-catalog.js";
 import { renderAnsiColorGrid, parseMascotSvgGrid, resolveMascotPath, type RgbColor } from "./render/mascot.js";
 import { renderHomeBox as buildRenderHomeBox, renderHomeView as buildRenderHomeView } from "./render/home.js";
 import { renderStaticMessages as buildStaticMessages } from "./render/messages.js";
@@ -101,7 +102,7 @@ export function renderMessages(app: AppState, maxWidth: number): string[] {
 }
 
 export function renderCompactHeader(app: AppState): string {
-  const model = `${T()}${app.providerName}/${app.modelName}${RESET}`;
+  const model = `${T()}${getPrettyModelName(app.modelName, app.modelProviderId)}${RESET}`;
   const git = app.gitBranch ? ` ${MUTED()}${app.gitBranch}${app.gitDirty ? "*" : ""}${RESET}` : "";
   return ` ${model}${git}`;
 }
@@ -226,7 +227,7 @@ export function renderHomeView(app: AppState, mainW: number, topHeight: number):
     mainW,
     topHeight,
     fullMascot: app.renderMascotInline(),
-    modelLabel: app.modelName === "none" ? "Pick one with /model" : `${app.providerName}/${app.modelName}`,
+    modelLabel: app.modelName === "none" ? "Pick one with /model" : getPrettyModelName(app.modelName, app.modelProviderId),
     appVersion: app.appVersion,
     homeTip: settings.quietStartup ? "" : app.homeTip,
     inventoryDetails,
@@ -263,12 +264,16 @@ export function renderUpdateBanner(app: AppState, width: number): string[] {
 
 export function buildSidebarLines(app: AppState): string[] {
   if (app.sidebarTreeOpen) app.sidebarFileTree = loadSidebarFileTree(app.cwd);
+  const uiPref = getConfiguredModelPreference("ui");
   return composeSidebarLines({
     width: app.screen.sidebarWidth,
     sessionName: app.sessionName,
     appVersion: app.appVersion,
     providerName: app.providerName,
-    modelName: app.modelName,
+    modelName: getPrettyModelName(app.modelName, app.modelProviderId),
+    uiModelName: uiPref
+      ? getPrettyModelName(uiPref, uiPref.includes("/") ? uiPref.slice(0, uiPref.indexOf("/")) : app.modelProviderId)
+      : "same as chat",
     mcpConnections: app.mcpConnections,
     shortCwd: app.formatShortCwd(Math.max(4, app.screen.sidebarWidth - 2)),
     gitBranch: app.gitBranch,

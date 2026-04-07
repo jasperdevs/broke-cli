@@ -1,6 +1,7 @@
 import type { DetectedProvider } from "../ai/detect.js";
 import type { ProviderRegistry } from "../ai/provider-registry.js";
 import type { ModelHandle } from "../ai/providers.js";
+import { getPrettyModelName } from "../ai/model-catalog.js";
 import { getSettings } from "../core/config.js";
 import { listResolvedModelPreferences, resolveConfiguredModelHandle, type SpecialistModelRole } from "./model-routing.js";
 
@@ -52,6 +53,10 @@ export function buildVisibleRuntimeModelOptions(
       if (preferences.planning?.key === key) badges.push("plan");
       if (preferences.ui?.key === key) badges.push("ui");
       if (preferences.architecture?.key === key) badges.push("arch");
-      return { ...option, badges };
+      return {
+        ...option,
+        displayName: getPrettyModelName(option.modelId, option.providerId),
+        badges,
+      };
     });
 }

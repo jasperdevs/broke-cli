@@ -15,6 +15,7 @@ export interface ModelOption {
   providerId: string;
   providerName: string;
   modelId: string;
+  displayName?: string;
   active: boolean;
   badges?: string[];
   isHeader?: boolean;

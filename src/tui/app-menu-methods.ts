@@ -10,6 +10,7 @@ import type { MenuEntry, MenuPromptKind, ModelOption, PickerItem, SettingEntry }
 import { moveTreeSelection } from "./tree-view.js";
 import { getPendingImagePromptLines } from "./bottom-ui.js";
 import { getQuestionMenuLineCount, scrollQuestionMenu } from "./question-menu.js";
+import { getPrettyModelName } from "../ai/model-catalog.js";
 type AppState = any;
 function getMenuVisibleRows(maxHeight: number, baseCount: number, tailReserve: number, chromeLines: number): number {
   return Math.max(1, maxHeight - baseCount - tailReserve - 1 - chromeLines);
@@ -114,12 +115,14 @@ export function getFilteredModels(app: AppState): ModelOption[] {
   const q = app.getMenuFilterQuery().toLowerCase();
   const pool = app.modelPicker.options;
   if (!q) return pool;
-  return pool.filter((o: ModelOption) => o.modelId.toLowerCase().includes(q) || o.providerName.toLowerCase().includes(q));
+  return pool.filter((o: ModelOption) =>
+    o.modelId.toLowerCase().includes(q)
+    || o.providerName.toLowerCase().includes(q)
+    || (o.displayName ?? "").toLowerCase().includes(q),
+  );
 }
 
-export function toggleModelScope(app: AppState): void {
-  void app;
-}
+export function toggleModelScope(app: AppState): void { void app; }
 
 export function getFilteredSettings(app: AppState): SettingEntry[] {
   if (!app.settingsPicker) return [];
@@ -287,10 +290,10 @@ export function getModelPickerEntries(app: AppState): MenuEntry[] {
   const badgeLabels: Record<string, string> = {
     now: "current",
     default: "chat",
-    small: "auto-small",
+    small: "fast",
     review: "review",
     plan: "planning",
-    ui: "ui",
+    ui: "design/UI",
     arch: "architecture",
   };
   const filtered = app.getFilteredModels();
@@ -302,6 +305,9 @@ export function getModelPickerEntries(app: AppState): MenuEntry[] {
   const entries: MenuEntry[] = [];
   let currentIdx = 0;
   const showProviderHeaders = byProvider.size > 1;
+  entries.push({ text: ` ${DIM}enter switch · space favorite · type filter${RESET}` });
+  entries.push({ text: ` ${DIM}press 1 chat · 2 fast · 3 review${RESET}` });
+  entries.push({ text: ` ${DIM}press 4 planning · 5 design/UI · 6 architecture${RESET}` });
   for (const [provider, opts] of byProvider) {
     if (showProviderHeaders) entries.push({ text: ` ${DIM}${provider}${RESET}` });
     for (const opt of opts) {
@@ -312,7 +318,7 @@ export function getModelPickerEntries(app: AppState): MenuEntry[] {
       const badges = opt.badges && opt.badges.length > 0
         ? ` ${DIM}${opt.badges.map((badge) => badgeLabels[badge] ?? badge).join(" · ")}${RESET}`
         : "";
-      entries.push({ text: `  ${arrow}${nameCol}${opt.modelId}${RESET}${pin}${badges}`, selectIndex: currentIdx });
+      entries.push({ text: `  ${arrow}${nameCol}${opt.displayName ?? opt.modelId}${RESET}${pin}${badges}`, selectIndex: currentIdx });
       currentIdx++;
     }
   }

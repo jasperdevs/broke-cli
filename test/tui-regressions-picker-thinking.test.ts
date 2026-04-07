@@ -59,8 +59,8 @@ describe("picker menus", () => {
     const app = new App() as any;
     app.openModelPicker(
       [
-        { providerId: "openai", providerName: "OpenAI", modelId: "gpt-5.4-mini", active: true },
-        { providerId: "openai", providerName: "OpenAI", modelId: "gpt-4o", active: false },
+        { providerId: "openai", providerName: "OpenAI", modelId: "gpt-5.4-mini", displayName: "GPT-5.4 mini", active: true },
+        { providerId: "openai", providerName: "OpenAI", modelId: "gpt-4o", displayName: "GPT-4o", active: false },
       ],
       () => {},
       () => {},
@@ -71,7 +71,8 @@ describe("picker menus", () => {
     const pickerText = rendered.map((line) => stripAnsi(line)).join("\n");
     expect(pickerText).toContain("enter switch");
     expect(pickerText).toContain("space favorite");
-    expect(pickerText).toContain("set selected as: 1 chat");
+    expect(pickerText).toContain("press 1 chat");
+    expect(pickerText).toContain("press 4 planning");
     expect(pickerText).not.toContain("Scope:");
 
     const originalTheme = getSettings().theme;
@@ -135,7 +136,6 @@ describe("picker menus", () => {
     expect(output).toContain("/model");
     expect(output).toContain("model-17");
     expect(output).not.toContain("no matches");
-    expect(output).toContain("space favorite");
   });
 
   it("caps item pickers to five visible rows even in tall panes", () => {
@@ -167,6 +167,7 @@ describe("picker menus", () => {
       providerId: "openai",
       providerName: "OpenAI",
       modelId: `model-${i}`,
+      displayName: `Model ${i}`,
       active: false,
     }));
     app.openModelPicker(models, () => {});
@@ -184,9 +185,9 @@ describe("picker menus", () => {
     };
     app.drawImmediate();
     const output = rendered.map((line) => stripAnsi(line));
-    const visibleModels = output.filter((line) => /model-\d+/.test(line));
+    const visibleModels = output.filter((line) => /Model \d+/.test(line));
     expect(visibleModels.length).toBeLessThanOrEqual(5);
-    expect(output.join("\n")).not.toContain("model-5");
+    expect(output.join("\n")).not.toContain("Model 5");
   });
 });
 
