@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Session } from "../src/core/session.js";
+import { buildBudgetReport } from "../src/core/budget-insights.js";
 import { App } from "../src/tui/app.js";
 import { MOUSE_OFF, MOUSE_ON } from "../src/utils/ansi.js";
 import { visibleWidth } from "../src/utils/terminal-width.js";
@@ -264,8 +265,10 @@ describe("input editing", () => {
     app.handleKey({ name: "s", char: "s", ctrl: false, meta: false, shift: false });
     expect(app.input.getText()).toBe("/settings s");
     app.handleKey({ name: "backspace", char: "", ctrl: false, meta: false, shift: false });
-    app.handleKey({ name: "backspace", char: "", ctrl: false, meta: false, shift: false });
     expect(app.input.getText()).toBe("/settings ");
+    app.handleKey({ name: "backspace", char: "", ctrl: false, meta: false, shift: false });
+    expect(app.settingsPicker).toBeNull();
+    expect(app.input.getText()).toBe("");
   });
 
   it("uses the normal prompt box as the filter input for picker menus", () => {
@@ -278,6 +281,22 @@ describe("input editing", () => {
     for (const char of "light") app.handleKey({ name: char, char, ctrl: false, meta: false, shift: false });
     expect(app.input.getText()).toBe("/theme light");
     expect(app.getFilteredItems().map((item: any) => item.id)).toEqual(["brokecli-light"]);
+    for (let i = 0; i < "light".length; i++) app.handleKey({ name: "backspace", char: "", ctrl: false, meta: false, shift: false });
+    expect(app.input.getText()).toBe("/theme ");
+    app.handleKey({ name: "backspace", char: "", ctrl: false, meta: false, shift: false });
+    expect(app.itemPicker).toBeNull();
+    expect(app.input.getText()).toBe("");
+  });
+
+  it("lets backspace exit fullscreen menu-style views too", () => {
+    const app = new App() as any;
+    const session = new Session("budget-test");
+    session.addUsage(12, 3, 0);
+    const report = buildBudgetReport(session);
+    app.openBudgetView("Budget Inspector", { all: report, session: report });
+    expect(app.budgetView).not.toBeNull();
+    app.handleKey({ name: "backspace", char: "", ctrl: false, meta: false, shift: false });
+    expect(app.budgetView).toBeNull();
   });
 
   it("does not persist plan/build mode when Shift+Tab toggles it", () => {

@@ -7,6 +7,10 @@ import { T } from "./app-shared.js";
 
 type AppState = any;
 
+function isPlainBackspace(key: Keypress): boolean {
+  return key.name === "backspace" && !key.ctrl && !key.meta && !key.shift;
+}
+
 export function handleBudgetViewKey(app: AppState, key: Keypress): void {
   const page = Math.max(1, app.screen.height - 7);
   const report = app.budgetView.reports[app.budgetView.scope];
@@ -19,7 +23,7 @@ export function handleBudgetViewKey(app: AppState, key: Keypress): void {
     showContext: app.budgetView.scope === "session",
   }).length;
   const maxScroll = Math.max(0, lineCount - Math.max(1, app.screen.height - 6));
-  if (key.name === "escape" || key.name === "q" || (key.ctrl && key.name === "c")) {
+  if (key.name === "escape" || isPlainBackspace(key) || key.name === "q" || (key.ctrl && key.name === "c")) {
     app.closeBudgetView();
     return;
   }
@@ -52,7 +56,7 @@ export function handleBudgetViewKey(app: AppState, key: Keypress): void {
 
 export function handleAgentRunViewKey(app: AppState, key: Keypress): void {
   const runCount = app.agentRunView.runs.length;
-  if (key.name === "escape" || key.name === "q" || (key.ctrl && key.name === "c")) {
+  if (key.name === "escape" || isPlainBackspace(key) || key.name === "q" || (key.ctrl && key.name === "c")) {
     app.closeAgentRunsView();
     return;
   }
@@ -87,6 +91,12 @@ export function handlePickerKey(app: AppState, key: Keypress): void {
     else if (key.name === "home") app.settingsPicker.cursor = 0;
     else if (key.name === "end") app.settingsPicker.cursor = app.clampMenuCursor(filtered.length - 1, filtered.length);
     else if ((key.name === "return" || key.name === "enter") && !key.shift && !key.meta && !key.ctrl) app.toggleSettingEntry(app.settingsPicker.cursor);
+    else if (isPlainBackspace(key) && app.getMenuFilterQuery().length === 0) {
+      app.settingsPicker = null;
+      app.input.clear();
+      app.drawNow();
+      return;
+    }
     else if (key.name === "escape" || (key.ctrl && key.name === "c")) {
       app.settingsPicker = null;
       app.input.clear();
@@ -111,6 +121,9 @@ export function handlePickerKey(app: AppState, key: Keypress): void {
     else if ((key.name === "return" || key.name === "enter") && !key.shift && !key.meta && !key.ctrl) {
       app.selectItemEntry(app.itemPicker.cursor);
       return;
+    } else if (isPlainBackspace(key) && app.getMenuFilterQuery().length === 0) {
+      app.closeItemPicker(true);
+      return;
     } else if (key.name === "escape" || (key.ctrl && key.name === "c")) {
       app.closeItemPicker(true);
       return;
@@ -131,6 +144,11 @@ export function handlePickerKey(app: AppState, key: Keypress): void {
     else if (key.name === "space") app.toggleModelPin(app.modelPicker.cursor);
     else if ((key.name === "return" || key.name === "enter") && !key.shift && !key.meta && !key.ctrl) {
       app.selectModelEntry(app.modelPicker.cursor);
+      return;
+    } else if (isPlainBackspace(key) && app.getMenuFilterQuery().length === 0) {
+      app.modelPicker = null;
+      app.input.clear();
+      app.drawNow();
       return;
     } else if (key.name === "escape" || (key.ctrl && key.name === "c")) {
       app.modelPicker = null;
