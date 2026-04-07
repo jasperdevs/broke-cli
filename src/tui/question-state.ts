@@ -21,6 +21,7 @@ export async function showQuestion(app: AppState, question: string, options?: st
       kind: options && options.length > 0 ? "single" : "text",
       options: (options ?? []).map((option) => ({ value: option, label: option })),
       required: true,
+      allowOther: !!(options && options.length > 0),
     }],
   });
   if (result.cancelled) return "[user skipped]";

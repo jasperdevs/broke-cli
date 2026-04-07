@@ -121,4 +121,85 @@ describe("question UI", () => {
       ],
     });
   });
+
+  it("lets option questions switch into custom input mode", async () => {
+    const app = new App() as any;
+    let rendered: string[] = [];
+    app.screen = {
+      height: 18,
+      width: 68,
+      hasSidebar: false,
+      mainWidth: 68,
+      sidebarWidth: 20,
+      render: (lines: string[]) => { rendered = lines; },
+      setCursor: () => {},
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+
+    const pending = app.showQuestion("Preferred protocol?", ["HTTPS", "SSH"]);
+    app.drawImmediate();
+    let text = rendered.map((line) => stripAnsi(line)).join("\n");
+    expect(text).toContain("Type something.");
+
+    app.handleKey(key("down"));
+    app.handleKey(key("down"));
+    app.handleKey(key("return"));
+    app.drawImmediate();
+
+    text = rendered.map((line) => stripAnsi(line)).join("\n");
+    expect(text).toContain("Custom answer");
+    expect(text).toContain("esc back");
+
+    for (const ch of "git+ssh") app.handleKey(key(ch, ch));
+    app.handleKey(key("return"));
+
+    await expect(pending).resolves.toBe("git+ssh");
+  });
+
+  it("shows multi-step progress and submit readiness", () => {
+    const app = new App() as any;
+    let rendered: string[] = [];
+    app.screen = {
+      height: 20,
+      width: 72,
+      hasSidebar: false,
+      mainWidth: 72,
+      sidebarWidth: 20,
+      render: (lines: string[]) => { rendered = lines; },
+      setCursor: () => {},
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+
+    app.showQuestionnaire({
+      title: "Setup",
+      submitLabel: "Submit",
+      questions: [
+        {
+          id: "protocol",
+          label: "Protocol",
+          prompt: "Pick one",
+          kind: "single",
+          required: true,
+          options: [{ value: "https", label: "HTTPS" }],
+        },
+        {
+          id: "notes",
+          label: "Notes",
+          prompt: "Say more",
+          kind: "text",
+          required: false,
+          options: [],
+        },
+      ],
+    });
+
+    app.drawImmediate();
+    const text = rendered.map((line) => stripAnsi(line)).join("\n");
+    expect(text).toContain("Protocol");
+    expect(text).toContain("Notes");
+    expect(text).toContain("Submit");
+    expect(text).toContain("[wait]");
+  });
 });

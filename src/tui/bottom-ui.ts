@@ -79,7 +79,7 @@ export function appendBottomMenus(
     bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
     bottomLines.push(getQuestionHeader(app.questionView));
     const field = currentQuestionField(app.questionView);
-    if (field && field.kind !== "text" && !isQuestionSubmitTab(app.questionView)) {
+    if (field && field.kind !== "text" && !app.questionView.inputMode && !isQuestionSubmitTab(app.questionView)) {
       const entries = app.buildMenuView(getQuestionOptionEntries(app.questionView), app.questionView.optionCursor, maxVisible);
       const body = getQuestionBodyLines(app.questionView, mainW);
       bottomLines.push(body[0] ?? "");

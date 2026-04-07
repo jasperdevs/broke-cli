@@ -170,9 +170,9 @@ function buildFooter(view: QuestionView): string {
   if (isQuestionSubmitTab(view)) return `${DIM}enter submit · esc cancel${RESET}`;
   const field = currentQuestionField(view);
   if (!field) return `${DIM}esc cancel${RESET}`;
-  if (field.kind === "text" || view.inputMode) {
-    const submitHint = field.kind === "text" ? "enter next" : "enter save";
-    return `${DIM}shift+enter newline · ${submitHint} · tab switch · esc back${RESET}`;
+  if (field.kind === "text") return `${DIM}shift+enter newline · enter next · tab switch · esc cancel${RESET}`;
+  if (view.inputMode) {
+    return `${DIM}shift+enter newline · enter save · tab switch · esc back${RESET}`;
   }
   if (field.kind === "multi") return `${DIM}↑↓ move · space toggle · enter next · tab switch · esc cancel${RESET}`;
   return `${DIM}↑↓ move · enter select · tab switch · esc cancel${RESET}`;
