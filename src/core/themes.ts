@@ -8,6 +8,22 @@ import type { Theme, ThemePalette } from "./theme-types.js";
 export type { Theme } from "./theme-types.js";
 
 const PALETTES: ThemePalette[] = [...THEME_PALETTES_A, ...THEME_PALETTES_B];
+
+function mixRgb(a: [number, number, number], b: [number, number, number], ratio: number): [number, number, number] {
+  const clamp = (value: number) => Math.max(0, Math.min(255, Math.round(value)));
+  return [
+    clamp(a[0] * (1 - ratio) + b[0] * ratio),
+    clamp(a[1] * (1 - ratio) + b[1] * ratio),
+    clamp(a[2] * (1 - ratio) + b[2] * ratio),
+  ];
+}
+
+function getSidebarBackground(palette: ThemePalette): string {
+  const base = palette.background ?? palette.userBubble;
+  const mixed = mixRgb(base, palette.userBubble, palette.dark ? 0.35 : 0.18);
+  return bg(...mixed);
+}
+
 function buildThemeMap(): Map<string, Theme> {
   const map = new Map<string, Theme>(PALETTES.map((palette) => [palette.key, toTheme(palette)]));
   for (const resource of listThemeResources()) {
@@ -32,6 +48,7 @@ function toTheme(palette: ThemePalette): Theme {
     textMuted: fg(...palette.textMuted),
     border: fg(...palette.border),
     sidebarBorder: fg(...palette.sidebarBorder),
+    sidebarBackground: getSidebarBackground(palette),
     plan: fg(...palette.plan),
     userBubble: bg(...palette.userBubble),
     userText: fg(...palette.userText),

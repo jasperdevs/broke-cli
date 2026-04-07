@@ -132,9 +132,9 @@ export class Screen {
 
   /** Sidebar width — scales with terminal */
   get sidebarWidth(): number {
-    if (this.cols >= 120) return 28;
-    if (this.cols >= 90) return 24;
-    if (this.cols >= 70) return 20;
-    return 18;
+    if (this.cols >= 120) return 32;
+    if (this.cols >= 90) return 28;
+    if (this.cols >= 70) return 24;
+    return 20;
   }
 }

@@ -154,7 +154,7 @@ function buildFrameLines(app: AppState, opts: { height: number; mainW: number; h
       const sidebarBody = sidebarBg
         ? `${sidebarBg}${paddedSidebar.replaceAll(RESET, `${RESET}${sidebarBg}`)}${RESET}`
         : paddedSidebar;
-      const sidebarLead = sidebarBg ? `${sidebarBg}   ${RESET}` : "   ";
+      const sidebarLead = sidebarBg ? `${sidebarBg}  ${RESET}` : "  ";
       frameLines.push(`${app.padLine(mainLine, mainW)}${sidebarLead}${sidebarBody}`);
     }
   }
@@ -183,9 +183,10 @@ export function sparkleSpinner(app: AppState, frame: number, color?: string): st
 
 export function shimmerText(_app: AppState, text: string, frame: number, color = T()): string {
   const rgbMatch = color.match(/38;2;(\d+);(\d+);(\d+)/);
-  const tr = rgbMatch ? parseInt(rgbMatch[1]) : 58;
-  const tg = rgbMatch ? parseInt(rgbMatch[2]) : 199;
-  const tb = rgbMatch ? parseInt(rgbMatch[3]) : 58;
+  if (!rgbMatch) return `${color}${text}${RESET}`;
+  const tr = parseInt(rgbMatch[1]);
+  const tg = parseInt(rgbMatch[2]);
+  const tb = parseInt(rgbMatch[3]);
   const dr = Math.round(tr * 0.55);
   const dg = Math.round(tg * 0.55);
   const db = Math.round(tb * 0.55);

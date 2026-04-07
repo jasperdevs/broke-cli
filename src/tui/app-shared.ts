@@ -10,7 +10,7 @@ export function USER_BG(): string { return currentTheme().userBubble; }
 export function USER_TXT(): string { return currentTheme().userText; }
 export function CODE_BG(): string { return currentTheme().codeBg; }
 export function APP_BG(): string { return currentTheme().background; }
-export function SIDEBAR_BG(): string { return currentTheme().userBubble || currentTheme().background; }
+export function SIDEBAR_BG(): string { return currentTheme().sidebarBackground || currentTheme().background; }
 export function ERR(): string { return currentTheme().error; }
 export function OK(): string { return currentTheme().success; }
 export function ACCENT_2(): string { return currentTheme().secondary; }

@@ -133,9 +133,18 @@ export function formatShortPath(_app: AppState, pathValue: string, maxWidth: num
     display = `~${display.slice(home.length)}`;
     if (display === "~") display = "~/";
   }
-  if (maxWidth <= 1) return display.slice(0, Math.max(0, maxWidth));
-  if (display.length <= maxWidth) return display;
-  return `~${display.slice(-(maxWidth - 1))}`;
+  if (maxWidth <= 1 || display.length <= maxWidth) return display.slice(0, Math.max(0, maxWidth));
+  const parts = display.split(/([\\/])/).filter(Boolean);
+  const kept: string[] = [];
+  let used = 1;
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const next = parts[i];
+    if (used + next.length > maxWidth) break;
+    kept.unshift(next);
+    used += next.length;
+  }
+  const suffix = kept.join("") || display.slice(-(maxWidth - 1));
+  return `…${suffix.slice(-(maxWidth - 1))}`;
 }
 
 export function formatRelativeAge(_app: AppState, updatedAt: number): string {

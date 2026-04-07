@@ -1,4 +1,3 @@
-import stripAnsi from "strip-ansi";
 import { collectProjectFiles } from "./file-picker.js";
 import type { Keypress } from "./keypress.js";
 import { matchesBinding, loadKeybindings } from "../core/keybindings.js";
@@ -55,27 +54,6 @@ function handleClickOrScroll(app: AppState, key: Keypress): boolean {
     if (!pointer) return false;
     if (isSidebarPointer(app, key)) {
       app.sidebarFocused = true;
-      const sidebarLines = app.renderSidebar(app.getSidebarViewportHeight());
-      const clickedLine = pointer.row <= sidebarLines.length ? sidebarLines[pointer.row - 1] : undefined;
-      if (clickedLine) {
-        const plain = stripAnsi(clickedLine).trim();
-        if (plain.startsWith("▾ Files") || plain.startsWith("▸ Files")) {
-          app.sidebarTreeOpen = !app.sidebarTreeOpen;
-        } else if (plain.match(/^[▾▸] .+\/$/)) {
-          const dirName = plain.slice(2).replace(/\/$/, "");
-          if (app.sidebarExpandedDirs.has(dirName)) app.sidebarExpandedDirs.delete(dirName);
-          else app.sidebarExpandedDirs.add(dirName);
-        } else if (plain.match(/^▸ \+\d+ more$/)) {
-          for (let i = pointer.row - 2; i >= 0; i--) {
-            const prevPlain = stripAnsi(sidebarLines[i] ?? "").trim();
-            if (prevPlain.match(/^▾ .+\/$/)) {
-              const dirName = prevPlain.slice(2).replace(/\/$/, "");
-              app.sidebarExpandedDirs.add(`${dirName}:all`);
-              break;
-            }
-          }
-        }
-      }
       app.draw();
     } else {
       app.sidebarFocused = false;

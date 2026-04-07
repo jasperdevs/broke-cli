@@ -39,6 +39,7 @@ export interface Theme {
   textMuted: string;
   border: string;
   sidebarBorder: string;
+  sidebarBackground: string;
   plan: string;
   userBubble: string;
   userText: string;

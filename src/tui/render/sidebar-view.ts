@@ -1,4 +1,44 @@
 import { buildSidebarFooterLines } from "../sidebar.js";
+import { wordWrap } from "./formatting.js";
+
+function truncateWithEllipsis(text: string, width: number): string {
+  if (width <= 0) return "";
+  if (text.length <= width) return text;
+  if (width <= 1) return text.slice(0, width);
+  return `${text.slice(0, width - 1)}…`;
+}
+
+function wrapSidebarValue(value: string, width: number, maxLines = 2): string[] {
+  const wrapped = wordWrap(value, Math.max(8, width));
+  if (wrapped.length <= maxLines) return wrapped;
+  const visible = wrapped.slice(0, maxLines);
+  visible[maxLines - 1] = truncateWithEllipsis(visible[maxLines - 1], Math.max(8, width));
+  return visible;
+}
+
+function wrapSidebarPath(pathValue: string, width: number, maxLines = 2): string[] {
+  if (!pathValue) return [];
+  const tokens = pathValue.split(/([\\/])/).filter(Boolean);
+  const lines: string[] = [];
+  let current = "";
+  for (const token of tokens) {
+    if (current.length + token.length <= width) {
+      current += token;
+      continue;
+    }
+    if (current) {
+      lines.push(current);
+      current = token === "\\" || token === "/" ? token : token.trimStart();
+      continue;
+    }
+    lines.push(truncateWithEllipsis(token, width));
+  }
+  if (current) lines.push(current);
+  if (lines.length <= maxLines) return lines;
+  const trimmed = lines.slice(0, maxLines);
+  trimmed[maxLines - 1] = truncateWithEllipsis(trimmed[maxLines - 1], width);
+  return trimmed;
+}
 
 export function buildSidebarFooter(options: {
   width: number;
@@ -59,37 +99,35 @@ export function buildSidebarLines(options: {
     colors,
   } = options;
 
-  const compactModels = width < 28 || modelSlots.length > 4;
-  const formatSlotLine = (label: string, value: string): string => {
-    const available = Math.max(4, width - label.length - 1);
-    const displayValue = value.length > available ? value.slice(0, available) : value;
-    return `${colors.text}${label}${colors.reset} ${colors.accent}${displayValue}${colors.reset}`;
-  };
+  const bodyWidth = Math.max(10, width - 2);
+  const versionText = `v${appVersion}`;
+  const sessionWidth = Math.max(6, width - versionText.length - 1);
+  const sessionDisplay = truncateWithEllipsis(sessionName, sessionWidth);
   const lines: string[] = [];
-  lines.push(`${colors.text}${colors.bold}${sessionName.slice(0, width - 2)}${colors.reset}`);
-  lines.push(`${colors.muted}v${appVersion}${colors.reset}`);
-  if (!compactModels) lines.push("");
+  lines.push("");
+  lines.push(`${colors.text}${colors.bold}${sessionDisplay}${colors.reset} ${colors.muted}${versionText}${colors.reset}`);
+  lines.push("");
   for (const slot of modelSlots) {
-    if (compactModels) {
-      lines.push(formatSlotLine(slot.label, slot.value));
-      continue;
-    }
     lines.push(`${colors.text}${slot.label}${colors.reset}`);
-    lines.push(`  ${colors.accent}${slot.value}${colors.reset}`);
+    for (const part of wrapSidebarValue(slot.value, bodyWidth, width < 24 ? 1 : 2)) {
+      lines.push(`  ${colors.accent}${part}${colors.reset}`);
+    }
   }
-  if (!compactModels) lines.push("");
-
   if (mcpConnections.length > 0) {
-    if (lines[lines.length - 1] !== "") lines.push("");
+    lines.push("");
     lines.push(`${colors.text}MCP${colors.reset}`);
     for (const connection of mcpConnections.slice(0, 3)) {
-      lines.push(`  ${colors.success}\u25CF${colors.reset} ${colors.muted}${connection.slice(0, width - 6)}${colors.reset}`);
+      for (const [index, part] of wrapSidebarValue(connection, Math.max(8, bodyWidth - 2), 2).entries()) {
+        if (index === 0) lines.push(`  ${colors.success}\u25CF${colors.reset} ${colors.muted}${part}${colors.reset}`);
+        else lines.push(`    ${colors.muted}${part}${colors.reset}`);
+      }
     }
   }
 
-  if (!compactModels && lines[lines.length - 1] !== "") lines.push("");
   lines.push(`${colors.text}Directory${colors.reset}`);
-  lines.push(`  ${colors.muted}${shortCwd}${colors.reset}`);
+  for (const part of wrapSidebarPath(shortCwd, bodyWidth, 2)) {
+    lines.push(`  ${colors.muted}${part}${colors.reset}`);
+  }
   if (gitBranch) lines.push(`  ${colors.muted}${gitBranch}${gitDirty ? " *" : ""}${colors.reset}`);
 
   return lines;
