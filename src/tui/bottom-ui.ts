@@ -98,8 +98,6 @@ export function buildInfoBar(app: AppState, hasSidebar: boolean, mainW: number):
   if (thinkLevel !== "off") parts.push({ text: `${T()}${thinkLevel}${RESET}`, plain: thinkLevel });
   const caveLevel = settings.cavemanLevel ?? "auto";
   if (caveLevel !== "off") parts.push({ text: `🪨 ${WARN()}${caveLevel}${RESET}`, plain: `rock ${caveLevel}` });
-  parts.push({ text: `${DIM}alt+a${RESET} ${DIM}tree${RESET}`, plain: "alt+a tree" });
-
   const liveTokens = app.getLiveTotalTokens();
   if ((settings.showCost && app.sessionCost > 0) || (settings.showTokens && !hasSidebar && liveTokens > 0)) {
     const costPart = settings.showCost && app.sessionCost > 0 ? fmtCost(app.animCost.get()) : "";

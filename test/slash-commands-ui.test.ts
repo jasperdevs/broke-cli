@@ -71,7 +71,9 @@ describe("slash command UI surfaces", () => {
     mkdirSync(extDir, { recursive: true });
     writeFileSync(extPath, "exports.register = () => {};", "utf-8");
     const originalDiscoverExtensions = loadConfig().settings?.discoverExtensions;
+    const originalExtensions = loadConfig().settings?.extensions;
     updateSetting("discoverExtensions", true);
+    updateSetting("extensions", [extDir]);
 
     try {
       const app = createAppStub();
@@ -101,6 +103,7 @@ describe("slash command UI surfaces", () => {
       expect(latestItems.length === 0 || latestItems.some((item) => item.id === "slash-test-extension")).toBe(true);
     } finally {
       updateSetting("discoverExtensions", originalDiscoverExtensions ?? true);
+      updateSetting("extensions", originalExtensions ?? []);
     }
   });
 

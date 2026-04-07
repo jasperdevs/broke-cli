@@ -160,6 +160,15 @@ describe("sidebar token summary", () => {
       updateSetting("cavemanLevel", original.cavemanLevel ?? "off");
     }
   });
+
+  it("does not advertise the old alt+a tree shortcut in the bottom bar", () => {
+    const app = new App() as any;
+    app.messages = [{ role: "user", content: "hello" }];
+    let rendered: string[] = [];
+    app.screen = { height: 16, width: 80, hasSidebar: false, mainWidth: 80, sidebarWidth: 0, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
+    app.drawImmediate();
+    expect(rendered.map((line) => stripAnsi(line)).join("\n")).not.toContain("alt+a tree");
+  });
 });
 
 describe("menu counters", () => {

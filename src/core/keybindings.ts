@@ -17,7 +17,7 @@ export interface Keybindings {
 
 export const DEFAULT_KEYBINDINGS: Keybindings = {
   modelPicker: "ctrl+l",
-  treeView: "alt+a",
+  treeView: "",
   abort: "ctrl+c",
   submit: "return",
   newline: "shift+return",
@@ -39,7 +39,8 @@ export function loadKeybindings(): Keybindings {
       cached = {
         ...DEFAULT_KEYBINDINGS,
         ...raw,
-        treeView: raw.treeView ?? raw.agentsView ?? DEFAULT_KEYBINDINGS.treeView,
+        // The tree hotkey is intentionally retired; keep /tree as the only entry point.
+        treeView: DEFAULT_KEYBINDINGS.treeView,
       };
     } catch {
       cached = { ...DEFAULT_KEYBINDINGS };
@@ -60,6 +61,7 @@ export function getKeybinding(action: keyof Keybindings): string {
 
 /** Check if a keypress matches a keybinding string like "ctrl+l" */
 export function matchesBinding(binding: string, key: { name: string; ctrl: boolean; meta: boolean; shift: boolean }): boolean {
+  if (!binding.trim()) return false;
   const parts = binding.toLowerCase().split("+");
   const keyName = parts[parts.length - 1];
   const needCtrl = parts.includes("ctrl");

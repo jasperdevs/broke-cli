@@ -73,6 +73,7 @@ export function drawImmediate(app: AppState): void {
   bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
   bottomLines.push(buildInfoBar(app, hasSidebar, mainW));
   if (app.statusMessage) bottomLines.push(` ${app.statusMessage}`);
+  const bottomTopPad = hasSidebar ? Math.max(0, footerLines.length - bottomLines.length) : 0;
 
   const frameLines = buildFrameLines(app, {
     height,
@@ -81,6 +82,7 @@ export function drawImmediate(app: AppState): void {
     hasSidebar,
     footerLines,
     bottomLines,
+    bottomTopPad,
     bottomMenuClicks,
     isHome,
   });
@@ -90,18 +92,23 @@ export function drawImmediate(app: AppState): void {
     app.screen.hideCursor();
     return;
   }
-  const mainTopHeight = Math.max(0, height - bottomLines.length);
-  app.screen.setCursor(Math.min(height, mainTopHeight + inputStartIndex + 1 + inputLayout.row), Math.min(width, 1 + inputLayout.col));
+  const effectiveBottomHeight = hasSidebar ? Math.max(bottomLines.length, footerLines.length) : bottomLines.length;
+  const mainTopHeight = Math.max(0, height - effectiveBottomHeight);
+  const sidebarTopHeight = hasSidebar ? Math.max(0, height - footerLines.length) : mainTopHeight;
+  const bottomStartRow = hasSidebar ? Math.max(mainTopHeight, sidebarTopHeight) : mainTopHeight;
+  app.screen.setCursor(Math.min(height, bottomStartRow + bottomTopPad + inputStartIndex + 1 + inputLayout.row), Math.min(width, 1 + inputLayout.col));
 }
 
-function buildFrameLines(app: AppState, opts: { height: number; width: number; mainW: number; hasSidebar: boolean; footerLines: string[]; bottomLines: string[]; bottomMenuClicks: Array<{ lineIndex: number; action: () => void }>; isHome: boolean; }): string[] {
-  const { height, mainW, hasSidebar, footerLines, bottomLines, bottomMenuClicks, isHome } = opts;
+function buildFrameLines(app: AppState, opts: { height: number; width: number; mainW: number; hasSidebar: boolean; footerLines: string[]; bottomLines: string[]; bottomTopPad: number; bottomMenuClicks: Array<{ lineIndex: number; action: () => void }>; isHome: boolean; }): string[] {
+  const { height, mainW, hasSidebar, footerLines, bottomLines, bottomTopPad, bottomMenuClicks, isHome } = opts;
   const frameLines: string[] = [];
-  const mainBottomHeight = bottomLines.length;
+  const paddedBottomLines = bottomTopPad > 0 ? [...Array.from({ length: bottomTopPad }, () => ""), ...bottomLines] : bottomLines;
+  const mainBottomHeight = paddedBottomLines.length;
   const mainTopHeight = Math.max(0, height - mainBottomHeight);
   const sidebarFooterHeight = hasSidebar ? footerLines.length : 0;
   const sidebarTopHeight = hasSidebar ? Math.max(0, height - sidebarFooterHeight) : 0;
-  app.activeMenuClickTargets = new Map(bottomMenuClicks.map(({ lineIndex, action }) => [mainTopHeight + lineIndex + 1, action]));
+  const bottomStartRow = hasSidebar ? Math.max(mainTopHeight, sidebarTopHeight) : mainTopHeight;
+  app.activeMenuClickTargets = new Map(bottomMenuClicks.map(({ lineIndex, action }) => [bottomStartRow + bottomTopPad + lineIndex + 1, action]));
   const showCompactHeader = !isHome && !hasSidebar && app.modelName !== "none";
   const bannerLines = app.renderUpdateBanner(mainW);
   const reservedBannerLines = bannerLines.slice(0, mainTopHeight);
@@ -137,10 +144,10 @@ function buildFrameLines(app: AppState, opts: { height: number; width: number; m
     for (let i = 0; i < mainBottomHeight; i++) {
       const row = frameLines.length;
       const footerLine = row >= sidebarTopHeight ? footerLines[row - sidebarTopHeight] ?? "" : "";
-      frameLines.push(`${app.padLine(bottomLines[i] ?? "", mainW)} ${border} ${app.padLine(footerLine, sideW)}`);
+      frameLines.push(`${app.padLine(paddedBottomLines[i] ?? "", mainW)} ${border} ${app.padLine(footerLine, sideW)}`);
     }
   } else {
-    frameLines.push(...bottomLines);
+    frameLines.push(...paddedBottomLines);
   }
 
   while (frameLines.length < height) frameLines.push("");

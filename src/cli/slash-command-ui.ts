@@ -137,7 +137,6 @@ export async function handleUiSlashCommand(options: {
         { id: "newline", label: bindings.newline, detail: "newline" },
         { id: "abort", label: bindings.abort, detail: "abort/exit" },
         { id: "modelPicker", label: bindings.modelPicker, detail: "model picker" },
-        { id: "treeView", label: bindings.treeView, detail: "session tree" },
         { id: "toggleThinking", label: bindings.toggleThinking, detail: "thinking" },
         { id: "cycleScopedModel", label: bindings.cycleScopedModel, detail: "pinned models" },
         { id: "toggleMode", label: bindings.toggleMode, detail: "build/plan" },

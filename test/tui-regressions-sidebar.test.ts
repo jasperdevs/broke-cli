@@ -114,8 +114,8 @@ describe("sidebar scrolling", () => {
     app.sidebarExpandedDirs.add("src:all");
     app.openItemPicker("Theme", listThemes().slice(0, 5).map((theme) => ({ id: theme.key, label: theme.label })), () => {});
     app.handleKey({ name: "scrolldown", char: "", ctrl: false, meta: false, shift: false });
-    expect(app.sidebarScrollOffset).toBeGreaterThan(0);
-    expect(app.itemPicker.cursor).toBe(0);
+    expect(app.sidebarScrollOffset).toBe(0);
+    expect(app.itemPicker.cursor).toBe(1);
 
     app.sidebarFocused = false;
     app.handleKey({ name: "pagedown", char: "", ctrl: false, meta: false, shift: false });
@@ -134,6 +134,63 @@ describe("sidebar scrolling", () => {
     expect(footerText).toContain("▰");
     expect(footerText).not.toContain("plan");
     updateSetting("showTokens", originalShowTokens);
+  });
+
+  it("keeps the slash menu and prompt cursor anchored when the sidebar footer is taller", () => {
+    const app = new App() as any;
+    const settings = getSettings();
+    const original = {
+      showTokens: settings.showTokens,
+      showCost: settings.showCost,
+      thinkingLevel: settings.thinkingLevel,
+      cavemanLevel: settings.cavemanLevel,
+    };
+    let rendered: string[] = [];
+    let cursorRow = 0;
+    try {
+      updateSetting("showTokens", true);
+      updateSetting("showCost", true);
+      updateSetting("thinkingLevel", "low");
+      updateSetting("cavemanLevel", "ultra");
+      app.messages = [{ role: "user", content: "hello" }];
+      app.setContextUsage(120_000, 128_000);
+      app.updateUsage(0.0021, 8_200, 621);
+      app.input.setText("/");
+      app.screen = {
+        height: 14,
+        width: 80,
+        hasSidebar: true,
+        mainWidth: 53,
+        sidebarWidth: 24,
+        render: (lines: string[]) => { rendered = lines; },
+        setCursor: (row: number) => { cursorRow = row; },
+        hideCursor: () => {},
+        forceRedraw: () => {},
+      };
+      app.drawImmediate();
+      const output = rendered.map((line) => stripAnsi(line)).join("\n");
+      expect(output).toContain("Commands");
+      expect(output).toContain("settings");
+      expect(output).toContain("help");
+      expect(stripAnsi(rendered[cursorRow - 1] ?? "")).toContain("/");
+    } finally {
+      updateSetting("showTokens", original.showTokens);
+      updateSetting("showCost", original.showCost);
+      updateSetting("thinkingLevel", original.thinkingLevel);
+      updateSetting("cavemanLevel", original.cavemanLevel ?? "off");
+    }
+  });
+
+  it("does not scroll transcript lines with wheel or page keys", () => {
+    const app = new App() as any;
+    app.messages = Array.from({ length: 40 }, (_, i) => ({ role: "assistant", content: `line ${i}` }));
+    app.scrollOffset = 8;
+    app.screen = { height: 16, width: 70, hasSidebar: false, mainWidth: 70, sidebarWidth: 20, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
+    app.handleKey({ name: "scrollup", char: "", ctrl: false, meta: false, shift: false });
+    app.handleKey({ name: "scrolldown", char: "", ctrl: false, meta: false, shift: false });
+    app.handleKey({ name: "pageup", char: "", ctrl: false, meta: false, shift: false });
+    app.handleKey({ name: "pagedown", char: "", ctrl: false, meta: false, shift: false });
+    expect(app.scrollOffset).toBe(8);
   });
 });
 

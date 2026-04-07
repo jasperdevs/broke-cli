@@ -55,37 +55,41 @@ function handleClickOrScroll(app: AppState, key: Keypress): boolean {
     return true;
   }
   if (key.name === "scrollup" || key.name === "scrolldown") {
-    const delta = key.name === "scrollup" ? -3 : 3;
+    const menuDelta = key.name === "scrollup" ? -1 : 1;
+    const sidebarDelta = key.name === "scrollup" ? -3 : 3;
     app.hideCursorBriefly();
+    if (app.scrollActiveMenu(menuDelta)) {
+      app.draw();
+      return true;
+    }
     if (app.sidebarFocused && app.screen.hasSidebar && !getSettings().hideSidebar) {
-      app.scrollSidebar(delta, app.getChatHeight());
-    } else if (!app.scrollActiveMenu(key.name === "scrollup" ? -1 : 1)) {
-      app.scrollTranscript(delta);
+      app.scrollSidebar(sidebarDelta, app.getChatHeight());
     }
     app.draw();
     return true;
   }
   if (key.name === "pageup" || (key.ctrl && key.name === "up")) {
+    const menuDelta = -Math.max(1, app.screen.height - 8);
     app.hideCursorBriefly();
+    if (app.scrollActiveMenu(menuDelta)) {
+      app.draw();
+      return true;
+    }
     if (app.sidebarFocused && app.screen.hasSidebar && !getSettings().hideSidebar) {
       app.scrollSidebar(-Math.max(1, app.getChatHeight() - 2), app.getChatHeight());
-    } else if (!app.scrollActiveMenu(-Math.max(1, app.screen.height - 8))) {
-      app.scrollOffset = Math.max(0, app.scrollOffset - 3);
-      app.invalidateMsgCache();
     }
     app.draw();
     return true;
   }
   if (key.name === "pagedown" || (key.ctrl && key.name === "down")) {
+    const menuDelta = Math.max(1, app.screen.height - 8);
     app.hideCursorBriefly();
+    if (app.scrollActiveMenu(menuDelta)) {
+      app.draw();
+      return true;
+    }
     if (app.sidebarFocused && app.screen.hasSidebar && !getSettings().hideSidebar) {
       app.scrollSidebar(Math.max(1, app.getChatHeight() - 2), app.getChatHeight());
-    } else if (!app.scrollActiveMenu(Math.max(1, app.screen.height - 8))) {
-      const chatHeight = app.getChatHeight();
-      const messageLines = app.renderMessages(app.screen.mainWidth - 2);
-      const maxScroll = Math.max(0, messageLines.length - chatHeight);
-      app.scrollOffset = Math.min(maxScroll, app.scrollOffset + 3);
-      app.invalidateMsgCache();
     }
     app.draw();
     return true;
@@ -140,10 +144,6 @@ function handleEscapeAndBindings(app: AppState, key: Keypress): boolean {
   const bindings = loadKeybindings();
   if (matchesBinding(bindings.modelPicker, key)) {
     app.onSubmit?.("/model");
-    return true;
-  }
-  if (matchesBinding(bindings.treeView, key)) {
-    app.onSubmit?.("/tree");
     return true;
   }
   if (matchesBinding(bindings.cycleScopedModel, key)) {

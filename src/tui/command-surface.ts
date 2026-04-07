@@ -30,7 +30,7 @@ export const COMMANDS: CommandEntry[] = [
   { name: "skills", desc: "list loaded skills" },
   { name: "projects", desc: "switch or search recent projects" },
   { name: "resume", desc: "resume session (sessions)", aliases: ["sessions"] },
-  { name: "tree", desc: "jump to any point in session history", hotkey: "alt+a" },
+  { name: "tree", desc: "jump to any point in session history" },
   { name: "fork", desc: "branch from current session" },
   { name: "session", desc: "show active session info" },
   { name: "hotkeys", desc: "show keyboard shortcuts" },
