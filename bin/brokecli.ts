@@ -1,4 +1,3 @@
-import { Command } from "commander";
 import { execSync } from "child_process";
 import { writeFileSync } from "fs";
 import { App } from "../src/tui/app.js";
@@ -25,7 +24,7 @@ import { bootstrapSession } from "../src/cli/session-bootstrap.js";
 import { runModelTurn } from "../src/cli/turn-runner.js";
 import { handleSlashCommand } from "../src/cli/slash-commands.js";
 import { buildHtmlExport } from "../src/cli/exports.js";
-import { registerPackageCommands } from "../src/cli/package-commands.js";
+import { createProgram } from "../src/cli/program.js";
 import { ensureConfiguredPackagesInstalled } from "../src/core/package-manager.js";
 import { checkForNewVersion } from "../src/core/update.js";
 import {
@@ -37,44 +36,7 @@ import {
   splitModelArg,
 } from "../src/cli/cli-helpers.js";
 
-const program = new Command()
-  .name("brokecli")
-  .description("AI coding CLI that doesn't waste your money")
-  .version(APP_VERSION)
-  .argument("[prompt...]", "Prompt to run in single-shot print/json mode")
-  .option("--broke", "Route to cheapest capable model")
-  .option("--provider <provider>", "Provider to use")
-  .option("-m, --model <model>", "Model to use (provider/model-id)")
-  .option("--api-key <key>", "Runtime API key override")
-  .option("-c, --continue", "Continue last session")
-  .option("-r, --resume", "Resume the most recent session")
-  .option("--session-id <id>", "Open a specific saved session")
-  .option("--fork <id>", "Fork from a specific saved session")
-  .option("--session-dir <path>", "Override the session directory for this run")
-  .option("-p, --print", "Single-shot mode: print response and exit")
-  .option("--mode <mode>", "Output mode: tui, json, or rpc", "tui")
-  .option("--tools <patterns>", "Comma-separated tool allowlist/excludes for this run")
-  .option("--thinking <level>", "Thinking level: off, minimal, low, medium, high, xhigh")
-  .option("--theme <theme>", "Theme override for this run")
-  .option("--models <patterns>", "Comma-separated model patterns for cycling")
-  .option("--list-models [search]", "List visible models and exit")
-  .option("--system-prompt <text>", "Replace the default system prompt for this run")
-  .option("--append-system-prompt <text>", "Append to the system prompt for this run")
-  .option("-e, --extension <source>", "Load extension path/package for this run", (value, acc: string[]) => [...acc, value], [])
-  .option("--skill <source>", "Load skill path/package for this run", (value, acc: string[]) => [...acc, value], [])
-  .option("--prompt-template <source>", "Load prompt template path/package for this run", (value, acc: string[]) => [...acc, value], [])
-  .option("--theme-path <source>", "Load theme path/package for this run", (value, acc: string[]) => [...acc, value], [])
-  .option("--no-extensions", "Disable extension discovery for this run")
-  .option("--no-skills", "Disable skill discovery for this run")
-  .option("--no-prompt-templates", "Disable prompt-template discovery for this run")
-  .option("--no-themes", "Disable theme discovery for this run")
-  .option("--export <session>", "Export a saved session to HTML")
-  .option("--export-out <path>", "Output path for --export")
-  .option("--verbose", "Force verbose startup")
-  .option("--no-session", "Disable session persistence for this run")
-  .option("--rpc", "Non-interactive JSON RPC mode");
-
-registerPackageCommands(program);
+const program = createProgram(APP_VERSION);
 
 program.action(async (promptParts, opts) => {
   clearRuntimeSettings();

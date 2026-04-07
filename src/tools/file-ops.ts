@@ -1,7 +1,5 @@
 import { readFileSync, writeFileSync, readdirSync, statSync } from "fs";
 import { basename, join, relative } from "path";
-import { z } from "zod";
-import { tool } from "ai";
 import { assessFileWrite } from "../core/safety.js";
 import { createCheckpoint } from "../core/git.js";
 
@@ -452,97 +450,43 @@ export function semSearchDirect({
   };
 }
 
-export const readFileTool = tool({
-  description: "Read file contents. Use mode=full for exact edits, mode=minimal to drop obvious noise, or mode=aggressive for structure-first exploration on large files. Use offset/limit for files over 500 lines.",
-  inputSchema: z.object({
-    path: z.string().describe("File path (relative or absolute)"),
-    offset: z.number().optional().describe("Start line (0-based)"),
-    limit: z.number().optional().describe("Max lines to return"),
-    mode: z.enum(["full", "minimal", "aggressive"]).optional().describe("Read mode (default: full)"),
-    tail: z.number().optional().describe("Return only the last N lines"),
-  }),
-  execute: async ({ path, offset, limit, mode, tail }) => {
-    const remote = tryParseRemoteGitHubTarget(path);
-    if (remote?.kind === "file") return fetchRemoteGitHubFile(remote);
-    return readFileDirect({ path, offset, limit, mode, tail });
-  },
-});
+export async function readFileMaybeRemote(options: ReadFileDirectOptions) {
+  const remote = tryParseRemoteGitHubTarget(options.path);
+  if (remote?.kind === "file") return fetchRemoteGitHubFile(remote);
+  return readFileDirect(options);
+}
 
-export const writeFileTool = tool({
-  description: "Create a new file or completely overwrite an existing one. For targeted changes to existing files, use editFile instead. Always readFile first if the file already exists.",
-  inputSchema: z.object({
-    path: z.string().describe("File path to write"),
-    content: z.string().describe("Complete file content"),
-  }),
-  execute: async ({ path, content }) => {
-    const risk = assessFileWrite(path);
-    if (risk.level === "warn") {
-      return { success: false as const, error: `Blocked: ${risk.reason}` };
+export async function listFilesMaybeRemote(options: { path?: string; maxDepth?: number; include?: string }) {
+  const remote = tryParseRemoteGitHubTarget(options.path ?? ".");
+  if (remote) return listRemoteGitHubTree(remote);
+  return listFilesDirect(options);
+}
+
+export function writeFileDirect({ path, content }: { path: string; content: string }) {
+  const risk = assessFileWrite(path);
+  if (risk.level === "warn") {
+    return { success: false as const, error: `Blocked: ${risk.reason}` };
+  }
+  createCheckpoint();
+  try {
+    writeFileSync(path, content, "utf-8");
+    return { success: true as const, bytesWritten: content.length };
+  } catch (err: unknown) {
+    return { success: false as const, error: (err as Error).message };
+  }
+}
+
+export function editFileDirect({ path, old_string, new_string }: { path: string; old_string: string; new_string: string }) {
+  createCheckpoint();
+  try {
+    const content = readFileSync(path, "utf-8");
+    if (!content.includes(old_string)) {
+      return { success: false as const, error: "old_string not found in file" };
     }
-    createCheckpoint();
-    try {
-      writeFileSync(path, content, "utf-8");
-      return { success: true as const, bytesWritten: content.length };
-    } catch (err: unknown) {
-      return { success: false as const, error: (err as Error).message };
-    }
-  },
-});
-
-export const editFileTool = tool({
-  description: "Replace an exact string in a file with new content. The old_string must match EXACTLY (including whitespace/indentation). Include enough surrounding lines to make old_string unique. Preferred over writeFile for changes to existing files.",
-  inputSchema: z.object({
-    path: z.string().describe("File path to edit"),
-    old_string: z.string().describe("Exact existing text to find (must be unique in the file)"),
-    new_string: z.string().describe("Replacement text"),
-  }),
-  execute: async ({ path, old_string, new_string }) => {
-    createCheckpoint();
-    try {
-      const content = readFileSync(path, "utf-8");
-      if (!content.includes(old_string)) {
-        return { success: false as const, error: "old_string not found in file" };
-      }
-      const updated = content.replace(old_string, new_string);
-      writeFileSync(path, updated, "utf-8");
-      return { success: true as const };
-    } catch (err: unknown) {
-      return { success: false as const, error: (err as Error).message };
-    }
-  },
-});
-
-export const listFilesTool = tool({
-  description: "List files and directories recursively. Use as a first step when exploring unfamiliar code. Skips hidden files and node_modules. Returns a compact list capped at 120 entries plus total count.",
-  inputSchema: z.object({
-    path: z.string().describe("Directory to list (default: current dir)").default("."),
-    maxDepth: z.number().optional().describe("Max recursion depth (default 3)"),
-    include: z.string().optional().describe("Glob filter (e.g. '*.ts', 'src/*.tsx')"),
-  }),
-  execute: async ({ path, maxDepth, include }) => {
-    const remote = tryParseRemoteGitHubTarget(path);
-    if (remote) return listRemoteGitHubTree(remote);
-    return listFilesDirect({ path, maxDepth, include });
-  },
-});
-
-export const grepTool = tool({
-  description: "Search file contents with regex. Returns grouped results by file with compact example lines, plus capped raw matches for exact follow-up. Use this before broad shell grep where possible.",
-  inputSchema: z.object({
-    pattern: z.string().describe("Regex pattern (case-insensitive)"),
-    path: z.string().describe("Directory to search (default: current dir)").default("."),
-    include: z.string().optional().describe("File extension filter (e.g. '*.ts', '*.py')"),
-  }),
-  execute: async ({ pattern, path, include }) => grepDirect({ pattern, path, include }),
-});
-
-export const semSearchTool = tool({
-  description: "Semantic-ish code discovery for natural-language queries. Use this before broad shell search when you know behavior or intent but not exact filenames or symbols.",
-  inputSchema: z.object({
-    query: z.string().describe("Natural-language description of the code or behavior to find"),
-    path: z.string().describe("Directory to search (default: current dir)").default("."),
-    include: z.string().optional().describe("Optional glob filter (e.g. '*.ts', 'src/*.rs')"),
-    limit: z.number().optional().describe("Max results (default 6, max 8)"),
-  }),
-  execute: async ({ query, path, include, limit }) => semSearchDirect({ query, path, include, limit }),
-});
+    const updated = content.replace(old_string, new_string);
+    writeFileSync(path, updated, "utf-8");
+    return { success: true as const };
+  } catch (err: unknown) {
+    return { success: false as const, error: (err as Error).message };
+  }
+}

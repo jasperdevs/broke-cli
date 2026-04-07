@@ -1,6 +1,6 @@
 import type { ToolSet } from "ai";
 import { bashTool } from "./bash.js";
-import { readFileTool, writeFileTool, editFileTool, listFilesTool, grepTool, semSearchTool } from "./file-ops.js";
+import { readFileTool, writeFileTool, editFileTool, listFilesTool, grepTool, semSearchTool } from "./file-ops-tools.js";
 import { webSearchTool, webFetchTool } from "./web.js";
 import { todoWriteTool } from "./todo.js";
 import { isToolAllowed } from "../core/permissions.js";
