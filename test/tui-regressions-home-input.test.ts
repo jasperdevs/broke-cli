@@ -258,6 +258,29 @@ describe("input editing", () => {
     expect(app.input.getText()).toBe("line one\n");
   });
 
+  it("renders a live pending shimmer state for /btw bubbles", () => {
+    const app = new App() as any;
+    app.openBtwBubble({ question: "status?", answer: "", modelLabel: "Claude Sonnet 4.6", pending: true });
+    const output = app.renderBtwBubble(60).map((line: string) => stripAnsi(line)).join("\n");
+    expect(output).toContain("/btw");
+    expect(output).toContain("status?");
+    expect(output).toContain("Answering from current session context...");
+    expect(output).toContain("esc cancel");
+  });
+
+  it("runs /btw immediately instead of queueing it while the main stream is active", () => {
+    const app = new App() as any;
+    let submitted: { text: string; images?: Array<{ mimeType: string; data: string }> } | null = null;
+    app.isStreaming = true;
+    app.onSubmit = (text: string, images?: Array<{ mimeType: string; data: string }>) => {
+      submitted = { text, images };
+    };
+    app.input.paste("/btw status?");
+    app.handleKey({ name: "return", char: "", ctrl: false, meta: false, shift: false });
+    expect(submitted).toEqual({ text: "/btw status?", images: undefined });
+    expect(app.pendingMessages).toEqual([]);
+  });
+
   it("does not show an empty reasoning block when no reasoning text arrives", () => {
     const app = new App() as any;
     app.messages = [{ role: "assistant", content: "Reading files" }];

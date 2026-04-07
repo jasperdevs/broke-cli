@@ -326,7 +326,14 @@ function submitQueuedInput(app: AppState, delivery: "steering" | "followup"): vo
   const text = app.input.submit();
   const images = app.takePendingImages();
   if ((!text && images.length === 0) || !app.onSubmit) return;
+  const trimmed = text.trimStart();
+  const shouldBypassQueue = trimmed.startsWith("/btw ");
   if (!app.isStreaming) {
+    if (images.length > 0) (app.onSubmit as (text: string, images?: Array<{ mimeType: string; data: string }>) => void)(text, images);
+    else app.onSubmit(text);
+    return;
+  }
+  if (shouldBypassQueue) {
     if (images.length > 0) (app.onSubmit as (text: string, images?: Array<{ mimeType: string; data: string }>) => void)(text, images);
     else app.onSubmit(text);
     return;

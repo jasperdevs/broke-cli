@@ -116,12 +116,12 @@ export function renderBtwBubble(app: AppState, width: number): string[] {
   const model = `${MUTED()}${bubble.modelLabel}${RESET}`;
   const header = `${label} ${DIM}·${RESET} ${model}`;
   const wrappedQuestion = wordWrap(bubble.question, Math.max(12, innerWidth - 4)).map((line) => `${TXT()}Q:${RESET} ${TXT()}${line}${RESET}`);
-  const answerText = bubble.error
-    ? `${ERR()}${bubble.error}${RESET}`
+  const wrappedAnswer = bubble.error
+    ? wordWrap(bubble.error, Math.max(12, innerWidth - 2)).map((line) => `${ERR()}${line}${RESET}`)
     : bubble.answer.trim()
-      ? `${TXT()}${bubble.answer.trim()}${RESET}`
-      : `${MUTED()}Answering from current session context...${RESET}`;
-  const wrappedAnswer = wordWrap(stripAnsi(answerText), Math.max(12, innerWidth - 2)).map((line) => bubble.error ? `${ERR()}${line}${RESET}` : `${TXT()}${line}${RESET}`);
+      ? wordWrap(bubble.answer.trim(), Math.max(12, innerWidth - 2)).map((line) => `${TXT()}${line}${RESET}`)
+      : wordWrap("Answering from current session context...", Math.max(12, innerWidth - 2)).map((line) =>
+        `${OK()}${app.sparkleSpinner(app.spinnerFrame, OK())}${RESET} ${app.shimmerText(line, app.spinnerFrame, OK())}`);
   const footer = bubble.pending
     ? `${DIM}esc cancel${RESET}`
     : `${DIM}space/enter/esc dismiss${RESET}`;
