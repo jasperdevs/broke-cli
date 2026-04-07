@@ -92,18 +92,16 @@ describe("sidebar scrolling", () => {
     expect(lines).toContain("  ▾ src/");
   });
 
-  it("ignores wheel input while hiding the sidebar footer during active menus", () => {
+  it("scrolls transcript outside menus and still keeps the sidebar footer visible during active menus", () => {
     const originalShowTokens = getSettings().showTokens;
     updateSetting("showTokens", true);
     const app = new App() as any;
     app.messages = Array.from({ length: 30 }, (_, i) => ({ role: "user", content: `msg ${i}` }));
-    app.scrollOffset = 6;
+    app.scrollOffset = 8;
     app.screen = { height: 16, width: 80, hasSidebar: false, mainWidth: 80, sidebarWidth: 20, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
-    app.handleKey({ name: "scrolldown", char: "", ctrl: false, meta: false, shift: false });
     app.handleKey({ name: "scrollup", char: "", ctrl: false, meta: false, shift: false });
     app.handleKey({ name: "pageup", char: "", ctrl: false, meta: false, shift: false });
-    app.handleKey({ name: "pagedown", char: "", ctrl: false, meta: false, shift: false });
-    expect(app.scrollOffset).toBe(6);
+    expect(app.scrollOffset).toBeLessThan(8);
 
     app.messages = [{ role: "user", content: "hello" }];
     app.sidebarFocused = true;
@@ -114,7 +112,7 @@ describe("sidebar scrolling", () => {
     app.sidebarExpandedDirs.add("src:all");
     app.openItemPicker("Theme", listThemes().slice(0, 5).map((theme) => ({ id: theme.key, label: theme.label })), () => {});
     app.handleKey({ name: "scrolldown", char: "", ctrl: false, meta: false, shift: false });
-    expect(app.sidebarScrollOffset).toBe(0);
+    expect(app.sidebarScrollOffset).toBeGreaterThan(0);
     expect(app.itemPicker.cursor).toBe(0);
 
     app.sidebarFocused = false;
@@ -233,19 +231,17 @@ describe("sidebar scrolling", () => {
     expect(output).toContain("same as chat");
   });
 
-  it("does not scroll transcript lines with wheel or page keys", () => {
+  it("scrolls transcript lines with wheel and page keys", () => {
     const app = new App() as any;
     app.messages = Array.from({ length: 40 }, (_, i) => ({ role: "assistant", content: `line ${i}` }));
     app.scrollOffset = 8;
     app.screen = { height: 16, width: 70, hasSidebar: false, mainWidth: 70, sidebarWidth: 20, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
     app.handleKey({ name: "scrollup", char: "", ctrl: false, meta: false, shift: false });
-    app.handleKey({ name: "scrolldown", char: "", ctrl: false, meta: false, shift: false });
     app.handleKey({ name: "pageup", char: "", ctrl: false, meta: false, shift: false });
-    app.handleKey({ name: "pagedown", char: "", ctrl: false, meta: false, shift: false });
-    expect(app.scrollOffset).toBe(8);
+    expect(app.scrollOffset).toBeLessThan(8);
   });
 
-  it("ignores sidebar wheel coordinates without requiring a prior click focus", () => {
+  it("scrolls the sidebar when wheel coordinates land in the sidebar even without prior focus", () => {
     const app = new App() as any;
     app.messages = [{ role: "user", content: "hello" }];
     app.screen = { height: 18, width: 100, hasSidebar: true, mainWidth: 73, sidebarWidth: 24, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
@@ -266,11 +262,11 @@ describe("sidebar scrolling", () => {
 
     expect(app.sidebarScrollOffset).toBe(0);
     app.handleKey({ name: "scrolldown", char: "95,8", ctrl: false, meta: false, shift: false });
-    expect(app.sidebarFocused).toBe(false);
-    expect(app.sidebarScrollOffset).toBe(0);
+    expect(app.sidebarFocused).toBe(true);
+    expect(app.sidebarScrollOffset).toBeGreaterThan(0);
   });
 
-  it("ignores wheel-style sidebar packets even when terminals set modifier bits", () => {
+  it("routes wheel-style sidebar packets to sidebar scrolling even when terminals set modifier bits", () => {
     const app = new App() as any;
     app.messages = [{ role: "user", content: "hello" }];
     app.screen = { height: 18, width: 100, hasSidebar: true, mainWidth: 73, sidebarWidth: 24, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
@@ -288,7 +284,7 @@ describe("sidebar scrolling", () => {
       ...Array.from({ length: 18 }, (_, i) => `    file-${i}.ts`),
     ];
     app.handleKey({ name: "scrolldown", char: "95,8", ctrl: false, meta: false, shift: false });
-    expect(app.sidebarScrollOffset).toBe(0);
+    expect(app.sidebarScrollOffset).toBeGreaterThan(0);
   });
 
   it("keeps the sidebar footer visible while composing plain text but hides it while streaming", () => {

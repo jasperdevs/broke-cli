@@ -104,7 +104,8 @@ export class KeypressHandler {
           const row = parseInt(match[3], 10);
           const release = match[4] === "m";
           if ((button & 64) === 64) {
-            continue;
+            const wheelDown = (button & 1) === 1;
+            this.onKey({ name: wheelDown ? "scrolldown" : "scrollup", char: `${col},${row}`, ctrl: false, meta: false, shift: false });
           } else if (button === 0 && release) {
             this.onKey({ name: "click", char: `${col},${row}`, ctrl: false, meta: false, shift: false });
           }

@@ -34,6 +34,21 @@ function isSidebarPointer(app: AppState, key: Keypress): boolean {
   return pointer.col > app.screen.mainWidth;
 }
 
+function scrollSidebarIfTargeted(app: AppState, delta: number, key?: Keypress): boolean {
+  if (!app.screen.hasSidebar || getSettings().hideSidebar) return false;
+  const pointerTargetsSidebar = !!key && isSidebarPointer(app, key);
+  if (!app.sidebarFocused && !pointerTargetsSidebar) return false;
+  const sidebarHeight = app.getSidebarViewportHeight();
+  app.sidebarFocused = true;
+  app.scrollSidebar(delta, sidebarHeight);
+  return true;
+}
+
+function scrollTranscriptIfVisible(app: AppState, delta: number): boolean {
+  if (app.messages.length === 0) return false;
+  return app.scrollTranscript(delta);
+}
+
 function handleClickOrScroll(app: AppState, key: Keypress): boolean {
   if (key.name === "click" && key.char) {
     const pointer = getPointerPosition(key);
@@ -69,6 +84,16 @@ function handleClickOrScroll(app: AppState, key: Keypress): boolean {
     return true;
   }
   if (key.name === "scrollup" || key.name === "scrolldown") {
+    app.hideCursorBriefly();
+    const delta = key.name === "scrollup" ? -3 : 3;
+    if (scrollSidebarIfTargeted(app, delta, key)) {
+      app.draw();
+      return true;
+    }
+    if (!app.filePicker && !app.itemPicker && !app.settingsPicker && !app.modelPicker && !app.treeView && !app.questionView && scrollTranscriptIfVisible(app, delta)) {
+      app.draw();
+      return true;
+    }
     return true;
   }
   if (key.name === "pageup" || (key.ctrl && key.name === "up")) {
@@ -78,9 +103,14 @@ function handleClickOrScroll(app: AppState, key: Keypress): boolean {
       app.draw();
       return true;
     }
-    if (app.sidebarFocused && app.screen.hasSidebar && !getSettings().hideSidebar) {
-      const sidebarHeight = app.getSidebarViewportHeight();
-      app.scrollSidebar(-Math.max(1, sidebarHeight - 2), sidebarHeight);
+    const pageDelta = -Math.max(1, app.getChatHeight() - 2);
+    if (scrollSidebarIfTargeted(app, pageDelta)) {
+      app.draw();
+      return true;
+    }
+    if (scrollTranscriptIfVisible(app, pageDelta)) {
+      app.draw();
+      return true;
     }
     app.draw();
     return true;
@@ -92,9 +122,14 @@ function handleClickOrScroll(app: AppState, key: Keypress): boolean {
       app.draw();
       return true;
     }
-    if (app.sidebarFocused && app.screen.hasSidebar && !getSettings().hideSidebar) {
-      const sidebarHeight = app.getSidebarViewportHeight();
-      app.scrollSidebar(Math.max(1, sidebarHeight - 2), sidebarHeight);
+    const pageDelta = Math.max(1, app.getChatHeight() - 2);
+    if (scrollSidebarIfTargeted(app, pageDelta)) {
+      app.draw();
+      return true;
+    }
+    if (scrollTranscriptIfVisible(app, pageDelta)) {
+      app.draw();
+      return true;
     }
     app.draw();
     return true;
