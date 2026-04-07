@@ -27,7 +27,16 @@ function escapePowerShellSingleQuoted(value: string): string {
   return value.replace(/'/g, "''");
 }
 
+function ringTerminalBell(): void {
+  try {
+    process.stdout.write("\x07");
+  } catch {
+    // ignore bell failures
+  }
+}
+
 export function sendResponseNotification(message = "Response complete"): void {
+  ringTerminalBell();
   try {
     const iconPath = getNotificationIconPath();
     if (process.platform === "win32") {
