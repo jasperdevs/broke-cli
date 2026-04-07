@@ -283,7 +283,22 @@ export async function executeTurn(options: {
         if (_name === "todoWrite") return;
         const r = result as { success?: boolean; output?: string; error?: string; content?: string; matches?: unknown[]; files?: string[] };
         let detail: string | undefined;
-        if (_name === "bash" && r.output) detail = r.output.slice(0, 200);
+        if (_name === "bash") {
+          const reroutedTo = (result as any)?.reroutedTo as string | undefined;
+          if ((result as any)?.rerouted) session.recordShellRecovery();
+          if (reroutedTo === "readFile") {
+            const totalLines = (result as any)?.totalLines;
+            detail = totalLines ? `via readFile · ${totalLines} lines` : "via readFile";
+          } else if (reroutedTo === "listFiles") {
+            const fileCount = (result as any)?.fileCount;
+            detail = fileCount ? `via listFiles · ${fileCount} files` : "via listFiles";
+          } else if (reroutedTo === "grep") {
+            const matchCount = (result as any)?.matchCount;
+            detail = matchCount !== undefined ? `via grep · ${matchCount} matches` : "via grep";
+          } else if (r.output) {
+            detail = r.output.slice(0, 200);
+          }
+        }
         else if (_name === "readFile" && r.content) {
           const lineCount = r.content.split("\n").length;
           detail = `${lineCount} lines`;
@@ -291,6 +306,7 @@ export async function executeTurn(options: {
           if (readPath) session.getContextOptimizer().trackFileRead(readPath, lineCount);
         } else if (_name === "grep" && r.matches) detail = `${(r.matches as unknown[]).length} matches`;
         else if (_name === "listFiles" && r.files) detail = `${(r.files as string[]).length} files`;
+        else if (_name === "semSearch") detail = `${((result as any)?.results as unknown[] | undefined)?.length ?? 0} ranked hits`;
         else if (_name === "agent") {
           const agent = result as { success?: boolean; model?: string; toolsUsed?: string[]; result?: string; error?: string };
           detail = [

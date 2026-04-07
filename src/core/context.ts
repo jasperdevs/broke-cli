@@ -53,6 +53,8 @@ export function buildSystemPrompt(cwd: string, providerId?: string, mode?: Mode,
 - Be concise. Short sentences. No filler. 1-2 sentence explanations after changes.
 - Read before editing. Always read a file before modifying it.
 - Use editFile for targeted changes. Only use writeFile for new files or complete rewrites.
+- Prefer semSearch for conceptual code discovery, grep for exact text, readFile for known files.
+- Do not use bash for cat/find/head/tail/grep-style repo exploration when native tools can do it cheaper.
 - Verify after changes when possible — run tests or the build to catch errors.
 - Follow existing patterns. Match the project's style, naming, and conventions.
 - Do not re-read files already in context.
@@ -71,22 +73,24 @@ export function buildSystemPrompt(cwd: string, providerId?: string, mode?: Mode,
   if (profile === "full" && cavemanLevel === "ultra") {
     parts.push(`<tool-tips>
 bash: tests/builds/git/install. No cat/sed/grep. 30s timeout.
+semSearch: natural-language code discovery. Use before broad grep on unfamiliar code.
 readFile: offset/limit for large files. Max 500 lines.
 editFile: EXACT match old_string. Enough context for uniqueness.
 writeFile: New files only. readFile first if exists.
 listFiles: Explore code. Depth 3.
-grep: Find defs/usages. Use include glob.
+grep: Exact strings/defs/usages. Use include glob.
 askUser: Only for user decisions.
 todoWrite: Task checklist for 3+ step work.
 </tool-tips>`);
   } else if (profile === "full") {
     parts.push(`<tool-tips>
-bash: Use for running tests, builds, git commands, installing packages. Prefer tools over bash for file operations (don't cat/sed/grep via bash). Commands timeout at 30s by default.
+bash: Use for running tests, builds, git commands, installs, and real shell workflows. Prefer tools over bash for file operations and repo exploration (don't cat/find/head/tail/grep via bash). Commands timeout at 30s by default.
+semSearch: Natural-language code discovery when you know behavior/intent but not exact filenames or symbols. Prefer this before broad grep on unfamiliar codebases.
 readFile: Use offset/limit for large files — don't read entire files over 500 lines.
 editFile: old_string must be an EXACT match of existing text. Include enough surrounding context to be unique. Prefer this over writeFile for changes.
 writeFile: For new files or complete rewrites only. Always readFile first if the file exists.
 listFiles: Start here when exploring unfamiliar code. Default depth is 3.
-grep: For finding definitions, usages, patterns across the codebase. Use include glob to narrow search.
+grep: For exact strings, definitions, usages, and regex patterns across the codebase. Use include glob to narrow search.
 webSearch: For current docs, APIs, recent events. Not for things you already know.
 webFetch: For reading specific URLs — docs pages, API references. Content is stripped of HTML.
 askUser: Use when you need the user's preference or decision. Good for: "which color?", "option A or B?", "delete these files?". Not for: things you can figure out yourself.

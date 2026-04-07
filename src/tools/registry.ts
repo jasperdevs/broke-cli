@@ -1,6 +1,6 @@
 import type { ToolSet } from "ai";
 import { bashTool } from "./bash.js";
-import { readFileTool, writeFileTool, editFileTool, listFilesTool, grepTool } from "./file-ops.js";
+import { readFileTool, writeFileTool, editFileTool, listFilesTool, grepTool, semSearchTool } from "./file-ops.js";
 import { webSearchTool, webFetchTool } from "./web.js";
 import { todoWriteTool } from "./todo.js";
 import { isToolAllowed } from "../core/permissions.js";
@@ -12,6 +12,7 @@ export const TOOL_NAMES = [
   "editFile",
   "listFiles",
   "grep",
+  "semSearch",
   "webSearch",
   "webFetch",
   "todoWrite",
@@ -27,6 +28,7 @@ const BASE_TOOLS: ToolSet = {
   editFile: editFileTool,
   listFiles: listFilesTool,
   grep: grepTool,
+  semSearch: semSearchTool,
   webSearch: webSearchTool,
   webFetch: webFetchTool,
   todoWrite: todoWriteTool,

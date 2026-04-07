@@ -26,6 +26,7 @@ export interface SessionBudgetMetrics {
   freshThreadCarryForwards: number;
   toolsExposed: number;
   toolsUsed: number;
+  shellRecoveries: number;
   plannerCacheHits: number;
   plannerCacheMisses: number;
   plannerInputTokens: number;
@@ -70,6 +71,7 @@ export function createEmptySessionBudgetMetrics(): SessionBudgetMetrics {
     freshThreadCarryForwards: 0,
     toolsExposed: 0,
     toolsUsed: 0,
+    shellRecoveries: 0,
     plannerCacheHits: 0,
     plannerCacheMisses: 0,
     plannerInputTokens: 0,

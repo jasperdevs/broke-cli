@@ -288,6 +288,11 @@ export class Session {
     this.save();
   }
 
+  recordShellRecovery(): void {
+    this.budgetMetrics.shellRecoveries += 1;
+    this.save();
+  }
+
   recordIdleCacheCliff(): void {
     this.budgetMetrics.idleCacheCliffs += 1;
     this.save();

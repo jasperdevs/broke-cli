@@ -16,8 +16,11 @@ describe("turn policy", () => {
   it("keeps exploration turns on a read-only tool subset with a low step cap", () => {
     const policy = getTurnPolicy("read src/app.ts and tell me what it does");
     expect(policy.archetype).toBe("explore");
+    expect(policy.allowedTools).toContain("semSearch");
     expect(policy.allowedTools).toContain("readFile");
     expect(policy.allowedTools).not.toContain("writeFile");
+    expect(policy.allowedTools).not.toContain("agent");
+    expect(policy.allowedTools).not.toContain("todoWrite");
     expect(policy.maxToolSteps).toBeLessThanOrEqual(2);
   });
 
@@ -50,6 +53,7 @@ describe("session budget metrics", () => {
     const session = new Session(`test-insights-${Date.now()}`);
     session.addUsage(200, 40, 0.001);
     session.recordTurn({ smallModel: true, toolsExposed: 6, toolsUsed: 2, plannerCacheHit: true });
+    session.recordShellRecovery();
     session.recordIdleCacheCliff();
     session.recordCompaction({ freshThreadCarryForward: true });
     session.recordTurn({ plannerInputTokens: 120, plannerOutputTokens: 30, executorInputTokens: 200, executorOutputTokens: 40 });
@@ -63,6 +67,7 @@ describe("session budget metrics", () => {
     expect(report.executorTokens).toBe(240);
     expect(report.sessionCount).toBe(1);
     expect(report.toolExposureWaste).toBe(4);
+    expect(report.shellRecoveries).toBe(1);
     expect(report.freshThreadCarryForwards).toBe(1);
     expect(dashboard).toContain("TOKENS");
     expect(dashboard).toContain("SCAFFOLDS");
@@ -75,6 +80,7 @@ describe("session budget metrics", () => {
     expect(dashboard).toContain("88");
     expect(summary).toContain("cliffs 1");
     expect(summary).toContain("tool waste 4");
+    expect(summary).toContain("shell saves 1");
     expect(summary).toContain("planner 150");
   });
 

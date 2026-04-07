@@ -44,11 +44,11 @@ const CACHE_DIR = join(homedir(), ".brokecli");
 const CACHE_FILE = join(CACHE_DIR, "turn-policy-cache.json");
 let cacheHydrated = false;
 
-const ALL_EDIT_TOOLS: ToolName[] = ["bash", "readFile", "writeFile", "editFile", "listFiles", "grep", "todoWrite", "agent"];
+const ALL_EDIT_TOOLS: ToolName[] = ["semSearch", "bash", "readFile", "writeFile", "editFile", "listFiles", "grep", "todoWrite", "agent"];
 const NO_TOOLS: ToolName[] = [];
-const READ_ONLY_TOOLS: ToolName[] = ["readFile", "listFiles", "grep", "todoWrite", "agent"];
-const SHELL_TOOLS: ToolName[] = ["bash", "readFile", "listFiles", "grep", "todoWrite"];
-const RESEARCH_TOOLS: ToolName[] = ["readFile", "listFiles", "grep", "webSearch", "webFetch", "todoWrite", "agent"];
+const READ_ONLY_TOOLS: ToolName[] = ["semSearch", "readFile", "listFiles", "grep"];
+const SHELL_TOOLS: ToolName[] = ["semSearch", "bash", "readFile", "listFiles", "grep"];
+const RESEARCH_TOOLS: ToolName[] = ["semSearch", "readFile", "listFiles", "grep", "webSearch", "webFetch", "agent"];
 
 const CASUAL_MESSAGE_PATTERNS = [
   /^(?:hi|hey|hello|hey there|hello there|yo|sup|what(?:'s| is)\s+up|how(?:'s| is)\s+it\s+going|how are you|thanks|thank you|thx|cool|nice|ok|okay|lol|lmao|gm|gn)[!.?\s]*$/i,
@@ -60,8 +60,8 @@ const PLANNABLE_ARCHETYPES = new Set<TurnArchetype>(["question", "explore", "she
 const STATIC_SCAFFOLDS: Record<TurnArchetype, string> = {
   casual: "lane cheap\nanswer brief\nno tools",
   question: "lane direct\nanswer first\nuse tools only if clearly needed",
-  explore: "lane cheap\ninspect first\nread/list/grep before conclusions",
-  shell: "lane cheap\nrun minimal shell steps\nsummarize exact outcome",
+  explore: "lane cheap\nsearch first\nread only what matches\nno broad shell search",
+  shell: "lane cheap\nprefer native read/search tools\nuse shell only for real commands",
   edit: "lane main\nread targets first\nmake the smallest correct edit\nverify once",
   bugfix: "lane main\nfind root cause from evidence\npatch once\nverify narrowly",
   review: "lane cheap\nstay read-only\nreport concrete issues ordered by severity",

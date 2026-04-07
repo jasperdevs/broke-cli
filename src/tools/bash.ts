@@ -6,6 +6,7 @@ import { z } from "zod";
 import { tool } from "ai";
 import { assessCommand } from "../core/safety.js";
 import { filterCommandOutput, rewriteCommand } from "./command-filter.js";
+import { grepDirect, listFilesDirect, readFileDirect } from "./file-ops.js";
 
 /** Max chars sent back to LLM context (~2000 tokens) */
 const MAX_OUTPUT_CHARS = 8000;
@@ -20,6 +21,102 @@ let onBashOutput: BashOutputCallback | null = null;
 
 export function setBashOutputCallback(cb: BashOutputCallback | null): void {
   onBashOutput = cb;
+}
+
+function unquote(arg: string): string {
+  return arg.replace(/^['"]|['"]$/g, "");
+}
+
+function hasShellMetacharacters(command: string): boolean {
+  return /[|><;&]/.test(command) || /\b(cd)\b/.test(command);
+}
+
+function renderGrepSummary(summary: Array<{ file: string; count: number; examples: Array<{ line: number; text: string }> }>): string {
+  return summary
+    .map((item) => [
+      `${item.file} (${item.count})`,
+      ...item.examples.map((example) => `  ${example.line}: ${example.text}`),
+    ].join("\n"))
+    .join("\n");
+}
+
+function rerouteSimpleShellCommand(command: string) {
+  const trimmed = command.trim();
+  if (!trimmed || hasShellMetacharacters(trimmed)) return null;
+
+  const catMatch = trimmed.match(/^cat\s+(.+)$/i);
+  if (catMatch) {
+    const path = unquote(catMatch[1].trim());
+    const result = readFileDirect({ path, mode: "full" });
+    return result.success
+      ? { ...result, output: result.content, rerouted: true as const, reroutedTo: "readFile" }
+      : { ...result, output: "", rerouted: true as const, reroutedTo: "readFile" };
+  }
+
+  const headMatch = trimmed.match(/^head\s+-n\s+(\d+)\s+(.+)$/i);
+  if (headMatch) {
+    const [, count, rawPath] = headMatch;
+    const result = readFileDirect({ path: unquote(rawPath.trim()), limit: Number(count), mode: "full" });
+    return result.success
+      ? { ...result, output: result.content, rerouted: true as const, reroutedTo: "readFile" }
+      : { ...result, output: "", rerouted: true as const, reroutedTo: "readFile" };
+  }
+
+  const tailMatch = trimmed.match(/^tail\s+-n\s+(\d+)\s+(.+)$/i);
+  if (tailMatch) {
+    const [, count, rawPath] = tailMatch;
+    const result = readFileDirect({ path: unquote(rawPath.trim()), tail: Number(count), mode: "full" });
+    return result.success
+      ? { ...result, output: result.content, rerouted: true as const, reroutedTo: "readFile" }
+      : { ...result, output: "", rerouted: true as const, reroutedTo: "readFile" };
+  }
+
+  const findMatch = trimmed.match(/^find\s+(\S+)\s+-name\s+(.+)$/i);
+  if (findMatch) {
+    const [, rawDir, rawPattern] = findMatch;
+    const result = listFilesDirect({
+      path: unquote(rawDir.trim()),
+      maxDepth: 12,
+      include: unquote(rawPattern.trim()),
+    });
+    return {
+      success: true as const,
+      output: result.files.join("\n"),
+      rerouted: true as const,
+      reroutedTo: "listFiles",
+      fileCount: result.files.length,
+    };
+  }
+
+  const searchMatch = trimmed.match(/^(rg|grep)\s+(['"].+?['"]|\S+)(?:\s+(.+))?$/i);
+  if (searchMatch) {
+    const [, _cmd, rawPattern, rawRest] = searchMatch;
+    let include: string | undefined;
+    let path = ".";
+    if (rawRest?.trim()) {
+      const includeMatch = rawRest.match(/(?:-g|--glob)\s+(['"].+?['"]|\S+)/i);
+      include = includeMatch ? unquote(includeMatch[1]) : undefined;
+      const cleaned = rawRest
+        .replace(/(?:-g|--glob)\s+(['"].+?['"]|\S+)/ig, "")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (cleaned) path = unquote(cleaned);
+    }
+    const result = grepDirect({
+      pattern: unquote(rawPattern),
+      path,
+      include,
+    });
+    return {
+      success: true as const,
+      output: renderGrepSummary(result.summary),
+      rerouted: true as const,
+      reroutedTo: "grep",
+      matchCount: result.totalMatches,
+    };
+  }
+
+  return null;
 }
 
 /** Truncate output keeping head + tail for maximum usefulness */
@@ -44,6 +141,9 @@ export const bashTool = tool({
     if (risk.level === "dangerous") {
       return { success: false as const, output: "", error: risk.reason ?? "Command blocked for safety" };
     }
+
+    const rerouted = rerouteSimpleShellCommand(command);
+    if (rerouted) return rerouted;
 
     const timeoutMs = timeout ?? 30000;
 

@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, readdirSync, statSync } from "fs";
-import { join, relative } from "path";
+import { basename, join, relative } from "path";
 import { z } from "zod";
 import { tool } from "ai";
 import { assessFileWrite } from "../core/safety.js";
@@ -9,6 +9,75 @@ import { createCheckpoint } from "../core/git.js";
 const MAX_READ_CHARS = 8000;
 /** Max lines from grep matches */
 const MAX_GREP_MATCHES = 30;
+/** Max semantic search results */
+const MAX_SEM_SEARCH_RESULTS = 8;
+const SKIP_DIRS = new Set([".git", "node_modules", "dist", "coverage", ".omx", ".tmp"]);
+const STOP_WORDS = new Set([
+  "a", "an", "the", "to", "for", "in", "on", "of", "and", "or", "with", "from", "at", "by",
+  "me", "show", "find", "read", "list", "look", "need", "tell", "what", "where", "how", "why",
+  "that", "this", "these", "those", "all", "file", "files", "code", "does", "work",
+]);
+
+type ReadMode = "full" | "minimal" | "aggressive";
+
+interface ReadFileDirectOptions {
+  path: string;
+  offset?: number;
+  limit?: number;
+  mode?: ReadMode;
+  tail?: number;
+}
+
+interface WalkFileOptions {
+  dir: string;
+  maxDepth: number;
+  include?: string;
+  onFile: (fullPath: string) => boolean | void;
+}
+
+function escapeRegex(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function normalizeGlobPattern(include?: string): RegExp | null {
+  if (!include?.trim()) return null;
+  const pattern = include.trim().replace(/\\/g, "/");
+  const regex = `^${pattern.split("*").map(escapeRegex).join(".*")}$`;
+  return new RegExp(regex, "i");
+}
+
+function matchesInclude(filePath: string, include?: string): boolean {
+  const matcher = normalizeGlobPattern(include);
+  if (!matcher) return true;
+  const normalized = filePath.replace(/\\/g, "/");
+  return matcher.test(normalized) || matcher.test(basename(normalized));
+}
+
+function walkFiles({ dir, maxDepth, include, onFile }: WalkFileOptions): void {
+  const visit = (current: string, depth: number): boolean => {
+    if (depth > maxDepth) return false;
+    try {
+      for (const entry of readdirSync(current)) {
+        if (entry.startsWith(".") && !entry.startsWith(".env")) continue;
+        if (SKIP_DIRS.has(entry)) continue;
+        const full = join(current, entry);
+        const stat = statSync(full);
+        if (stat.isDirectory()) {
+          if (visit(full, depth + 1)) return true;
+          continue;
+        }
+        const rel = relative(process.cwd(), full);
+        if (!matchesInclude(rel, include)) continue;
+        if (onFile(full) === true) return true;
+      }
+    } catch {
+      return false;
+    }
+    return false;
+  };
+
+  visit(dir, 0);
+}
 
 function stripNoiseLines(content: string, path: string): string {
   const ext = path.split(".").pop()?.toLowerCase();
@@ -60,6 +129,220 @@ function applyReadMode(content: string, path: string, mode: "full" | "minimal" |
   return content;
 }
 
+function buildGrepSummary(matches: Array<{ file: string; line: number; text: string }>) {
+  const grouped = matches.reduce<Record<string, Array<{ line: number; text: string }>>>((acc, match) => {
+    if (!acc[match.file]) acc[match.file] = [];
+    acc[match.file].push({ line: match.line, text: match.text });
+    return acc;
+  }, {});
+  return Object.entries(grouped).map(([file, fileMatches]) => ({
+    file,
+    count: fileMatches.length,
+    examples: fileMatches.slice(0, 3),
+  }));
+}
+
+function tokenizeSearchQuery(query: string): string[] {
+  return [...new Set(
+    query
+      .toLowerCase()
+      .split(/[^a-z0-9_.:/-]+/)
+      .map((token) => token.trim())
+      .filter((token) => token.length >= 2 && !STOP_WORDS.has(token)),
+  )];
+}
+
+function findFirstMatchLine(content: string, tokens: string[]): { line: number; text: string } | null {
+  const lines = content.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const lower = lines[i].toLowerCase();
+    if (tokens.some((token) => lower.includes(token))) {
+      return { line: i + 1, text: lines[i].trim().slice(0, 180) };
+    }
+  }
+  return null;
+}
+
+function scoreSemanticMatch(query: string, filePath: string, content: string, tokens: string[]): number {
+  const lowerPath = filePath.toLowerCase();
+  const lowerBase = basename(filePath).toLowerCase();
+  const lowerContent = content.toLowerCase();
+  let score = 0;
+
+  if (lowerPath.includes(query)) score += 24;
+  if (lowerBase.includes(query)) score += 28;
+
+  for (const token of tokens) {
+    if (lowerBase.includes(token)) score += 12;
+    if (lowerPath.includes(token)) score += 8;
+    const contentHits = lowerContent.split(token).length - 1;
+    if (contentHits > 0) score += Math.min(18, contentHits * 3);
+  }
+
+  if (/(readme|guide|doc|config|route|render|sidebar|session|budget|tool)/i.test(query) && /(readme|guide|doc|config|route|render|sidebar|session|budget|tool)/i.test(lowerPath)) {
+    score += 8;
+  }
+
+  return score;
+}
+
+export function readFileDirect({ path, offset, limit, mode, tail }: ReadFileDirectOptions) {
+  try {
+    const raw = readFileSync(path, "utf-8");
+    let content = raw;
+    const readMode = mode ?? "full";
+    const lines = raw.split("\n");
+
+    if (tail !== undefined && tail > 0) {
+      content = lines.slice(-tail).join("\n");
+    } else if (offset !== undefined || limit !== undefined) {
+      const start = offset ?? 0;
+      const end = limit ? start + limit : lines.length;
+      content = lines.slice(start, end).join("\n");
+    }
+
+    content = applyReadMode(content, path, readMode);
+    const totalLines = lines.length;
+
+    if (content.length > MAX_READ_CHARS) {
+      content = content.slice(0, MAX_READ_CHARS);
+      return {
+        success: true as const,
+        content,
+        totalLines,
+        truncated: true,
+        mode: readMode,
+        note: `File truncated in ${readMode} mode. Use offset/limit to read specific sections.`,
+      };
+    }
+
+    return { success: true as const, content, totalLines, mode: readMode };
+  } catch (err: unknown) {
+    return { success: false as const, error: (err as Error).message };
+  }
+}
+
+export function listFilesDirect({ path: dir = ".", maxDepth, include }: { path?: string; maxDepth?: number; include?: string }) {
+  const max = maxDepth ?? 3;
+  const files: string[] = [];
+  const visit = (current: string, depth: number): boolean => {
+    if (depth > max) return false;
+    try {
+      for (const entry of readdirSync(current)) {
+        if (entry.startsWith(".") && !entry.startsWith(".env")) continue;
+        if (SKIP_DIRS.has(entry)) continue;
+        const full = join(current, entry);
+        const stat = statSync(full);
+        const rel = relative(process.cwd(), full);
+        if (stat.isDirectory()) {
+          files.push(rel.replace(/\\/g, "/") + "/");
+          if (files.length >= 200) return true;
+          if (visit(full, depth + 1)) return true;
+          continue;
+        }
+        if (!matchesInclude(rel, include)) continue;
+        files.push(rel.replace(/\\/g, "/"));
+        if (files.length >= 200) return true;
+      }
+    } catch {
+      return false;
+    }
+    return false;
+  };
+  visit(dir, 0);
+  return { files };
+}
+
+export function grepDirect({ pattern, path: dir = ".", include }: { pattern: string; path?: string; include?: string }) {
+  const regex = new RegExp(pattern, "i");
+  const matches: Array<{ file: string; line: number; text: string }> = [];
+
+  walkFiles({
+    dir,
+    maxDepth: 12,
+    include,
+    onFile: (full) => {
+      try {
+        const content = readFileSync(full, "utf-8");
+        const lines = content.split("\n");
+        for (let i = 0; i < lines.length; i++) {
+          if (regex.test(lines[i])) {
+            matches.push({
+              file: relative(process.cwd(), full),
+              line: i + 1,
+              text: lines[i].trim().slice(0, 150),
+            });
+            if (matches.length >= MAX_GREP_MATCHES) return true;
+          }
+        }
+      } catch {
+        return false;
+      }
+      return false;
+    },
+  });
+
+  return {
+    matches,
+    summary: buildGrepSummary(matches),
+    totalMatches: matches.length,
+    capped: matches.length >= MAX_GREP_MATCHES,
+  };
+}
+
+export function semSearchDirect({
+  query,
+  path: dir = ".",
+  include,
+  limit,
+}: {
+  query: string;
+  path?: string;
+  include?: string;
+  limit?: number;
+}) {
+  const normalizedQuery = query.trim().toLowerCase();
+  const tokens = tokenizeSearchQuery(query);
+  const maxResults = Math.min(Math.max(limit ?? 6, 1), MAX_SEM_SEARCH_RESULTS);
+  const results: Array<{ file: string; line: number; excerpt: string; score: number }> = [];
+
+  walkFiles({
+    dir,
+    maxDepth: 10,
+    include,
+    onFile: (full) => {
+      try {
+        const raw = readFileSync(full, "utf-8");
+        const content = raw.length > 24000 ? raw.slice(0, 24000) : raw;
+        const rel = relative(process.cwd(), full);
+        const score = scoreSemanticMatch(normalizedQuery, rel, content, tokens);
+        if (score <= 0) return false;
+        const match = findFirstMatchLine(content, tokens.length > 0 ? tokens : [normalizedQuery]);
+        results.push({
+          file: rel,
+          line: match?.line ?? 1,
+          excerpt: match?.text ?? content.split("\n").find(Boolean)?.trim().slice(0, 180) ?? "",
+          score,
+        });
+      } catch {
+        return false;
+      }
+      return false;
+    },
+  });
+
+  const ranked = results
+    .sort((a, b) => b.score - a.score || a.file.localeCompare(b.file))
+    .slice(0, maxResults);
+
+  return {
+    results: ranked,
+    totalResults: ranked.length,
+    query,
+    terms: tokens,
+  };
+}
+
 export const readFileTool = tool({
   description: "Read file contents. Use mode=full for exact edits, mode=minimal to drop obvious noise, or mode=aggressive for structure-first exploration on large files. Use offset/limit for files over 500 lines.",
   inputSchema: z.object({
@@ -67,40 +350,9 @@ export const readFileTool = tool({
     offset: z.number().optional().describe("Start line (0-based)"),
     limit: z.number().optional().describe("Max lines to return"),
     mode: z.enum(["full", "minimal", "aggressive"]).optional().describe("Read mode (default: full)"),
+    tail: z.number().optional().describe("Return only the last N lines"),
   }),
-  execute: async ({ path, offset, limit, mode }) => {
-    try {
-      const raw = readFileSync(path, "utf-8");
-      let content = raw;
-      const readMode = mode ?? "full";
-
-      // Apply line offset/limit if specified
-      if (offset !== undefined || limit !== undefined) {
-        const lines = raw.split("\n");
-        const start = offset ?? 0;
-        const end = limit ? start + limit : lines.length;
-        content = lines.slice(start, end).join("\n");
-      }
-
-      content = applyReadMode(content, path, readMode);
-
-      // Truncate to save context tokens
-      const totalLines = raw.split("\n").length;
-      if (content.length > MAX_READ_CHARS) {
-        content = content.slice(0, MAX_READ_CHARS);
-        return {
-          success: true as const,
-          content,
-          totalLines,
-          truncated: true,
-          note: `File truncated in ${readMode} mode. Use offset/limit to read specific sections.`,
-        };
-      }
-      return { success: true as const, content, totalLines, mode: readMode };
-    } catch (err: unknown) {
-      return { success: false as const, error: (err as Error).message };
-    }
-  },
+  execute: async ({ path, offset, limit, mode, tail }) => readFileDirect({ path, offset, limit, mode, tail }),
 });
 
 export const writeFileTool = tool({
@@ -152,32 +404,9 @@ export const listFilesTool = tool({
   inputSchema: z.object({
     path: z.string().describe("Directory to list (default: current dir)").default("."),
     maxDepth: z.number().optional().describe("Max recursion depth (default 3)"),
+    include: z.string().optional().describe("Glob filter (e.g. '*.ts', 'src/*.tsx')"),
   }),
-  execute: async ({ path: dir, maxDepth }) => {
-    const max = maxDepth ?? 3;
-    const files: string[] = [];
-
-    function walk(d: string, depth: number) {
-      if (depth > max) return;
-      try {
-        for (const entry of readdirSync(d)) {
-          if (entry.startsWith(".") || entry === "node_modules") continue;
-          const full = join(d, entry);
-          const stat = statSync(full);
-          const rel = relative(process.cwd(), full);
-          if (stat.isDirectory()) {
-            files.push(rel + "/");
-            walk(full, depth + 1);
-          } else {
-            files.push(rel);
-          }
-        }
-      } catch { /* skip unreadable dirs */ }
-    }
-
-    walk(dir, 0);
-    return { files: files.slice(0, 200) };
-  },
+  execute: async ({ path, maxDepth, include }) => listFilesDirect({ path, maxDepth, include }),
 });
 
 export const grepTool = tool({
@@ -187,49 +416,16 @@ export const grepTool = tool({
     path: z.string().describe("Directory to search (default: current dir)").default("."),
     include: z.string().optional().describe("File extension filter (e.g. '*.ts', '*.py')"),
   }),
-  execute: async ({ pattern, path: dir, include }) => {
-    const regex = new RegExp(pattern, "i");
-    const matches: Array<{ file: string; line: number; text: string }> = [];
+  execute: async ({ pattern, path, include }) => grepDirect({ pattern, path, include }),
+});
 
-    function search(d: string) {
-      try {
-        for (const entry of readdirSync(d)) {
-          if (entry.startsWith(".") || entry === "node_modules" || entry === "dist") continue;
-          const full = join(d, entry);
-          const stat = statSync(full);
-          if (stat.isDirectory()) {
-            search(full);
-          } else if (!include || full.endsWith(include.replace("*", ""))) {
-            try {
-              const content = readFileSync(full, "utf-8");
-              const lines = content.split("\n");
-              for (let i = 0; i < lines.length; i++) {
-                if (regex.test(lines[i])) {
-                  matches.push({
-                    file: relative(process.cwd(), full),
-                    line: i + 1,
-                    text: lines[i].trim().slice(0, 150),
-                  });
-                  if (matches.length >= MAX_GREP_MATCHES) return;
-                }
-              }
-            } catch { /* skip binary files */ }
-          }
-        }
-      } catch { /* skip unreadable */ }
-    }
-
-    search(dir);
-    const grouped = matches.reduce<Record<string, Array<{ line: number; text: string }>>>((acc, match) => {
-      if (!acc[match.file]) acc[match.file] = [];
-      acc[match.file].push({ line: match.line, text: match.text });
-      return acc;
-    }, {});
-    const summary = Object.entries(grouped).map(([file, fileMatches]) => ({
-      file,
-      count: fileMatches.length,
-      examples: fileMatches.slice(0, 3),
-    }));
-    return { matches, summary, totalMatches: matches.length, capped: matches.length >= MAX_GREP_MATCHES };
-  },
+export const semSearchTool = tool({
+  description: "Semantic-ish code discovery for natural-language queries. Use this before broad shell search when you know behavior or intent but not exact filenames or symbols.",
+  inputSchema: z.object({
+    query: z.string().describe("Natural-language description of the code or behavior to find"),
+    path: z.string().describe("Directory to search (default: current dir)").default("."),
+    include: z.string().optional().describe("Optional glob filter (e.g. '*.ts', 'src/*.rs')"),
+    limit: z.number().optional().describe("Max results (default 6, max 8)"),
+  }),
+  execute: async ({ query, path, include, limit }) => semSearchDirect({ query, path, include, limit }),
 });

@@ -66,6 +66,7 @@ export function buildToolPreview(name: string, args: unknown): string {
   if (name === "agent") return (args as any)?.prompt ?? (args as any)?.task ?? "";
   if (name === "writeFile" || name === "editFile") return (args as any)?.path ?? "?";
   if (name === "readFile" || name === "listFiles" || name === "grep") return (args as any)?.path ?? (args as any)?.pattern ?? "?";
+  if (name === "semSearch") return (args as any)?.query ?? (args as any)?.path ?? "?";
   if (name === "bash") {
     const command = (args as any)?.command ?? "?";
     return command.length > 60 ? `${command.slice(0, 57)}...` : command;
