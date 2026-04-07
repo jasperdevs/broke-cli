@@ -297,7 +297,6 @@ export async function executeTurn(options: {
       abortSignal: abortController.signal,
       enableThinking: resolvedRoute === "main" ? getSettings().enableThinking : false,
       thinkingLevel: getSettings().thinkingLevel || "low",
-      yoloMode: getSettings().yoloMode,
       cwd: process.cwd(),
     }, streamCallbacks);
   } else {

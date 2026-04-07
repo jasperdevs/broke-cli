@@ -142,7 +142,6 @@ export async function runOneShotPrompt(options: {
         messages: turnMessages,
         enableThinking: getSettings().enableThinking,
         thinkingLevel: getSettings().thinkingLevel || "low",
-        yoloMode: getSettings().yoloMode,
         cwd: process.cwd(),
       },
       callbacks,

@@ -5,10 +5,9 @@ import { clearCredentials, hasStoredCredentials, listAuthenticated } from "../co
 import { getProviderCredential, getSettings, loadConfig, updateProviderConfig, updateSetting, type Mode, type Settings } from "../core/config.js";
 import { listProjects } from "../core/projects.js";
 import { listExtensions } from "../core/extensions.js";
-import { isToolAllowed, toggleExtensionEnabled, toggleToolPermission } from "../core/permissions.js";
+import { toggleExtensionEnabled } from "../core/permissions.js";
 import { Session } from "../core/session.js";
 import { listThemes, setPreviewTheme } from "../core/themes.js";
-import { TOOL_NAMES } from "../tools/registry.js";
 import type { Keypress } from "../tui/keypress.js";
 import { buildHtmlExport, buildMarkdownExport, formatRelativeMinutes } from "./exports.js";
 import { SessionManager } from "../core/session-manager.js";
@@ -61,7 +60,6 @@ export function openSettingsMenu(args: {
     return [
       { key: "mode", label: "Mode", value: s.mode, description: "build / plan — default mode and current slash mode" },
       { key: "modeSwitching", label: "Mode switching", value: s.modeSwitching, description: "manual / ask / auto — switch build vs plan per turn" },
-      { key: "yoloMode", label: "Yolo mode", value: String(s.yoloMode), description: "Run commands without safety checks" },
       { key: "autoCompact", label: "Auto-compact", value: String(s.autoCompact), description: "Automatically compress context when it gets too large" },
       { key: "autoSaveSessions", label: "Auto-save sessions", value: String(s.autoSaveSessions), description: "Save conversation history to disk" },
       { key: "gitCheckpoints", label: "Git checkpoints", value: String(s.gitCheckpoints), description: "Auto-commit before file modifications" },
@@ -139,14 +137,6 @@ export function openSettingsMenu(args: {
     }
     app.updateSettings(buildEntries());
   });
-}
-
-export function openPermissionsMenu(app: AnyApp): void {
-  const buildPermissionItems = () => TOOL_NAMES.map((name) => ({ id: name, label: name, detail: isToolAllowed(name) ? "allowed" : "blocked" }));
-  app.openItemPicker("Tool permissions", buildPermissionItems(), (id: string) => {
-    toggleToolPermission(id);
-    app.updateItemPickerItems?.(buildPermissionItems(), id);
-  }, { closeOnSelect: false, kind: "permissions" });
 }
 
 export function openExtensionsMenu(app: AnyApp, hooks: AnyHooks): boolean {

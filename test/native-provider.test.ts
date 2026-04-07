@@ -173,7 +173,6 @@ describe("native provider runtime selection", () => {
       system: "system",
       messages: [{ role: "user", content: "status?" }],
       denyToolUse: true,
-      permissionMode: "plan",
     }, {
       onText: vi.fn(),
       onReasoning: vi.fn(),

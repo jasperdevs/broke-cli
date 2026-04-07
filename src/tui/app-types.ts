@@ -131,7 +131,6 @@ export type MenuPromptKind =
   | "login"
   | "connect"
   | "settings"
-  | "permissions"
   | "extensions"
   | "theme"
   | "export"

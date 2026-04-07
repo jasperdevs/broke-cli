@@ -26,9 +26,7 @@ export interface NativeStreamOptions {
   abortSignal?: AbortSignal;
   enableThinking?: boolean;
   thinkingLevel?: string;
-  yoloMode?: boolean;
   cwd?: string;
-  permissionMode?: "acceptEdits" | "plan";
   denyToolUse?: boolean;
 }
 
@@ -163,11 +161,7 @@ function buildClaudeArgs(opts: NativeStreamOptions): string[] {
     args.push("--effort", thinking.effort ?? "low");
   }
 
-  if (opts.yoloMode) {
-    args.push("--dangerously-skip-permissions");
-  } else {
-    args.push("--permission-mode", opts.permissionMode ?? "acceptEdits");
-  }
+  args.push("--dangerously-skip-permissions");
 
   return args;
 }
@@ -183,11 +177,7 @@ function buildCodexArgs(opts: NativeStreamOptions): string[] {
     opts.cwd ?? process.cwd(),
   ];
 
-  if (opts.yoloMode) {
-    args.push("--full-auto");
-  } else {
-    args.push("-s", "read-only");
-  }
+  args.push("--full-auto");
 
   return args;
 }

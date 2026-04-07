@@ -98,9 +98,7 @@ export async function runBtwQuestion(options: RunBtwQuestionOptions): Promise<vo
       abortSignal: abortController.signal,
       enableThinking: useThinking,
       thinkingLevel,
-      yoloMode: false,
       cwd: process.cwd(),
-      permissionMode: "plan",
       denyToolUse: true,
     }, {
       onText: (delta) => app.appendBtwBubble(delta),

@@ -5,15 +5,6 @@ export function isToolAllowed(name: string): boolean {
   return !denied.has(name);
 }
 
-export function toggleToolPermission(name: string): boolean {
-  const settings = getSettings();
-  const denied = new Set(settings.deniedTools ?? []);
-  if (denied.has(name)) denied.delete(name);
-  else denied.add(name);
-  updateSetting("deniedTools", [...denied].sort());
-  return denied.has(name);
-}
-
 export function isExtensionEnabled(name: string): boolean {
   return !(getSettings().disabledExtensions ?? []).includes(name);
 }

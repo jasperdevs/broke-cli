@@ -110,7 +110,6 @@ describe("/btw runtime", () => {
 
     expect(streamMocks.startNativeStream).toHaveBeenCalledTimes(1);
     const [opts] = streamMocks.startNativeStream.mock.calls[0];
-    expect(opts.permissionMode).toBe("plan");
     expect(opts.denyToolUse).toBe(true);
   });
 });

@@ -177,7 +177,6 @@ export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts:
           abortSignal: abortController.signal,
           enableThinking: getSettings().enableThinking,
           thinkingLevel: getSettings().thinkingLevel || "low",
-          yoloMode: getSettings().yoloMode,
           cwd: process.cwd(),
         },
         rpcCallbacks,

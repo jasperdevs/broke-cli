@@ -25,7 +25,6 @@ export const COMMANDS: CommandEntry[] = [
   { name: "compact", desc: "compress context" },
   { name: "update", desc: "update app" },
   { name: "budget", desc: "inspect token pressure" },
-  { name: "permissions", desc: "allow or block tools" },
   { name: "extensions", desc: "manage extension loading" },
   { name: "skills", desc: "list loaded skills" },
   { name: "projects", desc: "switch or search recent projects" },

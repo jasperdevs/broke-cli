@@ -4,7 +4,7 @@ import { getConfiguredModelPreference, getSettings, updateModelPreference, updat
 import { createDefaultSessionName } from "../core/session.js";
 import { runConnectFlow } from "./connect-flow.js";
 import { runLoginFlow } from "./login-flow.js";
-import { openExtensionsMenu, openPermissionsMenu, openSettingsMenu, openThemeMenu } from "./slash-command-menus.js";
+import { openExtensionsMenu, openSettingsMenu, openThemeMenu } from "./slash-command-menus.js";
 import type { HandleSlashCommandOptions, SlashCommandResult } from "./slash-command-types.js";
 import { handleUiSlashCommand } from "./slash-command-ui.js";
 import { getResolvedModelPreference } from "./model-routing.js";
@@ -143,10 +143,6 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
       ], (id: string) => {
         if (id === "build" || id === "plan") setMode(id);
       }, { kind: "mode" });
-      return { handled: true };
-    }
-    case "permissions": {
-      openPermissionsMenu(app);
       return { handled: true };
     }
     case "extensions": {
