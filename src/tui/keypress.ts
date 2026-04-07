@@ -17,6 +17,42 @@ export interface Keypress {
   shift: boolean;
 }
 
+function decodeModifiedKey(code: number, mod: number): Keypress | null {
+  const shift = mod === 2 || mod === 4 || mod === 6 || mod === 8;
+  const meta = mod === 3 || mod === 4 || mod === 7 || mod === 8;
+  const ctrl = mod === 5 || mod === 6 || mod === 7 || mod === 8;
+  if (code === 13) return { name: "return", char: "", ctrl, meta, shift };
+  if (code === 10) return { name: "linefeed", char: "", ctrl, meta, shift };
+  if (code === 8 || code === 127) return { name: "backspace", char: "", ctrl, meta, shift };
+  return null;
+}
+
+export function decodeSpecialKeySequence(sequence: string): Keypress | null {
+  const directMap: Record<string, Keypress> = {
+    "\x1b\r": { name: "return", char: "", ctrl: false, meta: false, shift: true },
+    "\x1b\b": { name: "backspace", char: "", ctrl: false, meta: true, shift: false },
+    "\x1b\x7f": { name: "backspace", char: "", ctrl: false, meta: true, shift: false },
+  };
+  if (directMap[sequence]) return directMap[sequence];
+
+  const csiU = /^\x1b\[(\d+);(\d+)u$/u.exec(sequence);
+  if (csiU) return decodeModifiedKey(parseInt(csiU[1], 10), parseInt(csiU[2], 10));
+
+  const csiTilde = /^\x1b\[(\d+);(\d+)~$/u.exec(sequence);
+  if (csiTilde) return decodeModifiedKey(parseInt(csiTilde[1], 10), parseInt(csiTilde[2], 10));
+
+  const legacyTilde = /^\x1b\[27;(\d+);(\d+)~$/u.exec(sequence);
+  if (legacyTilde) return decodeModifiedKey(parseInt(legacyTilde[2], 10), parseInt(legacyTilde[1], 10));
+
+  const swappedLegacyTilde = /^\x1b\[27;(\d+);(\d+)u$/u.exec(sequence);
+  if (swappedLegacyTilde) return decodeModifiedKey(parseInt(swappedLegacyTilde[2], 10), parseInt(swappedLegacyTilde[1], 10));
+
+  const alternateLegacyTilde = /^\x1b\[(\d+);(\d+);27~$/u.exec(sequence);
+  if (alternateLegacyTilde) return decodeModifiedKey(parseInt(alternateLegacyTilde[1], 10), parseInt(alternateLegacyTilde[2], 10));
+
+  return null;
+}
+
 type KeyHandler = (key: Keypress) => void;
 type PasteHandler = (text: string) => void;
 
@@ -66,28 +102,9 @@ export class KeypressHandler {
     process.stdin.emit = ((event: string, ...args: any[]) => {
       if (event === "data") {
         const s = typeof args[0] === "string" ? args[0] : (args[0] as Buffer).toString("utf-8");
-        const specialEnterSequences: Record<string, Keypress> = {
-          "\x1b[13;2u": { name: "return", char: "", ctrl: false, meta: false, shift: true },
-          "\x1b[10;2u": { name: "linefeed", char: "", ctrl: false, meta: false, shift: true },
-          "\x1b[13;2~": { name: "return", char: "", ctrl: false, meta: false, shift: true },
-          "\x1b[10;2~": { name: "linefeed", char: "", ctrl: false, meta: false, shift: true },
-          "\x1b[27;2;13~": { name: "return", char: "", ctrl: false, meta: false, shift: true },
-          "\x1b[27;13;2~": { name: "return", char: "", ctrl: false, meta: false, shift: true },
-          "\x1b[13;5u": { name: "return", char: "", ctrl: true, meta: false, shift: false },
-          "\x1b[10;5u": { name: "linefeed", char: "", ctrl: true, meta: false, shift: false },
-          "\x1b[13;5~": { name: "return", char: "", ctrl: true, meta: false, shift: false },
-          "\x1b[10;5~": { name: "linefeed", char: "", ctrl: true, meta: false, shift: false },
-          "\x1b[13;3u": { name: "return", char: "", ctrl: false, meta: true, shift: false },
-          "\x1b[10;3u": { name: "linefeed", char: "", ctrl: false, meta: true, shift: false },
-          "\x1b[27;3;13~": { name: "return", char: "", ctrl: false, meta: true, shift: false },
-          "\x1b\r": { name: "return", char: "", ctrl: false, meta: false, shift: true },
-          "\x1b[127;5u": { name: "backspace", char: "", ctrl: true, meta: false, shift: false },
-          "\x1b[8;5u": { name: "backspace", char: "", ctrl: true, meta: false, shift: false },
-          "\x1b\b": { name: "backspace", char: "", ctrl: false, meta: true, shift: false },
-          "\x1b\x7f": { name: "backspace", char: "", ctrl: false, meta: true, shift: false },
-        };
-        if (specialEnterSequences[s]) {
-          this.onKey(specialEnterSequences[s]);
+        const specialKey = decodeSpecialKeySequence(s);
+        if (specialKey) {
+          this.onKey(specialKey);
           return false;
         }
         if (s === "\x1b") {
