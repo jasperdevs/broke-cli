@@ -267,7 +267,7 @@ describe("sidebar scrolling", () => {
     expect(app.sidebarScrollOffset).toBeGreaterThan(0);
   });
 
-  it("hides the sidebar footer while composing or streaming so the prompt stays at the real bottom", () => {
+  it("keeps the sidebar footer visible while composing plain text but hides it while streaming", () => {
     const app = new App() as any;
     const originalShowTokens = getSettings().showTokens;
     updateSetting("showTokens", true);
@@ -276,7 +276,9 @@ describe("sidebar scrolling", () => {
       app.setContextUsage(120_000, 128_000);
       app.updateUsage(0.0021, 8_200, 621);
       app.input.setText("hi");
-      expect(app.renderSidebarFooter()).toEqual([]);
+      const footerWhileTyping = app.renderSidebarFooter().map((line: string) => stripAnsi(line)).join("\n");
+      expect(footerWhileTyping).toContain("8.8k total");
+      expect(footerWhileTyping).toContain("120k ctx");
 
       app.input.clear();
       app.setStreaming(true);

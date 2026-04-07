@@ -92,7 +92,6 @@ function shouldHideSidebarFooter(app: AppState): boolean {
   if (app.isStreaming || app.isCompacting) return true;
   if (app.filePicker || app.itemPicker || app.settingsPicker || app.modelPicker || app.treeView) return true;
   if (app.pendingImages?.length > 0) return true;
-  if (app.input.getText().length > 0) return true;
   return app.getCommandSuggestionEntries().length > 0;
 }
 
