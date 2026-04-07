@@ -168,11 +168,26 @@ export function getFileContexts(app: AppState): Map<string, string> {
 }
 
 export function setStatus(app: AppState, message: string): void {
+  if (app.statusTimer) {
+    clearTimeout(app.statusTimer);
+    app.statusTimer = null;
+  }
   app.statusMessage = message;
+  app.statusTimer = setTimeout(() => {
+    if (app.statusMessage === message) {
+      app.statusMessage = undefined;
+      app.draw();
+    }
+    app.statusTimer = null;
+  }, 4000);
   app.draw();
 }
 
 export function clearStatus(app: AppState): void {
+  if (app.statusTimer) {
+    clearTimeout(app.statusTimer);
+    app.statusTimer = null;
+  }
   app.statusMessage = undefined;
   app.draw();
 }

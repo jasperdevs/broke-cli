@@ -135,6 +135,57 @@ describe("picker menus", () => {
     expect(output).not.toContain("no matches");
     expect(output).toContain("space pin");
   });
+
+  it("caps item pickers to five visible rows even in tall panes", () => {
+    const app = new App() as any;
+    const items = Array.from({ length: 12 }, (_, i) => ({ id: `id-${i}`, label: `Item ${i}` }));
+    app.openItemPicker("Pick one", items, () => {});
+    let rendered: string[] = [];
+    app.screen = {
+      height: 24,
+      width: 72,
+      hasSidebar: false,
+      mainWidth: 72,
+      sidebarWidth: 20,
+      render: (lines: string[]) => { rendered = lines; },
+      setCursor: () => {},
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+    app.drawImmediate();
+    const output = rendered.map((line) => stripAnsi(line));
+    const visibleItems = output.filter((line) => /Item \d+/.test(line));
+    expect(visibleItems).toHaveLength(5);
+    expect(output.join("\n")).not.toContain("Item 5");
+  });
+
+  it("caps model pickers to five visible rows even in tall panes", () => {
+    const app = new App() as any;
+    const models = Array.from({ length: 12 }, (_, i) => ({
+      providerId: "openai",
+      providerName: "OpenAI",
+      modelId: `model-${i}`,
+      active: false,
+    }));
+    app.openModelPicker(models, () => {});
+    let rendered: string[] = [];
+    app.screen = {
+      height: 24,
+      width: 72,
+      hasSidebar: false,
+      mainWidth: 72,
+      sidebarWidth: 20,
+      render: (lines: string[]) => { rendered = lines; },
+      setCursor: () => {},
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+    app.drawImmediate();
+    const output = rendered.map((line) => stripAnsi(line));
+    const visibleModels = output.filter((line) => /model-\d+/.test(line));
+    expect(visibleModels.length).toBeLessThanOrEqual(5);
+    expect(output.join("\n")).not.toContain("model-5");
+  });
 });
 
 describe("thinking preview", () => {

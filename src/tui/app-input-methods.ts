@@ -164,8 +164,8 @@ export function handleKey(app: AppState, key: Keypress): void {
       app.ctrlCCount++;
       if (app.ctrlCCount >= 2) { app.stop(); return; }
       app.primeCtrlCExit();
+      return;
     }
-    return;
   }
 
   if (handleClickOrScroll(app, key)) return;
@@ -216,7 +216,7 @@ export function handleKey(app: AppState, key: Keypress): void {
     return;
   }
 
-  if (app.isStreaming && app.input.getText().trim().length > 0) {
+  if ((app.isStreaming || app.isCompacting) && app.input.getText().trim().length > 0) {
     if (key.name === "tab") {
       queueCurrentInput(app, "followup");
       return;

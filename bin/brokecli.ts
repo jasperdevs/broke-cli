@@ -208,9 +208,7 @@ program.action(async (promptParts, opts) => {
   app.setSessionName(session.getName());
   hooks.emit("on_session_start", { cwd: process.cwd() });
   app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
-  void checkForNewVersion(APP_VERSION).then((update) => {
-    if (update) app.setUpdateNotice(update);
-  }).catch(() => {});
+  void checkForNewVersion(APP_VERSION).then((update) => update && app.setStatus(`Update available: v${update.latestVersion}. ${update.command ? "Run /update to install it." : update.instruction}`)).catch(() => {});
 
   let scopedModelIndex = -1;
 

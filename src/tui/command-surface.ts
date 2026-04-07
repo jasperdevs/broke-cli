@@ -15,11 +15,10 @@ export interface CommandSurfaceContext {
 
 export const COMMANDS: CommandEntry[] = [
   { name: "settings", desc: "configure options", sortPriority: -1 },
-  { name: "help", desc: "open command browser" },
   { name: "login", desc: "login with subscription/oauth" },
   { name: "connect", desc: "connect api key or local endpoint" },
   { name: "logout", desc: "clear stored auth" },
-  { name: "model", desc: "switch model, pin, and assign roles", hotkey: "ctrl+l" },
+  { name: "model", desc: "switch model and assign routing slots", hotkey: "ctrl+l" },
   { name: "mode", desc: "switch build or plan mode" },
   { name: "theme", desc: "change color theme" },
   { name: "compact", desc: "compress context" },
@@ -37,7 +36,7 @@ export const COMMANDS: CommandEntry[] = [
   { name: "reload", desc: "reload templates, context, and extensions" },
   { name: "changelog", desc: "show recent changes" },
   { name: "templates", desc: "browse slash templates" },
-  { name: "name", desc: "name this session" },
+  { name: "name", desc: "rename this session" },
   { name: "export", desc: "export or copy transcript" },
   { name: "copy", desc: "copy last response" },
   { name: "undo", desc: "undo last change" },

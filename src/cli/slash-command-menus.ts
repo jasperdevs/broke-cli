@@ -64,8 +64,6 @@ export function openSettingsMenu(args: {
       { key: "hideThinkingBlock", label: "Hide thinking block", value: String(s.hideThinkingBlock), description: "Hide streamed reasoning blocks in chat" },
       { key: "cavemanLevel", label: "Caveman mode", value: s.cavemanLevel ?? "auto", description: "off / lite / auto / ultra — save output tokens (ctrl+y)" },
       { key: "editorPaddingX", label: "Editor padding", value: String(s.editorPaddingX), description: "Horizontal input padding (0-3)" },
-      { key: "autocompleteMaxVisible", label: "Autocomplete size", value: String(s.autocompleteMaxVisible), description: "Visible command rows" },
-      { key: "showHardwareCursor", label: "Hardware cursor", value: String(s.showHardwareCursor), description: "Keep the terminal cursor visible while idle" },
       { key: "enableSkillCommands", label: "Skill commands", value: String(s.enableSkillCommands), description: "Allow /skill:name prompt shortcuts" },
       { key: "discoverExtensions", label: "Discover extensions", value: String(s.discoverExtensions), description: "Load extensions from configured paths" },
       { key: "discoverSkills", label: "Discover skills", value: String(s.discoverSkills), description: "Load skills from configured paths" },
@@ -111,10 +109,6 @@ export function openSettingsMenu(args: {
       onSystemPromptChange(buildSystemPrompt(process.cwd(), activeModel?.provider?.id, menuMode, next));
     } else if (key === "editorPaddingX") {
       updateSetting("editorPaddingX", (s.editorPaddingX + 1) % 4);
-    } else if (key === "autocompleteMaxVisible") {
-      const cycle = [5, 8, 12];
-      const idx = cycle.indexOf(s.autocompleteMaxVisible);
-      updateSetting("autocompleteMaxVisible", cycle[(idx + 1) % cycle.length] ?? 5);
     } else if (key === "terminal.showImages") {
       updateSetting("terminal", { ...s.terminal, showImages: !s.terminal.showImages });
     } else if (key === "images.blockImages") {

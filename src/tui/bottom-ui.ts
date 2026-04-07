@@ -29,6 +29,11 @@ export function getPendingImagePromptLines(app: AppState, mainW: number): string
   return lines;
 }
 
+export function getStatusPromptLines(app: AppState): string[] {
+  if (!app.statusMessage) return [];
+  return [` ${app.statusMessage}`];
+}
+
 export function appendBottomMenus(
   app: AppState,
   bottomLines: string[],
@@ -37,9 +42,10 @@ export function appendBottomMenus(
   mainW: number,
   separatorColor: string,
 ): void {
-  const tailReserve = 2 + (app.statusMessage ? 1 : 0);
+  const maxVisibleRows = Math.max(1, getSettings().autocompleteMaxVisible);
+  const tailReserve = 2;
   const getAvailableBodyRows = (chromeLines: number): number =>
-    Math.max(1, height - bottomLines.length - tailReserve - 1 - chromeLines);
+    Math.max(1, Math.min(maxVisibleRows, height - bottomLines.length - tailReserve - 1 - chromeLines));
 
   if (app.filePicker) {
     bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
@@ -68,7 +74,7 @@ export function appendBottomMenus(
   }
 
   const allSuggestions = app.getCommandSuggestionEntries();
-  const maxVisible = Math.max(1, Math.min(getSettings().autocompleteMaxVisible, getAvailableBodyRows(1)));
+  const maxVisible = Math.max(1, getAvailableBodyRows(1));
   const suggestions = app.buildMenuView(allSuggestions, app.cmdSuggestionCursor, maxVisible);
   if (suggestions.length > 0) {
     bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);

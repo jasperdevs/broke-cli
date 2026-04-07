@@ -66,6 +66,7 @@ export class App {
   private onAbort: (() => void) | null = null;
   private running = false;
   private statusMessage: string | undefined;
+  private statusTimer: ReturnType<typeof setTimeout> | null = null;
   private detectedProviders: string[] = [];
   private cwd = process.cwd();
   private modelPicker: { options: ModelOption[]; cursor: number; scope: "all" | "scoped" } | null = null;
@@ -82,7 +83,7 @@ export class App {
     title: string;
     items: PickerItem[];
     cursor: number;
-    kind?: "model" | "mode" | "login" | "connect" | "settings" | "permissions" | "extensions" | "theme" | "export" | "resume" | "session" | "hotkeys" | "tree" | "templates" | "skills" | "changelog" | "projects" | "logout";
+    kind?: "model" | "mode" | "name" | "login" | "connect" | "settings" | "permissions" | "extensions" | "theme" | "export" | "resume" | "session" | "hotkeys" | "tree" | "templates" | "skills" | "changelog" | "projects" | "logout";
     previewHint?: string;
     onPreview?: (id: string) => void;
     onCancel?: () => void;

@@ -277,8 +277,7 @@ export function handlePaste(app: AppState, text: string): void {
       const mimeType = `image/${match[1]}`;
       const data = match[2];
       app.pendingImages.push({ mimeType, data });
-      app.statusMessage = `${T()}✓ Image attached (${mimeType})${RESET}`;
-      setTimeout(() => { app.statusMessage = undefined; app.draw(); }, 1500);
+      app.setStatus?.(`${T()}✓ Image attached (${mimeType})${RESET}`);
       app.draw();
       return;
     }
@@ -295,8 +294,7 @@ export function handlePaste(app: AppState, text: string): void {
         const mimeType = `image/${ext === "jpg" ? "jpeg" : ext}`;
         const base64 = data.toString("base64");
         app.pendingImages.push({ mimeType, data: base64 });
-        app.statusMessage = `${T()}✓ Image loaded${RESET}`;
-        setTimeout(() => { app.statusMessage = undefined; app.draw(); }, 1500);
+        app.setStatus?.(`${T()}✓ Image loaded${RESET}`);
         app.draw();
         return;
       }

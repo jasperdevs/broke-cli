@@ -10,11 +10,12 @@ import { summarizeBranchMessages } from "../core/compact.js";
 import { checkForNewVersion } from "../core/update.js";
 import { APP_VERSION } from "../core/app-meta.js";
 import { handleLogoutMenu, openEmptyItemMenu, openExportMenu, openProjectsMenu, openResumeMenu } from "./slash-command-menus.js";
-import { loadKeybindings, reloadKeybindings } from "../core/keybindings.js";
+import { formatKeypressBinding, loadKeybindings, reloadKeybindings, updateKeybinding, type Keybindings } from "../core/keybindings.js";
 import { reloadContext } from "../core/context.js";
 import { undoLastCheckpoint } from "../core/git.js";
 import type { ExtensionHooks, SlashCommandApp, SlashCommandResult } from "./slash-command-types.js";
 import type { ModelHandle } from "../ai/providers.js";
+import type { PickerItem } from "../tui/app-types.js";
 
 async function loadBudgetReports(session: Session): Promise<{ all: BudgetReport; session: BudgetReport }> {
   const sessionDir = getSettings().sessionDir?.trim() || undefined;
@@ -34,6 +35,40 @@ function reloadSessionIntoUi(app: SlashCommandApp, session: Session, editorText?
   for (const msg of session.getMessages()) app.addMessage(msg.role, msg.content);
   app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
   if (editorText) app.setDraft?.(editorText);
+}
+
+async function chooseMenuItem(
+  app: SlashCommandApp,
+  title: string,
+  items: PickerItem[],
+  kind: "tree" | "hotkeys" | "name",
+): Promise<string> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value: string) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+    app.openItemPicker(title, items, (id: string) => finish(id), {
+      kind,
+      onCancel: () => finish(""),
+    });
+  });
+}
+
+function getHotkeyLabels(bindings: Keybindings): Array<{ id: keyof Keybindings; label: string; detail: string }> {
+  return [
+    { id: "submit", label: "Send message", detail: bindings.submit },
+    { id: "newline", label: "Insert newline", detail: bindings.newline },
+    { id: "abort", label: "Abort / exit", detail: bindings.abort },
+    { id: "modelPicker", label: "Open model menu", detail: bindings.modelPicker },
+    { id: "toggleThinking", label: "Cycle thinking", detail: bindings.toggleThinking },
+    { id: "cycleScopedModel", label: "Cycle pinned model", detail: bindings.cycleScopedModel },
+    { id: "toggleMode", label: "Toggle build / plan", detail: bindings.toggleMode },
+    { id: "deleteWord", label: "Delete word", detail: bindings.deleteWord },
+    { id: "deleteNextWord", label: "Delete next word", detail: bindings.deleteNextWord },
+  ];
 }
 
 export async function handleUiSlashCommand(options: {
@@ -62,6 +97,7 @@ export async function handleUiSlashCommand(options: {
     case "update": {
       const update = await checkForNewVersion(APP_VERSION);
       if (!update) {
+        app.clearUpdateNotice?.();
         app.setStatus?.(`Already on the latest version (${APP_VERSION}).`);
         return { handled: true };
       }
@@ -75,8 +111,9 @@ export async function handleUiSlashCommand(options: {
         }
         return { handled: true };
       }
-      app.setUpdateNotice?.(update);
-      app.setStatus?.(`Update available: v${update.latestVersion}. ${update.instruction}`);
+      app.clearUpdateNotice?.();
+      const instruction = update.command ? `Run /update to install ${update.latestVersion}.` : update.instruction;
+      app.setStatus?.(`Update available: v${update.latestVersion}. ${instruction}`);
       return { handled: true };
     }
     case "tree":
@@ -87,10 +124,14 @@ export async function handleUiSlashCommand(options: {
         let summaryText: string | undefined;
         let labelText: string | undefined;
         if (abandoned.length > 0) {
-          const choice = await app.showQuestion("Branch switch", ["No summary", "Summarize", "Custom summary"]);
-          if (choice === "Summarize" || choice === "Custom summary") {
+          const choice = await chooseMenuItem(app, "Branch switch", [
+            { id: "skip", label: "Jump now", detail: "switch branches without a summary" },
+            { id: "summarize", label: "Summarize branch", detail: "save abandoned branch context" },
+            { id: "custom", label: "Custom summary", detail: "choose the summary focus first" },
+          ], "tree");
+          if (choice === "summarize" || choice === "custom") {
             let custom = "";
-            if (choice === "Custom summary") {
+            if (choice === "custom") {
               custom = (await app.showQuestion("Custom summary focus"))?.trim?.() || "";
             }
             app.setCompacting?.(true);
@@ -131,19 +172,60 @@ export async function handleUiSlashCommand(options: {
       return { handled: true };
     }
     case "hotkeys": {
-      const bindings = loadKeybindings();
-      const items = [
-        { id: "submit", label: bindings.submit, detail: "send" },
-        { id: "newline", label: bindings.newline, detail: "newline" },
-        { id: "abort", label: bindings.abort, detail: "abort/exit" },
-        { id: "modelPicker", label: bindings.modelPicker, detail: "model picker" },
-        { id: "toggleThinking", label: bindings.toggleThinking, detail: "thinking" },
-        { id: "cycleScopedModel", label: bindings.cycleScopedModel, detail: "pinned models" },
-        { id: "toggleMode", label: bindings.toggleMode, detail: "build/plan" },
-        { id: "deleteWord", label: bindings.deleteWord, detail: "delete word" },
-        { id: "deleteNextWord", label: bindings.deleteNextWord, detail: "delete next word" },
-      ];
-      app.openItemPicker("Hotkeys", items, () => {}, { kind: "hotkeys" });
+      let bindings = loadKeybindings();
+      let rebinding: keyof Keybindings | null = null;
+      const buildItems = () => getHotkeyLabels(bindings).map((entry) => ({
+        id: entry.id,
+        label: entry.label,
+        detail: rebinding === entry.id
+          ? "press shortcut · enter stop · backspace clear"
+          : entry.detail,
+      }));
+      app.openItemPicker("Hotkeys", buildItems(), (id: string) => {
+        const key = id as keyof Keybindings;
+        rebinding = rebinding === key ? null : key;
+        app.updateItemPickerItems?.(buildItems(), id);
+        app.setStatus?.(rebinding ? `Rebinding ${getHotkeyLabels(bindings).find((entry) => entry.id === key)?.label ?? key}. Press a shortcut, Enter to stop, Backspace to clear.` : "Stopped rebinding.");
+      }, {
+        kind: "hotkeys",
+        closeOnSelect: false,
+        onCancel: () => { rebinding = null; },
+        onKey: (key) => {
+          if (!rebinding) return false;
+          if (key.name === "escape") {
+            rebinding = null;
+            app.updateItemPickerItems?.(buildItems());
+            app.setStatus?.("Stopped rebinding.");
+            return true;
+          }
+          if ((key.name === "return" || key.name === "enter") && !key.ctrl && !key.meta && !key.shift) {
+            rebinding = null;
+            app.updateItemPickerItems?.(buildItems());
+            app.setStatus?.("Stopped rebinding.");
+            return true;
+          }
+          if (key.name === "backspace" && !key.ctrl && !key.meta && !key.shift) {
+            updateKeybinding(rebinding, "");
+            reloadKeybindings();
+            bindings = loadKeybindings();
+            const cleared = rebinding;
+            rebinding = null;
+            app.updateItemPickerItems?.(buildItems(), cleared);
+            app.setStatus?.(`Cleared ${getHotkeyLabels(bindings).find((entry) => entry.id === cleared)?.label ?? cleared}.`);
+            return true;
+          }
+          const binding = formatKeypressBinding(key);
+          if (!binding) return true;
+          updateKeybinding(rebinding, binding);
+          reloadKeybindings();
+          bindings = loadKeybindings();
+          const assigned = rebinding;
+          rebinding = null;
+          app.updateItemPickerItems?.(buildItems(), assigned);
+          app.setStatus?.(`${getHotkeyLabels(bindings).find((entry) => entry.id === assigned)?.label ?? assigned} set to ${binding}.`);
+          return true;
+        },
+      });
       return { handled: true };
     }
     case "reload":

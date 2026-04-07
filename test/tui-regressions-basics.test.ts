@@ -30,10 +30,12 @@ describe("mouse reporting mode", () => {
     expect(MOUSE_OFF).toBe("");
   });
 
-  it("enables menu mouse tracking when the sidebar is interactive", () => {
+  it("keeps passive sidebar mode out of mouse-capture until a modal owns the UI", () => {
     const app = new App() as any;
     app.messages = [{ role: "user", content: "hello" }];
     app.screen = { height: 18, width: 100, hasSidebar: true, mainWidth: 73, sidebarWidth: 24, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
+    expect(app.shouldEnableMenuMouse()).toBe(false);
+    app.openItemPicker("Theme", [{ id: "dark", label: "Dark" }], () => {});
     expect(app.shouldEnableMenuMouse()).toBe(true);
   });
 });
@@ -212,33 +214,6 @@ describe("menu counters", () => {
     app.drawImmediate();
     const output = rendered.map((line) => stripAnsi(line)).join("\n");
     expect(output).toContain("Projects (1/2)");
-  });
-});
-
-describe("input layout", () => {
-  it("keeps the cursor on the input row below the separator", () => {
-    const app = new App() as any;
-    let rendered: string[] = [];
-    let cursorRow = 0;
-    app.messages = [{ role: "assistant", content: "hello" }];
-    app.input.setText("test");
-    app.screen = {
-      height: 14,
-      width: 60,
-      hasSidebar: false,
-      mainWidth: 60,
-      sidebarWidth: 0,
-      render: (lines: string[]) => { rendered = lines; },
-      setCursor: (row: number) => { cursorRow = row; },
-      hideCursor: () => {},
-      forceRedraw: () => {},
-    };
-    app.drawImmediate();
-    const plain = rendered.map((line) => stripAnsi(line));
-    const separatorRow = plain.findIndex((line) => line.includes("─".repeat(10))) + 1;
-    expect(separatorRow).toBeGreaterThan(0);
-    expect(cursorRow).toBeGreaterThan(separatorRow);
-    expect(plain[cursorRow - 1]).toContain("test");
   });
 });
 

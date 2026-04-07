@@ -1,6 +1,6 @@
 import stripAnsi from "strip-ansi";
 import { execSync, spawnSync } from "child_process";
-import { getSettings, loadConfig } from "../core/config.js";
+import { clearRuntimeSettings, getSettings, loadConfig, setRuntimeSettings } from "../core/config.js";
 import { listAuthenticated } from "../core/auth.js";
 import { BOLD, DIM, RESET } from "../utils/ansi.js";
 import { truncateVisible, visibleWidth } from "../utils/terminal-width.js";
@@ -11,7 +11,7 @@ import { fmtCost, fmtTokens, wordWrap } from "./render/formatting.js";
 import { APP_BG, ERR, MUTED, OK, P, T, TXT, WARN } from "./app-shared.js";
 import { drawQuestionView } from "./question-view.js";
 import { drawBudgetView } from "./fullscreen-views.js";
-import { appendBottomMenus, buildInfoBar, getPendingImagePromptLines } from "./bottom-ui.js";
+import { appendBottomMenus, buildInfoBar, getPendingImagePromptLines, getStatusPromptLines } from "./bottom-ui.js";
 import { getTreePickerEntries, getVisibleTreeRows } from "./tree-view.js";
 
 type AppState = any;
@@ -62,17 +62,21 @@ export function drawImmediate(app: AppState): void {
   const bottomLines: string[] = [];
   const bottomMenuClicks: Array<{ lineIndex: number; action: () => void }> = [];
   const pendingImageLines = getPendingImagePromptLines(app, mainW);
+  const statusLines = getStatusPromptLines(app);
 
   bottomLines.push("");
   bottomLines.push(...pendingImageLines);
   bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
   const inputStartIndex = bottomLines.length;
   bottomLines.push(...inputLayout.lines);
+  if (statusLines.length > 0) {
+    bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
+    bottomLines.push(...statusLines);
+  }
 
   appendBottomMenus(app, bottomLines, bottomMenuClicks, height, mainW, separatorColor);
   bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
   bottomLines.push(buildInfoBar(app, hasSidebar, mainW));
-  if (app.statusMessage) bottomLines.push(` ${app.statusMessage}`);
   const bottomTopPad = hasSidebar ? Math.max(0, footerLines.length - bottomLines.length) : 0;
 
   const frameLines = buildFrameLines(app, {
@@ -88,10 +92,6 @@ export function drawImmediate(app: AppState): void {
   });
   app.screen.render(frameLines.map((line) => app.decorateFrameLine(line, width)));
 
-  if (Date.now() < app.hideCursorUntil) {
-    app.screen.hideCursor();
-    return;
-  }
   const effectiveBottomHeight = hasSidebar ? Math.max(bottomLines.length, footerLines.length) : bottomLines.length;
   const mainTopHeight = Math.max(0, height - effectiveBottomHeight);
   const sidebarTopHeight = hasSidebar
@@ -114,7 +114,7 @@ function buildFrameLines(app: AppState, opts: { height: number; width: number; m
   const bottomStartRow = hasSidebar ? Math.max(mainTopHeight, sidebarTopHeight) : mainTopHeight;
   app.activeMenuClickTargets = new Map(bottomMenuClicks.map(({ lineIndex, action }) => [bottomStartRow + bottomTopPad + lineIndex + 1, action]));
   const showCompactHeader = !isHome && !hasSidebar && app.modelName !== "none";
-  const bannerLines = app.renderUpdateBanner(mainW);
+  const bannerLines = opts.isHome ? app.renderUpdateBanner(mainW) : [];
   const reservedBannerLines = bannerLines.slice(0, mainTopHeight);
   const fixedTopLines = [...reservedBannerLines];
   if (showCompactHeader && fixedTopLines.length < mainTopHeight) fixedTopLines.push(app.renderCompactHeader());
@@ -206,7 +206,7 @@ export function appendModelPicker(app: AppState, lines: string[], _maxTotal: num
   const scopedLabel = picker.scope === "scoped" ? `${TXT()}${BOLD}pinned${RESET}` : `${MUTED()}pinned${RESET}`;
   lines.push(` ${DIM}Scope:${RESET} ${allLabel} ${DIM}|${RESET} ${scopedLabel}`);
   lines.push(` ${DIM}enter use · space pin · tab scope${RESET}`);
-  lines.push(` ${DIM}1 default · 2 small · 3 review · 4 plan · 5 ui · 6 arch${RESET}`);
+  lines.push(` ${DIM}1 chat · 2 small auto · 3 review · 4 plan · 5 ui · 6 arch${RESET}`);
   if (app.getFilteredModels().length === 0) {
     lines.push(`  ${DIM}no matches${RESET}`);
     return;
@@ -229,7 +229,7 @@ export function decorateFrameLine(_app: AppState, line: string, targetWidth: num
 export function appendFilePicker(app: AppState, lines: string[], maxTotal: number, clickTargets: Array<{ lineIndex: number; action: () => void }>): void {
   const picker = app.filePicker!;
   lines.push(` ${T()}${BOLD}Files${RESET} ${renderMenuCount(picker.filtered.length === 0 ? 0 : picker.cursor + 1, picker.filtered.length)}`);
-  const maxItems = Math.max(1, maxTotal);
+  const maxItems = Math.max(1, Math.min(getSettings().autocompleteMaxVisible, maxTotal));
   for (const entry of app.buildMenuView(app.getFilePickerEntries(), picker.cursor, maxItems)) {
     if (entry.selectIndex !== undefined) app.registerMenuClickTarget(clickTargets, lines, () => app.selectFileEntry(entry.selectIndex!));
     lines.push(entry.text);
@@ -245,7 +245,7 @@ export function appendSettingsPicker(app: AppState, lines: string[], _maxTotal: 
     lines.push(`  ${DIM}no matches${RESET}`);
     return;
   }
-  const maxItems = Math.max(1, _maxTotal);
+  const maxItems = Math.max(1, Math.min(getSettings().autocompleteMaxVisible, _maxTotal));
   for (const entry of app.buildMenuView(app.getSettingsPickerEntries(), picker.cursor, maxItems)) {
     if (entry.selectIndex !== undefined) app.registerMenuClickTarget(clickTargets, lines, () => app.toggleSettingEntry(entry.selectIndex!));
     lines.push(entry.text);
@@ -260,7 +260,7 @@ export function appendItemPicker(app: AppState, lines: string[], _maxTotal: numb
     lines.push(`  ${DIM}no matches${RESET}`);
     return;
   }
-  const maxItems = Math.max(1, _maxTotal);
+  const maxItems = Math.max(1, Math.min(getSettings().autocompleteMaxVisible, _maxTotal));
   for (const entry of app.buildMenuView(app.getItemPickerEntries(), picker.cursor, maxItems)) {
     if (entry.selectIndex !== undefined) app.registerMenuClickTarget(clickTargets, lines, () => app.selectItemEntry(entry.selectIndex!));
     lines.push(entry.text);
@@ -277,7 +277,7 @@ export function appendTreePicker(app: AppState, lines: string[], maxItems: numbe
     lines.push(`  ${DIM}no matches${RESET}`);
     return;
   }
-  for (const entry of app.buildMenuView(getTreePickerEntries(app), selectedIndex, Math.max(1, maxItems))) {
+  for (const entry of app.buildMenuView(getTreePickerEntries(app), selectedIndex, Math.max(1, Math.min(getSettings().autocompleteMaxVisible, maxItems)))) {
     if (entry.selectIndex !== undefined) {
       app.registerMenuClickTarget(clickTargets, lines, () => {
         const target = rows[entry.selectIndex!];
@@ -302,6 +302,10 @@ export function getCommandMatches(app: AppState) {
 
 export function start(app: AppState): void {
   app.running = true;
+  setRuntimeSettings({
+    autocompleteMaxVisible: 5,
+    showHardwareCursor: true,
+  });
   try { app.gitBranch = execSync("git branch --show-current", { encoding: "utf-8", timeout: 3000 }).trim(); } catch {}
   try { app.gitDirty = execSync("git status --porcelain", { encoding: "utf-8", timeout: 3000 }).trim().length > 0; } catch {}
   app.screen.enter();
@@ -313,6 +317,7 @@ export function start(app: AppState): void {
 export function stop(app: AppState): void {
   if (!app.running) return;
   app.running = false;
+  clearRuntimeSettings();
   if (app.spinnerTimer) clearInterval(app.spinnerTimer);
   app.clearInterruptPrompt();
   process.stdout.off("resize", app.handleResize);

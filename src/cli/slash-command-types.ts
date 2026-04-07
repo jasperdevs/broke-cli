@@ -4,6 +4,7 @@ import type { BudgetReport } from "../core/budget-insights.js";
 import type { Mode, ModelPreferenceSlot, Settings } from "../core/config.js";
 import type { Session } from "../core/session.js";
 import type { ModelOption, PickerItem, SettingEntry, UpdateNotice } from "../tui/app-types.js";
+import type { Keypress } from "../tui/keypress.js";
 
 export interface SlashCommandApp {
   addMessage(role: "user" | "assistant" | "system", content: string): void;
@@ -35,9 +36,10 @@ export interface SlashCommandApp {
       onPreview?: (id: string) => void;
       onCancel?: () => void;
       onSecondaryAction?: (id: string) => void;
+      onKey?: (key: Keypress) => boolean;
       secondaryHint?: string;
       closeOnSelect?: boolean;
-      kind?: "login" | "connect" | "mode" | "permissions" | "extensions" | "theme" | "export" | "resume" | "session" | "hotkeys" | "tree" | "templates" | "skills" | "changelog" | "projects" | "logout";
+      kind?: "login" | "connect" | "mode" | "name" | "permissions" | "extensions" | "theme" | "export" | "resume" | "session" | "hotkeys" | "tree" | "templates" | "skills" | "changelog" | "projects" | "logout";
     },
   ): void;
   openTreeView?(title: string, session: Session, onSelect: (entryId: string) => void | Promise<void>): void;

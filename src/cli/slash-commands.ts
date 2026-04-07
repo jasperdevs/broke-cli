@@ -37,6 +37,7 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
 
   switch (cmd) {
     case "help":
+      app.setStatus?.("Type / to browse commands.");
       app.setDraft?.("/");
       return { handled: true };
     case "new":
@@ -174,13 +175,31 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
       return { handled: true };
     case "name": {
       const name = text.slice(6).trim();
-      if (!name) {
-        app.setStatus?.("Usage: /name <session name>");
+      if (name) {
+        session.setName(name);
+        app.setSessionName?.(name);
+        app.setStatus?.(`Session renamed to ${name}`);
         return { handled: true };
       }
-      session.setName(name);
-      app.setSessionName?.(name);
-      app.setStatus?.(`Session renamed to ${name}`);
+      const currentName = session.getName();
+      app.openItemPicker("Session name", [
+        { id: "rename", label: "Rename", detail: currentName },
+        { id: "clear", label: "Reset", detail: "New Session" },
+      ], (id: string) => {
+        if (id === "clear") {
+          session.setName("New Session");
+          app.setSessionName?.("New Session");
+          app.setStatus?.("Session name reset.");
+          return;
+        }
+        void app.showQuestion("Session name").then((nextName) => {
+          const trimmed = nextName.trim();
+          if (!trimmed) return;
+          session.setName(trimmed);
+          app.setSessionName?.(trimmed);
+          app.setStatus?.(`Session renamed to ${trimmed}`);
+        });
+      }, { kind: "name" });
       return { handled: true };
     }
     default: {

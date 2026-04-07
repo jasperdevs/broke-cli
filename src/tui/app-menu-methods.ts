@@ -32,48 +32,51 @@ export function getChatHeight(app: AppState): number {
 }
 
 export function getBottomLineCount(app: AppState, mainW: number, maxHeight: number): number {
+  const maxVisibleRows = Math.max(1, getSettings().autocompleteMaxVisible);
   const inputLineCount = app.getWrappedInputLines(app.input.getText(), mainW).length;
   const pendingImageLineCount = getPendingImagePromptLines(app, mainW).length;
-  const tailReserve = 2 + (app.statusMessage ? 1 : 0);
-  let count = 2 + pendingImageLineCount + inputLineCount;
+  const statusLineCount = app.statusMessage ? 2 : 0;
+  const tailReserve = 2;
+  let count = 2 + pendingImageLineCount + inputLineCount + statusLineCount;
   const baseCount = count;
 
   if (app.filePicker) {
     const entries = app.getFilePickerEntries();
     const visible = entries.length === 0
       ? 1
-      : Math.min(entries.length, getMenuVisibleRows(maxHeight, baseCount, tailReserve, 1));
+      : Math.min(entries.length, maxVisibleRows, getMenuVisibleRows(maxHeight, baseCount, tailReserve, 1));
     count += 2 + visible;
   } else if (app.itemPicker) {
     const entries = app.getItemPickerEntries();
     const visible = entries.length === 0
       ? 1
-      : Math.min(entries.length, getMenuVisibleRows(maxHeight, baseCount, tailReserve, 1));
+      : Math.min(entries.length, maxVisibleRows, getMenuVisibleRows(maxHeight, baseCount, tailReserve, 1));
     count += 2 + visible;
   } else if (app.settingsPicker) {
     const entries = app.getSettingsPickerEntries();
     const visible = entries.length === 0
       ? 1
-      : Math.min(entries.length, getMenuVisibleRows(maxHeight, baseCount, tailReserve, 1));
+      : Math.min(entries.length, maxVisibleRows, getMenuVisibleRows(maxHeight, baseCount, tailReserve, 1));
     count += 2 + visible;
   } else if (app.modelPicker) {
     const entries = app.getModelPickerEntries();
     const visible = entries.length === 0
       ? 1
-      : Math.min(entries.length, getMenuVisibleRows(maxHeight, baseCount, tailReserve, 3));
+      : Math.min(entries.length, maxVisibleRows, getMenuVisibleRows(maxHeight, baseCount, tailReserve, 3));
     count += 4 + visible;
   } else if (app.treeView) {
     const rows = app.getVisibleTreeRows();
     const visible = rows.length === 0
       ? 1
-      : Math.min(rows.length, getMenuVisibleRows(maxHeight, baseCount, tailReserve, 2));
+      : Math.min(rows.length, maxVisibleRows, getMenuVisibleRows(maxHeight, baseCount, tailReserve, 2));
     count += 3 + visible;
   } else {
     const allSuggestions = app.getCommandSuggestionEntries();
     if (allSuggestions.length > 0) {
       const visible = Math.min(
         allSuggestions.length,
-        Math.max(1, Math.min(getSettings().autocompleteMaxVisible, getMenuVisibleRows(maxHeight, baseCount, tailReserve, 1))),
+        maxVisibleRows,
+        Math.max(1, getMenuVisibleRows(maxHeight, baseCount, tailReserve, 1)),
       );
       count += 2 + visible;
     }
@@ -153,6 +156,7 @@ export function getMenuPromptPrefix(_app: AppState, kind: MenuPromptKind): strin
   switch (kind) {
     case "model": return "/model ";
     case "mode": return "/mode ";
+    case "name": return "/name ";
     case "login": return "/login ";
     case "connect": return "/connect ";
     case "settings": return "/settings ";
@@ -283,6 +287,15 @@ export function getItemPickerEntries(app: AppState): MenuEntry[] {
 
 export function getModelPickerEntries(app: AppState): MenuEntry[] {
   if (!app.modelPicker) return [];
+  const badgeLabels: Record<string, string> = {
+    now: "current",
+    default: "chat",
+    small: "small auto",
+    review: "review",
+    plan: "planning",
+    ui: "ui",
+    arch: "architecture",
+  };
   const filtered = app.getFilteredModels();
   const byProvider = new Map<string, ModelOption[]>();
   for (const opt of filtered) {
@@ -299,7 +312,7 @@ export function getModelPickerEntries(app: AppState): MenuEntry[] {
       const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
       const nameCol = isCursor ? `${TXT()}${BOLD}` : T();
       const badges = opt.badges && opt.badges.length > 0
-        ? ` ${DIM}${opt.badges.join(" · ")}${RESET}`
+        ? ` ${DIM}${opt.badges.map((badge) => badgeLabels[badge] ?? badge).join(" · ")}${RESET}`
         : "";
       entries.push({ text: `  ${arrow}${nameCol}${opt.modelId}${RESET}${pin}${badges}`, selectIndex: currentIdx });
       currentIdx++;
@@ -441,12 +454,12 @@ export function applyCommandSuggestion(app: AppState, index: number, submitOnRet
 }
 
 export function hideCursorBriefly(app: AppState, durationMs = 140): void {
-  app.hideCursorUntil = Date.now() + durationMs;
-  if (app.hideCursorTimer) clearTimeout(app.hideCursorTimer);
-  app.hideCursorTimer = setTimeout(() => {
+  app.hideCursorUntil = 0;
+  if (app.hideCursorTimer) {
+    clearTimeout(app.hideCursorTimer);
     app.hideCursorTimer = null;
-    app.draw();
-  }, durationMs + 10);
+  }
+  if (durationMs > 0) app.draw();
 }
 
 export function getSidebarBorder(app: AppState): string {
@@ -473,6 +486,5 @@ export function shouldEnableMenuMouse(app: AppState): boolean {
     || app.treeView
     || app.budgetView
     || app.questionView
-    || (app.screen.hasSidebar && app.shouldShowSidebar())
   );
 }

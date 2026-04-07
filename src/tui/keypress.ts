@@ -87,6 +87,10 @@ export class KeypressHandler {
           this.onKey(specialEnterSequences[s]);
           return false;
         }
+        if (s === "\x1b") {
+          this.onKey({ name: "escape", char: "", ctrl: false, meta: false, shift: false });
+          return false;
+        }
         mouseSeqRe.lastIndex = 0;
         let match;
         let hasMouseData = false;

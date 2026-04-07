@@ -108,6 +108,7 @@ export type PendingDelivery = "steering" | "followup";
 export type MenuPromptKind =
   | "model"
   | "mode"
+  | "name"
   | "login"
   | "connect"
   | "settings"

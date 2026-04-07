@@ -46,10 +46,12 @@ describe("command aliases", () => {
 });
 
 describe("sidebar scrolling", () => {
-  it("keeps terminal mouse capture disabled so text selection stays native", () => {
+  it("keeps passive sidebar mode out of mouse-capture until a modal is active", () => {
     const app = new App() as any;
     app.messages = [{ role: "user", content: "hello" }];
     app.screen = { height: 18, width: 100, hasSidebar: true, mainWidth: 73, sidebarWidth: 24, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
+    expect(app.shouldEnableMenuMouse()).toBe(false);
+    app.openItemPicker("Theme", [{ id: "dark", label: "Dark" }], () => {});
     expect(app.shouldEnableMenuMouse()).toBe(true);
   });
 
@@ -173,7 +175,7 @@ describe("sidebar scrolling", () => {
       const output = rendered.map((line) => stripAnsi(line)).join("\n");
       expect(output).toContain("Commands");
       expect(output).toContain("settings");
-      expect(output).toContain("help");
+      expect(output).not.toContain("help");
       expect(output).not.toContain("120k ctx");
       expect(output).not.toContain("621 out");
       expect(stripAnsi(rendered[cursorRow - 1] ?? "")).toContain("/");
@@ -183,6 +185,28 @@ describe("sidebar scrolling", () => {
       updateSetting("thinkingLevel", original.thinkingLevel);
       updateSetting("cavemanLevel", original.cavemanLevel ?? "off");
     }
+  });
+
+  it("caps sidebar chat slash menus to five visible command rows", () => {
+    const app = new App() as any;
+    let rendered: string[] = [];
+    app.messages = [{ role: "user", content: "hello" }];
+    app.input.setText("/");
+    app.screen = {
+      height: 18,
+      width: 100,
+      hasSidebar: true,
+      mainWidth: 73,
+      sidebarWidth: 24,
+      render: (lines: string[]) => { rendered = lines; },
+      setCursor: () => {},
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+    app.drawImmediate();
+    const output = rendered.map((line) => stripAnsi(line));
+    const commandRows = output.filter((line) => /\ssettings\s+configure options|\smodel\s+switch model|\sconnect\s+connect provider|\ssession\s+inspect session|\sresume\s+load prior session/.test(line));
+    expect(commandRows.length).toBeLessThanOrEqual(5);
   });
 
   it("does not scroll transcript lines with wheel or page keys", () => {
