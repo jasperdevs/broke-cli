@@ -34,7 +34,7 @@ export function registerPackageCommands(program: Command): void {
   program
     .command("self-update")
     .alias("upgrade")
-    .description("Update brokecli itself")
+    .description("Update the app")
     .action(() => {
       const result = runSelfUpdateCommand();
       if (!result.performed) {
@@ -42,7 +42,7 @@ export function registerPackageCommands(program: Command): void {
         return;
       }
       if (result.exitCode !== 0) process.exit(result.exitCode);
-      process.stdout.write("Updated brokecli. Restart to use the new version.\n");
+      process.stdout.write("Updated. Restart to use the new version.\n");
     });
 
   program

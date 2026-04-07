@@ -72,7 +72,9 @@ export function buildInfoBar(app: AppState, hasSidebar: boolean, mainW: number):
   const liveTokens = app.getLiveTotalTokens();
   if ((settings.showCost && app.sessionCost > 0) || (settings.showTokens && !hasSidebar && liveTokens > 0)) {
     const costPart = settings.showCost && app.sessionCost > 0 ? fmtCost(app.animCost.get()) : "";
-    const tokenPart = settings.showTokens && !hasSidebar && liveTokens > 0 ? app.renderTokenSummaryParts().join(" ") : "";
+    const tokenPart = settings.showTokens && !hasSidebar && liveTokens > 0
+      ? app.renderTokenSummaryParts().filter((_: string, index: number) => !(settings.showCost && index === 1)).join(" ")
+      : "";
     const statStr = [costPart, tokenPart].filter(Boolean).join(" · ");
     parts.push({ text: `${DIM}${statStr}${RESET}`, plain: statStr });
   }

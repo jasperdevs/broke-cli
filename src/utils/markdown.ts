@@ -1,7 +1,7 @@
 /**
  * Markdown renderer — uses marked.lexer() for parsing (token AST only)
  * and walks the token tree to produce ANSI-styled terminal output.
- * Inspired by Pi's approach: no HTML renderer, just lexer + custom walker.
+ * Keep markdown rendering small and deterministic: lexer + custom walker.
  *
  * Syntax highlighting via cli-highlight (highlight.js based).
  */

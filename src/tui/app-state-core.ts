@@ -1,7 +1,7 @@
 import { currentTheme } from "../core/themes.js";
 import { getSettings, type CavemanLevel, type Mode, type ThinkingLevel } from "../core/config.js";
 import { buildSidebarFooter } from "./render/sidebar-view.js";
-import { fmtTokens } from "./render/formatting.js";
+import { fmtCost, fmtTokens } from "./render/formatting.js";
 import { DIM, RESET } from "../utils/ansi.js";
 import { MUTED, OK, P, T, TXT } from "./app-shared.js";
 import type { ModelOption, UpdateNotice } from "./app-types.js";
@@ -70,11 +70,13 @@ export function getLiveTotalTokens(app: AppState): number {
 
 export function renderTokenSummaryParts(app: AppState): string[] {
   const total = app.getLiveTotalTokens();
-  return [
-    `${fmtTokens(total)} total`,
-    `${fmtTokens(app.getLiveInputTokens())} in`,
-    `${fmtTokens(app.getLiveOutputTokens())} out`,
-  ];
+  const parts = [`${fmtTokens(total)} total`];
+  if (getSettings().showCost) {
+    parts.push(app.sessionCost > 0 ? fmtCost(app.animCost.get()) : "local");
+  }
+  parts.push(`${fmtTokens(app.getLiveInputTokens())} in`);
+  parts.push(`${fmtTokens(app.getLiveOutputTokens())} out`);
+  return parts;
 }
 
 export function getModeAccent(app: AppState): string {
@@ -101,6 +103,7 @@ export function renderSidebarFooter(app: AppState): string[] {
     colors: {
       accent: app.getModeAccent(),
       muted: MUTED(),
+      dim: DIM,
       text: TXT(),
       warning: currentTheme().warning,
       error: currentTheme().error,

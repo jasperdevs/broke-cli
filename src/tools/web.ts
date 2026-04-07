@@ -49,7 +49,7 @@ export const webFetchTool = tool({
     try {
       const res = await fetch(url, {
         signal: AbortSignal.timeout(15000),
-        headers: { "User-Agent": "BrokeCLI/1.0" },
+        headers: { "User-Agent": "terminal-agent/1.0" },
       });
       if (!res.ok) {
         return { success: false as const, error: `HTTP ${res.status} ${res.statusText}` };

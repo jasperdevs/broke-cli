@@ -44,7 +44,7 @@ export class KeypressHandler {
   start(): void {
     if (this.started) return;
     if (!process.stdin.isTTY) {
-      throw new Error("brokecli requires an interactive terminal (TTY).");
+      throw new Error("Interactive terminal (TTY) required.");
     }
     this.started = true;
 

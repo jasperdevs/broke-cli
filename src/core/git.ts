@@ -19,7 +19,7 @@ export function createCheckpoint(): boolean {
     if (!status) return false; // nothing to checkpoint
 
     execSync("git add -A", { stdio: "pipe" });
-    execSync('git commit -m "brokecli: checkpoint before tool changes" --no-verify', {
+    execSync('git commit -m "checkpoint before tool changes" --no-verify', {
       encoding: "utf-8",
       stdio: "pipe",
     });

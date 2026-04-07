@@ -3,6 +3,8 @@ import { getModelContextLimit, getModelPricing, loadModelCatalog } from "./model
 export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
   totalTokens: number;
   cost: number;
 }
@@ -16,15 +18,22 @@ export function calculateCost(
   inputTokens: number,
   outputTokens: number,
   providerId?: string,
+  cacheTokens?: { cacheReadTokens?: number; cacheWriteTokens?: number },
 ): TokenUsage {
   const pricing = getModelPricing(model, providerId);
+  const cacheReadTokens = cacheTokens?.cacheReadTokens ?? 0;
+  const cacheWriteTokens = cacheTokens?.cacheWriteTokens ?? 0;
   const cost =
     (inputTokens / 1_000_000) * pricing.input +
-    (outputTokens / 1_000_000) * pricing.output;
+    (outputTokens / 1_000_000) * pricing.output +
+    (cacheReadTokens / 1_000_000) * (pricing.cacheRead ?? pricing.input) +
+    (cacheWriteTokens / 1_000_000) * (pricing.cacheWrite ?? pricing.input);
 
   return {
     inputTokens,
     outputTokens,
+    cacheReadTokens,
+    cacheWriteTokens,
     totalTokens: inputTokens + outputTokens,
     cost,
   };

@@ -43,7 +43,7 @@ try {
 <toast>
   <visual>
     <binding template="ToastGeneric">
-      <text>BrokeCLI</text>
+      <text>Terminal Agent</text>
       <text>${escapedMessage}</text>
     </binding>
   </visual>
@@ -57,7 +57,7 @@ try {
 if (-not $shown) {
   try {
     $wshell = New-Object -ComObject WScript.Shell
-    $null = $wshell.Popup('${escapedMessage}', 4, 'BrokeCLI', 0x40)
+    $null = $wshell.Popup('${escapedMessage}', 4, 'Terminal Agent', 0x40)
     $shown = $true
   } catch {}
 }
@@ -78,7 +78,7 @@ if (-not $shown) {
     }
     $icon.Icon = $iconObj
     $icon.BalloonTipIcon = [System.Windows.Forms.ToolTipIcon]::Info
-    $icon.BalloonTipTitle = 'BrokeCLI'
+    $icon.BalloonTipTitle = 'Terminal Agent'
     $icon.BalloonTipText = '${escapedMessage}'
     $icon.Visible = $true
     $icon.ShowBalloonTip(4000)
@@ -106,15 +106,15 @@ try { [console]::write([char]7) } catch {}
     }
 
     if (process.platform === "darwin") {
-      const script = `display notification "${message.replace(/"/g, '\\"')}" with title "BrokeCLI"`;
+      const script = `display notification "${message.replace(/"/g, '\\"')}" with title "Terminal Agent"`;
       const child = spawn("osascript", ["-e", script], { detached: true, stdio: "ignore" });
       child.unref();
       return;
     }
 
     const notifyArgs = iconPath
-      ? ["--icon", iconPath, "BrokeCLI", message]
-      : ["BrokeCLI", message];
+      ? ["--icon", iconPath, "Terminal Agent", message]
+      : ["Terminal Agent", message];
     const child = spawn("notify-send", notifyArgs, {
       detached: true,
       stdio: "ignore",

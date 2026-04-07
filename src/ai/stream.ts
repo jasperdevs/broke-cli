@@ -2,7 +2,7 @@ import { streamText, stepCountIs, type ToolSet } from "ai";
 import type { LanguageModel } from "ai";
 import { calculateCost, type TokenUsage } from "./cost.js";
 import { estimateConversationTokens, estimateTextTokens } from "./tokens.js";
-import { getSettings } from "../core/config.js";
+import { resolveThinkingConfig } from "./thinking.js";
 
 export interface StreamCallbacks {
   onText: (delta: string) => void;
@@ -55,22 +55,24 @@ export async function startStream(
     // Build provider options (thinking/reasoning for supported providers)
     const providerOptions: Record<string, Record<string, Record<string, string | number>>> = {};
     const estimatedInputTokens = estimateConversationTokens(opts.system, messages as Array<{ role: "user" | "assistant"; content: string | Array<{ type: "text"; text: string } | { type: "image"; image: string }> }>, opts.modelId);
-    if (opts.enableThinking) {
-      const level = opts.thinkingLevel || "low";
-      const budgets = getSettings().thinkingBudgets;
+    const thinking = resolveThinkingConfig({
+      providerId: opts.providerId,
+      modelId: opts.modelId,
+      enabled: opts.enableThinking,
+      level: opts.thinkingLevel,
+    });
+    if (thinking.enabled) {
       if (opts.providerId === "anthropic") {
-        // Anthropic: budget-based thinking
-        const budgetTokens = budgets[level as keyof typeof budgets] ?? (level === "minimal" ? 1024 : level === "low" ? 4096 : level === "medium" ? 10240 : level === "high" ? 32768 : 65536);
-        providerOptions.anthropic = { thinking: { type: "enabled", budgetTokens } };
+        providerOptions.anthropic = { thinking: { type: "enabled", budgetTokens: thinking.budgetTokens ?? 4096 } };
       } else if (opts.providerId === "openai") {
-        // OpenAI: reasoning_effort (low/medium/high map directly)
-        providerOptions.openai = { reasoningEffort: { value: level } };
+        providerOptions.openai = { reasoningEffort: { value: thinking.effort ?? "low" } };
       } else if (opts.providerId === "google") {
-        // Google: thinkingBudget
-        const thinkingBudget = budgets[level as keyof typeof budgets] ?? (level === "minimal" ? 1024 : level === "low" ? 4096 : level === "medium" ? 10240 : level === "high" ? 32768 : 65536);
-        providerOptions.google = { thinkingConfig: { thinkingBudget } };
+        providerOptions.google = { thinkingConfig: { thinkingBudget: thinking.budgetTokens ?? 4096 } };
       }
     }
+
+    const normalizeUsageField = (value: unknown): number =>
+      typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
 
     const result = streamText({
       model: opts.model,
@@ -183,11 +185,14 @@ export async function startStream(
     try {
       const usage = await result.usage;
       const estimatedOutputTokens = estimateTextTokens(emittedText + emittedReasoning, opts.modelId);
+      const cacheReadTokens = normalizeUsageField((usage as any).cachedInputTokens ?? (usage as any).cacheReadInputTokens ?? (usage as any).cache_read_input_tokens);
+      const cacheWriteTokens = normalizeUsageField((usage as any).cacheCreationInputTokens ?? (usage as any).cacheWriteInputTokens ?? (usage as any).cache_creation_input_tokens);
       const tokenUsage = calculateCost(
         opts.modelId,
         usage.inputTokens && usage.inputTokens > 0 ? usage.inputTokens : estimatedInputTokens,
         usage.outputTokens && usage.outputTokens > 0 ? usage.outputTokens : estimatedOutputTokens,
         opts.providerId,
+        { cacheReadTokens, cacheWriteTokens },
       );
       callbacks.onAfterResponse?.();
       callbacks.onFinish(tokenUsage);

@@ -3,7 +3,7 @@ import { rmSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import { saveCredentials } from "../src/core/auth.js";
-import { getProviderCredential } from "../src/core/config.js";
+import { getProviderCredential, loadConfig, updateProviderConfig } from "../src/core/config.js";
 import { detectProviders } from "../src/ai/detect.js";
 
 const authPath = join(homedir(), ".brokecli", "auth.json");
@@ -23,8 +23,14 @@ describe("oauth credential detection", () => {
   });
 
   it("includes stored oauth providers in detected provider results", async () => {
-    saveCredentials("google-antigravity", JSON.stringify({ token: "test-token", projectId: "proj-456" }));
-    const providers = await detectProviders();
-    expect(providers.some((provider) => provider.id === "google-antigravity")).toBe(true);
+    const previousDisabled = loadConfig().providers?.["google-antigravity"]?.disabled;
+    try {
+      updateProviderConfig("google-antigravity", { disabled: false });
+      saveCredentials("google-antigravity", JSON.stringify({ token: "test-token", projectId: "proj-456" }));
+      const providers = await detectProviders();
+      expect(providers.some((provider) => provider.id === "google-antigravity")).toBe(true);
+    } finally {
+      updateProviderConfig("google-antigravity", { disabled: previousDisabled ?? null });
+    }
   });
 });

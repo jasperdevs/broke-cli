@@ -107,10 +107,18 @@ export async function bootstrapSession(options: {
 
     let smallModel: ModelHandle | null = null;
     let smallModelId = "";
-    const cheapId = getSmallModelId(activeModel.provider.id);
-    if (cheapId && cheapId !== currentModelId) {
+    const configuredSmallModel = loadConfig().defaultSmallModel?.trim();
+    const configuredSmallProvider = configuredSmallModel?.includes("/")
+      ? configuredSmallModel.slice(0, configuredSmallModel.indexOf("/"))
+      : activeModel.provider.id;
+    const configuredSmallId = configuredSmallModel?.includes("/")
+      ? configuredSmallModel.slice(configuredSmallModel.indexOf("/") + 1)
+      : configuredSmallModel;
+    const cheapProviderId = configuredSmallId ? configuredSmallProvider : activeModel.provider.id;
+    const cheapId = configuredSmallId || getSmallModelId(activeModel.provider.id);
+    if (cheapId && !(cheapProviderId === activeModel.provider.id && cheapId === currentModelId)) {
       try {
-        smallModel = providerRegistry.createModel(activeModel.provider.id, cheapId);
+        smallModel = providerRegistry.createModel(cheapProviderId, cheapId);
         smallModelId = cheapId;
       } catch {
         smallModel = null;

@@ -54,14 +54,14 @@ export async function handleUiSlashCommand(options: {
     case "update": {
       const update = await checkForNewVersion(APP_VERSION);
       if (!update) {
-        app.addMessage("system", `Already on the latest brokecli (${APP_VERSION}).`);
+        app.addMessage("system", `Already on the latest version (${APP_VERSION}).`);
         return { handled: true };
       }
       if (update.command && app.runExternalCommand) {
-        const exitCode = app.runExternalCommand("Update brokecli", update.command.command, update.command.args);
+        const exitCode = app.runExternalCommand("Update", update.command.command, update.command.args);
         if (exitCode === 0) {
           app.clearUpdateNotice?.();
-          app.addMessage("system", `Updated brokecli to v${update.latestVersion}. Restart to use the new version.`);
+          app.addMessage("system", `Updated to v${update.latestVersion}. Restart to use the new version.`);
         } else {
           app.addMessage("system", `Update failed. ${update.instruction}`);
         }

@@ -25,7 +25,7 @@ function formatTokens(n: number): string {
 /** Render the header bar as a single string */
 export function renderHeader(state: HeaderState, width: number): string {
   const theme = currentTheme();
-  const left = `${theme.primary}${BOLD} brokecli${RESET} ${theme.border}│${RESET} ${theme.text}${state.provider}/${state.model}${RESET}`;
+  const left = `${theme.primary}${BOLD} terminal${RESET} ${theme.border}│${RESET} ${theme.text}${state.provider}/${state.model}${RESET}`;
   const streaming = state.isStreaming ? ` ${theme.success}*${RESET}` : "";
   const right = `${theme.primary}${formatCost(state.cost)}${RESET} ${theme.border}│${RESET} ${theme.textMuted}${formatTokens(state.tokens)} tok${streaming} ${RESET}`;
 

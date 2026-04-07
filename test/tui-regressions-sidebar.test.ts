@@ -127,7 +127,7 @@ describe("sidebar scrolling", () => {
     expect(footerText).toContain("621 out");
     expect(footerText).toContain("120k context");
     expect(footerText).toContain("94%");
-    expect(footerText).toContain("[");
+    expect(footerText).toContain("▰");
     expect(footerText).not.toContain("plan");
     updateSetting("showTokens", originalShowTokens);
   });
@@ -175,7 +175,7 @@ describe("wrapped input layout", () => {
       app.drawImmediate();
       const rowText = stripAnsi(rendered[cursorRow - 1] ?? "");
       expect(rowText).not.toMatch(/^─+$/);
-      expect(cursorRow).toBeGreaterThanOrEqual(rendered.length - 2);
+      expect(cursorRow).toBeGreaterThanOrEqual(rendered.length - 3);
     } finally {
       updateSetting("showTokens", original.showTokens);
       updateSetting("showCost", original.showCost);

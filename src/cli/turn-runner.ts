@@ -10,6 +10,7 @@ import type { Session } from "../core/session.js";
 import { runValidationSuite } from "./auto-validate.js";
 import type { ToolName } from "../tools/registry.js";
 import { executeTurn } from "./turn-execution.js";
+import { maybeAutoNameSession } from "./chat-naming.js";
 import {
   canUseSdkTools,
 } from "./turn-runner-support.js";
@@ -45,6 +46,7 @@ interface TurnRunnerApp {
   hasPendingMessages(delivery?: PendingDelivery): boolean;
   flushPendingMessages(delivery: PendingDelivery): void;
   getFileContexts?: () => Map<string, string>;
+  setSessionName?(name: string): void;
 }
 
 interface ExtensionHooks {
@@ -251,6 +253,22 @@ export async function runModelTurn(options: {
   }
 
   if (app.hasPendingMessages("followup")) app.flushPendingMessages("followup");
+
+  if (typeof (session as any).getName !== "function" || session.getName() === "New Session") {
+    const assistantText = app.getLastAssistantContent().trim();
+    if (assistantText) {
+      void maybeAutoNameSession({
+        app,
+        session,
+        userText: text,
+        assistantText,
+        smallModel,
+        smallModelId,
+        activeModel,
+        currentModelId,
+      });
+    }
+  }
 
   return { lastToolCalls: result.nextToolCalls, lastActivityTime: nextActivityTime };
 }

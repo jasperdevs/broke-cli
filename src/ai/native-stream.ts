@@ -2,6 +2,7 @@ import { spawn, type SpawnOptionsWithoutStdio } from "child_process";
 import { calculateCost, type TokenUsage } from "./cost.js";
 import { estimateConversationTokens, estimateTextTokens } from "./tokens.js";
 import { resolveNativeCommand } from "./native-cli.js";
+import { resolveThinkingConfig } from "./thinking.js";
 
 interface NativeMessage {
   role: "user" | "assistant";
@@ -33,7 +34,7 @@ function formatNativePrompt(system: string, messages: NativeMessage[]): string {
   const conversation = messages
     .map((message) => {
       const imageNote = message.images?.length
-        ? `\n[${message.images.length} image(s) were attached to this turn in the original BrokeCLI session.]`
+        ? `\n[${message.images.length} image(s) were attached to this turn in the original session.]`
         : "";
       return `${message.role.toUpperCase()}:\n${message.content}${imageNote}`;
     })
@@ -54,23 +55,27 @@ function toNumber(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
-function extractUsage(usage: unknown): { inputTokens: number; outputTokens: number } {
+function extractUsage(usage: unknown): { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number } {
   const record = typeof usage === "object" && usage !== null ? usage as Record<string, unknown> : {};
   return {
     inputTokens: toNumber(record.input_tokens ?? record.inputTokens),
     outputTokens: toNumber(record.output_tokens ?? record.outputTokens),
+    cacheReadTokens: toNumber(record.cache_read_input_tokens ?? record.cacheReadInputTokens ?? record.cached_input_tokens ?? record.cachedInputTokens),
+    cacheWriteTokens: toNumber(record.cache_creation_input_tokens ?? record.cacheWriteInputTokens ?? record.cache_write_input_tokens ?? record.cacheWriteTokens),
   };
 }
 
 export function normalizeNativeUsage(options: {
   providerId: NativeStreamOptions["providerId"];
-  reported: { inputTokens: number; outputTokens: number };
+  reported: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number };
   estimatedInputTokens: number;
   estimatedOutputTokens: number;
-}): { inputTokens: number; outputTokens: number } {
+}): { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number } {
   const { providerId, reported, estimatedInputTokens, estimatedOutputTokens } = options;
   let inputTokens = reported.inputTokens > 0 ? reported.inputTokens : estimatedInputTokens;
   let outputTokens = reported.outputTokens > 0 ? reported.outputTokens : estimatedOutputTokens;
+  let cacheReadTokens = reported.cacheReadTokens > 0 ? reported.cacheReadTokens : 0;
+  let cacheWriteTokens = reported.cacheWriteTokens > 0 ? reported.cacheWriteTokens : 0;
 
   if (providerId === "codex") {
     // Native Codex can report hidden/orchestration input usage that is far above the
@@ -84,8 +89,10 @@ export function normalizeNativeUsage(options: {
 
   if (outputTokens < 0) outputTokens = estimatedOutputTokens;
   if (inputTokens < 0) inputTokens = estimatedInputTokens;
+  if (cacheReadTokens < 0) cacheReadTokens = 0;
+  if (cacheWriteTokens < 0) cacheWriteTokens = 0;
 
-  return { inputTokens, outputTokens };
+  return { inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens };
 }
 
 function extractClaudeText(message: unknown, blockType: "text" | "thinking"): string {
@@ -144,13 +151,14 @@ function buildClaudeArgs(opts: NativeStreamOptions): string[] {
     opts.system,
   ];
 
-  if (opts.enableThinking) {
-    const effortMap: Record<string, string> = {
-      low: "low",
-      medium: "medium",
-      high: "high",
-    };
-    args.push("--effort", effortMap[opts.thinkingLevel ?? "low"] ?? "low");
+  const thinking = resolveThinkingConfig({
+    providerId: opts.providerId,
+    modelId: opts.modelId,
+    enabled: opts.enableThinking,
+    level: opts.thinkingLevel,
+  });
+  if (thinking.enabled) {
+    args.push("--effort", thinking.effort ?? "low");
   }
 
   if (opts.yoloMode) {
@@ -271,6 +279,10 @@ export async function startNativeStream(
         usage.inputTokens,
         usage.outputTokens,
         opts.providerId,
+        {
+          cacheReadTokens: usage.cacheReadTokens,
+          cacheWriteTokens: usage.cacheWriteTokens,
+        },
       ));
       resolve();
     };

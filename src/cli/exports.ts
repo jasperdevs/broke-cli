@@ -38,7 +38,7 @@ export function buildMarkdownExport(
   cwd: string,
 ): string {
   const header = [
-    "# BrokeCLI Transcript",
+    "# Transcript",
     "",
     `- Exported: ${formatTimestamp(Date.now())}`,
     `- Model: ${providerName}/${modelName}`,
@@ -76,12 +76,12 @@ export function buildHtmlExport(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BrokeCLI Transcript</title>
+<title>Transcript</title>
 </head>
 <body>
 <main class="shell">
   <section class="meta">
-    <h1>BrokeCLI Transcript</h1>
+    <h1>Transcript</h1>
     <div class="meta-row">Model: ${escapeHtml(providerName)}/${escapeHtml(modelName)}</div>
     <div class="meta-row">Directory: ${escapeHtml(cwd)}</div>
     <div class="meta-row">Exported: ${escapeHtml(formatTimestamp(Date.now()))}</div>
@@ -132,7 +132,7 @@ export async function publishTranscriptShare(options: {
         headers: {
           "content-type": "application/json",
           authorization: `Bearer ${token}`,
-          "user-agent": "brokecli",
+          "user-agent": "terminal-agent",
         },
         body: JSON.stringify({
           description: options.description,

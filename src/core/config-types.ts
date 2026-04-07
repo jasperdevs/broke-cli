@@ -112,6 +112,7 @@ export interface Settings {
 export interface BrokeConfig {
   defaultProvider?: string;
   defaultModel?: string;
+  defaultSmallModel?: string;
   budget?: { maxSessionCost?: number; maxMonthlyCost?: number };
   providers?: Record<string, { apiKey?: string; baseUrl?: string; disabled?: boolean }>;
   modelContextLimits?: Record<string, number>;

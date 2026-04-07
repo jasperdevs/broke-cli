@@ -42,15 +42,6 @@ export function drawNow(app: AppState): void {
 export function drawImmediate(app: AppState): void {
   app.lastDrawTime = Date.now();
   app.keypress.setMouseTracking(app.shouldEnableMenuMouse());
-  app.screen.setAlternateScreen?.(!!(
-    app.budgetView
-    || app.agentRunView
-    || app.questionView
-    || app.filePicker
-    || app.itemPicker
-    || app.settingsPicker
-    || app.modelPicker
-  ));
   if (app.budgetView) {
     drawBudgetView(app);
     return;
@@ -77,6 +68,7 @@ export function drawImmediate(app: AppState): void {
   const bottomLines: string[] = [];
   const bottomMenuClicks: Array<{ lineIndex: number; action: () => void }> = [];
 
+  bottomLines.push("");
   bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
   bottomLines.push(...inputLayout.lines);
 
@@ -287,7 +279,7 @@ export function stop(app: AppState): void {
   app.screen.exit();
   app.screen.dispose();
   console.log("");
-  console.log(`${T()}${BOLD} BrokeCLI${RESET} ${DIM}session ended${RESET}`);
+  console.log(`${T()}${BOLD} Session${RESET} ${DIM}ended${RESET}`);
   console.log(`${DIM} ${fmtCost(app.sessionCost)} | ${fmtTokens(app.sessionTokens)} tokens${RESET}`);
   console.log("");
   process.exit(0);

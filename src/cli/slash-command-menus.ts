@@ -163,7 +163,7 @@ export function openExportMenu(args: { app: AnyApp; session: Session; activeMode
   ];
   app.openItemPicker("Export format", items, (id: string) => {
     const shouldCopy = id === "copy-markdown";
-    const defaultPath = `brokecli-export.${id === "html" ? "html" : "md"}`;
+    const defaultPath = `transcript-export.${id === "html" ? "html" : "md"}`;
     const filePath = text.slice(8).trim() || defaultPath;
     const msgs = session.getMessages();
     const content = id === "html"
@@ -194,7 +194,7 @@ export async function shareTranscript(args: { app: AnyApp; session: Session; act
   }
   const filePath = buildShareFilePath(msgs, process.cwd());
   const content = buildHtmlExport(msgs, activeModel?.provider.name ?? "unknown", currentModelId || "unknown", process.cwd());
-  const share = await publishTranscriptShare({ html: content, filePath, description: `BrokeCLI transcript from ${process.cwd()}` });
+  const share = await publishTranscriptShare({ html: content, filePath, description: `Transcript from ${process.cwd()}` });
   const shareUrl = share.url;
   try {
     if (process.platform === "win32") execSync("clip", { input: shareUrl });
@@ -252,7 +252,7 @@ export async function handleLogoutMenu(args: { app: AnyApp; restText: string; ac
     const knownTargets = listLogoutTargets();
     const targets = normalized === "all" ? knownTargets : normalized ? [normalized] : [];
     if (targets.length === 0) {
-      app.addMessage("system", "No stored brokecli credentials found to clear.");
+      app.addMessage("system", "No stored credentials found to clear.");
       return;
     }
     const cleared: string[] = [];
@@ -275,9 +275,9 @@ export async function handleLogoutMenu(args: { app: AnyApp; restText: string; ac
     }
     if (normalized === "all" || (activeModel && targets.includes(activeModel.provider.id))) updateSetting("lastModel", "");
     await refreshProviderState(true);
-    if (cleared.length > 0) app.addMessage("system", `Cleared stored brokecli auth for: ${cleared.join(", ")}`);
+    if (cleared.length > 0) app.addMessage("system", `Cleared stored auth for: ${cleared.join(", ")}`);
     if (external.length > 0) app.addMessage("system", `External env/native auth still active: ${external.join(", ")}`);
-    if (cleared.length === 0 && external.length === 0) app.addMessage("system", "No stored brokecli credentials found to clear.");
+    if (cleared.length === 0 && external.length === 0) app.addMessage("system", "No stored credentials found to clear.");
   };
 
   if (restText) {
@@ -286,7 +286,7 @@ export async function handleLogoutMenu(args: { app: AnyApp; restText: string; ac
   }
   const targets = listLogoutTargets();
   if (targets.length === 0) {
-    openEmptyItemMenu(app, "Logout", "no stored brokecli credentials", "logout");
+    openEmptyItemMenu(app, "Logout", "no stored credentials", "logout");
     return;
   }
   const items = [

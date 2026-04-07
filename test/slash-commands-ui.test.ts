@@ -30,32 +30,38 @@ describe("slash command UI surfaces", () => {
   it("reloads extensions immediately when toggled with enter", async () => {
     mkdirSync(extDir, { recursive: true });
     writeFileSync(extPath, "exports.register = () => {};", "utf-8");
+    const originalDiscoverExtensions = loadConfig().settings?.discoverExtensions;
+    updateSetting("discoverExtensions", true);
 
-    const app = createAppStub();
-    let reloaded = 0;
-    let latestItems: Array<{ id: string; label: string; detail?: string }> = [];
-    let onSelect: ((id: string) => void) | null = null;
-    app.openItemPicker = (_title: string, _items: any[], nextOnSelect: (id: string) => void) => {
-      onSelect = nextOnSelect;
-    };
-    app.updateItemPickerItems = (items: Array<{ id: string; label: string; detail?: string }>) => {
-      latestItems = items;
-    };
+    try {
+      const app = createAppStub();
+      let reloaded = 0;
+      let latestItems: Array<{ id: string; label: string; detail?: string }> = [];
+      let onSelect: ((id: string) => void) | null = null;
+      app.openItemPicker = (_title: string, _items: any[], nextOnSelect: (id: string) => void) => {
+        onSelect = nextOnSelect;
+      };
+      app.updateItemPickerItems = (items: Array<{ id: string; label: string; detail?: string }>) => {
+        latestItems = items;
+      };
 
-    await handleSlashCommand({
-      text: "/extensions",
-      app,
-      session: new Session(`test-extensions-${Date.now()}`),
-      ...createSlashArgs({
-        hooks: { emit() {}, reload() { reloaded += 1; } },
-      }),
-    });
+      await handleSlashCommand({
+        text: "/extensions",
+        app,
+        session: new Session(`test-extensions-${Date.now()}`),
+        ...createSlashArgs({
+          hooks: { emit() {}, reload() { reloaded += 1; } },
+        }),
+      });
 
-    onSelect?.("slash-test-extension");
+      onSelect?.("slash-test-extension");
 
-    expect(reloaded).toBe(1);
-    expect(loadConfig().settings?.disabledExtensions).toContain("slash-test-extension");
-    expect(latestItems.length === 0 || latestItems.some((item) => item.id === "slash-test-extension")).toBe(true);
+      expect(reloaded).toBe(1);
+      expect(loadConfig().settings?.disabledExtensions).toContain("slash-test-extension");
+      expect(latestItems.length === 0 || latestItems.some((item) => item.id === "slash-test-extension")).toBe(true);
+    } finally {
+      updateSetting("discoverExtensions", originalDiscoverExtensions ?? true);
+    }
   });
 
   it("opens an empty extensions picker instead of writing a transcript message", async () => {
@@ -288,7 +294,7 @@ describe("slash command UI surfaces", () => {
       expect(result.handled).toBe(true);
       expect(getCredentials("openai")).toBeNull();
       expect(loadConfig().providers?.openai?.apiKey).toBeUndefined();
-      expect(app.messages.some((entry) => entry.content.includes("Cleared stored brokecli auth for: openai"))).toBe(true);
+      expect(app.messages.some((entry) => entry.content.includes("Cleared stored auth for: openai"))).toBe(true);
     } finally {
       if (previousConfig == null) {
         if (existsSync(configPath)) unlinkSync(configPath);

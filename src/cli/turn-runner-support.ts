@@ -33,8 +33,18 @@ export function shouldSuppressPlanningNarration(nextText: string, policy: { arch
     || normalized.startsWith("need ")
     || normalized.startsWith("i'm checking")
     || normalized.startsWith("i am checking")
+    || normalized.startsWith("checking ")
+    || normalized.startsWith("reading ")
+    || normalized.startsWith("looking ")
+    || normalized.startsWith("inspecting ")
+    || normalized.startsWith("i'll ")
+    || normalized.startsWith("i will ")
+    || normalized.startsWith("let me ")
     || normalized.startsWith("design dir")
-    || normalized.startsWith("repo read next");
+    || normalized.startsWith("repo read next")
+    || normalized.startsWith("before editing")
+    || normalized.startsWith("before recreating")
+    || normalized.startsWith("i need to");
 }
 
 export function formatTurnErrorMessage(options: {

@@ -50,7 +50,7 @@ export function renderHomeView(options: {
   const mascotInline = canShowMascot ? fullMascot : [];
   const mascotWidth = visibleWidth(mascotInline[0] ?? "");
   const gap = mascotWidth > 0 ? 2 : 0;
-  const headerCandidates = ["Welcome to BrokeCLI", "Welcome"];
+  const headerCandidates = ["Welcome"];
   const headerText = headerCandidates.find((candidate) => mascotWidth + gap + candidate.length <= contentWidth) ?? headerCandidates[headerCandidates.length - 1];
   const rightWidth = mascotWidth > 0 ? Math.max(18, contentWidth - mascotWidth - gap) : contentWidth;
   const locationBase = formatShortCwd(Math.max(10, rightWidth - 1));

@@ -81,7 +81,7 @@ describe("sidebar token summary", () => {
     const app = new App() as any;
     app.setContextUsage(132, 344_000);
     app.updateUsage(0.0016, 150, 60);
-    expect(app.renderTokenSummaryParts()).toEqual(["210 total", "150 in", "60 out"]);
+    expect(app.renderTokenSummaryParts()).toEqual(["210 total", "$0.0016", "150 in", "60 out"]);
   });
 
   it("shows only lifetime totals plus current context usage in the sidebar footer", () => {
@@ -94,11 +94,12 @@ describe("sidebar token summary", () => {
     expect(footer).not.toContain("Session");
     expect(footer).not.toContain("Next request");
     expect(footer).toContain("210 total");
+    expect(footer).toContain("$0.0016");
     expect(footer).toContain("150 in");
     expect(footer).toContain("60 out");
     expect(footer).toContain("132 context");
     expect(footer).toContain("<1%");
-    expect(footer).toContain("[");
+    expect(footer).toContain("▰");
     updateSetting("showTokens", originalShowTokens);
   });
 
@@ -112,11 +113,12 @@ describe("sidebar token summary", () => {
     app.updateUsage(0.0016, 150, 60);
     const footer = app.renderSidebarFooter().map((line: string) => stripAnsi(line));
     expect(footer.some((line: string) => line.trim() === "210 total")).toBe(true);
+    expect(footer.some((line: string) => line.trim() === "$0.0016")).toBe(true);
     expect(footer.some((line: string) => line.trim() === "150 in")).toBe(true);
     expect(footer.some((line: string) => line.trim() === "60 out")).toBe(true);
     expect(footer.some((line: string) => line.trim() === "132k context")).toBe(true);
     expect(footer.some((line: string) => line.includes("38%"))).toBe(true);
-    expect(footer.some((line: string) => line.includes("["))).toBe(true);
+    expect(footer.some((line: string) => line.includes("▰") || line.includes("▱"))).toBe(true);
     updateSetting("cavemanLevel", "off");
     updateSetting("showTokens", originalShowTokens);
   });
@@ -130,7 +132,7 @@ describe("sidebar token summary", () => {
     const footer = app.renderSidebarFooter().map((line: string) => stripAnsi(line)).join("\n");
     expect(footer).toContain("822 context");
     expect(footer).toContain("<1%");
-    expect(footer).toContain("[");
+    expect(footer).toContain("▰");
     updateSetting("showTokens", originalShowTokens);
   });
 
@@ -209,7 +211,7 @@ describe("startup home view", () => {
     const output = rendered.map((line) => stripAnsi(line)).join("\n");
     const firstCardLine = rendered.find((line) => stripAnsi(line).includes("╭")) ?? "";
     expect(stripAnsi(firstCardLine)).toContain("╭");
-    expect(output).toContain("Welcome to BrokeCLI");
+    expect(output).toContain("Welcome");
     expect(output).toContain("openai/gpt-5.4-mini");
     expect(output).toContain("~\\Downloads\\broke-cli");
     expect(output).toContain("Tip");
@@ -238,7 +240,7 @@ describe("startup home view", () => {
     expect(output).toContain("Update available");
     expect(output).toContain("Latest v0.0.2");
     expect(output).toContain("/update");
-    expect(output).toContain("Welcome to BrokeCLI");
+    expect(output).toContain("Welcome");
   });
 
   it("only enables the sidebar after chat starts", () => {
@@ -297,8 +299,8 @@ describe("input editing", () => {
   it("uses the normal prompt box as the filter input for picker menus", () => {
     const app = new App() as any;
     app.openItemPicker("Theme", [
-      { id: "brokecli-dark", label: "BrokeCLI Dark", detail: "dark" },
-      { id: "brokecli-light", label: "BrokeCLI Light", detail: "light" },
+      { id: "brokecli-dark", label: "Default Dark", detail: "dark" },
+      { id: "brokecli-light", label: "Default Light", detail: "light" },
     ], () => {}, { kind: "theme" });
     expect(app.input.getText()).toBe("/theme ");
     for (const char of "light") app.handleKey({ name: char, char, ctrl: false, meta: false, shift: false });

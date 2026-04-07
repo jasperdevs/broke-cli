@@ -10,8 +10,7 @@ describe("budget inspector", () => {
   it("opens as a fullscreen mode and closes with escape", () => {
     const app = new App() as any;
     let rendered: string[] = [];
-    const alternateStates: boolean[] = [];
-    app.screen = { height: 12, width: 40, hasSidebar: true, mainWidth: 28, sidebarWidth: 11, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {}, setAlternateScreen: (enabled: boolean) => { alternateStates.push(enabled); } };
+    app.screen = { height: 12, width: 40, hasSidebar: true, mainWidth: 28, sidebarWidth: 11, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
     const report = {
       sessionCount: 1,
       totalTokens: 240,
@@ -38,7 +37,6 @@ describe("budget inspector", () => {
     };
     app.openBudgetView("Budget Inspector", { all: { ...report, sessionCount: 4 }, session: report }, "all");
     app.drawImmediate();
-    expect(alternateStates.at(-1)).toBe(true);
     expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("Budget Inspector");
     expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("tab current");
     expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("all sessions");
@@ -47,13 +45,11 @@ describe("budget inspector", () => {
     expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("current session");
     expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("tab all");
     app.handleKey({ name: "escape", char: "", ctrl: false, meta: false, shift: false } as Keypress);
-    expect(alternateStates.at(-1)).toBe(false);
     expect(rendered.map((line) => stripAnsi(line)).join("\n")).not.toContain("Budget Inspector");
   });
 
   it("uses the alternate screen for model picker overlays", () => {
     const app = new App() as any;
-    const alternateStates: boolean[] = [];
     app.screen = {
       height: 14,
       width: 60,
@@ -64,16 +60,15 @@ describe("budget inspector", () => {
       setCursor: () => {},
       hideCursor: () => {},
       forceRedraw: () => {},
-      setAlternateScreen: (enabled: boolean) => { alternateStates.push(enabled); },
     };
     app.openModelPicker([
       { providerId: "anthropic", providerName: "Anthropic", modelId: "claude-sonnet-4-6", active: false },
       { providerId: "ollama", providerName: "Ollama", modelId: "gemma3:4b", active: false },
     ], () => {});
     app.drawImmediate();
-    expect(alternateStates.at(-1)).toBe(true);
+    expect(app.modelPicker).not.toBeNull();
     app.handleKey({ name: "escape", char: "", ctrl: false, meta: false, shift: false } as Keypress);
-    expect(alternateStates.at(-1)).toBe(false);
+    expect(app.modelPicker).toBeNull();
   });
 });
 

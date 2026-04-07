@@ -15,6 +15,7 @@ export interface SidebarFooterColors {
   text: string;
   warning: string;
   error: string;
+  dim: string;
 }
 
 function formatContextPercentLabel(contextPercent: number): string {
@@ -25,14 +26,17 @@ function formatContextPercentLabel(contextPercent: number): string {
 
 function buildContextMeter(width: number, contextPercent: number, colors: SidebarFooterColors): string {
   const percent = formatContextPercentLabel(contextPercent);
-  const available = Math.max(4, width - percent.length - 8);
-  const fillWidth = Math.max(4, Math.min(8, available));
-  const filled = Math.max(0, Math.min(fillWidth, Math.round((Math.max(0, contextPercent) / 100) * fillWidth)));
+  const available = Math.max(4, width - percent.length - 6);
+  const fillWidth = Math.max(4, Math.min(6, available));
+  const ratio = Math.max(0, Math.min(1, contextPercent / 100));
+  const filled = ratio > 0
+    ? Math.max(1, Math.min(fillWidth, Math.round(ratio * fillWidth)))
+    : 0;
   const empty = Math.max(0, fillWidth - filled);
   const fillColor = contextPercent > 90 ? colors.error : contextPercent > 70 ? colors.warning : colors.accent;
-  const fill = filled > 0 ? `${fillColor}${"█".repeat(filled)}${RESET}` : "";
-  const rest = empty > 0 ? `${colors.muted}${"░".repeat(empty)}${RESET}` : "";
-  return `${colors.muted}[${RESET}${fill}${rest}${colors.muted}]${RESET} ${fillColor}${percent}${RESET}`;
+  const fill = filled > 0 ? `${fillColor}${"▰".repeat(filled)}${RESET}` : "";
+  const rest = empty > 0 ? `${colors.dim}${"▱".repeat(empty)}${RESET}` : "";
+  return `${fill}${rest} ${fillColor}${percent}${RESET}`;
 }
 
 const fileTreeCache = new Map<string, { at: number; items: SidebarTreeItem[] }>();
@@ -101,8 +105,7 @@ export function buildSidebarFooterLines(options: {
   }
 
   if (contextUsed !== undefined && contextTokens) {
-    const contextColor = contextUsed > 90 ? colors.error : contextUsed > 70 ? colors.warning : colors.text;
-    lines.push(`${contextColor}${contextTokens} context${RESET}`);
+    lines.push(`${colors.text}${contextTokens} context${RESET}`);
     lines.push(buildContextMeter(width, contextUsed, colors));
   }
 

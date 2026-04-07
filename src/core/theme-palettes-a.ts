@@ -3,7 +3,7 @@ import type { ThemePalette } from "./theme-types.js";
 export const THEME_PALETTES_A: ThemePalette[] = [
   {
     key: "brokecli-dark",
-    label: "BrokeCLI Dark",
+    label: "Default Dark",
     dark: true,
     primary: [58, 199, 58],
     secondary: [42, 154, 42],
@@ -26,7 +26,7 @@ export const THEME_PALETTES_A: ThemePalette[] = [
   },
   {
     key: "brokecli-light",
-    label: "BrokeCLI Light",
+    label: "Default Light",
     dark: false,
     primary: [34, 136, 34],
     secondary: [70, 112, 70],
@@ -49,7 +49,7 @@ export const THEME_PALETTES_A: ThemePalette[] = [
   },
   {
     key: "codex",
-    label: "Codex",
+    label: "Blue Steel",
     dark: true,
     primary: [84, 154, 255],
     secondary: [118, 176, 255],
@@ -72,7 +72,7 @@ export const THEME_PALETTES_A: ThemePalette[] = [
   },
   {
     key: "opencode",
-    label: "OpenCode",
+    label: "Night Signal",
     dark: true,
     primary: [122, 162, 247],
     secondary: [187, 154, 247],
@@ -95,7 +95,7 @@ export const THEME_PALETTES_A: ThemePalette[] = [
   },
   {
     key: "pi",
-    label: "Pi",
+    label: "Paper Sky",
     dark: false,
     primary: [41, 114, 255],
     secondary: [91, 139, 255],

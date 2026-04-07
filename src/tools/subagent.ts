@@ -75,7 +75,7 @@ export function buildAgentSystemPrompt(cwd: string, providerId?: string): string
   const base = buildSystemPrompt(cwd, providerId, "build", resolveCavemanLevel(getSettings().cavemanLevel ?? "auto", ""));
   return [
     base,
-    "You are a delegated agent running inside BrokeCLI.",
+    "You are a delegated agent running inside this terminal agent.",
     "You are stateless. You get one prompt, you do the work autonomously, and you return one final report to the parent agent.",
     "Use only read-only search and inspection tools. Do not modify files. Do not claim to have changed anything.",
     "Prefer searching, listing, and reading over guessing. Trust your result enough to be concise.",
