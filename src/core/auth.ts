@@ -10,11 +10,14 @@ export interface AuthCredentials {
 
 const CONFIG_DIR = join(homedir(), ".brokecli");
 const AUTH_FILE = join(CONFIG_DIR, "auth.json");
+let cachedAuthData: Record<string, AuthCredentials> | null = null;
 
 function readAuthData(): Record<string, AuthCredentials> {
+  if (cachedAuthData) return { ...cachedAuthData };
   if (!existsSync(AUTH_FILE)) return {};
   try {
-    return JSON.parse(readFileSync(AUTH_FILE, "utf-8"));
+    cachedAuthData = JSON.parse(readFileSync(AUTH_FILE, "utf-8"));
+    return { ...cachedAuthData };
   } catch {
     return {};
   }
@@ -22,6 +25,7 @@ function readAuthData(): Record<string, AuthCredentials> {
 
 function writeAuthData(data: Record<string, AuthCredentials>): void {
   mkdirSync(CONFIG_DIR, { recursive: true });
+  cachedAuthData = { ...data };
   writeFileSync(AUTH_FILE, JSON.stringify(data, null, 2), "utf-8");
 }
 
@@ -74,6 +78,10 @@ export function listAuthenticated(): string[] {
   if (getClaudeToken() && !authed.includes("anthropic")) authed.push("anthropic");
 
   return authed;
+}
+
+export function resetAuthCacheForTests(): void {
+  cachedAuthData = null;
 }
 
 /** Read Codex CLI auth token from ~/.codex/auth.json */

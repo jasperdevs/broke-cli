@@ -26,8 +26,9 @@ import { createProgram } from "../src/cli/program.js";
 import { ensureConfiguredPackagesInstalled } from "../src/core/package-manager.js";
 import { checkForNewVersion } from "../src/core/update.js";
 import { isSkippedPromptAnswer, isValidHttpBaseUrl, normalizeThinkingLevel, normalizeProgramArgv, readPromptArg, splitModelArg } from "../src/cli/cli-helpers.js";
-import { listResolvedModelPreferences, resolveConfiguredModelHandle, type SpecialistModelRole } from "../src/cli/model-routing.js";
-
+import { resolvePreferredMode, type SpecialistModelRole } from "../src/cli/model-routing.js";
+import { buildVisibleRuntimeModelOptions, rebuildSmallModelState as computeSmallModelState, resolveSpecialistRuntimeModel } from "../src/cli/runtime-models.js";
+import { getTurnPolicy } from "../src/core/turn-policy.js";
 const program = createProgram(APP_VERSION);
 
 program.action(async (promptParts, opts) => {
@@ -147,7 +148,7 @@ program.action(async (promptParts, opts) => {
 
   const app = new App();
   app.setVersion(program.version() ?? APP_VERSION);
-  let currentMode: Mode = "build";
+  let currentMode: Mode = getSettings().mode;
   let lastActivityTime = Date.now(); // Track for cache expiry warning
 
   const buildRuntimeSystemPrompt = (providerId?: string): string => {
@@ -158,6 +159,17 @@ program.action(async (promptParts, opts) => {
   };
 
   let systemPrompt = buildRuntimeSystemPrompt(undefined);
+
+  const applyMode = (nextMode: Mode, options?: { status?: string }) => {
+    if (currentMode === nextMode) {
+      if (options?.status) app.setStatus(options.status);
+      return;
+    }
+    currentMode = nextMode;
+    app.setMode(nextMode);
+    systemPrompt = buildRuntimeSystemPrompt(activeModel?.provider?.id);
+    if (options?.status) app.setStatus(options.status);
+  };
 
   // Resume or new session
   let session: Session;
@@ -203,8 +215,7 @@ program.action(async (promptParts, opts) => {
   let scopedModelIndex = -1;
 
   app.onModeToggle((newMode) => {
-    currentMode = newMode;
-    systemPrompt = buildRuntimeSystemPrompt(activeModel?.provider?.id);
+    applyMode(newMode);
   });
 
   app.onCavemanToggle((level) => {
@@ -253,41 +264,17 @@ program.action(async (promptParts, opts) => {
   }
 
   function rebuildSmallModelState(): void {
-    smallModel = null;
-    smallModelId = "";
-    if (!activeModel) return;
-    if (activeModel.provider.id === "codex" && activeModel.runtime === "native-cli") return;
-    const resolved = resolveConfiguredModelHandle(providerRegistry, activeModel, currentModelId, "small");
-    if (!resolved || resolved.modelId === currentModelId) return;
-    smallModel = resolved.model;
-    smallModelId = resolved.modelId;
+    const next = computeSmallModelState(providerRegistry, activeModel, currentModelId);
+    smallModel = next.smallModel;
+    smallModelId = next.smallModelId;
   }
 
   function resolveSpecialistModel(role: SpecialistModelRole): { model: ModelHandle; modelId: string } | null {
-    if (!activeModel) return null;
-    const resolved = resolveConfiguredModelHandle(providerRegistry, activeModel, currentModelId, role);
-    return resolved ? { model: resolved.model, modelId: resolved.modelId } : null;
+    return resolveSpecialistRuntimeModel(providerRegistry, activeModel, currentModelId, role);
   }
 
   function buildVisibleModelOptions(): Array<{ providerId: string; providerName: string; modelId: string; active: boolean; badges?: string[] }> {
-    const fallbackProviderId = activeModel?.provider.id ?? providers[0]?.id ?? "openai";
-    const preferences = listResolvedModelPreferences(fallbackProviderId);
-    const preserved = Object.values(preferences).map((entry) => entry.key);
-    const currentKey = activeModel ? `${activeModel.provider.id}/${currentModelId}` : "";
-    return providerRegistry
-      .buildVisibleModelOptions(activeModel, currentModelId, getSettings().scopedModels, preserved)
-      .map((option) => {
-        const key = `${option.providerId}/${option.modelId}`;
-        const badges: string[] = [];
-        if (key === currentKey) badges.push("now");
-        if (preferences.default?.key === key) badges.push("default");
-        if (preferences.small?.key === key) badges.push("small");
-        if (preferences.review?.key === key) badges.push("review");
-        if (preferences.planning?.key === key) badges.push("plan");
-        if (preferences.ui?.key === key) badges.push("ui");
-        if (preferences.architecture?.key === key) badges.push("arch");
-        return { ...option, badges };
-      });
+    return buildVisibleRuntimeModelOptions(providerRegistry, activeModel, currentModelId, providers);
   }
 
   const initPromise = (async () => {
@@ -391,6 +378,9 @@ program.action(async (promptParts, opts) => {
           rebuildSmallModelState();
           systemPrompt = buildRuntimeSystemPrompt(nextModel.provider.id);
         },
+        onModeChange: (nextMode) => {
+          applyMode(nextMode);
+        },
         onModelRoutingChange: () => {
           rebuildSmallModelState();
         },
@@ -466,6 +456,20 @@ program.action(async (promptParts, opts) => {
     if (!activeModel) {
       app.addMessage("system", "No provider configured. Run /connect.");
       return;
+    }
+    const modeSwitching = getSettings().modeSwitching;
+    if (modeSwitching !== "manual") {
+      const preferredMode = resolvePreferredMode(text, getTurnPolicy(text, lastToolCalls).archetype, currentMode);
+      if (preferredMode) {
+        let shouldSwitch = modeSwitching === "auto";
+        if (!shouldSwitch && modeSwitching === "ask") {
+          const answer = await app.showQuestion(`Switch to ${preferredMode.mode} mode for this turn?`, ["Switch", "Stay"]);
+          shouldSwitch = answer === "Switch";
+        }
+        if (shouldSwitch) {
+          applyMode(preferredMode.mode, { status: `Mode: ${preferredMode.mode} - ${preferredMode.reason}` });
+        }
+      }
     }
     touchProject(process.cwd(), session.getId(), text);
     const turnResult = await runModelTurn({

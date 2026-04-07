@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { getCredentials, saveCredentials } from "../src/core/auth.js";
+import { getCredentials, resetAuthCacheForTests, saveCredentials } from "../src/core/auth.js";
 import { loadConfig, updateProviderConfig, updateSetting } from "../src/core/config.js";
 import { handleSlashCommand } from "../src/cli/slash-commands.js";
 import { Session } from "../src/core/session.js";
@@ -27,6 +27,46 @@ afterEach(() => {
 });
 
 describe("slash command UI surfaces", () => {
+  it("exposes mode switching in /settings", async () => {
+    const app = createAppStub();
+    let settingsEntries: Array<{ key: string; label: string; value: string; description: string }> = [];
+    app.openSettings = (entries: Array<{ key: string; label: string; value: string; description: string }>) => {
+      settingsEntries = entries;
+    };
+
+    const result = await handleSlashCommand({
+      text: "/settings",
+      app,
+      session: new Session(`test-settings-mode-${Date.now()}`),
+      ...createSlashArgs(),
+    });
+
+    expect(result.handled).toBe(true);
+    expect(settingsEntries.some((entry) => entry.key === "mode")).toBe(true);
+    expect(settingsEntries.some((entry) => entry.key === "modeSwitching")).toBe(true);
+  });
+
+  it("opens a mode picker for /mode", async () => {
+    const app = createAppStub();
+    let pickerTitle = "";
+    let pickerItems: Array<{ id: string; label: string; detail?: string }> = [];
+    app.openItemPicker = (title: string, items: Array<{ id: string; label: string; detail?: string }>) => {
+      pickerTitle = title;
+      pickerItems = items;
+    };
+
+    const result = await handleSlashCommand({
+      text: "/mode",
+      app,
+      session: new Session(`test-mode-picker-${Date.now()}`),
+      ...createSlashArgs(),
+    });
+
+    expect(result.handled).toBe(true);
+    expect(pickerTitle).toBe("Mode");
+    expect(pickerItems.map((item) => item.id)).toEqual(["build", "plan"]);
+  });
+
   it("reloads extensions immediately when toggled with enter", async () => {
     mkdirSync(extDir, { recursive: true });
     writeFileSync(extPath, "exports.register = () => {};", "utf-8");
@@ -280,6 +320,7 @@ describe("slash command UI surfaces", () => {
       } else {
         writeFileSync(authPath, previousAuth, "utf-8");
       }
+      resetAuthCacheForTests();
     }
   });
 });

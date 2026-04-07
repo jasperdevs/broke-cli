@@ -37,7 +37,7 @@ export interface SlashCommandApp {
       onSecondaryAction?: (id: string) => void;
       secondaryHint?: string;
       closeOnSelect?: boolean;
-      kind?: "login" | "connect" | "permissions" | "extensions" | "theme" | "export" | "resume" | "session" | "hotkeys" | "tree" | "templates" | "skills" | "changelog" | "projects" | "logout";
+      kind?: "login" | "connect" | "mode" | "permissions" | "extensions" | "theme" | "export" | "resume" | "session" | "hotkeys" | "tree" | "templates" | "skills" | "changelog" | "projects" | "logout";
     },
   ): void;
   openTreeView?(title: string, session: Session, onSelect: (entryId: string) => void | Promise<void>): void;
@@ -81,6 +81,7 @@ export interface HandleSlashCommandOptions {
   getContextOptimizer: () => ReturnType<Session["getContextOptimizer"]>;
   onSessionReplace: (session: Session) => void;
   onModelChange: (model: ModelHandle, modelId: string) => void;
+  onModeChange: (mode: Mode) => void;
   onModelRoutingChange?: () => void;
   onSystemPromptChange: (systemPrompt: string) => void;
   hooks: ExtensionHooks;

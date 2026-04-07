@@ -4,6 +4,7 @@ import { join } from "path";
 import { homedir } from "os";
 import { runLoginFlow } from "../src/cli/login-flow.js";
 import { OAUTH_PROVIDERS } from "../src/cli/oauth-providers.js";
+import { resetAuthCacheForTests } from "../src/core/auth.js";
 
 vi.mock("../src/cli/oauth-login-support.js", () => ({
   runOAuthProviderLogin: vi.fn(async () => {}),
@@ -21,6 +22,7 @@ const authPath = join(homedir(), ".brokecli", "auth.json");
 
 afterEach(() => {
   rmSync(authPath, { force: true });
+  resetAuthCacheForTests();
   vi.clearAllMocks();
 });
 

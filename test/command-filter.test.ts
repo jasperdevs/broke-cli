@@ -26,6 +26,7 @@ describe("command-aware filtering", () => {
   it("keeps the command browser aligned with shipped session/template actions", () => {
     const names = getCommandMatches("/").map((entry) => entry.name);
     expect(names).toContain("fork");
+    expect(names).toContain("mode");
     expect(names).toContain("templates");
   });
 

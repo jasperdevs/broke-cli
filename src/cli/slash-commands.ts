@@ -25,6 +25,7 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
     getContextOptimizer,
     onSessionReplace,
     onModelChange,
+    onModeChange,
     onModelRoutingChange,
     onSystemPromptChange,
     hooks,
@@ -96,7 +97,26 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
       return { handled: true };
     }
     case "settings": {
-      openSettingsMenu({ app, activeModel, currentMode, onSystemPromptChange });
+      openSettingsMenu({ app, activeModel, currentMode, onModeChange, onSystemPromptChange });
+      return { handled: true };
+    }
+    case "mode": {
+      const setMode = (nextMode: Mode) => {
+        updateSetting("mode", nextMode);
+        onModeChange(nextMode);
+        onSystemPromptChange(buildSystemPrompt(process.cwd(), activeModel?.provider?.id, nextMode, getSettings().cavemanLevel ?? "auto"));
+        app.setStatus?.(`Mode: ${nextMode}`);
+      };
+      if (restText === "build" || restText === "plan") {
+        setMode(restText);
+        return { handled: true };
+      }
+      app.openItemPicker("Mode", [
+        { id: "build", label: "Build", detail: "make changes directly with tools" },
+        { id: "plan", label: "Plan", detail: "outline and think before edits" },
+      ], (id: string) => {
+        if (id === "build" || id === "plan") setMode(id);
+      }, { kind: "mode" });
       return { handled: true };
     }
     case "permissions": {

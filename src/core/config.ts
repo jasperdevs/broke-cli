@@ -6,6 +6,7 @@ import { parse as parseJsonc } from "jsonc-parser";
 import { getCredentials } from "./auth.js";
 export type {
   Mode,
+  ModeSwitchingPolicy,
   ThinkingLevel,
   CavemanLevel,
   TreeFilterMode,

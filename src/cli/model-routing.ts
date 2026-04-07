@@ -1,7 +1,7 @@
 import type { ProviderRegistry } from "../ai/provider-registry.js";
 import type { ModelHandle } from "../ai/providers.js";
 import { getSmallModelId } from "../ai/router.js";
-import { getConfiguredModelPreference, type ModelPreferenceSlot } from "../core/config.js";
+import { getConfiguredModelPreference, type Mode, type ModelPreferenceSlot } from "../core/config.js";
 import type { TurnArchetype } from "../core/turn-policy.js";
 
 export type SpecialistModelRole = Exclude<ModelPreferenceSlot, "default" | "small">;
@@ -56,6 +56,33 @@ export function resolvePreferredSpecialistRole(userMessage: string, archetype: T
   }
   if (archetype === "planning" || archetype === "research") return "planning";
   return null;
+}
+
+export function resolvePreferredMode(
+  userMessage: string,
+  archetype: TurnArchetype,
+  currentMode: Mode,
+): { mode: Mode; reason: string } | null {
+  const msg = userMessage.toLowerCase();
+  let nextMode: Mode | null = null;
+  let reason = "";
+
+  if (/\b(plan|planning|roadmap|strategy|tradeoff|approach)\b/i.test(msg) || archetype === "planning") {
+    nextMode = "plan";
+    reason = "planning turn";
+  } else if (/\b(architecture|architect|service boundary|service boundaries|system design|migration plan|api design|domain model)\b/i.test(msg)) {
+    nextMode = "plan";
+    reason = "architecture turn";
+  } else if (archetype === "edit" || archetype === "bugfix" || archetype === "shell") {
+    nextMode = "build";
+    reason = archetype === "shell" ? "execution turn" : "implementation turn";
+  } else if (/\b(ui|ux|frontend|front-end|css|layout|spacing|responsive|component styling)\b/i.test(msg)) {
+    nextMode = "build";
+    reason = "ui implementation turn";
+  }
+
+  if (!nextMode || nextMode === currentMode) return null;
+  return { mode: nextMode, reason };
 }
 
 export function resolveConfiguredModelHandle(

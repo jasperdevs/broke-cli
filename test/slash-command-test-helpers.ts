@@ -68,6 +68,7 @@ export function createSlashArgs(overrides: Record<string, unknown> = {}) {
     getContextOptimizer: () => ({ reset() {} }) as any,
     onSessionReplace: () => {},
     onModelChange: () => {},
+    onModeChange: () => {},
     onSystemPromptChange: () => {},
     hooks: { emit() {} },
     onProjectChange: () => {},

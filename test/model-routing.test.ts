@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { resolveExecutionTarget } from "../src/cli/turn-runner-support.js";
-import { resolvePreferredSpecialistRole } from "../src/cli/model-routing.js";
+import { resolvePreferredMode, resolvePreferredSpecialistRole } from "../src/cli/model-routing.js";
 
 const mainModel = {
   provider: { id: "openai", name: "OpenAI", defaultModel: "gpt-5.4-mini", models: ["gpt-5.4-mini"] },
@@ -21,6 +21,18 @@ describe("specialist model routing", () => {
     expect(resolvePreferredSpecialistRole("polish the landing page spacing and typography", "edit")).toBe("ui");
     expect(resolvePreferredSpecialistRole("review this diff for bugs", "review")).toBe("review");
     expect(resolvePreferredSpecialistRole("plan the system boundaries for this migration", "planning")).toBe("architecture");
+  });
+
+  it("detects when a turn should switch between plan and build", () => {
+    expect(resolvePreferredMode("plan the service boundaries for this migration", "planning", "build")).toEqual({
+      mode: "plan",
+      reason: "planning turn",
+    });
+    expect(resolvePreferredMode("fix the broken sidebar footer wrap", "bugfix", "plan")).toEqual({
+      mode: "build",
+      reason: "implementation turn",
+    });
+    expect(resolvePreferredMode("what file renders the sidebar", "explore", "build")).toBeNull();
   });
 
   it("routes UI-heavy main-lane work to the configured specialist model", () => {

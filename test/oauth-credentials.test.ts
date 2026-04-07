@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { rmSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
-import { saveCredentials } from "../src/core/auth.js";
+import { resetAuthCacheForTests, saveCredentials } from "../src/core/auth.js";
 import { getProviderCredential, loadConfig, updateProviderConfig } from "../src/core/config.js";
 import { detectProviders } from "../src/ai/detect.js";
 
@@ -10,6 +10,7 @@ const authPath = join(homedir(), ".brokecli", "auth.json");
 
 afterEach(() => {
   rmSync(authPath, { force: true });
+  resetAuthCacheForTests();
 });
 
 describe("oauth credential detection", () => {

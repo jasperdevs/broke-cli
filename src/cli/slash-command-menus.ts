@@ -33,12 +33,22 @@ function listLogoutTargets(): string[] {
   return [...new Set([...configuredProviders, ...listAuthenticated()])].sort();
 }
 
-export function openSettingsMenu(args: { app: AnyApp; activeModel: any; currentMode: Mode; onSystemPromptChange: (systemPrompt: string) => void; }): void {
-  const { app, activeModel, currentMode, onSystemPromptChange } = args;
+export function openSettingsMenu(args: {
+  app: AnyApp;
+  activeModel: any;
+  currentMode: Mode;
+  onModeChange: (mode: Mode) => void;
+  onSystemPromptChange: (systemPrompt: string) => void;
+}): void {
+  const { app, activeModel, currentMode, onModeChange, onSystemPromptChange } = args;
+  let menuMode = currentMode;
   const thinkingLevels = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
+  const modeSwitchingPolicies = ["manual", "ask", "auto"] as const;
   function buildEntries() {
     const s = getSettings();
     return [
+      { key: "mode", label: "Mode", value: s.mode, description: "build / plan — default mode and current slash mode" },
+      { key: "modeSwitching", label: "Mode switching", value: s.modeSwitching, description: "manual / ask / auto — switch build vs plan per turn" },
       { key: "yoloMode", label: "Yolo mode", value: String(s.yoloMode), description: "Run commands without safety checks" },
       { key: "autoCompact", label: "Auto-compact", value: String(s.autoCompact), description: "Automatically compress context when it gets too large" },
       { key: "autoSaveSessions", label: "Auto-save sessions", value: String(s.autoSaveSessions), description: "Save conversation history to disk" },
@@ -72,7 +82,17 @@ export function openSettingsMenu(args: { app: AnyApp; activeModel: any; currentM
   app.openSettings(buildEntries(), (key: string) => {
     const s = getSettings();
     const val = s[key as keyof Settings];
-    if (key === "thinkingLevel") {
+    if (key === "mode") {
+      const next = menuMode === "build" ? "plan" : "build";
+      updateSetting("mode", next);
+      menuMode = next;
+      onModeChange(next);
+      onSystemPromptChange(buildSystemPrompt(process.cwd(), activeModel?.provider?.id, next, s.cavemanLevel ?? "auto"));
+    } else if (key === "modeSwitching") {
+      const current = s.modeSwitching;
+      const next = modeSwitchingPolicies[(modeSwitchingPolicies.indexOf(current as any) + 1) % modeSwitchingPolicies.length];
+      updateSetting("modeSwitching", next);
+    } else if (key === "thinkingLevel") {
       const current = s.thinkingLevel || (s.enableThinking ? "low" : "off");
       const next = thinkingLevels[(thinkingLevels.indexOf(current as any) + 1) % thinkingLevels.length];
       updateSetting("thinkingLevel", next);
@@ -88,7 +108,7 @@ export function openSettingsMenu(args: { app: AnyApp; activeModel: any; currentM
       const next = levels[(levels.indexOf(current as any) + 1) % levels.length];
       updateSetting("cavemanLevel", next);
       reloadContext();
-      onSystemPromptChange(buildSystemPrompt(process.cwd(), activeModel?.provider?.id, currentMode, next));
+      onSystemPromptChange(buildSystemPrompt(process.cwd(), activeModel?.provider?.id, menuMode, next));
     } else if (key === "editorPaddingX") {
       updateSetting("editorPaddingX", (s.editorPaddingX + 1) % 4);
     } else if (key === "autocompleteMaxVisible") {

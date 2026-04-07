@@ -1,4 +1,5 @@
 export type Mode = "build" | "plan";
+export type ModeSwitchingPolicy = "manual" | "ask" | "auto";
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
 export type CavemanLevel = "off" | "lite" | "auto" | "ultra";
 export type TreeFilterMode = "default" | "no-tools" | "user-only" | "labeled-only" | "all";
@@ -63,6 +64,7 @@ export interface Settings {
   favoriteThemes: string[];
   lastModel: string;
   mode: Mode;
+  modeSwitching: ModeSwitchingPolicy;
   cavemanLevel: CavemanLevel;
   theme: string;
   autoLint: boolean;

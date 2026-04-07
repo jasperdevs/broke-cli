@@ -20,6 +20,7 @@ export const COMMANDS: CommandEntry[] = [
   { name: "connect", desc: "connect api key or local endpoint" },
   { name: "logout", desc: "clear stored auth" },
   { name: "model", desc: "switch model, pin, and assign roles", hotkey: "ctrl+l" },
+  { name: "mode", desc: "switch build or plan mode" },
   { name: "theme", desc: "change color theme" },
   { name: "compact", desc: "compress context" },
   { name: "update", desc: "update app" },
