@@ -5,11 +5,11 @@ import { matchesBinding, loadKeybindings } from "../core/keybindings.js";
 import { getSettings } from "../core/config.js";
 import { handleQuestionViewKey } from "./question-view.js";
 import {
-  handleAgentRunViewKey,
   handleBudgetViewKey,
   handleFilePickerKey,
   handlePaste,
   handlePickerKey,
+  handleTreeViewKey,
   queueCurrentInput,
   restoreQueuedMessage,
   submitInput,
@@ -19,25 +19,7 @@ type AppState = any;
 
 export { handlePaste } from "./app-input-routes.js";
 
-export function handleKey(app: AppState, key: Keypress): void {
-  if (app.budgetView) {
-    handleBudgetViewKey(app, key);
-    return;
-  }
-  if (app.agentRunView) {
-    handleAgentRunViewKey(app, key);
-    return;
-  }
-
-  if (app.isCompacting) {
-    if (key.ctrl && key.name === "c") {
-      app.ctrlCCount++;
-      if (app.ctrlCCount >= 2) { app.stop(); return; }
-      app.primeCtrlCExit();
-    }
-    return;
-  }
-
+function handleClickOrScroll(app: AppState, key: Keypress): boolean {
   if (key.name === "click" && key.char) {
     const [colStr, rowStr] = key.char.split(",");
     const col = parseInt(colStr, 10);
@@ -68,12 +50,10 @@ export function handleKey(app: AppState, key: Keypress): void {
       app.draw();
     } else {
       app.sidebarFocused = false;
-      const menuAction = app.activeMenuClickTargets.get(row);
-      if (menuAction) menuAction();
+      app.activeMenuClickTargets.get(row)?.();
     }
-    return;
+    return true;
   }
-
   if (key.name === "scrollup" || key.name === "scrolldown") {
     const delta = key.name === "scrollup" ? -3 : 3;
     app.hideCursorBriefly();
@@ -83,15 +63,14 @@ export function handleKey(app: AppState, key: Keypress): void {
       app.scrollTranscript(delta);
     }
     app.draw();
-    return;
+    return true;
   }
-
   if (key.name === "pageup" || (key.ctrl && key.name === "up")) {
     app.hideCursorBriefly();
     app.scrollOffset = Math.max(0, app.scrollOffset - 3);
     app.invalidateMsgCache();
     app.draw();
-    return;
+    return true;
   }
   if (key.name === "pagedown" || (key.ctrl && key.name === "down")) {
     app.hideCursorBriefly();
@@ -101,8 +80,91 @@ export function handleKey(app: AppState, key: Keypress): void {
     app.scrollOffset = Math.min(maxScroll, app.scrollOffset + 3);
     app.invalidateMsgCache();
     app.draw();
+    return true;
+  }
+  return false;
+}
+
+function handleEscapeAndBindings(app: AppState, key: Keypress): boolean {
+  if (key.name === "escape" && app.sidebarFocused) {
+    app.sidebarFocused = false;
+    app.drawNow();
+    return true;
+  }
+  if (key.meta && key.name === "up") {
+    restoreQueuedMessage(app);
+    return true;
+  }
+  if (key.name === "escape" && !app.isStreaming && app.hasPendingMessages() && app.input.getText().trim().length === 0) {
+    app.clearPendingMessages();
+    app.draw();
+    return true;
+  }
+  if (key.name === "escape" && app.isStreaming && app.onAbort) {
+    if (app.escPrimed) {
+      app.clearInterruptPrompt();
+      app.onAbort();
+    } else {
+      app.primeEscapeAbort();
+    }
+    return true;
+  }
+  if (key.name === "escape" && !app.isStreaming && !app.hasPendingMessages() && app.input.getText().trim().length === 0) {
+    if (app.escPrimed) {
+      app.clearInterruptPrompt();
+      app.onSubmit?.("/tree");
+    } else {
+      app.primeEscapeTree();
+    }
+    return true;
+  }
+  if (key.ctrl && key.name === "c") {
+    app.ctrlCCount++;
+    if (app.ctrlCCount >= 2) {
+      app.stop();
+      return true;
+    }
+    app.primeCtrlCExit();
+    return true;
+  }
+  app.clearInterruptPrompt();
+
+  const bindings = loadKeybindings();
+  if (matchesBinding(bindings.modelPicker, key)) {
+    app.onSubmit?.("/model");
+    return true;
+  }
+  if (matchesBinding(bindings.treeView, key)) {
+    app.onSubmit?.("/tree");
+    return true;
+  }
+  if (matchesBinding(bindings.cycleScopedModel, key)) {
+    app.onCycleScopedModel?.();
+    return true;
+  }
+  return false;
+}
+
+export function handleKey(app: AppState, key: Keypress): void {
+  if (app.budgetView) {
+    handleBudgetViewKey(app, key);
     return;
   }
+  if (app.treeView) {
+    handleTreeViewKey(app, key);
+    return;
+  }
+
+  if (app.isCompacting) {
+    if (key.ctrl && key.name === "c") {
+      app.ctrlCCount++;
+      if (app.ctrlCCount >= 2) { app.stop(); return; }
+      app.primeCtrlCExit();
+    }
+    return;
+  }
+
+  if (handleClickOrScroll(app, key)) return;
 
   if (app.questionView) {
     handleQuestionViewKey(app, key);
@@ -119,54 +181,7 @@ export function handleKey(app: AppState, key: Keypress): void {
     return;
   }
 
-  if (key.name === "escape" && app.sidebarFocused) {
-    app.sidebarFocused = false;
-    app.drawNow();
-    return;
-  }
-
-  if (key.meta && key.name === "up") {
-    restoreQueuedMessage(app);
-    return;
-  }
-
-  if (key.name === "escape" && !app.isStreaming && app.hasPendingMessages() && app.input.getText().trim().length === 0) {
-    app.clearPendingMessages();
-    app.draw();
-    return;
-  }
-
-  if (key.name === "escape" && app.isStreaming && app.onAbort) {
-    if (app.escPrimed) {
-      app.clearInterruptPrompt();
-      app.onAbort();
-    } else {
-      app.primeEscapeAbort();
-    }
-    return;
-  }
-
-  if (key.ctrl && key.name === "c") {
-    app.ctrlCCount++;
-    if (app.ctrlCCount >= 2) { app.stop(); return; }
-    app.primeCtrlCExit();
-    return;
-  }
-  app.clearInterruptPrompt();
-
-  const bindings = loadKeybindings();
-  if (matchesBinding(bindings.modelPicker, key)) {
-    if (app.onSubmit) app.onSubmit("/model");
-    return;
-  }
-  if (matchesBinding(bindings.agentsView, key)) {
-    if (app.onSubmit) app.onSubmit("/agents");
-    return;
-  }
-  if (matchesBinding(bindings.cycleScopedModel, key)) {
-    if (app.onCycleScopedModel) app.onCycleScopedModel();
-    return;
-  }
+  if (handleEscapeAndBindings(app, key)) return;
 
   if (key.ctrl && key.name === "o") {
     app.allToolsExpanded = !app.allToolsExpanded;

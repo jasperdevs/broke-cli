@@ -1,12 +1,10 @@
 import { startNativeStream } from "../ai/native-stream.js";
 import { startStream } from "../ai/stream.js";
 import { estimateTextTokens } from "../ai/tokens.js";
-import { routeMessage } from "../ai/router.js";
 import type { ModelHandle } from "../ai/providers.js";
 import { buildSystemPrompt, resolveCavemanLevel } from "../core/context.js";
 import { getTotalContextTokens } from "../core/compact.js";
 import { getSettings, type Mode } from "../core/config.js";
-import { shouldPreferSmallExecutor } from "../core/turn-policy.js";
 import type { TurnPolicy } from "../core/turn-policy.js";
 import type { ToolName } from "../tools/registry.js";
 import {
@@ -14,12 +12,13 @@ import {
   canUseSdkTools,
   formatTurnErrorMessage,
   looksLikeRawToolPayload,
+  resolveExecutionTarget,
   shouldRequestThinkTags,
   shouldSuppressPlanningNarration,
-  supportsThinking,
 } from "./turn-runner-support.js";
 import type { Session } from "../core/session.js";
 import { sendResponseNotification } from "./notify.js";
+import type { SpecialistModelRole } from "./model-routing.js";
 
 type PendingDelivery = "steering" | "followup";
 
@@ -76,6 +75,7 @@ export async function executeTurn(options: {
   activeSystemPrompt: string;
   optimizeMessages: (messages: Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }>) => Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }>;
   forceRoute?: "main" | "small";
+  resolveSpecialistModel?: (role: SpecialistModelRole) => { model: ModelHandle; modelId: string } | null;
 }): Promise<{
   nextToolCalls: string[];
   lastActivityTime: number;
@@ -105,6 +105,7 @@ export async function executeTurn(options: {
     activeSystemPrompt,
     optimizeMessages,
     forceRoute,
+    resolveSpecialistModel,
   } = options;
 
   let turnSystemPrompt = activeSystemPrompt;
@@ -117,21 +118,24 @@ export async function executeTurn(options: {
   session.getContextOptimizer().nextTurn();
 
   const settings = getSettings();
-  const canAutoRoute = !!smallModel
-    && settings.autoRoute
-    && !(activeModel.provider.id === "codex" && activeModel.runtime === "native-cli");
-  const requestedRoute = forceRoute ?? (canAutoRoute
-    ? routeMessage(text, session.getChatMessages().length, lastToolCalls)
-    : "main" as const);
-  const forceSmallExecutor = !forceRoute && canAutoRoute
-    && !!smallModel
-    && shouldPreferSmallExecutor(policy, session.getChatMessages().length, !!effectiveImages?.length);
-  const resolvedRoute = forceSmallExecutor ? "small" : requestedRoute;
-  const executionModel = resolvedRoute === "small" && smallModel ? smallModel : activeModel;
-  const executionModelId = resolvedRoute === "small" && smallModel ? smallModelId : currentModelId;
-  const thinkingRequested = resolvedRoute === "main"
-    ? settings.enableThinking && supportsThinking(executionModel)
-    : false;
+  const {
+    resolvedRoute,
+    executionModel,
+    executionModelId,
+    thinkingRequested,
+  } = resolveExecutionTarget({
+    text,
+    policy,
+    sessionMessageCount: session.getChatMessages().length,
+    lastToolCalls,
+    forceRoute,
+    activeModel,
+    currentModelId,
+    smallModel,
+    smallModelId,
+    effectiveImages,
+    resolveSpecialistModel,
+  });
   const nextToolCalls: string[] = [];
   let optimizedMessages = selectedMessages;
   let abortController: AbortController | null = new AbortController();
@@ -380,16 +384,6 @@ export async function executeTurn(options: {
           detail = totalEntries && totalEntries > shown ? `${shown}/${totalEntries} entries` : `${shown} entries`;
         }
         else if (_name === "semSearch") detail = `${((result as any)?.results as unknown[] | undefined)?.length ?? 0} ranked hits`;
-        else if (_name === "agent") {
-          const agent = result as { success?: boolean; model?: string; toolsUsed?: string[]; result?: string; error?: string };
-          detail = [
-            agent.model ? `model ${agent.model}` : "",
-            agent.toolsUsed && agent.toolsUsed.length > 0 ? `tools ${agent.toolsUsed.join(", ")}` : "tools none",
-          ].filter(Boolean).join(" · ");
-          if (agent.success === false && agent.error) app.addToolResult(_name, agent.error.slice(0, 240), true, detail);
-          else app.addToolResult(_name, (agent.result ?? "[empty agent response]").slice(0, 4000), false, detail);
-          return;
-        }
         if (r.success === false && r.error) app.addToolResult(_name, r.error.slice(0, 80), true);
         else app.addToolResult(_name, "ok", false, detail);
       },

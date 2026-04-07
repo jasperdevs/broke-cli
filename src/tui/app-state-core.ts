@@ -115,6 +115,7 @@ export function renderSidebarFooter(app: AppState): string[] {
 export function clearInterruptPrompt(app: AppState): void {
   app.ctrlCCount = 0;
   app.escPrimed = false;
+  app.escAction = null;
   if (app.ctrlCTimeout) clearTimeout(app.ctrlCTimeout);
   if (app.escTimeout) clearTimeout(app.escTimeout);
   app.ctrlCTimeout = null;
@@ -123,6 +124,7 @@ export function clearInterruptPrompt(app: AppState): void {
 
 export function primeCtrlCExit(app: AppState): void {
   app.escPrimed = false;
+  app.escAction = null;
   app.ctrlCCount = 1;
   if (app.ctrlCTimeout) clearTimeout(app.ctrlCTimeout);
   app.ctrlCTimeout = setTimeout(() => {
@@ -133,16 +135,26 @@ export function primeCtrlCExit(app: AppState): void {
   app.draw();
 }
 
-export function primeEscapeAbort(app: AppState): void {
+function primeEscapeAction(app: AppState, action: "stop" | "tree"): void {
   app.ctrlCCount = 0;
   app.escPrimed = true;
+  app.escAction = action;
   if (app.escTimeout) clearTimeout(app.escTimeout);
   app.escTimeout = setTimeout(() => {
     app.escPrimed = false;
+    app.escAction = null;
     app.escTimeout = null;
     app.draw();
   }, 1500);
   app.drawNow?.();
+}
+
+export function primeEscapeAbort(app: AppState): void {
+  primeEscapeAction(app, "stop");
+}
+
+export function primeEscapeTree(app: AppState): void {
+  primeEscapeAction(app, "tree");
 }
 
 export function setContextUsage(app: AppState, tokens: number, limit: number): void {
@@ -240,6 +252,7 @@ export interface AppStateCoreMethods {
   clearInterruptPrompt(): void;
   primeCtrlCExit(): void;
   primeEscapeAbort(): void;
+  primeEscapeTree(): void;
   setContextUsage(tokens: number, limit: number): void;
   setStreaming(streaming: boolean): void;
   setThinkingRequested(requested: boolean): void;
@@ -265,6 +278,7 @@ export const appStateCoreMethods: AppStateCoreMethods = {
   clearInterruptPrompt(this: AppState) { return clearInterruptPrompt(this); },
   primeCtrlCExit(this: AppState) { return primeCtrlCExit(this); },
   primeEscapeAbort(this: AppState) { return primeEscapeAbort(this); },
+  primeEscapeTree(this: AppState) { return primeEscapeTree(this); },
   setContextUsage(this: AppState, tokens: number, limit: number) { return setContextUsage(this, tokens, limit); },
   setStreaming(this: AppState, streaming: boolean) { return setStreaming(this, streaming); },
   setThinkingRequested(this: AppState, requested: boolean) { return setThinkingRequested(this, requested); },

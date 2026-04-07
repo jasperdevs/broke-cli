@@ -71,6 +71,17 @@ function buildChildrenMap(entries: SessionEntry[]): Map<string | null, SessionEn
   return children;
 }
 
+function collectAncestorIds(entries: SessionEntry[], entryId: string | null): Set<string> {
+  const map = getEntryMap(entries);
+  const ids = new Set<string>();
+  let cursor = entryId;
+  while (cursor) {
+    ids.add(cursor);
+    cursor = map.get(cursor)?.parentId ?? null;
+  }
+  return ids;
+}
+
 function matchesTreeFilter(entry: SessionEntry, mode: TreeFilterMode): boolean {
   switch (mode) {
     case "all":
@@ -196,6 +207,21 @@ export class Session {
     return this.entries.find((entry) => entry.id === entryId);
   }
 
+  getEntriesToSummarizeForNavigation(targetId: string): SessionEntry[] {
+    const target = this.getTreeEntry(targetId);
+    if (!target || !this.leafId) return [];
+    const currentPath = getActiveEntries(this.entries, this.leafId);
+    const targetLeafId = target.role === "user" ? target.parentId : target.id;
+    const targetAncestors = collectAncestorIds(this.entries, targetLeafId);
+    const abandoned: SessionEntry[] = [];
+    for (let i = currentPath.length - 1; i >= 0; i--) {
+      const entry = currentPath[i];
+      if (targetAncestors.has(entry.id)) break;
+      if (entry.role === "user" || entry.role === "assistant") abandoned.unshift(entry);
+    }
+    return abandoned;
+  }
+
   toggleLabel(entryId: string, label?: string): { labeled: boolean; value?: string } {
     const entry = this.entries.find((candidate) => candidate.id === entryId);
     if (!entry) return { labeled: false };
@@ -223,6 +249,34 @@ export class Session {
     this.leafId = target.id;
     this.save();
     return { cancelled: false };
+  }
+
+  navigateTree(targetId: string, options?: { summary?: string; label?: string }): { editorText?: string; cancelled: boolean; summaryEntryId?: string } {
+    const navigation = this.navigateTo(targetId);
+    if (navigation.cancelled) return navigation;
+    let summaryEntryId: string | undefined;
+    if (options?.summary?.trim()) {
+      const entry: SessionEntry = {
+        id: randomUUID(),
+        parentId: this.leafId,
+        role: "system",
+        content: `[Branch summary]\n${options.summary.trim()}`,
+        timestamp: Date.now(),
+        label: options.label?.trim() || "branch summary",
+        labelTimestamp: Date.now(),
+      };
+      this.entries.push(entry);
+      this.leafId = entry.id;
+      summaryEntryId = entry.id;
+    } else if (options?.label?.trim()) {
+      const target = this.getTreeEntry(targetId);
+      if (target) {
+        target.label = options.label.trim();
+        target.labelTimestamp = Date.now();
+      }
+    }
+    this.save();
+    return { ...navigation, summaryEntryId };
   }
 
   addUsage(inputTokens: number, outputTokens: number, cost: number): void {

@@ -26,16 +26,6 @@ function compactPreview(text: string, maxLength = 88): string {
   return normalized.length <= maxLength ? normalized : `${normalized.slice(0, maxLength - 3)}...`;
 }
 
-function extractAgentPrompt(tc: ToolCallRenderGroup): string {
-  const args = tc.args as Record<string, unknown> | undefined;
-  const prompt = typeof args?.prompt === "string"
-    ? args.prompt
-    : typeof args?.task === "string"
-      ? args.task
-      : tc.preview;
-  return compactPreview(prompt || "Delegated task", 120);
-}
-
 function ensureOverlayGap(lines: string[]): void {
   if (lines.length === 0) return;
   if (lines[lines.length - 1] !== "") lines.push("");
@@ -83,7 +73,6 @@ export function toolDescription(tc: ToolCallRenderGroup): string {
     case "webSearch": return `Searching web for "${a?.query ?? tc.preview}"`;
     case "webFetch": return `Fetching ${a?.url ?? tc.preview}`;
     case "askUser": return `Asking: ${a?.question ?? tc.preview}`;
-    case "agent": return "Task";
     case "todoWrite": return "Updating task list";
     default: return `${tc.name} ${tc.preview}`;
   }
@@ -114,23 +103,7 @@ export function renderToolCallBlock(options: {
     : done ? `${colors.muted}\u25CF${reset}`
     : (spinnerFrame % 2 === 0 ? `${colors.ok}\u25CF${reset}` : `${colors.accent2}\u25CF${reset}`);
 
-  if (tc.name === "agent") {
-    const title = extractAgentPrompt(tc);
-    const stateLabel = tc.error ? "failed"
-      : done ? "done"
-      : "running";
-    lines.push(`  ${icon} ${colors.text}Agent task${reset}`);
-    for (const wrappedLine of renderPrefixedWrappedLines(`  ${branch} `, title, maxWidth)) {
-      lines.push(`${done ? colors.muted : colors.text}${wrappedLine}${reset}`);
-    }
-    lines.push(`${colors.muted}  ${branch} ${stateLabel}${reset}`);
-  } else {
-    lines.push(`  ${icon} ${done ? colors.muted : colors.text}${toolDescription(tc)}${running ? "..." : ""}${reset}`);
-  }
-
-  if (tc.name === "agent" && running) {
-    lines.push(`${colors.muted}  ${branch} preparing task${reset}`);
-  }
+  lines.push(`  ${icon} ${done ? colors.muted : colors.text}${toolDescription(tc)}${running ? "..." : ""}${reset}`);
 
   const a = tc.args as Record<string, string> | undefined;
 
@@ -195,20 +168,6 @@ export function renderToolCallBlock(options: {
     } else if (tc.resultDetail) {
       for (const wrappedLine of renderPrefixedWrappedLines(`  ${branch} `, tc.resultDetail, maxWidth)) {
         lines.push(`${colors.muted}${wrappedLine}${reset}`);
-      }
-    }
-  }
-
-  if (tc.name === "agent" && done) {
-    if (tc.resultDetail) {
-      for (const wrappedLine of renderPrefixedWrappedLines(`  ${branch} `, tc.resultDetail, maxWidth)) {
-        lines.push(`${colors.muted}${wrappedLine}${reset}`);
-      }
-    }
-    if (!tc.error && tc.result) {
-      lines.push(`${colors.muted}  ${branch} result${reset}`);
-      for (const wrappedLine of renderPrefixedWrappedLines(`    `, tc.result, Math.max(8, maxWidth - 2))) {
-        lines.push(`${colors.text}${wrappedLine}${reset}`);
       }
     }
   }

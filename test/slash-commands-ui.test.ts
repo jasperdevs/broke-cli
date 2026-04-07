@@ -165,51 +165,25 @@ describe("slash command UI surfaces", () => {
     expect(capturedItems.some((item) => item.label.includes("remote session"))).toBe(false);
   });
 
-  it("opens the agent task inspector for /agents", async () => {
+  it("opens the session tree for /tree", async () => {
     const app = createAppStub();
-    let opened: { title: string; runs: any[] } | null = null;
-    app.getAgentRuns = () => [{
-      id: "run-1",
-      prompt: "Review the failing tests",
-      status: "done",
-      result: "Tests fail in session-manager",
-      detail: "model openai/gpt-5.4 · tools readFile,grep",
-      createdAt: Date.now(),
-    }];
-    app.openAgentRunsView = (title: string, runs: any[]) => {
-      opened = { title, runs };
+    let opened: { title: string; sessionId: string } | null = null;
+    const session = new Session(`test-tree-${Date.now()}`);
+    session.addMessage("user", "start");
+    session.addMessage("assistant", "reply");
+    app.openTreeView = (title: string, nextSession: Session) => {
+      opened = { title, sessionId: nextSession.getId() };
     };
 
     const result = await handleSlashCommand({
-      text: "/agents",
+      text: "/tree",
       app,
-      session: new Session(`test-agents-${Date.now()}`),
+      session,
       ...createSlashArgs(),
     });
 
     expect(result.handled).toBe(true);
-    expect(opened?.title).toBe("Agent Tasks");
-    expect(opened?.runs).toHaveLength(1);
-  });
-
-  it("opens an empty agent task inspector for /agents with no runs", async () => {
-    const app = createAppStub();
-    let opened: { title: string; runs: any[] } | null = null;
-    app.openAgentRunsView = (title: string, runs: any[]) => {
-      opened = { title, runs };
-    };
-
-    const result = await handleSlashCommand({
-      text: "/agents",
-      app,
-      session: new Session(`test-agents-empty-${Date.now()}`),
-      ...createSlashArgs(),
-    });
-
-    expect(result.handled).toBe(true);
-    expect(opened?.title).toBe("Agent Tasks");
-    expect(opened?.runs).toEqual([]);
-    expect(app.messages).toEqual([]);
+    expect(opened).toEqual({ title: "Session Tree", sessionId: session.getId() });
   });
 
   it("opens a session info picker for /session", async () => {
@@ -294,7 +268,7 @@ describe("slash command UI surfaces", () => {
       expect(result.handled).toBe(true);
       expect(getCredentials("openai")).toBeNull();
       expect(loadConfig().providers?.openai?.apiKey).toBeUndefined();
-      expect(app.messages.some((entry) => entry.content.includes("Cleared stored auth for: openai"))).toBe(true);
+      expect(app.statusMessage).toContain("Cleared stored auth for: openai");
     } finally {
       if (previousConfig == null) {
         if (existsSync(configPath)) unlinkSync(configPath);

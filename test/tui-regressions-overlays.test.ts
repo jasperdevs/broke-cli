@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import stripAnsi from "strip-ansi";
 import type { Keypress } from "../src/tui/keypress.js";
 import { App } from "../src/tui/app.js";
+import { Session } from "../src/core/session.js";
 import { currentTheme, setPreviewTheme } from "../src/core/themes.js";
 import { renderStaticMessages } from "../src/tui/render/messages.js";
 import { wordWrap } from "../src/tui/render/formatting.js";
@@ -72,24 +73,20 @@ describe("budget inspector", () => {
   });
 });
 
-describe("agent task inspector", () => {
-  it("opens as a fullscreen mode with task details", () => {
+describe("session tree", () => {
+  it("opens as a fullscreen mode with session details", () => {
     const app = new App() as any;
     let rendered: string[] = [];
     app.screen = { height: 12, width: 60, hasSidebar: true, mainWidth: 38, sidebarWidth: 19, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
-    app.openAgentRunsView("Agent Tasks", [{
-      id: "run-1",
-      prompt: "Review the failing tests in session-manager",
-      status: "done",
-      result: "The regression is in continueRecent.",
-      detail: "model openai/gpt-5.4 · tools readFile,grep",
-      createdAt: Date.now(),
-    }]);
+    const session = new Session(`test-tree-overlay-${Date.now()}`);
+    session.addMessage("user", "Review the failing tests in session-manager");
+    session.addMessage("assistant", "The regression is in continueRecent.");
+    app.openTreeView("Session Tree", session, () => {});
     app.drawImmediate();
     const output = rendered.map((line) => stripAnsi(line)).join("\n");
-    expect(output).toContain("Agent Tasks");
-    expect(output).toContain("esc back");
-    expect(output).toContain("Review the failing tests");
+    expect(output).toContain("Session Tree");
+    expect(output).toContain("enter jump");
+    expect(output).toContain("Review the failing t");
     expect(output).toContain("continueRecent");
   });
 });

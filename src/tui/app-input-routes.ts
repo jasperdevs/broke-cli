@@ -4,6 +4,7 @@ import { filterFiles } from "./file-picker.js";
 import type { Keypress } from "./keypress.js";
 import { DIM, RESET } from "../utils/ansi.js";
 import { T } from "./app-shared.js";
+import { getSelectedTreeItem, getVisibleTreeRows, moveTreeSelection, pageTreeSelection, toggleTreeFilter, toggleTreeFold, toggleTreeLabel, toggleTreeTimestampMode } from "./tree-view.js";
 
 type AppState = any;
 
@@ -54,33 +55,40 @@ export function handleBudgetViewKey(app: AppState, key: Keypress): void {
   }
 }
 
-export function handleAgentRunViewKey(app: AppState, key: Keypress): void {
-  const runCount = app.agentRunView.runs.length;
+export function handleTreeViewKey(app: AppState, key: Keypress): void {
   if (key.name === "escape" || isPlainBackspace(key) || key.name === "q" || (key.ctrl && key.name === "c")) {
-    app.closeAgentRunsView();
+    app.closeTreeView();
     return;
   }
-  if (runCount === 0) return;
-  if (key.name === "up") {
-    app.agentRunView.selectedIndex = Math.max(0, app.agentRunView.selectedIndex - 1);
-    app.draw();
+  if (key.name === "up" || key.name === "scrollup") moveTreeSelection(app, -1);
+  else if (key.name === "down" || key.name === "scrolldown") moveTreeSelection(app, 1);
+  else if (key.name === "home") {
+    const rows = getVisibleTreeRows(app);
+    app.treeView.selectedId = rows[0]?.item.id ?? null;
+  } else if (key.name === "end") {
+    const rows = getVisibleTreeRows(app);
+    app.treeView.selectedId = rows[rows.length - 1]?.item.id ?? app.treeView.selectedId;
+  } else if (key.name === "left" && !key.ctrl && !key.meta) {
+    pageTreeSelection(app, -1);
+  } else if (key.name === "right" && !key.ctrl && !key.meta) {
+    pageTreeSelection(app, 1);
+  } else if ((key.ctrl || key.meta) && key.name === "left") {
+    toggleTreeFold(app, -1);
+  } else if ((key.ctrl || key.meta) && key.name === "right") {
+    toggleTreeFold(app, 1);
+  } else if (key.shift && key.char?.toLowerCase() === "l") {
+    toggleTreeLabel(app);
+  } else if (key.shift && key.char?.toLowerCase() === "t") {
+    toggleTreeTimestampMode(app);
+  } else if (key.ctrl && key.name === "u") {
+    toggleTreeFilter(app, "user-only");
+  } else if (key.ctrl && key.name === "o") {
+    toggleTreeFilter(app, "all");
+  } else if ((key.name === "return" || key.name === "enter") && !key.shift && !key.meta && !key.ctrl) {
+    app.selectTreeEntry?.();
     return;
   }
-  if (key.name === "down") {
-    app.agentRunView.selectedIndex = Math.min(runCount - 1, app.agentRunView.selectedIndex + 1);
-    app.draw();
-    return;
-  }
-  if (key.name === "home") {
-    app.agentRunView.selectedIndex = 0;
-    app.draw();
-    return;
-  }
-  if (key.name === "end") {
-    app.agentRunView.selectedIndex = runCount - 1;
-    app.draw();
-    return;
-  }
+  app.draw();
 }
 
 export function handlePickerKey(app: AppState, key: Keypress): void {
@@ -137,6 +145,7 @@ export function handlePickerKey(app: AppState, key: Keypress): void {
   if (app.modelPicker) {
     const filtered = app.getFilteredModels();
     const page = Math.max(1, app.screen.height - 8);
+    const queryEmpty = app.getMenuFilterQuery().length === 0;
     if (key.name === "up") app.modelPicker.cursor = app.clampMenuCursor(app.modelPicker.cursor - 1, filtered.length);
     else if (key.name === "down") app.modelPicker.cursor = app.clampMenuCursor(app.modelPicker.cursor + 1, filtered.length);
     else if (key.name === "scrollup") app.modelPicker.cursor = app.clampMenuCursor(app.modelPicker.cursor - 1, filtered.length);
@@ -147,6 +156,12 @@ export function handlePickerKey(app: AppState, key: Keypress): void {
     else if (key.name === "end") app.modelPicker.cursor = app.clampMenuCursor(filtered.length - 1, filtered.length);
     else if (key.name === "tab") app.toggleModelScope();
     else if (key.name === "space") app.toggleModelPin(app.modelPicker.cursor);
+    else if (!key.ctrl && !key.meta && queryEmpty && key.char === "1") app.assignModelSlot(app.modelPicker.cursor, "default");
+    else if (!key.ctrl && !key.meta && queryEmpty && key.char === "2") app.assignModelSlot(app.modelPicker.cursor, "small");
+    else if (!key.ctrl && !key.meta && queryEmpty && key.char === "3") app.assignModelSlot(app.modelPicker.cursor, "review");
+    else if (!key.ctrl && !key.meta && queryEmpty && key.char === "4") app.assignModelSlot(app.modelPicker.cursor, "planning");
+    else if (!key.ctrl && !key.meta && queryEmpty && key.char === "5") app.assignModelSlot(app.modelPicker.cursor, "ui");
+    else if (!key.ctrl && !key.meta && queryEmpty && key.char === "6") app.assignModelSlot(app.modelPicker.cursor, "architecture");
     else if ((key.name === "return" || key.name === "enter") && !key.shift && !key.meta && !key.ctrl) {
       app.selectModelEntry(app.modelPicker.cursor);
       return;

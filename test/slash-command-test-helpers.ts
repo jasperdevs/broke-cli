@@ -7,6 +7,7 @@ export function createAppStub() {
   const messages: Array<{ role: "user" | "assistant" | "system"; content: string }> = [];
   return {
     messages,
+    statusMessage: "",
     cleared: false,
     costReset: false,
     stopped: false,
@@ -23,6 +24,9 @@ export function createAppStub() {
     setModel() {},
     setSessionName() {},
     setDraft() {},
+    setStatus(message: string) {
+      this.statusMessage = message;
+    },
     updateUsage() {},
     openModelPicker() {},
     openSettings() {},
@@ -46,10 +50,7 @@ export function createAppStub() {
       return 0;
     },
     openBudgetView() {},
-    openAgentRunsView() {},
-    getAgentRuns() {
-      return [];
-    },
+    openTreeView() {},
   };
 }
 

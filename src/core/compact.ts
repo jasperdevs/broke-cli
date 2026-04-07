@@ -2,53 +2,150 @@ import type { LanguageModel } from "ai";
 import { generateText } from "ai";
 import { estimateConversationTokens } from "../ai/tokens.js";
 
-const COMPACT_PROMPT = `Compress this conversation into a minimal context block for another AI to continue.
+const COMPACT_PROMPT = `Compress this conversation into a durable continuation frame for another coding agent.
 
-KEEP (exact values):
-- File paths modified/read and what changed
-- Current task state and next steps
-- Key decisions made and constraints
-- Error messages encountered
-- Code patterns established
+Hard rules:
+- Keep only actionable facts.
+- Prefer exact file paths, errors, decisions, validation results, open problems, and next steps.
+- Collapse repeated attempts into one final outcome.
+- Never repeat greetings, filler, or full file contents.
+- Mention abandoned branches only if they still matter.
+- Output raw bullet lines only. No intro. No markdown heading prose.
 
-DROP:
-- Greetings, acknowledgments, explanations of what tools do
-- Verbose tool outputs (just note "read file X, 200 lines")
-- Repeated attempts at the same thing (just note final outcome)
-- Full file contents (just note path + summary)
+Required sections in order:
+- task:
+- state:
+- files:
+- decisions:
+- errors:
+- verify:
+- next:
+`;
 
-Format: dense bullet points. No prose. Every line should be actionable context.`;
+interface CompactOptions {
+  customInstructions?: string;
+  tailKeep?: number;
+}
+
+function normalizeText(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function collectInterestingLines(text: string): string[] {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !/^(sure|okay|ok|thanks|thank you|got it|understood)[.!]*$/i.test(line))
+    .slice(0, 6);
+}
+
+function dedupeConversation(
+  messages: Array<{ role: "user" | "assistant"; content: string }>,
+): Array<{ role: "user" | "assistant"; content: string }> {
+  const deduped: Array<{ role: "user" | "assistant"; content: string }> = [];
+  for (const message of messages) {
+    const content = normalizeText(message.content);
+    if (!content) continue;
+    const previous = deduped[deduped.length - 1];
+    if (previous && previous.role === message.role && normalizeText(previous.content) === content) continue;
+    deduped.push({ role: message.role, content });
+  }
+  return deduped;
+}
+
+function buildDeterministicSummary(
+  messages: Array<{ role: "user" | "assistant"; content: string }>,
+  customInstructions?: string,
+): string {
+  const task = messages.find((message) => message.role === "user")?.content ?? "continue the current task";
+  const lastAssistant = [...messages].reverse().find((message) => message.role === "assistant")?.content ?? "";
+  const lastUser = [...messages].reverse().find((message) => message.role === "user")?.content ?? "";
+  const state = collectInterestingLines(lastAssistant).slice(0, 2);
+  const next = collectInterestingLines(lastUser).slice(0, 2);
+  const fileMatches = [...new Set(messages.flatMap((message) => (
+    message.content.match(/[A-Za-z0-9_./-]+\.[A-Za-z0-9]+/g) ?? []
+  )))].slice(0, 8);
+  const errorLines = [...new Set(messages.flatMap((message) => (
+    message.content.split(/\r?\n/).filter((line) => /(error|failed|exception|invalid|ENOENT|EINVAL|TypeError|ReferenceError)/i.test(line))
+  )))].slice(0, 5);
+  const decisionLines = [...new Set(messages.flatMap((message) => (
+    message.content.split(/\r?\n/).filter((line) => /\b(decided|using|keep|remove|switched|route|prefer|default)\b/i.test(line))
+  )))].slice(0, 5);
+  const verifyLines = [...new Set(messages.flatMap((message) => (
+    message.content.split(/\r?\n/).filter((line) => /\b(test|build|typecheck|lint|verified|passes|failed)\b/i.test(line))
+  )))].slice(0, 5);
+  const lines = [
+    `- task: ${normalizeText(task).slice(0, 220)}`,
+    `- state: ${state.join(" | ") || "recent state not captured"}`,
+    `- files: ${fileMatches.length > 0 ? fileMatches.join(", ") : "none noted"}`,
+    `- decisions: ${decisionLines.length > 0 ? decisionLines.map(normalizeText).join(" | ") : "none noted"}`,
+    `- errors: ${errorLines.length > 0 ? errorLines.map(normalizeText).join(" | ") : "none"}`,
+    `- verify: ${verifyLines.length > 0 ? verifyLines.map(normalizeText).join(" | ") : "not yet run"}`,
+    `- next: ${next.join(" | ") || "continue from the latest active branch"}`,
+  ];
+  if (customInstructions?.trim()) lines.push(`- focus: ${normalizeText(customInstructions).slice(0, 220)}`);
+  return lines.join("\n");
+}
+
+async function generateCompactionSummary(
+  messages: Array<{ role: "user" | "assistant"; content: string }>,
+  model: LanguageModel,
+  customInstructions?: string,
+): Promise<string> {
+  const conversationText = messages
+    .map((message) => `${message.role}: ${message.content.slice(0, 700)}`)
+    .join("\n\n");
+  const system = customInstructions?.trim()
+    ? `${COMPACT_PROMPT}\nFollow this extra focus instruction: ${customInstructions.trim()}`
+    : COMPACT_PROMPT;
+  const result = await generateText({
+    model,
+    system,
+    prompt: conversationText,
+    maxOutputTokens: 700,
+  });
+  return result.text.trim();
+}
 
 export async function compactMessages(
   messages: Array<{ role: "user" | "assistant"; content: string }>,
   model: LanguageModel,
+  options: CompactOptions = {},
 ): Promise<{ role: "user" | "assistant"; content: string }[]> {
-  if (messages.length < 6) return messages;
+  const normalized = dedupeConversation(messages);
+  const tailKeep = Math.max(3, options.tailKeep ?? 6);
+  if (normalized.length <= tailKeep) return normalized;
 
-  // Keep last 4 messages, summarize the rest
-  const toSummarize = messages.slice(0, -4);
-  const toKeep = messages.slice(-4);
-
-  // Truncate each message to avoid blowing up the compaction request itself
-  const conversationText = toSummarize
-    .map((m) => `${m.role}: ${m.content.slice(0, 400)}`)
-    .join("\n\n");
+  const toSummarize = normalized.slice(0, -tailKeep);
+  const toKeep = normalized.slice(-tailKeep);
 
   try {
-    const result = await generateText({
-      model,
-      system: COMPACT_PROMPT,
-      prompt: conversationText,
-      maxOutputTokens: 600,
-    });
-
+    const summary = await generateCompactionSummary(toSummarize, model, options.customInstructions);
     return [
-      { role: "user" as const, content: `[Compacted context]\n${result.text}` },
+      { role: "user" as const, content: `[Compacted context]\n${summary}` },
       ...toKeep,
     ];
   } catch {
-    // Fallback: just truncate old messages
-    return messages.slice(-6);
+    return [
+      { role: "user" as const, content: `[Compacted context]\n${buildDeterministicSummary(toSummarize, options.customInstructions)}` },
+      ...toKeep,
+    ];
+  }
+}
+
+export async function summarizeBranchMessages(
+  messages: Array<{ role: "user" | "assistant"; content: string }>,
+  model?: LanguageModel | null,
+  customInstructions?: string,
+): Promise<string> {
+  const normalized = dedupeConversation(messages);
+  if (normalized.length === 0) return "No abandoned branch state to summarize.";
+  if (!model) return buildDeterministicSummary(normalized, customInstructions);
+  try {
+    return await generateCompactionSummary(normalized, model, customInstructions);
+  } catch {
+    return buildDeterministicSummary(normalized, customInstructions);
   }
 }
 

@@ -1,5 +1,9 @@
 import { modelSupportsReasoning } from "../ai/model-catalog.js";
 import type { ModelHandle } from "../ai/providers.js";
+import { getSettings } from "../core/config.js";
+import type { TurnPolicy } from "../core/turn-policy.js";
+import { resolvePreferredSpecialistRole, type SpecialistModelRole } from "./model-routing.js";
+import { routeMessage } from "../ai/router.js";
 
 const SDK_TOOL_PROVIDER_IDS = new Set([
   "anthropic", "openai", "codex", "google", "mistral", "groq", "xai",
@@ -16,6 +20,75 @@ export function shouldRequestThinkTags(model: ModelHandle, thinkingRequested: bo
 
 export function canUseSdkTools(model: ModelHandle): boolean {
   return model.runtime === "sdk" && !!model.model && SDK_TOOL_PROVIDER_IDS.has(model.provider.id);
+}
+
+export function resolveExecutionTarget(options: {
+  text: string;
+  policy: TurnPolicy;
+  sessionMessageCount: number;
+  lastToolCalls: string[];
+  forceRoute?: "main" | "small";
+  activeModel: ModelHandle;
+  currentModelId: string;
+  smallModel: ModelHandle | null;
+  smallModelId: string;
+  effectiveImages?: Array<{ mimeType: string; data: string }>;
+  resolveSpecialistModel?: (role: SpecialistModelRole) => { model: ModelHandle; modelId: string } | null;
+}): {
+  resolvedRoute: "main" | "small";
+  executionModel: ModelHandle;
+  executionModelId: string;
+  thinkingRequested: boolean;
+  specialistRole: SpecialistModelRole | null;
+} {
+  const {
+    text,
+    policy,
+    sessionMessageCount,
+    lastToolCalls,
+    forceRoute,
+    activeModel,
+    currentModelId,
+    smallModel,
+    smallModelId,
+    effectiveImages,
+    resolveSpecialistModel,
+  } = options;
+  const settings = getSettings();
+  const canAutoRoute = !!smallModel
+    && settings.autoRoute
+    && !(activeModel.provider.id === "codex" && activeModel.runtime === "native-cli");
+  const requestedRoute = forceRoute ?? (canAutoRoute
+    ? routeMessage(text, sessionMessageCount, lastToolCalls)
+    : "main");
+  const forceSmallExecutor = !forceRoute
+    && canAutoRoute
+    && !!smallModel
+    && policy.preferSmallExecutor
+    && !effectiveImages?.length;
+  const resolvedRoute = forceSmallExecutor ? "small" : requestedRoute;
+  if (resolvedRoute === "small" && smallModel) {
+    const thinkingRequested = false;
+    return {
+      resolvedRoute,
+      executionModel: smallModel,
+      executionModelId: smallModelId,
+      thinkingRequested,
+      specialistRole: null,
+    };
+  }
+  const specialistRole = resolvePreferredSpecialistRole(text, policy.archetype);
+  const specialist = specialistRole ? resolveSpecialistModel?.(specialistRole) ?? null : null;
+  const executionModel = specialist?.model ?? activeModel;
+  const executionModelId = specialist?.modelId ?? currentModelId;
+  const thinkingRequested = settings.enableThinking && supportsThinking(executionModel);
+  return {
+    resolvedRoute: "main",
+    executionModel,
+    executionModelId,
+    thinkingRequested,
+    specialistRole,
+  };
 }
 
 export function looksLikeRawToolPayload(nextText: string): boolean {
@@ -73,7 +146,6 @@ export function formatTurnErrorMessage(options: {
 }
 
 export function buildToolPreview(name: string, args: unknown): string {
-  if (name === "agent") return (args as any)?.prompt ?? (args as any)?.task ?? "";
   if (name === "writeFile" || name === "editFile") return (args as any)?.path ?? "?";
   if (name === "readFile" || name === "listFiles" || name === "grep") return (args as any)?.path ?? (args as any)?.pattern ?? "?";
   if (name === "semSearch") return (args as any)?.query ?? (args as any)?.path ?? "?";

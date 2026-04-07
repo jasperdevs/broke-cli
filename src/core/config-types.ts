@@ -2,8 +2,7 @@ export type Mode = "build" | "plan";
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
 export type CavemanLevel = "off" | "lite" | "auto" | "ultra";
 export type TreeFilterMode = "default" | "no-tools" | "user-only" | "labeled-only" | "all";
-export type QueueDeliveryMode = "one-at-a-time" | "all";
-export type TransportMode = "auto" | "sse" | "websocket";
+export type ModelPreferenceSlot = "default" | "small" | "review" | "planning" | "ui" | "architecture";
 
 export interface PackageFilterSource {
   source: string;
@@ -74,8 +73,6 @@ export interface Settings {
   deniedTools: string[];
   disabledExtensions: string[];
   quietStartup: boolean;
-  collapseChangelog: boolean;
-  treeFilterMode: TreeFilterMode;
   editorPaddingX: number;
   autocompleteMaxVisible: number;
   showHardwareCursor: boolean;
@@ -86,9 +83,6 @@ export interface Settings {
   compaction: CompactionSettings;
   branchSummary: BranchSummarySettings;
   retry: RetrySettings;
-  steeringMode: QueueDeliveryMode;
-  followUpMode: QueueDeliveryMode;
-  transport: TransportMode;
   terminal: TerminalSettings;
   images: ImageSettings;
   shellPath: string;
@@ -102,7 +96,6 @@ export interface Settings {
   prompts: string[];
   themes: string[];
   enableSkillCommands: boolean;
-  verboseStartup: boolean;
   discoverExtensions: boolean;
   discoverSkills: boolean;
   discoverPrompts: boolean;
@@ -113,6 +106,10 @@ export interface BrokeConfig {
   defaultProvider?: string;
   defaultModel?: string;
   defaultSmallModel?: string;
+  defaultReviewModel?: string;
+  defaultPlanningModel?: string;
+  defaultUiModel?: string;
+  defaultArchitectureModel?: string;
   budget?: { maxSessionCost?: number; maxMonthlyCost?: number };
   providers?: Record<string, { apiKey?: string; baseUrl?: string; disabled?: boolean }>;
   modelContextLimits?: Record<string, number>;

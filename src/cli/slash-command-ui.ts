@@ -6,6 +6,7 @@ import { Session } from "../core/session.js";
 import { getSettings } from "../core/config.js";
 import { buildAggregateBudgetReport, buildBudgetReport, renderBudgetDashboard, type BudgetReport } from "../core/budget-insights.js";
 import { formatRelativeMinutes } from "./exports.js";
+import { summarizeBranchMessages } from "../core/compact.js";
 import { checkForNewVersion } from "../core/update.js";
 import { APP_VERSION } from "../core/app-meta.js";
 import { handleLogoutMenu, openEmptyItemMenu, openExportMenu, openProjectsMenu, openResumeMenu } from "./slash-command-menus.js";
@@ -26,6 +27,13 @@ async function loadBudgetReports(session: Session): Promise<{ all: BudgetReport;
     all: buildAggregateBudgetReport(sessions),
     session: buildBudgetReport(session),
   };
+}
+
+function reloadSessionIntoUi(app: SlashCommandApp, session: Session, editorText?: string): void {
+  app.clearMessages();
+  for (const msg of session.getMessages()) app.addMessage(msg.role, msg.content);
+  app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
+  if (editorText) app.setDraft?.(editorText);
 }
 
 export async function handleUiSlashCommand(options: {
@@ -54,28 +62,51 @@ export async function handleUiSlashCommand(options: {
     case "update": {
       const update = await checkForNewVersion(APP_VERSION);
       if (!update) {
-        app.addMessage("system", `Already on the latest version (${APP_VERSION}).`);
+        app.setStatus?.(`Already on the latest version (${APP_VERSION}).`);
         return { handled: true };
       }
       if (update.command && app.runExternalCommand) {
         const exitCode = app.runExternalCommand("Update", update.command.command, update.command.args);
         if (exitCode === 0) {
           app.clearUpdateNotice?.();
-          app.addMessage("system", `Updated to v${update.latestVersion}. Restart to use the new version.`);
+          app.setStatus?.(`Updated to v${update.latestVersion}. Restart to use the new version.`);
         } else {
-          app.addMessage("system", `Update failed. ${update.instruction}`);
+          app.setStatus?.(`Update failed. ${update.instruction}`);
         }
         return { handled: true };
       }
       app.setUpdateNotice?.(update);
-      app.addMessage("system", `Update available: v${update.latestVersion}. ${update.instruction}`);
+      app.setStatus?.(`Update available: v${update.latestVersion}. ${update.instruction}`);
       return { handled: true };
     }
-    case "agents": {
-      const runs = app.getAgentRuns?.() ?? [];
-      app.openAgentRunsView?.("Agent Tasks", runs);
+    case "tree":
+      app.openTreeView?.("Session Tree", session, async (entryId: string) => {
+        const target = session.getTreeEntry(entryId);
+        if (!target) return;
+        const abandoned = session.getEntriesToSummarizeForNavigation(entryId);
+        let summaryText: string | undefined;
+        let labelText: string | undefined;
+        if (abandoned.length > 0) {
+          const choice = await app.showQuestion("Branch switch", ["No summary", "Summarize", "Custom summary"]);
+          if (choice === "Summarize" || choice === "Custom summary") {
+            let custom = "";
+            if (choice === "Custom summary") {
+              custom = (await app.showQuestion("Custom summary focus"))?.trim?.() || "";
+            }
+            app.setCompacting?.(true);
+            summaryText = await summarizeBranchMessages(
+              abandoned.map((entry) => ({ role: entry.role === "system" ? "assistant" : entry.role, content: entry.content })),
+              activeModel?.runtime === "sdk" ? activeModel.model ?? undefined : undefined,
+              custom || undefined,
+            );
+            app.setCompacting?.(false);
+            labelText = custom ? "branch summary" : undefined;
+          }
+        }
+        const result = session.navigateTree(entryId, { summary: summaryText, label: labelText });
+        reloadSessionIntoUi(app, session, result.editorText);
+      });
       return { handled: true };
-    }
     case "session": {
       const sessionDir = getSettings().sessionDir?.trim();
       const sessionFile = SessionManager.open(session.getId(), sessionDir || undefined, session.getCwd()).getSessionFile() ?? "in-memory";
@@ -106,7 +137,7 @@ export async function handleUiSlashCommand(options: {
         { id: "newline", label: bindings.newline, detail: "newline" },
         { id: "abort", label: bindings.abort, detail: "abort/exit" },
         { id: "modelPicker", label: bindings.modelPicker, detail: "model picker" },
-        { id: "agentsView", label: bindings.agentsView, detail: "agent tasks" },
+        { id: "treeView", label: bindings.treeView, detail: "session tree" },
         { id: "toggleThinking", label: bindings.toggleThinking, detail: "thinking" },
         { id: "cycleScopedModel", label: bindings.cycleScopedModel, detail: "pinned models" },
         { id: "toggleMode", label: bindings.toggleMode, detail: "build/plan" },
@@ -132,23 +163,23 @@ export async function handleUiSlashCommand(options: {
         if (items.length === 0) openEmptyItemMenu(app, "Recent Changes", "no changelog entries yet", "changelog");
         else app.openItemPicker("Recent Changes", items, () => {}, { kind: "changelog" });
       } catch (err) {
-        app.addMessage("system", `Changelog failed: ${(err as Error).message}`);
+        app.setStatus?.(`Changelog failed: ${(err as Error).message}`);
       }
       return { handled: true };
     }
     case "copy": {
       const lastContent = app.getLastAssistantContent();
       if (!lastContent) {
-        app.addMessage("system", "No response to copy.");
+        app.setStatus?.("No response to copy.");
         return { handled: true };
       }
       try {
         if (process.platform === "win32") execSync("clip", { input: lastContent });
         else if (process.platform === "darwin") execSync("pbcopy", { input: lastContent });
         else execSync("xclip -selection clipboard", { input: lastContent });
-        app.addMessage("system", "Copied to clipboard.");
+        app.setStatus?.("Copied to clipboard.");
       } catch {
-        app.addMessage("system", "Failed to copy to clipboard.");
+        app.setStatus?.("Failed to copy to clipboard.");
       }
       return { handled: true };
     }
@@ -163,7 +194,7 @@ export async function handleUiSlashCommand(options: {
       openProjectsMenu(app, restText, onProjectChange);
       return { handled: true };
     case "undo":
-      app.addMessage("system", undoLastCheckpoint().message);
+      app.setStatus?.(undoLastCheckpoint().message);
       return { handled: true };
     case "templates": {
       const templates = listTemplates();

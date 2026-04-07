@@ -13,14 +13,16 @@ import { executeTurn } from "./turn-execution.js";
 import { maybeAutoNameSession } from "./chat-naming.js";
 import {
   canUseSdkTools,
+  resolveExecutionTarget,
 } from "./turn-runner-support.js";
+import type { SpecialistModelRole } from "./model-routing.js";
 
 async function compactForModel(
   messages: Array<{ role: "user" | "assistant"; content: string }>,
   model: ModelHandle,
 ): Promise<Array<{ role: "user" | "assistant"; content: string }>> {
   if (model.runtime === "sdk" && model.model) {
-    return compactMessages(messages, model.model);
+    return compactMessages(messages, model.model, { tailKeep: 5 });
   }
   return messages.slice(-6);
 }
@@ -83,8 +85,9 @@ export async function runModelTurn(options: {
   alreadyAddedUserMessage?: boolean;
   repairDepth?: number;
   forceRoute?: "main" | "small";
+  resolveSpecialistModel?: (role: SpecialistModelRole) => { model: ModelHandle; modelId: string } | null;
 }): Promise<{ lastToolCalls: string[]; lastActivityTime: number }> {
-  const { app, session, text, images, activeModel, currentModelId, smallModel, smallModelId, currentMode, systemPrompt, buildTools, hooks, lastToolCalls, lastActivityTime, alreadyAddedUserMessage, repairDepth = 0, forceRoute } = options;
+  const { app, session, text, images, activeModel, currentModelId, smallModel, smallModelId, currentMode, systemPrompt, buildTools, hooks, lastToolCalls, lastActivityTime, alreadyAddedUserMessage, repairDepth = 0, forceRoute, resolveSpecialistModel } = options;
   const getContextOptimizer = (): ReturnType<Session["getContextOptimizer"]> => session.getContextOptimizer();
   const settings = getSettings();
   const effectiveImages = settings.images.blockImages ? undefined : images;
@@ -134,12 +137,25 @@ export async function runModelTurn(options: {
   }
 
   const effectiveCavemanLevel = resolveCavemanLevel(getSettings().cavemanLevel ?? "auto", text);
-  const contextLimit = getModelContextLimitOverride(activeModel.provider.id, currentModelId)
-    ?? getContextLimit(currentModelId, activeModel.provider.id)
+  const previewTarget = resolveExecutionTarget({
+    text,
+    policy,
+    sessionMessageCount: session.getChatMessages().length,
+    lastToolCalls,
+    forceRoute,
+    activeModel,
+    currentModelId,
+    smallModel,
+    smallModelId,
+    effectiveImages,
+    resolveSpecialistModel,
+  });
+  const contextLimit = getModelContextLimitOverride(previewTarget.executionModel.provider.id, previewTarget.executionModelId)
+    ?? getContextLimit(previewTarget.executionModelId, previewTarget.executionModel.provider.id)
     ?? 128000;
   let turnSystemPrompt = buildSystemPrompt(
     process.cwd(),
-    activeModel.provider.id,
+    previewTarget.executionModel.provider.id,
     currentMode,
     effectiveCavemanLevel,
     policy.promptProfile,
@@ -190,6 +206,7 @@ export async function runModelTurn(options: {
     activeSystemPrompt: turnSystemPrompt,
     optimizeMessages: (messages) => selectMessagesForTurn(messages, policy, (msgs) => getContextOptimizer().optimizeMessages(msgs)),
     forceRoute,
+    resolveSpecialistModel,
   });
   nextActivityTime = result.lastActivityTime;
 
@@ -248,6 +265,7 @@ export async function runModelTurn(options: {
         lastActivityTime: nextActivityTime,
         alreadyAddedUserMessage: false,
         repairDepth: repairDepth + 1,
+        resolveSpecialistModel,
       });
     }
   }

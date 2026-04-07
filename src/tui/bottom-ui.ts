@@ -59,7 +59,10 @@ export function appendBottomMenus(
 export function buildInfoBar(app: AppState, hasSidebar: boolean, mainW: number): string {
   const parts: Array<{ text: string; plain: string }> = [];
   if (app.ctrlCCount === 1) parts.push({ text: `${ERR()}Ctrl+C again to exit${RESET}`, plain: "Ctrl+C again to exit" });
-  else if (app.escPrimed) parts.push({ text: `${ERR()}Esc again to stop${RESET}`, plain: "Esc again to stop" });
+  else if (app.escPrimed) {
+    const escLabel = app.escAction === "tree" ? "Esc again for tree" : "Esc again to stop";
+    parts.push({ text: `${ERR()}${escLabel}${RESET}`, plain: escLabel });
+  }
   if (app.isStreaming) parts.push({ text: `${DIM}esc${RESET} ${DIM}stop${RESET}`, plain: "esc stop" });
 
   const settings = getSettings();
@@ -69,9 +72,7 @@ export function buildInfoBar(app: AppState, hasSidebar: boolean, mainW: number):
   if (thinkLevel !== "off") parts.push({ text: `${T()}${thinkLevel}${RESET}`, plain: thinkLevel });
   const caveLevel = settings.cavemanLevel ?? "auto";
   if (caveLevel !== "off") parts.push({ text: `🪨 ${WARN()}${caveLevel}${RESET}`, plain: `rock ${caveLevel}` });
-  if (app.getAgentRuns && app.getAgentRuns().length > 0) {
-    parts.push({ text: `${DIM}alt+a${RESET} ${DIM}agents${RESET}`, plain: "alt+a agents" });
-  }
+  parts.push({ text: `${DIM}alt+a${RESET} ${DIM}tree${RESET}`, plain: "alt+a tree" });
 
   const liveTokens = app.getLiveTotalTokens();
   if ((settings.showCost && app.sessionCost > 0) || (settings.showTokens && !hasSidebar && liveTokens > 0)) {

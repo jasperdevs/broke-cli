@@ -1,0 +1,54 @@
+import { describe, expect, it } from "vitest";
+import { resolveExecutionTarget } from "../src/cli/turn-runner-support.js";
+import { resolvePreferredSpecialistRole } from "../src/cli/model-routing.js";
+
+const mainModel = {
+  provider: { id: "openai", name: "OpenAI", defaultModel: "gpt-5.4-mini", models: ["gpt-5.4-mini"] },
+  runtime: "sdk",
+  model: {} as any,
+  modelId: "gpt-5.4-mini",
+};
+
+const uiModel = {
+  provider: { id: "anthropic", name: "Anthropic", defaultModel: "claude-sonnet-4-6", models: ["claude-sonnet-4-6"] },
+  runtime: "sdk",
+  model: {} as any,
+  modelId: "claude-sonnet-4-6",
+};
+
+describe("specialist model routing", () => {
+  it("detects specialist roles from task shape", () => {
+    expect(resolvePreferredSpecialistRole("polish the landing page spacing and typography", "edit")).toBe("ui");
+    expect(resolvePreferredSpecialistRole("review this diff for bugs", "review")).toBe("review");
+    expect(resolvePreferredSpecialistRole("plan the system boundaries for this migration", "planning")).toBe("architecture");
+  });
+
+  it("routes UI-heavy main-lane work to the configured specialist model", () => {
+    const resolved = resolveExecutionTarget({
+      text: "make the dashboard spacing and typography feel polished",
+      policy: {
+        archetype: "edit",
+        allowedTools: [],
+        maxToolSteps: 2,
+        scaffold: "lane main",
+        scaffoldSource: "builtin",
+        preferSmallExecutor: false,
+        promptProfile: "full",
+        historyWindow: null,
+      },
+      sessionMessageCount: 6,
+      lastToolCalls: [],
+      activeModel: mainModel as any,
+      currentModelId: "gpt-5.4-mini",
+      smallModel: null,
+      smallModelId: "",
+      resolveSpecialistModel: (role) => role === "ui"
+        ? { model: uiModel as any, modelId: "claude-sonnet-4-6" }
+        : null,
+    });
+
+    expect(resolved.resolvedRoute).toBe("main");
+    expect(resolved.specialistRole).toBe("ui");
+    expect(resolved.executionModelId).toBe("claude-sonnet-4-6");
+  });
+});

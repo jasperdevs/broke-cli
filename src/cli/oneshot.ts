@@ -5,7 +5,6 @@ import { startStream } from "../ai/stream.js";
 import { buildSystemPrompt, resolveCavemanLevel } from "../core/context.js";
 import { Session } from "../core/session.js";
 import { getTools, type ToolName } from "../tools/registry.js";
-import { createAgentTool } from "../tools/subagent.js";
 import { getSettings, type Mode } from "../core/config.js";
 import { resolveTurnPolicy } from "../core/turn-policy.js";
 import type { ProviderRegistry } from "../ai/provider-registry.js";
@@ -87,14 +86,6 @@ export async function runOneShotPrompt(options: {
   const tools = policy.allowedTools.length > 0
     ? getTools({
         include: policy.allowedTools as readonly ToolName[],
-        extraTools: {
-          agent: createAgentTool({
-            cwd: () => process.cwd(),
-            providerRegistry,
-            getActiveModel: () => activeModel,
-            getCurrentModelId: () => modelId,
-          }),
-        },
       })
     : undefined;
   const baseSystemPrompt = buildSystemPrompt(

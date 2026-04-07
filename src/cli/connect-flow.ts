@@ -10,6 +10,7 @@ interface ConnectFlowItem {
 
 interface ConnectFlowApp {
   addMessage(role: "user" | "assistant" | "system", content: string): void;
+  setStatus?(message: string): void;
   showQuestion(prompt: string, options?: string[]): Promise<string>;
   openItemPicker(
     title: string,
@@ -39,6 +40,11 @@ function getNativeCliLabel(providerId: string): string {
   return "native provider";
 }
 
+function reportConnectStatus(app: ConnectFlowApp, message: string): void {
+  if (app.setStatus) app.setStatus(message);
+  else app.addMessage("system", message);
+}
+
 export async function runConnectFlow(options: {
   providerId?: string;
   app: ConnectFlowApp;
@@ -63,7 +69,7 @@ export async function runConnectFlow(options: {
 
   const info = providerRegistry.getProviderInfo(selectedProviderId);
   if (!info) {
-    app.addMessage("system", `Unknown provider: ${selectedProviderId}`);
+    reportConnectStatus(app, `Unknown provider: ${selectedProviderId}`);
     return;
   }
 
@@ -73,9 +79,9 @@ export async function runConnectFlow(options: {
     updateProviderConfig(selectedProviderId, { disabled: false });
     const providers = await refreshProviderState(true);
     if (providers.some((p) => p.id === selectedProviderId)) {
-      app.addMessage("system", `Connected ${getNativeCliLabel(selectedProviderId)} using existing native login${discoveredCredential.source ? ` from ${discoveredCredential.source}` : ""}.`);
+      reportConnectStatus(app, `Connected ${getNativeCliLabel(selectedProviderId)} using existing native login${discoveredCredential.source ? ` from ${discoveredCredential.source}` : ""}.`);
     } else {
-      app.addMessage("system", `Found ${getNativeCliLabel(selectedProviderId)} login, but the native CLI is not available on PATH yet.`);
+      reportConnectStatus(app, `Found ${getNativeCliLabel(selectedProviderId)} login, but the native CLI is not available on PATH yet.`);
     }
     return;
   }
@@ -89,7 +95,7 @@ export async function runConnectFlow(options: {
     const entered = (await app.showQuestion(`Base URL for ${info.name}`, baseUrlOptions))?.trim() ?? "";
     let baseUrl = defaultBaseUrl;
     if (isSkippedPromptAnswer(entered)) {
-      app.addMessage("system", "Connect cancelled.");
+      reportConnectStatus(app, "Connect cancelled.");
       return;
     }
     if (entered === "use default") {
@@ -99,17 +105,17 @@ export async function runConnectFlow(options: {
     } else if (entered === "custom") {
       const custom = (await app.showQuestion(`Enter ${info.name} base URL`, undefined)).trim();
       if (isSkippedPromptAnswer(custom)) {
-        app.addMessage("system", "Connect cancelled.");
+        reportConnectStatus(app, "Connect cancelled.");
         return;
       }
       if (!isValidHttpBaseUrl(custom)) {
-        app.addMessage("system", `Invalid base URL: ${custom}`);
+        reportConnectStatus(app, `Invalid base URL: ${custom}`);
         return;
       }
       baseUrl = custom;
     } else if (entered && entered !== defaultBaseUrl) {
       if (!isValidHttpBaseUrl(entered)) {
-        app.addMessage("system", `Invalid base URL: ${entered}`);
+        reportConnectStatus(app, `Invalid base URL: ${entered}`);
         return;
       }
       baseUrl = entered;
@@ -117,9 +123,9 @@ export async function runConnectFlow(options: {
     updateProviderConfig(selectedProviderId, { baseUrl, disabled: false });
     const providers = await refreshProviderState(true);
     if (providers.some((p) => p.id === selectedProviderId)) {
-      app.addMessage("system", `Connected ${info.name} at ${baseUrl}.`);
+      reportConnectStatus(app, `Connected ${info.name} at ${baseUrl}.`);
     } else {
-      app.addMessage("system", `${info.name} saved at ${baseUrl}, but it is not responding yet.`);
+      reportConnectStatus(app, `${info.name} saved at ${baseUrl}, but it is not responding yet.`);
     }
     return;
   }
@@ -127,20 +133,20 @@ export async function runConnectFlow(options: {
   if (discoveredCredential.kind === "api_key") {
     updateProviderConfig(selectedProviderId, { disabled: false });
     await refreshProviderState(true);
-    app.addMessage("system", `Connected ${info.name} using existing credentials${discoveredCredential.source ? ` from ${discoveredCredential.source}` : ""}.`);
+    reportConnectStatus(app, `Connected ${info.name} using existing credentials${discoveredCredential.source ? ` from ${discoveredCredential.source}` : ""}.`);
     return;
   }
 
   const apiKey = (await app.showQuestion(`Paste ${info.name} API key`, undefined)).trim();
   if (isSkippedPromptAnswer(apiKey)) {
-    app.addMessage("system", "Connect cancelled.");
+    reportConnectStatus(app, "Connect cancelled.");
     return;
   }
   updateProviderConfig(selectedProviderId, { apiKey, disabled: false });
   const providers = await refreshProviderState(true);
   if (providers.some((p) => p.id === selectedProviderId)) {
-    app.addMessage("system", `Connected ${info.name}.`);
+    reportConnectStatus(app, `Connected ${info.name}.`);
   } else {
-    app.addMessage("system", `${info.name} credentials saved, but detection has not confirmed access yet.`);
+    reportConnectStatus(app, `${info.name} credentials saved, but detection has not confirmed access yet.`);
   }
 }

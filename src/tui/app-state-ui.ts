@@ -1,9 +1,10 @@
-import { getSettings, updateSetting, type CavemanLevel, type Mode, type ThinkingLevel } from "../core/config.js";
+import { getSettings, updateSetting, type CavemanLevel, type Mode, type ModelPreferenceSlot, type ThinkingLevel } from "../core/config.js";
 import type { BudgetReport } from "../core/budget-insights.js";
 import { HOME_TIPS } from "./app-shared.js";
-import type { AgentRun, MenuPromptKind, ModelOption, PickerItem, QuestionRequest, QuestionResult, SettingEntry } from "./app-types.js";
+import type { MenuPromptKind, ModelOption, PickerItem, QuestionRequest, QuestionResult, SettingEntry } from "./app-types.js";
 import type { Keypress } from "./keypress.js";
 import { showQuestion, showQuestionnaire } from "./question-state.js";
+import type { Session } from "../core/session.js";
 
 type AppState = any;
 
@@ -12,13 +13,15 @@ export function openModelPicker(
   options: ModelOption[],
   onSelect: (providerId: string, modelId: string) => void,
   onPin?: (providerId: string, modelId: string, pinned: boolean) => void,
+  onAssign?: (providerId: string, modelId: string, slot: ModelPreferenceSlot) => void,
   initialCursor?: number,
   initialScope: "all" | "scoped" = "all",
 ): void {
-  const cursorIdx = initialCursor ?? options.findIndex((o) => o.active);
+  const cursorIdx = initialCursor ?? options.findIndex((o) => o.badges?.includes("now") || o.active);
   app.modelPicker = { options, cursor: cursorIdx >= 0 ? cursorIdx : 0, scope: initialScope };
   app.onModelSelect = onSelect;
   app.onModelPin = onPin ?? null;
+  app.onModelAssign = onAssign ?? null;
   app.openMenuPrompt("model");
   app.drawNow();
 }
@@ -28,6 +31,19 @@ export function openSettings(app: AppState, entries: SettingEntry[], onToggle: (
   app.onSettingToggle = onToggle;
   app.openMenuPrompt("settings");
   app.drawNow();
+}
+
+export function updateModelPickerOptions(app: AppState, options: ModelOption[], focusKey?: string): void {
+  if (!app.modelPicker) return;
+  app.modelPicker.options = options;
+  const filtered = app.getFilteredModels();
+  if (focusKey) {
+    const idx = filtered.findIndex((option: ModelOption) => `${option.providerId}/${option.modelId}` === focusKey);
+    app.modelPicker.cursor = idx >= 0 ? idx : app.clampMenuCursor(app.modelPicker.cursor, filtered.length);
+  } else {
+    app.modelPicker.cursor = app.clampMenuCursor(app.modelPicker.cursor, filtered.length);
+  }
+  app.draw();
 }
 
 export function updateSettings(app: AppState, entries: SettingEntry[]): void {
@@ -100,18 +116,23 @@ export function closeBudgetView(app: AppState): void {
   app.drawNow();
 }
 
-export function openAgentRunsView(app: AppState, title: string, runs: AgentRun[]): void {
-  app.agentRunView = {
+export function openTreeView(app: AppState, title: string, session: Session, onSelect: (entryId: string) => void | Promise<void>): void {
+  app.treeView = {
     title,
-    runs,
-    selectedIndex: Math.max(0, runs.length - 1),
+    session,
+    filterMode: "default",
+    selectedId: session.getLeafId(),
     scrollOffset: 0,
+    collapsedIds: new Set<string>(),
+    showLabelTimestamps: false,
   };
+  app.onTreeSelect = onSelect;
   app.drawNow();
 }
 
-export function closeAgentRunsView(app: AppState): void {
-  app.agentRunView = null;
+export function closeTreeView(app: AppState): void {
+  app.treeView = null;
+  app.onTreeSelect = null;
   app.drawNow();
 }
 
@@ -136,7 +157,7 @@ export function onModeToggle(app: AppState, callback: (mode: Mode) => void): voi
 export function onThinkingToggle(app: AppState, callback: (level: ThinkingLevel) => void): void { app.onThinkingChange = callback; }
 
 export function cycleThinkingMode(app: AppState): void {
-  const levels: ThinkingLevel[] = ["off", "low", "medium", "high"];
+  const levels: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
   const settings = getSettings();
   const current = settings.thinkingLevel || (settings.enableThinking ? "low" : "off");
   const idx = levels.indexOf(current);
@@ -162,16 +183,26 @@ export function cycleCavemanMode(app: AppState): void {
 
 export function onScopedModelCycle(app: AppState, handler: () => void): void { app.onCycleScopedModel = handler; }
 
+export function assignModelSlot(app: AppState, cursor: number, slot: ModelPreferenceSlot): void {
+  if (!app.modelPicker || !app.onModelAssign) return;
+  const filtered = app.getFilteredModels();
+  const option = filtered[cursor];
+  if (!option) return;
+  app.onModelAssign(option.providerId, option.modelId, slot);
+  app.draw();
+}
+
 export interface AppStateUiMethods {
-  openModelPicker(options: ModelOption[], onSelect: (providerId: string, modelId: string) => void, onPin?: (providerId: string, modelId: string, pinned: boolean) => void, initialCursor?: number, initialScope?: "all" | "scoped"): void;
+  openModelPicker(options: ModelOption[], onSelect: (providerId: string, modelId: string) => void, onPin?: (providerId: string, modelId: string, pinned: boolean) => void, onAssign?: (providerId: string, modelId: string, slot: ModelPreferenceSlot) => void, initialCursor?: number, initialScope?: "all" | "scoped"): void;
+  updateModelPickerOptions(options: ModelOption[], focusKey?: string): void;
   openSettings(entries: SettingEntry[], onToggle: (key: string) => void): void;
   updateSettings(entries: SettingEntry[]): void;
   updateItemPickerItems(items: PickerItem[], focusId?: string): void;
   openItemPicker(title: string, items: PickerItem[], onSelect: (id: string) => void, options?: { initialCursor?: number; previewHint?: string; onPreview?: (id: string) => void; onCancel?: () => void; onSecondaryAction?: (id: string) => void; onKey?: (key: Keypress) => boolean; secondaryHint?: string; closeOnSelect?: boolean; kind?: MenuPromptKind }): void;
   openBudgetView(title: string, reports: { all: BudgetReport; session: BudgetReport }, scope?: "all" | "session"): void;
   closeBudgetView(): void;
-  openAgentRunsView(title: string, runs: AgentRun[]): void;
-  closeAgentRunsView(): void;
+  openTreeView(title: string, session: Session, onSelect: (entryId: string) => void | Promise<void>): void;
+  closeTreeView(): void;
   getMode(): Mode;
   setMode(mode: Mode): void;
   setCwd(cwd: string): void;
@@ -183,18 +214,20 @@ export interface AppStateUiMethods {
   showQuestion(question: string, options?: string[]): Promise<string>;
   showQuestionnaire(request: QuestionRequest): Promise<QuestionResult>;
   onScopedModelCycle(handler: () => void): void;
+  assignModelSlot(cursor: number, slot: ModelPreferenceSlot): void;
 }
 
 export const appStateUiMethods: AppStateUiMethods = {
-  openModelPicker(this: AppState, options, onSelect, onPin, initialCursor, initialScope) { return openModelPicker(this, options, onSelect, onPin, initialCursor, initialScope); },
+  openModelPicker(this: AppState, options, onSelect, onPin, onAssign, initialCursor, initialScope) { return openModelPicker(this, options, onSelect, onPin, onAssign, initialCursor, initialScope); },
+  updateModelPickerOptions(this: AppState, options, focusKey) { return updateModelPickerOptions(this, options, focusKey); },
   openSettings(this: AppState, entries, onToggle) { return openSettings(this, entries, onToggle); },
   updateSettings(this: AppState, entries) { return updateSettings(this, entries); },
   updateItemPickerItems(this: AppState, items, focusId) { return updateItemPickerItems(this, items, focusId); },
   openItemPicker(this: AppState, title, items, onSelect, options) { return openItemPicker(this, title, items, onSelect, options); },
   openBudgetView(this: AppState, title, reports, scope) { return openBudgetView(this, title, reports, scope); },
   closeBudgetView(this: AppState) { return closeBudgetView(this); },
-  openAgentRunsView(this: AppState, title, runs) { return openAgentRunsView(this, title, runs); },
-  closeAgentRunsView(this: AppState) { return closeAgentRunsView(this); },
+  openTreeView(this: AppState, title, session, onSelect) { return openTreeView(this, title, session, onSelect); },
+  closeTreeView(this: AppState) { return closeTreeView(this); },
   getMode(this: AppState) { return getMode(this); },
   setMode(this: AppState, mode) { return setMode(this, mode); },
   setCwd(this: AppState, cwd) { return setCwd(this, cwd); },
@@ -206,4 +239,5 @@ export const appStateUiMethods: AppStateUiMethods = {
   showQuestion(this: AppState, question, options) { return showQuestion(this, question, options); },
   showQuestionnaire(this: AppState, request) { return showQuestionnaire(this, request); },
   onScopedModelCycle(this: AppState, handler) { return onScopedModelCycle(this, handler); },
+  assignModelSlot(this: AppState, cursor, slot) { return assignModelSlot(this, cursor, slot); },
 };

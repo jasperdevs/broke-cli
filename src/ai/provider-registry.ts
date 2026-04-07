@@ -93,12 +93,14 @@ export class ProviderRegistry {
     activeModel: ModelHandle | null,
     currentModelId: string,
     pinnedModels: string[],
+    preservedModels: string[] = [],
   ): VisibleModelOption[] {
     const cacheKey = JSON.stringify({
       providers: this.providers.map((provider) => provider.id),
       activeProvider: activeModel?.provider.id ?? "",
       currentModelId,
       pinnedModels: [...pinnedModels].sort(),
+      preservedModels: [...preservedModels].sort(),
     });
     if (cacheKey === this.visibleModelOptionsCacheKey) {
       return this.visibleModelOptionsCache;
@@ -113,6 +115,10 @@ export class ProviderRegistry {
       const slashIndex = pinnedModel.indexOf("/");
       if (slashIndex > 0) visibleProviderIds.add(pinnedModel.slice(0, slashIndex));
     }
+    for (const preservedModel of preservedModels) {
+      const slashIndex = preservedModel.indexOf("/");
+      if (slashIndex > 0) visibleProviderIds.add(preservedModel.slice(0, slashIndex));
+    }
     const currentKey = activeModel ? `${activeModel.provider.id}/${currentModelId}` : "";
     const options: VisibleModelOption[] = [];
 
@@ -120,6 +126,11 @@ export class ProviderRegistry {
       const preserve = pinnedModels
         .filter((entry) => entry.startsWith(`${provider.id}/`))
         .map((entry) => entry.slice(provider.id.length + 1));
+      preserve.push(
+        ...preservedModels
+          .filter((entry) => entry.startsWith(`${provider.id}/`))
+          .map((entry) => entry.slice(provider.id.length + 1)),
+      );
       if (currentKey.startsWith(`${provider.id}/`)) {
         preserve.push(currentModelId);
       }

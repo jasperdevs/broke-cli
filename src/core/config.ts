@@ -9,8 +9,7 @@ export type {
   ThinkingLevel,
   CavemanLevel,
   TreeFilterMode,
-  QueueDeliveryMode,
-  TransportMode,
+  ModelPreferenceSlot,
   PackageFilterSource,
   PackageSource,
   CompactionSettings,
@@ -26,7 +25,7 @@ export type {
 } from "./config-types.js";
 export { DEFAULT_SETTINGS } from "./config-defaults.js";
 import { DEFAULT_SETTINGS } from "./config-defaults.js";
-import type { BrokeConfig, ProviderCredential, Settings } from "./config-types.js";
+import type { BrokeConfig, ModelPreferenceSlot, ProviderCredential, Settings } from "./config-types.js";
 
 const CONFIG_DIR = join(homedir(), ".brokecli");
 const CONFIG_FILE = join(CONFIG_DIR, "config.json");
@@ -146,6 +145,36 @@ export function updateSetting(key: keyof Settings, value: unknown, scope: "globa
 export function updateSettingsPatch(patch: Partial<Settings>, scope: "global" | "project" = "global"): void {
   const config = scope === "project" ? loadProjectConfig() : loadGlobalConfig();
   config.settings = mergeSettings(config.settings, patch);
+  if (scope === "project") cachedProject = { cwd: process.cwd(), config };
+  else cachedGlobal = config;
+  cachedMerged = null;
+  saveConfig(config, scope);
+}
+
+const MODEL_PREFERENCE_KEYS: Record<ModelPreferenceSlot, keyof BrokeConfig> = {
+  default: "defaultModel",
+  small: "defaultSmallModel",
+  review: "defaultReviewModel",
+  planning: "defaultPlanningModel",
+  ui: "defaultUiModel",
+  architecture: "defaultArchitectureModel",
+};
+
+export function getConfiguredModelPreference(slot: ModelPreferenceSlot): string | undefined {
+  const key = MODEL_PREFERENCE_KEYS[slot];
+  const value = loadConfig()[key];
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+export function updateModelPreference(
+  slot: ModelPreferenceSlot,
+  value: string | null,
+  scope: "global" | "project" = "global",
+): void {
+  const key = MODEL_PREFERENCE_KEYS[slot];
+  const config = scope === "project" ? loadProjectConfig() : loadGlobalConfig();
+  if (value == null || value.trim().length === 0) delete (config as Record<string, unknown>)[key];
+  else (config as Record<string, unknown>)[key] = value.trim();
   if (scope === "project") cachedProject = { cwd: process.cwd(), config };
   else cachedGlobal = config;
   cachedMerged = null;

@@ -5,7 +5,6 @@ import { startStream } from "../ai/stream.js";
 import { buildSystemPrompt, resolveCavemanLevel } from "../core/context.js";
 import { Session } from "../core/session.js";
 import { getTools } from "../tools/registry.js";
-import { createAgentTool } from "../tools/subagent.js";
 import { getSettings, setRuntimeProviderApiKey, type Mode } from "../core/config.js";
 import { resolveTurnPolicy } from "../core/turn-policy.js";
 import { loadPricing } from "../ai/cost.js";
@@ -115,14 +114,6 @@ export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts:
     const tools = policy.allowedTools.length > 0
       ? getTools({
           include: policy.allowedTools as readonly ToolName[],
-          extraTools: {
-            agent: createAgentTool({
-              cwd: () => process.cwd(),
-              providerRegistry,
-              getActiveModel: () => activeModel,
-              getCurrentModelId: () => currentModelId,
-            }),
-          },
         })
       : undefined;
 

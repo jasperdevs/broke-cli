@@ -1,22 +1,17 @@
 import { getSettings, updateSetting } from "./config.js";
 
-function normalizeToolName(name: string): string {
-  return name === "subagent" ? "agent" : name;
-}
-
 export function isToolAllowed(name: string): boolean {
-  const denied = new Set((getSettings().deniedTools ?? []).map(normalizeToolName));
-  return !denied.has(normalizeToolName(name));
+  const denied = new Set(getSettings().deniedTools ?? []);
+  return !denied.has(name);
 }
 
 export function toggleToolPermission(name: string): boolean {
   const settings = getSettings();
-  const normalized = normalizeToolName(name);
-  const denied = new Set((settings.deniedTools ?? []).map(normalizeToolName));
-  if (denied.has(normalized)) denied.delete(normalized);
-  else denied.add(normalized);
+  const denied = new Set(settings.deniedTools ?? []);
+  if (denied.has(name)) denied.delete(name);
+  else denied.add(name);
   updateSetting("deniedTools", [...denied].sort());
-  return denied.has(normalized);
+  return denied.has(name);
 }
 
 export function isExtensionEnabled(name: string): boolean {

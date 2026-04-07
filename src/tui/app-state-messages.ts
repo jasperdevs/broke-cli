@@ -1,4 +1,4 @@
-import type { AgentRun, PendingDelivery, PendingImage, PendingMessage, TodoItem } from "./app-types.js";
+import type { PendingDelivery, PendingImage, PendingMessage, TodoItem } from "./app-types.js";
 
 type AppState = any;
 
@@ -55,14 +55,6 @@ export function updateTodo(app: AppState, items: TodoItem[]): void {
 }
 
 export function addToolCall(app: AppState, name: string, preview: string, args?: unknown): void {
-  if (name === "agent") {
-    app.agentRuns.push({
-      id: `${Date.now()}-${app.agentRuns.length}`,
-      prompt: preview,
-      status: "running",
-      createdAt: Date.now(),
-    });
-  }
   app.toolCallGroups.push({ name, preview, args, expanded: app.allToolsExpanded });
   const maxW = app.screen.mainWidth - 4;
   const tc = app.toolCallGroups[app.toolCallGroups.length - 1];
@@ -77,15 +69,6 @@ export function addToolCall(app: AppState, name: string, preview: string, args?:
 }
 
 export function updateToolCallArgs(app: AppState, name: string, preview: string, args: unknown): void {
-  if (name === "agent") {
-    for (let i = app.agentRuns.length - 1; i >= 0; i--) {
-      const run = app.agentRuns[i];
-      if (run.status === "running") {
-        run.prompt = preview;
-        break;
-      }
-    }
-  }
   for (let i = app.toolCallGroups.length - 1; i >= 0; i--) {
     const tc = app.toolCallGroups[i];
     if (tc.name === name && !tc.result) {
@@ -105,17 +88,6 @@ export function updateToolCallArgs(app: AppState, name: string, preview: string,
 }
 
 export function addToolResult(app: AppState, name: string, result: string, error?: boolean, resultDetail?: string): void {
-  if (name === "agent") {
-    for (let i = app.agentRuns.length - 1; i >= 0; i--) {
-      const run = app.agentRuns[i];
-      if (run.status === "running") {
-        run.status = error ? "error" : "done";
-        run.result = result;
-        run.detail = resultDetail;
-        break;
-      }
-    }
-  }
   for (let i = app.toolCallGroups.length - 1; i >= 0; i--) {
     if (app.toolCallGroups[i].name === name && !app.toolCallGroups[i].result) {
       app.toolCallGroups[i].result = result;
@@ -258,10 +230,6 @@ export function flushPendingMessages(app: AppState, delivery: PendingDelivery): 
   if (app.onPendingMessagesReady) app.onPendingMessagesReady(delivery);
 }
 
-export function getAgentRuns(app: AppState): AgentRun[] {
-  return [...app.agentRuns];
-}
-
 export function onAbortRequest(app: AppState, handler: () => void): void { app.onAbort = handler; }
 
 export interface AppStateMessageMethods {
@@ -292,7 +260,6 @@ export interface AppStateMessageMethods {
   hasPendingMessages(delivery?: PendingDelivery): boolean;
   getPendingMessagesCount(delivery?: PendingDelivery): number;
   flushPendingMessages(delivery: PendingDelivery): void;
-  getAgentRuns(): AgentRun[];
   onAbortRequest(handler: () => void): void;
 }
 
@@ -324,6 +291,5 @@ export const appStateMessageMethods: AppStateMessageMethods = {
   hasPendingMessages(this: AppState, delivery) { return hasPendingMessages(this, delivery); },
   getPendingMessagesCount(this: AppState, delivery) { return getPendingMessagesCount(this, delivery); },
   flushPendingMessages(this: AppState, delivery) { return flushPendingMessages(this, delivery); },
-  getAgentRuns(this: AppState) { return getAgentRuns(this); },
   onAbortRequest(this: AppState, handler) { return onAbortRequest(this, handler); },
 };

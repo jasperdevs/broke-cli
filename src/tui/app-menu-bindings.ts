@@ -31,6 +31,7 @@ import {
   selectFileEntry,
   selectItemEntry,
   selectModelEntry,
+  selectTreeEntry,
   shouldEnableMenuMouse,
   toggleModelPin,
   toggleModelScope,
@@ -74,6 +75,7 @@ export interface AppMenuMethods {
   selectItemEntry(index: number): void;
   toggleModelPin(index: number): void;
   selectModelEntry(index: number): void;
+  selectTreeEntry(): void;
   selectFileEntry(index: number): void;
   applyCommandSuggestion(index: number, submitOnReturn?: boolean): void;
   hideCursorBriefly(durationMs?: number): void;
@@ -114,6 +116,7 @@ export const appMenuMethods: AppMenuMethods = {
   selectItemEntry(this: AppState, index: number) { return selectItemEntry(this, index); },
   toggleModelPin(this: AppState, index: number) { return toggleModelPin(this, index); },
   selectModelEntry(this: AppState, index: number) { return selectModelEntry(this, index); },
+  selectTreeEntry(this: AppState) { return selectTreeEntry(this); },
   selectFileEntry(this: AppState, index: number) { return selectFileEntry(this, index); },
   applyCommandSuggestion(this: AppState, index: number, submitOnReturn?: boolean) { return applyCommandSuggestion(this, index, submitOnReturn); },
   hideCursorBriefly(this: AppState, durationMs?: number) { return hideCursorBriefly(this, durationMs); },

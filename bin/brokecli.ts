@@ -3,14 +3,12 @@ import { writeFileSync } from "fs";
 import { App } from "../src/tui/app.js";
 import type { DetectedProvider } from "../src/ai/detect.js";
 import type { ModelHandle } from "../src/ai/providers.js";
-import { getSmallModelId } from "../src/ai/router.js";
 import { buildSystemPrompt, reloadContext } from "../src/core/context.js";
 import { Session } from "../src/core/session.js";
 import { SessionManager } from "../src/core/session-manager.js";
 import { touchProject } from "../src/core/projects.js";
 import { getTools, TOOL_NAMES, type ToolName } from "../src/tools/registry.js";
 import { createAskUserTool } from "../src/tools/ask.js";
-import { createAgentTool } from "../src/tools/subagent.js";
 import { setBashOutputCallback } from "../src/tools/bash.js";
 import { setTodoChangeCallback } from "../src/tools/todo.js";
 import { getApiKey, getSettings, updateSetting, type Mode } from "../src/core/config.js";
@@ -27,14 +25,8 @@ import { buildHtmlExport } from "../src/cli/exports.js";
 import { createProgram } from "../src/cli/program.js";
 import { ensureConfiguredPackagesInstalled } from "../src/core/package-manager.js";
 import { checkForNewVersion } from "../src/core/update.js";
-import {
-  isSkippedPromptAnswer,
-  isValidHttpBaseUrl,
-  normalizeThinkingLevel,
-  normalizeProgramArgv,
-  readPromptArg,
-  splitModelArg,
-} from "../src/cli/cli-helpers.js";
+import { isSkippedPromptAnswer, isValidHttpBaseUrl, normalizeThinkingLevel, normalizeProgramArgv, readPromptArg, splitModelArg } from "../src/cli/cli-helpers.js";
+import { listResolvedModelPreferences, resolveConfiguredModelHandle, type SpecialistModelRole } from "../src/cli/model-routing.js";
 
 const program = createProgram(APP_VERSION);
 
@@ -47,7 +39,7 @@ program.action(async (promptParts, opts) => {
   if (thinkingOverride) setRuntimeSettings({ thinkingLevel: thinkingOverride, enableThinking: thinkingOverride !== "off", defaultThinkingLevel: thinkingOverride });
   if (opts.theme) setRuntimeSettings({ theme: opts.theme });
   if (opts.models) setRuntimeSettings({ enabledModels: opts.models.split(",").map((entry: string) => entry.trim()).filter(Boolean) });
-  if (opts.verbose) setRuntimeSettings({ quietStartup: false, verboseStartup: true });
+  if (opts.verbose) setRuntimeSettings({ quietStartup: false });
   if (opts.extensions === false) setRuntimeSettings({ discoverExtensions: false });
   if (opts.skills === false) setRuntimeSettings({ discoverSkills: false });
   if (opts.promptTemplates === false) setRuntimeSettings({ discoverPrompts: false });
@@ -70,11 +62,9 @@ program.action(async (promptParts, opts) => {
     return;
   }
 
-  // Load extension hooks
   await ensureConfiguredPackagesInstalled();
   const hooks = loadExtensions();
 
-  // RPC mode � non-interactive JSON I/O
   if (opts.rpc || opts.mode === "rpc") {
     await runRpcMode(hooks, opts);
     return;
@@ -210,10 +200,8 @@ program.action(async (promptParts, opts) => {
     if (update) app.setUpdateNotice(update);
   }).catch(() => {});
 
-  // Scoped model index for Ctrl+P cycling
   let scopedModelIndex = -1;
 
-  // Mode toggle callback
   app.onModeToggle((newMode) => {
     currentMode = newMode;
     systemPrompt = buildRuntimeSystemPrompt(activeModel?.provider?.id);
@@ -251,7 +239,6 @@ program.action(async (promptParts, opts) => {
     }
   });
 
-  // Detect providers + load pricing in background
   let providers: DetectedProvider[] = [];
   let activeModel: ModelHandle | null = null;
   let smallModel: ModelHandle | null = null;
@@ -270,19 +257,37 @@ program.action(async (promptParts, opts) => {
     smallModelId = "";
     if (!activeModel) return;
     if (activeModel.provider.id === "codex" && activeModel.runtime === "native-cli") return;
-    const cheapId = getSmallModelId(activeModel.provider.id);
-    if (!cheapId || cheapId === currentModelId) return;
-    try {
-      smallModel = providerRegistry.createModel(activeModel.provider.id, cheapId);
-      smallModelId = cheapId;
-    } catch {
-      smallModel = null;
-      smallModelId = "";
-    }
+    const resolved = resolveConfiguredModelHandle(providerRegistry, activeModel, currentModelId, "small");
+    if (!resolved || resolved.modelId === currentModelId) return;
+    smallModel = resolved.model;
+    smallModelId = resolved.modelId;
   }
 
-  function buildVisibleModelOptions(): Array<{ providerId: string; providerName: string; modelId: string; active: boolean }> {
-    return providerRegistry.buildVisibleModelOptions(activeModel, currentModelId, getSettings().scopedModels);
+  function resolveSpecialistModel(role: SpecialistModelRole): { model: ModelHandle; modelId: string } | null {
+    if (!activeModel) return null;
+    const resolved = resolveConfiguredModelHandle(providerRegistry, activeModel, currentModelId, role);
+    return resolved ? { model: resolved.model, modelId: resolved.modelId } : null;
+  }
+
+  function buildVisibleModelOptions(): Array<{ providerId: string; providerName: string; modelId: string; active: boolean; badges?: string[] }> {
+    const fallbackProviderId = activeModel?.provider.id ?? providers[0]?.id ?? "openai";
+    const preferences = listResolvedModelPreferences(fallbackProviderId);
+    const preserved = Object.values(preferences).map((entry) => entry.key);
+    const currentKey = activeModel ? `${activeModel.provider.id}/${currentModelId}` : "";
+    return providerRegistry
+      .buildVisibleModelOptions(activeModel, currentModelId, getSettings().scopedModels, preserved)
+      .map((option) => {
+        const key = `${option.providerId}/${option.modelId}`;
+        const badges: string[] = [];
+        if (key === currentKey) badges.push("now");
+        if (preferences.default?.key === key) badges.push("default");
+        if (preferences.small?.key === key) badges.push("small");
+        if (preferences.review?.key === key) badges.push("review");
+        if (preferences.planning?.key === key) badges.push("plan");
+        if (preferences.ui?.key === key) badges.push("ui");
+        if (preferences.architecture?.key === key) badges.push("arch");
+        return { ...option, badges };
+      });
   }
 
   const initPromise = (async () => {
@@ -306,24 +311,14 @@ program.action(async (promptParts, opts) => {
   const buildTools = (allowedTools: readonly ToolName[]) => ({
     ...getTools({
       include: allowedTools,
-      extraTools: {
-        agent: createAgentTool({
-          cwd: () => process.cwd(),
-          providerRegistry,
-          getActiveModel: () => activeModel,
-          getCurrentModelId: () => currentModelId,
-        }),
-      },
     }),
     askUser: createAskUserTool((request) => app.showQuestionnaire(request)),
   });
 
-  // Wire bash streaming output to UI
   setBashOutputCallback((chunk) => {
     app.appendToolOutput(chunk);
   });
 
-  // Wire TODO list to UI
   setTodoChangeCallback((items) => {
     app.updateTodo(items);
   });
@@ -395,6 +390,9 @@ program.action(async (promptParts, opts) => {
           currentModelId = nextModelId;
           rebuildSmallModelState();
           systemPrompt = buildRuntimeSystemPrompt(nextModel.provider.id);
+        },
+        onModelRoutingChange: () => {
+          rebuildSmallModelState();
         },
         onSystemPromptChange: (nextSystemPrompt) => {
           systemPrompt = nextSystemPrompt;
@@ -486,12 +484,12 @@ program.action(async (promptParts, opts) => {
       lastToolCalls,
       lastActivityTime,
       alreadyAddedUserMessage: templateLoaded,
+      resolveSpecialistModel,
     });
     lastToolCalls = turnResult.lastToolCalls;
     lastActivityTime = turnResult.lastActivityTime;
   }
 
-// Close the program.action callback
 });
 
 program.parse(normalizeProgramArgv(process.argv));

@@ -58,11 +58,11 @@ export function getBottomLineCount(app: AppState, mainW: number, maxHeight: numb
     count += visible;
   } else if (app.modelPicker) {
     const entries = app.getModelPickerEntries();
-    const visible = entries.length === 0 ? 1 : Math.min(entries.length, Math.max(1, menuBodyCapacity(true) - 3));
+    const visible = entries.length === 0 ? 1 : Math.min(entries.length, Math.max(1, menuBodyCapacity(true) - 4));
     count += 1; // menu separator
     count += 1; // title
     count += 1; // scope
-    count += 1; // hint
+    count += 2; // hints
     count += visible;
   } else {
     const allSuggestions = app.getCommandSuggestionEntries();
@@ -160,7 +160,7 @@ export function getMenuPromptPrefix(_app: AppState, kind: MenuPromptKind): strin
     case "resume": return "/resume ";
     case "session": return "/session ";
     case "hotkeys": return "/hotkeys ";
-    case "agents": return "/agents ";
+    case "tree": return "/tree ";
     case "templates": return "/templates ";
     case "skills": return "/skills ";
     case "changelog": return "/changelog ";
@@ -294,7 +294,10 @@ export function getModelPickerEntries(app: AppState): MenuEntry[] {
       const pin = opt.active ? ` ${T()}*${RESET}` : "";
       const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
       const nameCol = isCursor ? `${TXT()}${BOLD}` : T();
-      entries.push({ text: `  ${arrow}${nameCol}${opt.modelId}${RESET}${pin}`, selectIndex: currentIdx });
+      const badges = opt.badges && opt.badges.length > 0
+        ? ` ${DIM}${opt.badges.join(" · ")}${RESET}`
+        : "";
+      entries.push({ text: `  ${arrow}${nameCol}${opt.modelId}${RESET}${pin}${badges}`, selectIndex: currentIdx });
       currentIdx++;
     }
   }
@@ -388,6 +391,12 @@ export function selectModelEntry(app: AppState, index: number): void {
   app.input.clear();
   if (app.onModelSelect) app.onModelSelect(selected.providerId, selected.modelId);
   app.drawNow();
+}
+
+export function selectTreeEntry(app: AppState): void {
+  const selectedId = app.treeView?.selectedId;
+  if (!selectedId || !app.onTreeSelect) return;
+  void app.onTreeSelect(selectedId);
 }
 
 export function selectFileEntry(app: AppState, index: number): void {

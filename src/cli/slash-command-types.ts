@@ -1,7 +1,7 @@
 import type { ModelHandle } from "../ai/providers.js";
 import type { ProviderRegistry } from "../ai/provider-registry.js";
 import type { BudgetReport } from "../core/budget-insights.js";
-import type { Mode, Settings } from "../core/config.js";
+import type { Mode, ModelPreferenceSlot, Settings } from "../core/config.js";
 import type { Session } from "../core/session.js";
 import type { ModelOption, PickerItem, SettingEntry, UpdateNotice } from "../tui/app-types.js";
 
@@ -12,14 +12,17 @@ export interface SlashCommandApp {
   setModel(provider: string, model: string): void;
   setSessionName?(name: string): void;
   setDraft?(text: string): void;
+  setStatus?(message: string): void;
   updateUsage(cost: number, inputTokens: number, outputTokens: number): void;
   openModelPicker(
     options: ModelOption[],
     onSelect: (providerId: string, modelId: string) => void,
     onPin?: (providerId: string, modelId: string, pinned: boolean) => void,
+    onAssign?: (providerId: string, modelId: string, slot: ModelPreferenceSlot) => void,
     initialCursor?: number,
     initialScope?: "all" | "scoped",
   ): void;
+  updateModelPickerOptions?(options: ModelOption[], focusKey?: string): void;
   openSettings(entries: SettingEntry[], onToggle: (key: string) => void): void;
   updateSettings(entries: SettingEntry[]): void;
   openItemPicker(
@@ -34,22 +37,21 @@ export interface SlashCommandApp {
       onSecondaryAction?: (id: string) => void;
       secondaryHint?: string;
       closeOnSelect?: boolean;
-      kind?: "login" | "connect" | "permissions" | "extensions" | "theme" | "export" | "resume" | "session" | "hotkeys" | "agents" | "templates" | "skills" | "changelog" | "projects" | "logout";
+      kind?: "login" | "connect" | "permissions" | "extensions" | "theme" | "export" | "resume" | "session" | "hotkeys" | "tree" | "templates" | "skills" | "changelog" | "projects" | "logout";
     },
   ): void;
-  openAgentRunsView?(title: string, runs: Array<{ id: string; prompt: string; status: "running" | "done" | "error"; result?: string; detail?: string; createdAt: number }>): void;
-  getAgentRuns?(): Array<{ id: string; prompt: string; status: "running" | "done" | "error"; result?: string; detail?: string; createdAt: number }>;
+  openTreeView?(title: string, session: Session, onSelect: (entryId: string) => void | Promise<void>): void;
   stop(): void;
   cycleCavemanMode(): void;
   cycleThinkingMode(): void;
   getLastAssistantContent(): string;
   getFileContexts(): Map<string, string>;
   showQuestion(prompt: string, options?: string[]): Promise<string>;
+  updateItemPickerItems?(items: PickerItem[], focusId?: string): void;
+  setCompacting?(compacting: boolean, tokenCount?: number): void;
   runExternalCommand?(title: string, command: string, args: string[]): number;
   setUpdateNotice?(notice: UpdateNotice | null): void;
   clearUpdateNotice?(): void;
-  updateItemPickerItems?(items: PickerItem[], focusId?: string): void;
-  setCompacting?(compacting: boolean, tokenCount?: number): void;
   openBudgetView?(title: string, reports: { all: BudgetReport; session: BudgetReport }, scope?: "all" | "session"): void;
 }
 
@@ -79,6 +81,7 @@ export interface HandleSlashCommandOptions {
   getContextOptimizer: () => ReturnType<Session["getContextOptimizer"]>;
   onSessionReplace: (session: Session) => void;
   onModelChange: (model: ModelHandle, modelId: string) => void;
+  onModelRoutingChange?: () => void;
   onSystemPromptChange: (systemPrompt: string) => void;
   hooks: ExtensionHooks;
   onProjectChange: (cwd: string) => void;

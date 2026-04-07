@@ -16,7 +16,6 @@ export const TOOL_NAMES = [
   "webSearch",
   "webFetch",
   "todoWrite",
-  "agent",
 ] as const;
 
 export type ToolName = typeof TOOL_NAMES[number];

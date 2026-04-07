@@ -2,6 +2,8 @@ import type { RgbColor } from "./render/mascot.js";
 import type { BudgetReport } from "../core/budget-insights.js";
 import type { UpdateInfo } from "../core/update.js";
 import type { InputWidget } from "./input.js";
+import type { Session, SessionTreeItem } from "../core/session.js";
+import type { TreeFilterMode } from "../core/config.js";
 
 export interface ChatMessage {
   role: "user" | "assistant" | "system";
@@ -14,6 +16,7 @@ export interface ModelOption {
   providerName: string;
   modelId: string;
   active: boolean;
+  badges?: string[];
   isHeader?: boolean;
 }
 
@@ -42,20 +45,14 @@ export interface BudgetView {
 
 export type UpdateNotice = UpdateInfo;
 
-export interface AgentRun {
-  id: string;
-  prompt: string;
-  status: "running" | "done" | "error";
-  result?: string;
-  detail?: string;
-  createdAt: number;
-}
-
-export interface AgentRunView {
+export interface TreeView {
   title: string;
-  runs: AgentRun[];
-  selectedIndex: number;
+  session: Session;
+  filterMode: TreeFilterMode;
+  selectedId: string | null;
   scrollOffset: number;
+  collapsedIds: Set<string>;
+  showLabelTimestamps: boolean;
 }
 
 export interface QuestionOption {
@@ -120,12 +117,20 @@ export type MenuPromptKind =
   | "resume"
   | "session"
   | "hotkeys"
-  | "agents"
+  | "tree"
   | "templates"
   | "skills"
   | "changelog"
   | "projects"
   | "logout";
+
+export interface TreeRow {
+  item: SessionTreeItem;
+  marker: string;
+  text: string;
+  branchStart: boolean;
+  collapsed: boolean;
+}
 
 export interface MenuEntry {
   text: string;

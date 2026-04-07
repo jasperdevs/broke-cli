@@ -17,7 +17,7 @@ describe("command aliases", () => {
     expect(app.getCommandMatches()[0].name).toBe("clear");
   });
 
-  it("suggests resume for the sessions alias and hides removed commands", () => {
+  it("suggests resume for the sessions alias and only shows shipped commands", () => {
     const app = new App() as any;
     app.input.paste("/sessions");
     expect(app.getCommandMatches()[0].name).toBe("resume");
@@ -27,7 +27,7 @@ describe("command aliases", () => {
     expect(all).toContain("reload");
     expect(all).toContain("hotkeys");
     expect(all).toContain("session");
-    expect(all).not.toContain("tree");
+    expect(all).toContain("tree");
     expect(all).not.toContain("cost");
     expect(all).not.toContain("notify");
     expect(all).not.toContain("btw");

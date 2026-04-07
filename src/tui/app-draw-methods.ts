@@ -1,6 +1,7 @@
 import stripAnsi from "strip-ansi";
 import { execSync, spawnSync } from "child_process";
-import { getSettings } from "../core/config.js";
+import { getSettings, loadConfig } from "../core/config.js";
+import { listAuthenticated } from "../core/auth.js";
 import { BOLD, DIM, RESET } from "../utils/ansi.js";
 import { truncateVisible, visibleWidth } from "../utils/terminal-width.js";
 import { resolveNativeCommand } from "../ai/native-cli.js";
@@ -9,8 +10,9 @@ import { getCommandMatches as findCommandMatches } from "./command-surface.js";
 import { fmtCost, fmtTokens, wordWrap } from "./render/formatting.js";
 import { APP_BG, ERR, MUTED, OK, P, T, TXT, WARN } from "./app-shared.js";
 import { drawQuestionView } from "./question-view.js";
-import { drawAgentRunsView, drawBudgetView } from "./fullscreen-views.js";
+import { drawBudgetView } from "./fullscreen-views.js";
 import { appendBottomMenus, buildInfoBar } from "./bottom-ui.js";
+import { drawTreeView } from "./tree-view.js";
 
 type AppState = any;
 
@@ -46,8 +48,8 @@ export function drawImmediate(app: AppState): void {
     drawBudgetView(app);
     return;
   }
-  if (app.agentRunView) {
-    drawAgentRunsView(app);
+  if (app.treeView) {
+    drawTreeView(app);
     return;
   }
   if (app.questionView) {
@@ -189,12 +191,13 @@ export function shimmerText(_app: AppState, text: string, frame: number, color =
 export function appendModelPicker(app: AppState, lines: string[], _maxTotal: number, clickTargets: Array<{ lineIndex: number; action: () => void }>): void {
   const picker = app.modelPicker!;
   const total = app.getFilteredModels().length;
-  const maxItems = Math.max(1, _maxTotal - 3);
+  const maxItems = Math.max(1, _maxTotal - 4);
   lines.push(` ${T()}${BOLD}Select model${RESET} ${renderMenuCount(total === 0 ? 0 : picker.cursor + 1, total)}`);
   const allLabel = picker.scope === "all" ? `${TXT()}${BOLD}all${RESET}` : `${MUTED()}all${RESET}`;
   const scopedLabel = picker.scope === "scoped" ? `${TXT()}${BOLD}pinned${RESET}` : `${MUTED()}pinned${RESET}`;
   lines.push(` ${DIM}Scope:${RESET} ${allLabel} ${DIM}|${RESET} ${scopedLabel}`);
-  lines.push(` ${DIM}space pin · tab scope${RESET}`);
+  lines.push(` ${DIM}enter use · space pin · tab scope${RESET}`);
+  lines.push(` ${DIM}1 default · 2 small · 3 review · 4 plan · 5 ui · 6 arch${RESET}`);
   if (app.getFilteredModels().length === 0) {
     lines.push(`  ${DIM}no matches${RESET}`);
     return;
@@ -233,7 +236,8 @@ export function appendSettingsPicker(app: AppState, lines: string[], _maxTotal: 
     lines.push(`  ${DIM}no matches${RESET}`);
     return;
   }
-  for (const entry of app.buildMenuView(app.getSettingsPickerEntries(), picker.cursor, 6)) {
+  const maxItems = Math.max(1, _maxTotal - 1);
+  for (const entry of app.buildMenuView(app.getSettingsPickerEntries(), picker.cursor, maxItems)) {
     if (entry.selectIndex !== undefined) app.registerMenuClickTarget(clickTargets, lines, () => app.toggleSettingEntry(entry.selectIndex!));
     lines.push(entry.text);
   }
@@ -247,14 +251,21 @@ export function appendItemPicker(app: AppState, lines: string[], _maxTotal: numb
     lines.push(`  ${DIM}no matches${RESET}`);
     return;
   }
-  for (const entry of app.buildMenuView(app.getItemPickerEntries(), picker.cursor, 10)) {
+  const maxItems = Math.max(1, _maxTotal - 1);
+  for (const entry of app.buildMenuView(app.getItemPickerEntries(), picker.cursor, maxItems)) {
     if (entry.selectIndex !== undefined) app.registerMenuClickTarget(clickTargets, lines, () => app.selectItemEntry(entry.selectIndex!));
     lines.push(entry.text);
   }
 }
 
 export function getCommandMatches(app: AppState) {
-  return findCommandMatches(app.input.getText(), { hasAgentRuns: (app.getAgentRuns?.().length ?? 0) > 0 });
+  const configuredAuth = Object.values(loadConfig().providers ?? {}).some((provider) => !!provider?.apiKey);
+  return findCommandMatches(app.input.getText(), {
+    hasMessages: app.messages.length > 0,
+    hasAssistantContent: !!app.getLastAssistantContent(),
+    canResume: getSettings().autoSaveSessions,
+    hasStoredAuth: configuredAuth || listAuthenticated().length > 0,
+  });
 }
 
 export function start(app: AppState): void {

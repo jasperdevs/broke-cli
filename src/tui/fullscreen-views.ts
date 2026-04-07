@@ -1,55 +1,11 @@
 import { BOLD, DIM, RESET } from "../utils/ansi.js";
-import { visibleWidth } from "../utils/terminal-width.js";
 import { renderBudgetDashboard } from "../core/budget-insights.js";
-import { ERR, OK, T, TXT } from "./app-shared.js";
-import { wordWrap } from "./render/formatting.js";
+import { T } from "./app-shared.js";
 
 type AppState = any;
 
 function renderMenuCount(current: number, total: number): string {
   return `${DIM}(${current}/${total})${RESET}`;
-}
-
-function renderAgentRunListItem(
-  run: { prompt: string; status: "running" | "done" | "error"; detail?: string },
-  selected: boolean,
-  width: number,
-): string {
-  const statusColor = run.status === "error" ? ERR() : run.status === "done" ? DIM : OK();
-  const arrow = selected ? `${T()}>${RESET}` : `${DIM} ${RESET}`;
-  const label = selected ? `${TXT()}${BOLD}Task${RESET}` : `${DIM}Task${RESET}`;
-  const prompt = run.prompt.replace(/\s+/g, " ").trim() || "[empty]";
-  const promptText = appTruncate(prompt, Math.max(8, width - 10));
-  const detail = run.detail ? ` ${DIM}${appTruncate(run.detail, Math.max(8, width - 8))}${RESET}` : "";
-  return `${arrow} ${label} ${statusColor}${promptText}${RESET}${detail}`;
-}
-
-function buildAgentRunDetail(
-  run: { prompt: string; status: "running" | "done" | "error"; detail?: string; result?: string },
-  width: number,
-): string[] {
-  const lines: string[] = [];
-  const statusColor = run.status === "error" ? ERR() : run.status === "done" ? OK() : T();
-  const header = `${statusColor}${BOLD}${run.status === "running" ? "Working" : run.status === "error" ? "Error" : "Done"}${RESET}`;
-  lines.push(`${header}${run.detail ? ` ${DIM}${run.detail}${RESET}` : ""}`);
-  lines.push("");
-  lines.push(`${DIM}Task${RESET}`);
-  for (const line of wordWrap(run.prompt.replace(/\s+/g, " ").trim(), Math.max(8, width))) {
-    lines.push(`${TXT()}${line}${RESET}`);
-  }
-  lines.push("");
-  lines.push(`${DIM}Result${RESET}`);
-  const body = (run.result ?? (run.status === "running" ? "Preparing prompt..." : "[empty]")).trim();
-  for (const rawLine of body.split(/\r?\n/)) {
-    for (const line of wordWrap(rawLine || " ", Math.max(8, width))) {
-      lines.push(`${TXT()}${line}${RESET}`);
-    }
-  }
-  return lines;
-}
-
-function appTruncate(text: string, width: number): string {
-  return visibleWidth(text) <= width ? text : `${text.slice(0, Math.max(0, width - 3))}...`;
 }
 
 export function drawBudgetView(app: AppState): void {
@@ -89,101 +45,6 @@ export function drawBudgetView(app: AppState): void {
     const indicator = maxScroll > 0 ? (i === thumbRow ? `${T()}█${RESET}` : `${DIM}│${RESET}`) : " ";
     frame.push(`${" ".repeat(leftPad)}${app.padLine(line, bodyWidth)} ${indicator}`);
   }
-  while (frame.length < height) frame.push("");
-  app.screen.render(frame.map((line) => app.decorateFrameLine(line, width)));
-  app.screen.hideCursor();
-}
-
-export function drawAgentRunsView(app: AppState): void {
-  const { width, height } = app.screen;
-  const separatorColor = app.getModeAccent();
-  const title = `${T()}${BOLD}${app.agentRunView.title}${RESET}`;
-  const listWidth = Math.min(38, Math.max(24, Math.floor(width * 0.36)));
-  const detailWidth = Math.max(20, width - listWidth - 3);
-  const rows = Math.max(1, height - 3);
-  const runs = app.agentRunView.runs;
-  const selectedIndex = Math.max(0, Math.min(runs.length - 1, app.agentRunView.selectedIndex));
-  app.agentRunView.selectedIndex = selectedIndex;
-  const maxScroll = Math.max(0, runs.length - rows);
-  if (selectedIndex < app.agentRunView.scrollOffset) app.agentRunView.scrollOffset = selectedIndex;
-  if (selectedIndex >= app.agentRunView.scrollOffset + rows) {
-    app.agentRunView.scrollOffset = Math.max(0, selectedIndex - rows + 1);
-  }
-  if (app.agentRunView.scrollOffset > maxScroll) app.agentRunView.scrollOffset = maxScroll;
-
-  const frame: string[] = [];
-  const count = renderMenuCount(runs.length === 0 ? 0 : selectedIndex + 1, runs.length);
-  frame.push(`${separatorColor}${"─".repeat(width)}${RESET}`);
-  const headerRight = `${count} ${DIM}esc back${RESET}`;
-  frame.push(` ${title}${" ".repeat(Math.max(1, width - 2 - visibleWidth(title) - visibleWidth(headerRight)))}${headerRight}`);
-
-  const visibleRuns = runs.slice(app.agentRunView.scrollOffset, app.agentRunView.scrollOffset + rows);
-  const selectedRun = runs[selectedIndex];
-  const detailLines = selectedRun
-    ? buildAgentRunDetail(selectedRun, detailWidth)
-    : [`${DIM}no agent runs yet${RESET}`];
-
-  for (let i = 0; i < rows; i++) {
-    const run = visibleRuns[i];
-    const absoluteIndex = app.agentRunView.scrollOffset + i;
-    const selected = absoluteIndex === selectedIndex;
-    const left = run ? app.padLine(renderAgentRunListItem(run, selected, listWidth), listWidth) : app.padLine("", listWidth);
-    const right = app.padLine(detailLines[i] ?? "", detailWidth);
-    frame.push(`${left} ${app.getSidebarBorder()} ${right}`);
-  }
-
-  while (frame.length < height) frame.push("");
-  app.screen.render(frame.map((line) => app.decorateFrameLine(line, width)));
-  app.screen.hideCursor();
-}
-
-export function drawModelPickerView(app: AppState): void {
-  const { width, height } = app.screen;
-  const separatorColor = app.getModeAccent();
-  const picker = app.modelPicker!;
-  const filtered = app.getFilteredModels();
-  const entries = app.getModelPickerEntries();
-  const total = filtered.length;
-  const current = total === 0 ? 0 : Math.min(total, picker.cursor + 1);
-  const count = renderMenuCount(current, total);
-  const scopeLabel = picker.scope === "all"
-    ? `${TXT()}${BOLD}all${RESET}${DIM} | ${RESET}${DIM}pinned${RESET}`
-    : `${DIM}all${RESET}${DIM} | ${RESET}${TXT()}${BOLD}pinned${RESET}`;
-  const prompt = app.input.getText() || app.getMenuPromptPrefix("model");
-  const leftPad = 2;
-  const bodyWidth = Math.max(20, width - leftPad - 4);
-  const bodyHeight = Math.max(1, height - 8);
-  let selectedEntryIndex = entries.findIndex((entry: { selectIndex?: number }) => entry.selectIndex === picker.cursor);
-  if (selectedEntryIndex < 0) selectedEntryIndex = Math.max(0, entries.findIndex((entry: { selectIndex?: number }) => entry.selectIndex !== undefined));
-  let scrollOffset = 0;
-  if (entries.length > bodyHeight) {
-    scrollOffset = Math.max(0, selectedEntryIndex - Math.floor(bodyHeight / 2));
-    if (scrollOffset + bodyHeight > entries.length) scrollOffset = Math.max(0, entries.length - bodyHeight);
-  }
-  const visible = entries.slice(scrollOffset, scrollOffset + bodyHeight);
-  const maxScroll = Math.max(0, entries.length - bodyHeight);
-  const thumbRow = maxScroll > 0
-    ? Math.round((scrollOffset / Math.max(maxScroll, 1)) * Math.max(0, bodyHeight - 1))
-    : -1;
-
-  const frame: string[] = [];
-  frame.push(`${separatorColor}${"─".repeat(width)}${RESET}`);
-  frame.push("");
-  frame.push(` ${T()}${BOLD}Select model${RESET} ${count}`);
-  frame.push(` ${DIM}Scope:${RESET} ${scopeLabel}${DIM} · space pin · tab scope · esc back${RESET}`);
-  frame.push(` ${DIM}${prompt}${RESET}`);
-  frame.push("");
-
-  if (visible.length === 0) {
-    frame.push(`${" ".repeat(leftPad)}${DIM}None${RESET}`);
-  } else {
-    for (let i = 0; i < bodyHeight; i++) {
-      const line = visible[i]?.text ?? "";
-      const indicator = maxScroll > 0 ? (i === thumbRow ? `${T()}█${RESET}` : `${DIM}│${RESET}`) : " ";
-      frame.push(`${" ".repeat(leftPad)}${app.padLine(line, bodyWidth)} ${indicator}`);
-    }
-  }
-
   while (frame.length < height) frame.push("");
   app.screen.render(frame.map((line) => app.decorateFrameLine(line, width)));
   app.screen.hideCursor();

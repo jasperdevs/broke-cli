@@ -10,7 +10,7 @@ import { Session } from "../core/session.js";
 import { listThemes, setPreviewTheme } from "../core/themes.js";
 import { TOOL_NAMES } from "../tools/registry.js";
 import type { Keypress } from "../tui/keypress.js";
-import { buildHtmlExport, buildMarkdownExport, buildShareFilePath, formatRelativeMinutes, publishTranscriptShare } from "./exports.js";
+import { buildHtmlExport, buildMarkdownExport, formatRelativeMinutes } from "./exports.js";
 import { SessionManager } from "../core/session-manager.js";
 
 type AnyApp = any;
@@ -35,6 +35,7 @@ function listLogoutTargets(): string[] {
 
 export function openSettingsMenu(args: { app: AnyApp; activeModel: any; currentMode: Mode; onSystemPromptChange: (systemPrompt: string) => void; }): void {
   const { app, activeModel, currentMode, onSystemPromptChange } = args;
+  const thinkingLevels = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
   function buildEntries() {
     const s = getSettings();
     return [
@@ -42,7 +43,7 @@ export function openSettingsMenu(args: { app: AnyApp; activeModel: any; currentM
       { key: "autoCompact", label: "Auto-compact", value: String(s.autoCompact), description: "Automatically compress context when it gets too large" },
       { key: "autoSaveSessions", label: "Auto-save sessions", value: String(s.autoSaveSessions), description: "Save conversation history to disk" },
       { key: "gitCheckpoints", label: "Git checkpoints", value: String(s.gitCheckpoints), description: "Auto-commit before file modifications" },
-      { key: "thinkingLevel", label: "Thinking mode", value: s.thinkingLevel || (s.enableThinking ? "low" : "off"), description: "off / low / medium / high (ctrl+t to cycle)" },
+      { key: "thinkingLevel", label: "Thinking mode", value: s.thinkingLevel || (s.enableThinking ? "low" : "off"), description: "off / minimal / low / medium / high / xhigh (ctrl+t to cycle)" },
       { key: "hideSidebar", label: "Hide sidebar", value: String(s.hideSidebar), description: "Hide the right sidebar panel" },
       { key: "autoRoute", label: "Auto-route", value: String(s.autoRoute), description: "Route simple tasks to cheaper model automatically" },
       { key: "showTokens", label: "Show tokens", value: String(s.showTokens), description: "Display token count in status bar" },
@@ -55,6 +56,11 @@ export function openSettingsMenu(args: { app: AnyApp; activeModel: any; currentM
       { key: "editorPaddingX", label: "Editor padding", value: String(s.editorPaddingX), description: "Horizontal input padding (0-3)" },
       { key: "autocompleteMaxVisible", label: "Autocomplete size", value: String(s.autocompleteMaxVisible), description: "Visible command rows" },
       { key: "showHardwareCursor", label: "Hardware cursor", value: String(s.showHardwareCursor), description: "Keep the terminal cursor visible while idle" },
+      { key: "enableSkillCommands", label: "Skill commands", value: String(s.enableSkillCommands), description: "Allow /skill:name prompt shortcuts" },
+      { key: "discoverExtensions", label: "Discover extensions", value: String(s.discoverExtensions), description: "Load extensions from configured paths" },
+      { key: "discoverSkills", label: "Discover skills", value: String(s.discoverSkills), description: "Load skills from configured paths" },
+      { key: "discoverPrompts", label: "Discover templates", value: String(s.discoverPrompts), description: "Load prompt templates from configured paths" },
+      { key: "discoverThemes", label: "Discover themes", value: String(s.discoverThemes), description: "Load themes from configured paths" },
       { key: "terminal.showImages", label: "Show image tags", value: String(s.terminal.showImages), description: "Show pasted image markers in chat" },
       { key: "images.blockImages", label: "Block images", value: String(s.images.blockImages), description: "Do not send pasted images to models" },
       { key: "autoLint", label: "Auto lint", value: String(s.autoLint), description: `Run ${s.lintCommand || "lint"} after model edits` },
@@ -67,9 +73,8 @@ export function openSettingsMenu(args: { app: AnyApp; activeModel: any; currentM
     const s = getSettings();
     const val = s[key as keyof Settings];
     if (key === "thinkingLevel") {
-      const levels = ["off", "low", "medium", "high"] as const;
       const current = s.thinkingLevel || (s.enableThinking ? "low" : "off");
-      const next = levels[(levels.indexOf(current as any) + 1) % levels.length];
+      const next = thinkingLevels[(thinkingLevels.indexOf(current as any) + 1) % thinkingLevels.length];
       updateSetting("thinkingLevel", next);
       updateSetting("enableThinking", next !== "off");
     } else if (typeof val === "boolean") {
@@ -174,36 +179,15 @@ export function openExportMenu(args: { app: AnyApp; session: Session; activeMode
         if (process.platform === "win32") execSync("clip", { input: content });
         else if (process.platform === "darwin") execSync("pbcopy", { input: content });
         else execSync("xclip -selection clipboard", { input: content });
-        app.addMessage("system", "Transcript copied.");
+        app.setStatus?.("Transcript copied.");
       } else {
         writeFileSync(filePath, content, "utf-8");
-        app.addMessage("system", `Exported to ${filePath}`);
+        app.setStatus?.(`Exported to ${filePath}`);
       }
     } catch (err) {
-      app.addMessage("system", `Export failed: ${(err as Error).message}`);
+      app.setStatus?.(`Export failed: ${(err as Error).message}`);
     }
   }, { kind: "export" });
-}
-
-export async function shareTranscript(args: { app: AnyApp; session: Session; activeModel: any; currentModelId: string; }): Promise<void> {
-  const { app, session, activeModel, currentModelId } = args;
-  const msgs = session.getMessages();
-  if (msgs.length === 0) {
-    app.addMessage("system", "Nothing to share yet.");
-    return;
-  }
-  const filePath = buildShareFilePath(msgs, process.cwd());
-  const content = buildHtmlExport(msgs, activeModel?.provider.name ?? "unknown", currentModelId || "unknown", process.cwd());
-  const share = await publishTranscriptShare({ html: content, filePath, description: `Transcript from ${process.cwd()}` });
-  const shareUrl = share.url;
-  try {
-    if (process.platform === "win32") execSync("clip", { input: shareUrl });
-    else if (process.platform === "darwin") execSync("pbcopy", { input: shareUrl });
-    else execSync("xclip -selection clipboard", { input: shareUrl });
-    app.addMessage("system", share.kind === "gist" ? `Shared to ${share.url} (link copied)` : `Shared to ${share.filePath} (link copied)`);
-  } catch {
-    app.addMessage("system", share.kind === "gist" ? `Shared to ${share.url}` : `Shared to ${share.filePath}`);
-  }
 }
 
 export function openResumeMenu(args: { app: AnyApp; restText: string; onSessionReplace: (session: Session) => void; }): boolean {
@@ -252,7 +236,7 @@ export async function handleLogoutMenu(args: { app: AnyApp; restText: string; ac
     const knownTargets = listLogoutTargets();
     const targets = normalized === "all" ? knownTargets : normalized ? [normalized] : [];
     if (targets.length === 0) {
-      app.addMessage("system", "No stored credentials found to clear.");
+      app.setStatus?.("No stored credentials found to clear.");
       return;
     }
     const cleared: string[] = [];
@@ -275,9 +259,9 @@ export async function handleLogoutMenu(args: { app: AnyApp; restText: string; ac
     }
     if (normalized === "all" || (activeModel && targets.includes(activeModel.provider.id))) updateSetting("lastModel", "");
     await refreshProviderState(true);
-    if (cleared.length > 0) app.addMessage("system", `Cleared stored auth for: ${cleared.join(", ")}`);
-    if (external.length > 0) app.addMessage("system", `External env/native auth still active: ${external.join(", ")}`);
-    if (cleared.length === 0 && external.length === 0) app.addMessage("system", "No stored credentials found to clear.");
+    if (cleared.length > 0) app.setStatus?.(`Cleared stored auth for: ${cleared.join(", ")}`);
+    else if (external.length > 0) app.setStatus?.(`External env/native auth still active: ${external.join(", ")}`);
+    else app.setStatus?.("No stored credentials found to clear.");
   };
 
   if (restText) {

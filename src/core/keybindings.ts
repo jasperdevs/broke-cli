@@ -4,7 +4,7 @@ import { homedir } from "os";
 
 export interface Keybindings {
   modelPicker: string;
-  agentsView: string;
+  treeView: string;
   abort: string;
   submit: string;
   newline: string;
@@ -17,7 +17,7 @@ export interface Keybindings {
 
 export const DEFAULT_KEYBINDINGS: Keybindings = {
   modelPicker: "ctrl+l",
-  agentsView: "alt+a",
+  treeView: "alt+a",
   abort: "ctrl+c",
   submit: "return",
   newline: "shift+return",
@@ -36,7 +36,11 @@ export function loadKeybindings(): Keybindings {
   if (existsSync(file)) {
     try {
       const raw = JSON.parse(readFileSync(file, "utf-8"));
-      cached = { ...DEFAULT_KEYBINDINGS, ...raw };
+      cached = {
+        ...DEFAULT_KEYBINDINGS,
+        ...raw,
+        treeView: raw.treeView ?? raw.agentsView ?? DEFAULT_KEYBINDINGS.treeView,
+      };
     } catch {
       cached = { ...DEFAULT_KEYBINDINGS };
     }

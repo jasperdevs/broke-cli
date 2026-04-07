@@ -1,13 +1,12 @@
-import { writeFileSync } from "fs";
 import { buildSystemPrompt, reloadContext } from "../core/context.js";
 import { compactMessages, getTotalContextTokens } from "../core/compact.js";
-import { clearCredentials, hasStoredCredentials, listAuthenticated } from "../core/auth.js";
-import { getProviderCredential, getSettings, loadConfig, updateProviderConfig, updateSetting, type Settings, type Mode } from "../core/config.js";
+import { getSettings, updateModelPreference, updateSetting, type Mode, type ModelPreferenceSlot } from "../core/config.js";
 import { runConnectFlow } from "./connect-flow.js";
 import { runLoginFlow } from "./login-flow.js";
 import { openExtensionsMenu, openPermissionsMenu, openSettingsMenu, openThemeMenu } from "./slash-command-menus.js";
 import type { HandleSlashCommandOptions, SlashCommandResult } from "./slash-command-types.js";
 import { handleUiSlashCommand } from "./slash-command-ui.js";
+import { getResolvedModelPreference } from "./model-routing.js";
 
 export async function handleSlashCommand(options: HandleSlashCommandOptions): Promise<SlashCommandResult> {
   const {
@@ -26,6 +25,7 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
     getContextOptimizer,
     onSessionReplace,
     onModelChange,
+    onModelRoutingChange,
     onSystemPromptChange,
     hooks,
     onProjectChange,
@@ -36,7 +36,7 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
 
   switch (cmd) {
     case "help":
-      app.addMessage("system", "Type / to see available commands.");
+      app.setDraft?.("/");
       return { handled: true };
     case "new":
     case "clear":
@@ -66,7 +66,7 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
     case "model": {
       const allOptions = buildVisibleModelOptions();
       if (allOptions.length === 0) {
-        app.addMessage("system", "No connected providers found. Run /connect.");
+        app.setStatus?.("No connected providers found. Run /connect.");
         return { handled: true };
       }
       app.openModelPicker(allOptions, (provId, modId) => {
@@ -77,13 +77,21 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
           session.setProviderModel(nextModel.provider.name, modId);
           updateSetting("lastModel", `${provId}/${modId}`);
         } catch (err) {
-          app.addMessage("system", `Failed: ${(err as Error).message}`);
+          app.setStatus?.(`Failed: ${(err as Error).message}`);
         }
       }, (provId, modId, pinned) => {
         const key = `${provId}/${modId}`;
         const scoped = getSettings().scopedModels;
         if (pinned && !scoped.includes(key)) updateSetting("scopedModels", [...scoped, key]);
         else if (!pinned) updateSetting("scopedModels", scoped.filter((entry: string) => entry !== key));
+        app.updateModelPickerOptions?.(buildVisibleModelOptions(), key);
+      }, (provId, modId, slot: ModelPreferenceSlot) => {
+        const key = `${provId}/${modId}`;
+        const fallbackProviderId = activeModel?.provider.id ?? provId;
+        const current = getResolvedModelPreference(slot, fallbackProviderId);
+        updateModelPreference(slot, current?.key === key ? null : key);
+        onModelRoutingChange?.();
+        app.updateModelPickerOptions?.(buildVisibleModelOptions(), key);
       }, 0);
       return { handled: true };
     }
@@ -105,7 +113,7 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
     }
     case "compact": {
       if (!activeModel) {
-        app.addMessage("system", "No model available for compaction.");
+        app.setStatus?.("No model available for compaction.");
         return { handled: true };
       }
       hooks.emit("on_message", { role: "user", content: text });
@@ -114,16 +122,16 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
         const ctxTokens = getTotalContextTokens(chatMsgs, systemPrompt, currentModelId);
         app.setCompacting?.(true, ctxTokens);
         const compacted = activeModel.runtime === "sdk" && activeModel.model
-          ? await compactMessages(chatMsgs, activeModel.model)
+          ? await compactMessages(chatMsgs, activeModel.model, { customInstructions: restText || undefined })
           : chatMsgs.slice(-6);
         session.replaceConversation(compacted);
         session.recordCompaction();
         app.setCompacting?.(false);
         app.clearMessages();
-        app.addMessage("system", `Context compacted: ${chatMsgs.length} messages -> ${compacted.length}`);
+        app.setStatus?.(`Compacted ${chatMsgs.length} -> ${compacted.length}`);
       } catch (err) {
         app.setCompacting?.(false);
-        app.addMessage("system", `Compact failed: ${(err as Error).message}`);
+        app.setStatus?.(`Compact failed: ${(err as Error).message}`);
       }
       return { handled: true };
     }
@@ -131,7 +139,7 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
       const forked = session.fork();
       if (activeModel) forked.setProviderModel(activeModel.provider.name, currentModelId);
       onSessionReplace(forked);
-      app.addMessage("system", "Forked session. History preserved, new branch started.");
+      app.setStatus?.("Forked session.");
       return { handled: true };
     }
     case "caveman": {
@@ -147,11 +155,12 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
     case "name": {
       const name = text.slice(6).trim();
       if (!name) {
-        app.addMessage("system", "Usage: /name <session name>");
+        app.setStatus?.("Usage: /name <session name>");
         return { handled: true };
       }
       session.setName(name);
       app.setSessionName?.(name);
+      app.setStatus?.(`Session renamed to ${name}`);
       return { handled: true };
     }
     default: {
@@ -169,7 +178,7 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
         onProjectChange,
       });
       if (uiResult) return uiResult;
-      app.addMessage("system", `Unknown: /${cmd}`);
+      app.setStatus?.(`Unknown: /${cmd}`);
       return { handled: true };
     }
   }
