@@ -185,7 +185,6 @@ export function handlePickerKey(app: AppState, key: Keypress): void {
     else if (key.name === "pagedown") app.modelPicker.cursor = app.clampMenuCursor(app.modelPicker.cursor + page, filtered.length);
     else if (key.name === "home") app.modelPicker.cursor = 0;
     else if (key.name === "end") app.modelPicker.cursor = app.clampMenuCursor(filtered.length - 1, filtered.length);
-    else if (key.name === "tab") app.toggleModelScope();
     else if (key.name === "space") app.toggleModelPin(app.modelPicker.cursor);
     else if (!key.ctrl && !key.meta && queryEmpty && key.char === "1") app.assignModelSlot(app.modelPicker.cursor, "default");
     else if (!key.ctrl && !key.meta && queryEmpty && key.char === "2") app.assignModelSlot(app.modelPicker.cursor, "small");

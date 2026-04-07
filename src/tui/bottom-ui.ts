@@ -66,7 +66,7 @@ export function appendBottomMenus(
   }
   if (app.modelPicker) {
     bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
-    app.appendModelPicker(bottomLines, getAvailableBodyRows(3), bottomMenuClicks);
+    app.appendModelPicker(bottomLines, getAvailableBodyRows(4), bottomMenuClicks);
     return;
   }
   if (app.treeView) {

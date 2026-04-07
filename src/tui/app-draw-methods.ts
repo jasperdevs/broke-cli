@@ -201,12 +201,9 @@ export function appendModelPicker(app: AppState, lines: string[], _maxTotal: num
   const total = app.getFilteredModels().length;
   const maxItems = Math.max(1, _maxTotal);
   lines.push(` ${T()}${BOLD}Select model${RESET} ${renderMenuCount(total === 0 ? 0 : picker.cursor + 1, total)}`);
-  const allLabel = picker.scope === "all" ? `${TXT()}${BOLD}all${RESET}` : `${MUTED()}all${RESET}`;
-  const scopedLabel = picker.scope === "scoped" ? `${TXT()}${BOLD}pinned${RESET}` : `${MUTED()}pinned${RESET}`;
-  lines.push(` ${DIM}Scope:${RESET} ${allLabel} ${DIM}|${RESET} ${scopedLabel}`);
-  lines.push(` ${DIM}enter use · space pin · tab scope${RESET}`);
-  lines.push(` ${DIM}assign selected: 1 chat · 2 auto-small · 3 review${RESET}`);
-  lines.push(` ${DIM}4 planning · 5 ui · 6 architecture${RESET}`);
+  lines.push(` ${DIM}enter switch · space favorite · type filter${RESET}`);
+  lines.push(` ${DIM}set selected as: 1 chat · 2 auto-small · 3 review${RESET}`);
+  lines.push(` ${DIM}4 planning · 5 UI · 6 architecture${RESET}`);
   if (app.getFilteredModels().length === 0) {
     lines.push(`  ${DIM}no matches${RESET}`);
     return;

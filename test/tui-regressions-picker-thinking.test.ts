@@ -55,7 +55,7 @@ describe("picker menus", () => {
     expect(app.itemPicker).toBeNull();
   });
 
-  it("shows model scope toggle and restores theme preview on escape", () => {
+  it("uses plain-language model picker copy and restores theme preview on escape", () => {
     const app = new App() as any;
     app.openModelPicker(
       [
@@ -65,12 +65,14 @@ describe("picker menus", () => {
       () => {},
       () => {},
     );
-    app.handleKey({ name: "tab", char: "", ctrl: false, meta: false, shift: false });
-    expect(app.modelPicker.scope).toBe("scoped");
     let rendered: string[] = [];
     app.screen = { height: 16, width: 60, hasSidebar: false, mainWidth: 60, sidebarWidth: 20, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
     app.drawImmediate();
-    expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("Scope: all | pinned");
+    const pickerText = rendered.map((line) => stripAnsi(line)).join("\n");
+    expect(pickerText).toContain("enter switch");
+    expect(pickerText).toContain("space favorite");
+    expect(pickerText).toContain("set selected as: 1 chat");
+    expect(pickerText).not.toContain("Scope:");
 
     const originalTheme = getSettings().theme;
     const themes = listThemes().slice(0, 4);
@@ -133,7 +135,7 @@ describe("picker menus", () => {
     expect(output).toContain("/model");
     expect(output).toContain("model-17");
     expect(output).not.toContain("no matches");
-    expect(output).toContain("space pin");
+    expect(output).toContain("space favorite");
   });
 
   it("caps item pickers to five visible rows even in tall panes", () => {

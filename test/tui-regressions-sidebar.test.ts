@@ -124,7 +124,8 @@ describe("sidebar scrolling", () => {
     app.mode = "plan";
     app.setContextUsage(120_000, 128_000);
     app.updateUsage(0.0021, 8_200, 621);
-    expect(app.renderSidebarFooter()).toEqual([]);
+    const footerWhileMenuOpen = app.renderSidebarFooter().map((line: string) => stripAnsi(line)).join("\n");
+    expect(footerWhileMenuOpen).toContain("8.8k total");
     app.closeItemPicker();
     const footer = app.renderSidebarFooter();
     const footerText = footer.map((line: string) => stripAnsi(line)).join("\n");
@@ -174,8 +175,8 @@ describe("sidebar scrolling", () => {
       expect(output).toContain("Commands");
       expect(output).toContain("settings");
       expect(output).not.toContain("help");
-      expect(output).not.toContain("120k ctx");
-      expect(output).not.toContain("621 out");
+      expect(output).toContain("120k ctx");
+      expect(output).toContain("621 out");
       expect(stripAnsi(rendered[cursorRow - 1] ?? "")).toContain("/");
     } finally {
       updateSetting("showTokens", original.showTokens);
@@ -267,6 +268,27 @@ describe("sidebar scrolling", () => {
     expect(app.sidebarScrollOffset).toBe(0);
     app.handleKey({ name: "scrolldown", char: "95,8", ctrl: false, meta: false, shift: false });
     expect(app.sidebarFocused).toBe(true);
+    expect(app.sidebarScrollOffset).toBeGreaterThan(0);
+  });
+
+  it("decodes wheel-style sidebar scroll packets even when terminals set modifier bits", () => {
+    const app = new App() as any;
+    app.messages = [{ role: "user", content: "hello" }];
+    app.screen = { height: 18, width: 100, hasSidebar: true, mainWidth: 73, sidebarWidth: 24, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
+    app.buildSidebarLines = () => [
+      "New Session",
+      "v0.0.1",
+      "",
+      "provider/model",
+      "",
+      "Directory",
+      "  ~/repo",
+      "",
+      "▾ Files",
+      "  ▾ src/",
+      ...Array.from({ length: 18 }, (_, i) => `    file-${i}.ts`),
+    ];
+    app.handleKey({ name: "scrolldown", char: "95,8", ctrl: false, meta: false, shift: false });
     expect(app.sidebarScrollOffset).toBeGreaterThan(0);
   });
 

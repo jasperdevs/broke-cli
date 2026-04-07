@@ -63,8 +63,8 @@ export function getBottomLineCount(app: AppState, mainW: number, maxHeight: numb
     const entries = app.getModelPickerEntries();
     const visible = entries.length === 0
       ? 1
-      : Math.min(entries.length, maxVisibleRows, getMenuVisibleRows(maxHeight, baseCount, tailReserve, 3));
-    count += 4 + visible;
+      : Math.min(entries.length, maxVisibleRows, getMenuVisibleRows(maxHeight, baseCount, tailReserve, 4));
+    count += 5 + visible;
   } else if (app.treeView) {
     const rows = app.getVisibleTreeRows();
     const visible = rows.length === 0
@@ -111,20 +111,14 @@ export function getInputCursorLayout(app: AppState, text: string, cursor: number
 
 export function getFilteredModels(app: AppState): ModelOption[] {
   if (!app.modelPicker) return [];
-  const pool = app.modelPicker.scope === "scoped"
-    ? app.modelPicker.options.filter((option: ModelOption) => option.active)
-    : app.modelPicker.options;
   const q = app.getMenuFilterQuery().toLowerCase();
-  const basePool = pool.length > 0 ? pool : app.modelPicker.options;
-  if (!q) return basePool;
-  return basePool.filter((o: ModelOption) => o.modelId.toLowerCase().includes(q) || o.providerName.toLowerCase().includes(q));
+  const pool = app.modelPicker.options;
+  if (!q) return pool;
+  return pool.filter((o: ModelOption) => o.modelId.toLowerCase().includes(q) || o.providerName.toLowerCase().includes(q));
 }
 
 export function toggleModelScope(app: AppState): void {
-  if (!app.modelPicker) return;
-  app.modelPicker.scope = app.modelPicker.scope === "all" ? "scoped" : "all";
-  app.modelPicker.cursor = app.clampMenuCursor(app.modelPicker.cursor, app.getFilteredModels().length);
-  app.draw();
+  void app;
 }
 
 export function getFilteredSettings(app: AppState): SettingEntry[] {
@@ -293,7 +287,7 @@ export function getModelPickerEntries(app: AppState): MenuEntry[] {
   const badgeLabels: Record<string, string> = {
     now: "current",
     default: "chat",
-    small: "small auto",
+    small: "auto-small",
     review: "review",
     plan: "planning",
     ui: "ui",
@@ -307,8 +301,9 @@ export function getModelPickerEntries(app: AppState): MenuEntry[] {
   }
   const entries: MenuEntry[] = [];
   let currentIdx = 0;
+  const showProviderHeaders = byProvider.size > 1;
   for (const [provider, opts] of byProvider) {
-    entries.push({ text: ` ${DIM}${provider}${RESET}` });
+    if (showProviderHeaders) entries.push({ text: ` ${DIM}${provider}${RESET}` });
     for (const opt of opts) {
       const isCursor = currentIdx === app.modelPicker.cursor;
       const pin = opt.active ? ` ${T()}*${RESET}` : "";

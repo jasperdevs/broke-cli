@@ -103,10 +103,9 @@ export class KeypressHandler {
           const col = parseInt(match[2], 10);
           const row = parseInt(match[3], 10);
           const release = match[4] === "m";
-          if (button === 64) {
-            this.onKey({ name: "scrollup", char: `${col},${row}`, ctrl: false, meta: false, shift: false });
-          } else if (button === 65) {
-            this.onKey({ name: "scrolldown", char: `${col},${row}`, ctrl: false, meta: false, shift: false });
+          if ((button & 64) === 64) {
+            const wheelDirection = button & 1;
+            this.onKey({ name: wheelDirection === 0 ? "scrollup" : "scrolldown", char: `${col},${row}`, ctrl: false, meta: false, shift: false });
           } else if (button === 0 && release) {
             this.onKey({ name: "click", char: `${col},${row}`, ctrl: false, meta: false, shift: false });
           }

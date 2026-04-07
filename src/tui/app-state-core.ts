@@ -90,9 +90,7 @@ export function getModeAccent(app: AppState): string {
 
 function shouldHideSidebarFooter(app: AppState): boolean {
   if (app.isStreaming || app.isCompacting) return true;
-  if (app.filePicker || app.itemPicker || app.settingsPicker || app.modelPicker || app.treeView || app.questionView) return true;
-  if (app.pendingImages?.length > 0) return true;
-  return app.getCommandSuggestionEntries().length > 0;
+  return false;
 }
 
 export function renderSidebarFooter(app: AppState): string[] {
