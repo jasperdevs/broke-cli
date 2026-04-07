@@ -3,6 +3,7 @@ import { Session } from "../src/core/session.js";
 import { buildBudgetReport } from "../src/core/budget-insights.js";
 import { App } from "../src/tui/app.js";
 import { MOUSE_OFF, MOUSE_ON } from "../src/utils/ansi.js";
+import { ALT_SCREEN_OFF, ALT_SCREEN_ON } from "../src/utils/ansi.js";
 import { visibleWidth } from "../src/utils/terminal-width.js";
 import { getSettings, updateSetting } from "../src/core/config.js";
 import { currentTheme } from "../src/core/themes.js";
@@ -10,6 +11,7 @@ import stripAnsi from "strip-ansi";
 import type { Keypress } from "../src/tui/keypress.js";
 import { renderStaticMessages } from "../src/tui/render/messages.js";
 import { wordWrap } from "../src/tui/render/formatting.js";
+import { Screen } from "../src/tui/screen.js";
 
 describe("session token accounting", () => {
   it("keeps separate input and output totals", () => {
@@ -32,6 +34,27 @@ describe("mouse reporting mode", () => {
     const app = new App() as any;
     app.messages = [{ role: "user", content: "hello" }];
     expect(app.shouldEnableMenuMouse()).toBe(false);
+  });
+});
+
+describe("screen buffer mode", () => {
+  it("enters the alternate screen so the TUI stays fullscreen instead of living in scrollback", () => {
+    const writes: string[] = [];
+    const originalWrite = process.stdout.write;
+    (process.stdout.write as unknown as (chunk: any, ...args: any[]) => boolean) = ((chunk: any, ...args: any[]) => {
+      writes.push(String(chunk));
+      return true;
+    }) as typeof process.stdout.write;
+
+    try {
+      const screen = new Screen();
+      screen.enter();
+      screen.exit();
+      expect(writes.join("")).toContain(ALT_SCREEN_ON);
+      expect(writes.join("")).toContain(ALT_SCREEN_OFF);
+    } finally {
+      (process.stdout.write as unknown as typeof process.stdout.write) = originalWrite;
+    }
   });
 });
 

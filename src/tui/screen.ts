@@ -35,11 +35,15 @@ export class Screen {
   get height(): number { return this.rows; }
   get width(): number { return this.cols; }
 
-  /** Enter screen mode without switching to the alternate buffer so selection stays native. */
+  /** Enter the TUI in the terminal alternate buffer so it stays fullscreen. */
   enter(): void {
     if (!this.resizeAttached) {
       process.stdout.on("resize", this.handleResize);
       this.resizeAttached = true;
+    }
+    if (!this.usingAlternateScreen) {
+      write(ALT_SCREEN_ON);
+      this.usingAlternateScreen = true;
     }
     write(CURSOR_HOME);
     write(CLEAR_SCREEN);
