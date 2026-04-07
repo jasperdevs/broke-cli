@@ -22,6 +22,14 @@ Required sections in order:
 - next:
 `;
 
+export const COMPACTION_SUMMARY_PREFIX = `The conversation history before this point was compacted into the following summary:
+
+<summary>
+`;
+
+export const COMPACTION_SUMMARY_SUFFIX = `
+</summary>`;
+
 interface CompactOptions {
   customInstructions?: string;
   tailKeep?: number;
@@ -108,12 +116,36 @@ async function generateCompactionSummary(
   return result.text.trim();
 }
 
+export function buildCompactionContextMessage(summary: string): string {
+  return `${COMPACTION_SUMMARY_PREFIX}${summary.trim()}${COMPACTION_SUMMARY_SUFFIX}`;
+}
+
+export function splitCompactedMessages(
+  messages: Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }>,
+): {
+  summary: string | null;
+  messages: Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }>;
+} {
+  const first = messages[0];
+  if (first?.role !== "user") return { summary: null, messages };
+  if (!first.content.startsWith(COMPACTION_SUMMARY_PREFIX) || !first.content.endsWith(COMPACTION_SUMMARY_SUFFIX)) {
+    return { summary: null, messages };
+  }
+  return {
+    summary: first.content.slice(COMPACTION_SUMMARY_PREFIX.length, -COMPACTION_SUMMARY_SUFFIX.length).trim(),
+    messages: messages.slice(1),
+  };
+}
+
 export async function compactMessages(
   messages: Array<{ role: "user" | "assistant"; content: string }>,
   model: LanguageModel,
   options: CompactOptions = {},
 ): Promise<{ role: "user" | "assistant"; content: string }[]> {
-  const normalized = dedupeConversation(messages);
+  const parsed = splitCompactedMessages(messages);
+  const normalized = dedupeConversation(parsed.summary
+    ? [{ role: "user" as const, content: `Previously compacted summary:\n${parsed.summary}` }, ...parsed.messages]
+    : messages);
   const tailKeep = Math.max(3, options.tailKeep ?? 6);
   if (normalized.length <= tailKeep) return normalized;
 
@@ -123,12 +155,12 @@ export async function compactMessages(
   try {
     const summary = await generateCompactionSummary(toSummarize, model, options.customInstructions);
     return [
-      { role: "user" as const, content: `[Compacted context]\n${summary}` },
+      { role: "user" as const, content: buildCompactionContextMessage(summary) },
       ...toKeep,
     ];
   } catch {
     return [
-      { role: "user" as const, content: `[Compacted context]\n${buildDeterministicSummary(toSummarize, options.customInstructions)}` },
+      { role: "user" as const, content: buildCompactionContextMessage(buildDeterministicSummary(toSummarize, options.customInstructions)) },
       ...toKeep,
     ];
   }

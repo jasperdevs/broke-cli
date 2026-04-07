@@ -37,12 +37,19 @@ export interface SessionBudgetMetrics {
   toolCallsByName: Record<string, number>;
 }
 
+export interface CompactionSummaryState {
+  summary: string;
+  tokensBefore: number;
+  timestamp: number;
+}
+
 export interface SessionData {
   id: string;
   name?: string;
   cwd: string;
   provider: string;
   model: string;
+  compactionSummary?: CompactionSummaryState | null;
   messages?: Message[];
   entries?: SessionEntry[];
   leafId?: string | null;

@@ -1,7 +1,7 @@
 import { getContextLimit } from "../ai/cost.js";
 import type { ModelHandle } from "../ai/providers.js";
 import { buildSystemPrompt, resolveCavemanLevel } from "../core/context.js";
-import { compactMessages, getTotalContextTokens } from "../core/compact.js";
+import { compactMessages, getTotalContextTokens, splitCompactedMessages } from "../core/compact.js";
 import { checkBudget } from "../core/budget.js";
 import { getModelContextLimitOverride, getSettings, type Mode } from "../core/config.js";
 import { resolveTurnPolicy } from "../core/turn-policy.js";
@@ -107,16 +107,20 @@ export async function runModelTurn(options: {
   }
 
   const idleMs = Date.now() - lastActivityTime;
-  if (idleMs > 5 * 60 * 1000 && session.getChatMessages().length > 4) {
+  const idleChatMessages = session.getChatMessages();
+  if (idleMs > 5 * 60 * 1000 && idleChatMessages.length > 4) {
     const idleMins = Math.floor(idleMs / 60000);
     session.recordIdleCacheCliff();
     app.setStatus(`idle ${idleMins}m - context cache likely expired, consider /compact`);
-    if (settings.autoCompact && session.getChatMessages().length > 8) {
+    if (settings.autoCompact && idleChatMessages.length > 8) {
       try {
-        const carryForward = await compactForModel(session.getChatMessages(), activeModel);
-        session.replaceConversation(carryForward);
+        const idleContextTokens = getTotalContextTokens(idleChatMessages, systemPrompt, currentModelId);
+        const carryForward = await compactForModel(idleChatMessages, activeModel);
+        const parsed = splitCompactedMessages(carryForward);
+        if (parsed.summary) session.applyCompaction(parsed.summary, parsed.messages, idleContextTokens);
+        else session.replaceConversation(parsed.messages);
         session.recordCompaction({ freshThreadCarryForward: true });
-        app.addMessage("system", `Fresh carry-forward after ${idleMins}m idle to avoid cache waste.`);
+        app.setStatus(`Refreshed hidden context after ${idleMins}m idle to avoid cache waste.`);
       } catch {
         // keep current transcript if carry-forward compaction fails
       }
@@ -173,10 +177,12 @@ export async function runModelTurn(options: {
     try {
       app.setCompacting(true, ctxTokens);
       const compacted = await compactForModel(chatMsgs, activeModel);
-      session.replaceConversation(compacted);
+      const parsed = splitCompactedMessages(compacted);
+      if (parsed.summary) session.applyCompaction(parsed.summary, parsed.messages, ctxTokens);
+      else session.replaceConversation(parsed.messages);
       session.recordCompaction();
       app.setCompacting(false);
-      app.addMessage("system", `Auto-compacted: ${chatMsgs.length} -> ${compacted.length} messages`);
+      app.setStatus(`Auto-compacted older context. Kept ${session.getMessages().length} visible messages.`);
       chatMsgs = session.getChatMessages();
       selectedMessages = selectMessagesForTurn(chatMsgs, policy, (messages) => getContextOptimizer().optimizeMessages(messages));
       ctxTokens = getTotalContextTokens(selectedMessages, turnSystemPrompt, currentModelId);

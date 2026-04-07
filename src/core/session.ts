@@ -1,7 +1,9 @@
 import { randomUUID } from "crypto";
 import { ContextOptimizer } from "./context-optimizer.js";
 import { getSettings, type TreeFilterMode } from "./config.js";
+import { buildCompactionContextMessage } from "./compact.js";
 import {
+  type CompactionSummaryState,
   createEmptySessionBudgetMetrics,
   type Message,
   type SessionBudgetMetrics,
@@ -106,6 +108,7 @@ export class Session {
   private totalOutputTokens = 0;
   private totalCost = 0;
   private budgetMetrics: SessionBudgetMetrics = createEmptySessionBudgetMetrics();
+  private compactionSummary: CompactionSummaryState | null = null;
   private cwd = process.cwd();
   private provider = "";
   private model = "";
@@ -161,9 +164,18 @@ export class Session {
   }
 
   getChatMessages(): Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }> {
-    return this.getMessages()
+    const visibleMessages = this.getMessages()
       .filter((m) => m.role === "user" || m.role === "assistant")
       .map((m) => ({ role: m.role as "user" | "assistant", content: m.content, images: m.images }));
+    if (!this.compactionSummary?.summary?.trim()) return visibleMessages;
+    return [
+      { role: "user", content: buildCompactionContextMessage(this.compactionSummary.summary) },
+      ...visibleMessages,
+    ];
+  }
+
+  getCompactionSummary(): CompactionSummaryState | null {
+    return this.compactionSummary ? { ...this.compactionSummary } : null;
   }
 
   getTreeItems(filterMode: TreeFilterMode = "all"): SessionTreeItem[] {
@@ -311,6 +323,29 @@ export class Session {
     })));
     this.entries = next.entries;
     this.leafId = next.leafId;
+    this.compactionSummary = null;
+    this.contextOptimizer.reset();
+    this.save();
+  }
+
+  applyCompaction(
+    summary: string,
+    messages: Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }>,
+    tokensBefore: number,
+  ): void {
+    const next = entriesFromMessages(messages.map((message) => ({
+      role: message.role,
+      content: message.content,
+      images: message.images,
+      timestamp: Date.now(),
+    })));
+    this.entries = next.entries;
+    this.leafId = next.leafId;
+    this.compactionSummary = {
+      summary: summary.trim(),
+      tokensBefore,
+      timestamp: Date.now(),
+    };
     this.contextOptimizer.reset();
     this.save();
   }
@@ -368,6 +403,7 @@ export class Session {
   clear(): void {
     this.entries = [];
     this.leafId = null;
+    this.compactionSummary = null;
     this.totalInputTokens = 0;
     this.totalOutputTokens = 0;
     this.totalCost = 0;
@@ -383,6 +419,7 @@ export class Session {
       cwd: this.cwd,
       provider: this.provider,
       model: this.model,
+      compactionSummary: this.compactionSummary,
       messages: this.getMessages(),
       entries: this.entries,
       leafId: this.leafId,
@@ -411,6 +448,7 @@ export class Session {
     session.totalInputTokens = data.totalInputTokens;
     session.totalOutputTokens = data.totalOutputTokens;
     session.totalCost = data.totalCost;
+    session.compactionSummary = data.compactionSummary ?? null;
     session.budgetMetrics = {
       ...session.budgetMetrics,
       ...(data.budgetMetrics ?? {}),
@@ -427,6 +465,7 @@ export class Session {
       forked.entries = structuredClone(this.entries);
       forked.name = `${this.name} (fork)`;
       forked.leafId = this.leafId;
+    forked.compactionSummary = this.compactionSummary ? { ...this.compactionSummary } : null;
     forked.totalInputTokens = this.totalInputTokens;
     forked.totalOutputTokens = this.totalOutputTokens;
     forked.totalCost = this.totalCost;

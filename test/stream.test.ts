@@ -62,6 +62,7 @@ vi.mock("../src/core/budget.js", () => ({
 vi.mock("../src/core/compact.js", () => ({
   compactMessages: async (messages: any[]) => messages,
   getTotalContextTokens: () => 1,
+  splitCompactedMessages: (messages: any[]) => ({ summary: null, messages }),
 }));
 
 vi.mock("../src/core/context.js", () => ({

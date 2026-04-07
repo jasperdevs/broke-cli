@@ -1,5 +1,5 @@
 import { buildSystemPrompt, reloadContext } from "../core/context.js";
-import { compactMessages, getTotalContextTokens } from "../core/compact.js";
+import { compactMessages, getTotalContextTokens, splitCompactedMessages } from "../core/compact.js";
 import { getSettings, updateModelPreference, updateSetting, type Mode, type ModelPreferenceSlot } from "../core/config.js";
 import { runConnectFlow } from "./connect-flow.js";
 import { runLoginFlow } from "./login-flow.js";
@@ -148,11 +148,15 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
         const compacted = activeModel.runtime === "sdk" && activeModel.model
           ? await compactMessages(chatMsgs, activeModel.model, { customInstructions: restText || undefined })
           : chatMsgs.slice(-6);
-        session.replaceConversation(compacted);
+        const parsed = splitCompactedMessages(compacted);
+        if (parsed.summary) session.applyCompaction(parsed.summary, parsed.messages, ctxTokens);
+        else session.replaceConversation(parsed.messages);
         session.recordCompaction();
         app.setCompacting?.(false);
         app.clearMessages();
-        app.setStatus?.(`Compacted ${chatMsgs.length} -> ${compacted.length}`);
+        for (const msg of session.getMessages()) app.addMessage(msg.role, msg.content);
+        app.updateUsage?.(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
+        app.setStatus?.(`Compacted older context. Kept ${session.getMessages().length} visible messages.`);
       } catch (err) {
         app.setCompacting?.(false);
         app.setStatus?.(`Compact failed: ${(err as Error).message}`);

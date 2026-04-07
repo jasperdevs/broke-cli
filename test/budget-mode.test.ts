@@ -49,6 +49,18 @@ describe("session budget metrics", () => {
     expect(session.getBudgetMetrics().totalTurns).toBe(1);
   });
 
+  it("keeps compaction summaries hidden from the visible transcript but present in chat context", () => {
+    const session = new Session(`test-compaction-summary-${Date.now()}`);
+    session.addMessage("user", "first");
+    session.addMessage("assistant", "second");
+    session.applyCompaction("task: keep going", [{ role: "assistant", content: "latest visible" }], 123);
+
+    expect(session.getMessages().map((msg) => msg.content)).toEqual(["latest visible"]);
+    expect(session.getChatMessages()[0]?.content).toContain("<summary>");
+    expect(session.getChatMessages()[0]?.content).toContain("task: keep going");
+    expect(session.getCompactionSummary()?.tokensBefore).toBe(123);
+  });
+
   it("formats a structured budget report and summary", () => {
     const session = new Session(`test-insights-${Date.now()}`);
     session.addUsage(200, 40, 0.001);
