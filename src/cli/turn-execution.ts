@@ -13,6 +13,7 @@ import {
   formatTurnErrorMessage,
   looksLikeRawToolPayload,
   resolveExecutionTarget,
+  shouldEnforceToolFirstTurn,
   shouldRequestThinkTags,
   shouldSuppressPlanningNarration,
 } from "./turn-runner-support.js";
@@ -39,6 +40,7 @@ interface TurnExecutionApp {
   onAbortRequest(callback: () => void): void;
   hasPendingMessages(delivery?: PendingDelivery): boolean;
   flushPendingMessages(delivery: PendingDelivery): void;
+  rollbackLastAssistantMessage(): void;
 }
 
 interface ExtensionHooks {
@@ -85,7 +87,7 @@ export async function executeTurn(options: {
   lastActivityTime: number;
   steeringInterrupted: boolean;
   resolvedRoute: "main" | "small";
-  completion: "success" | "empty" | "error";
+  completion: "success" | "empty" | "error" | "insufficient";
   toolActivity: boolean;
   assistantText: string;
   errorMessage?: string;
@@ -174,7 +176,7 @@ export async function executeTurn(options: {
   }
 
   let streamTokenFlushTimer: ReturnType<typeof setTimeout> | null = null;
-  let completion: "success" | "empty" | "error" = "success";
+  let completion: "success" | "empty" | "error" | "insufficient" = "success";
   let errorMessage: string | undefined;
   const scheduleStreamTokenUpdate = (): void => {
     if (streamTokenFlushTimer) return;
@@ -251,6 +253,17 @@ export async function executeTurn(options: {
       app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
       abortController = null;
       nextActivityTime = Date.now();
+      if (shouldEnforceToolFirstTurn({
+        text,
+        assistantText: content,
+        toolActivity: sawToolActivity || nextToolCalls.length > 0,
+        policy,
+        model: executionModel,
+      })) {
+        app.rollbackLastAssistantMessage();
+        completion = "insufficient";
+        return;
+      }
       if (content) {
         session.addMessage("assistant", content);
         if (getSettings().notifyOnResponse) sendResponseNotification();

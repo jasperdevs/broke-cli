@@ -161,6 +161,14 @@ export function getLastAssistantContent(app: AppState): string {
   return "";
 }
 
+export function rollbackLastAssistantMessage(app: AppState): void {
+  const last = app.messages[app.messages.length - 1];
+  if (last?.role !== "assistant") return;
+  app.messages.pop();
+  app.invalidateMsgCache();
+  app.draw();
+}
+
 export function getFileContexts(app: AppState): Map<string, string> {
   const ctx = new Map<string, string>(app.fileContexts);
   app.fileContexts.clear();
@@ -262,6 +270,7 @@ export interface AppStateMessageMethods {
   appendToolOutput(chunk: string): void;
   collapseToolCalls(): void;
   getLastAssistantContent(): string;
+  rollbackLastAssistantMessage(): void;
   getFileContexts(): Map<string, string>;
   setStatus(message: string): void;
   clearStatus(): void;
@@ -293,6 +302,7 @@ export const appStateMessageMethods: AppStateMessageMethods = {
   appendToolOutput(this: AppState, chunk) { return appendToolOutput(this, chunk); },
   collapseToolCalls(this: AppState) { return collapseToolCalls(this); },
   getLastAssistantContent(this: AppState) { return getLastAssistantContent(this); },
+  rollbackLastAssistantMessage(this: AppState) { return rollbackLastAssistantMessage(this); },
   getFileContexts(this: AppState) { return getFileContexts(this); },
   setStatus(this: AppState, message) { return setStatus(this, message); },
   clearStatus(this: AppState) { return clearStatus(this); },

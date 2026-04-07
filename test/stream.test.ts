@@ -72,7 +72,7 @@ vi.mock("../src/core/context.js", () => ({
 vi.mock("../src/core/turn-policy.js", () => ({
   resolveTurnPolicy: async () => ({
     archetype: "edit",
-    allowedTools: [],
+    allowedTools: ["readFile", "writeFile"],
     maxToolSteps: 0,
     scaffold: "lane: main\nsteps: 1) read 2) edit\nverify: once",
     scaffoldSource: "builtin",
@@ -251,6 +251,7 @@ describe("stream tool steps", () => {
       appendThinking: vi.fn(),
       setThinkingRequested: vi.fn(),
       getLastAssistantContent: vi.fn(() => assistantContent),
+      rollbackLastAssistantMessage: vi.fn(() => { assistantContent = ""; }),
       setStreaming: vi.fn(),
       setStreamTokens: vi.fn(),
       updateUsage: vi.fn(),
@@ -312,6 +313,86 @@ describe("stream tool steps", () => {
     expect(app.addMessage).not.toHaveBeenCalledWith("system", "No response from model. Try again or switch models with /model.");
   });
 
+  it("retries edit turns when a local sdk model claims success without using tools", async () => {
+    let assistantContent = "";
+    const app = {
+      addMessage: vi.fn(),
+      appendToLastMessage: vi.fn((delta: string) => { assistantContent += delta; }),
+      appendThinking: vi.fn(),
+      setThinkingRequested: vi.fn(),
+      getLastAssistantContent: vi.fn(() => assistantContent),
+      rollbackLastAssistantMessage: vi.fn(() => { assistantContent = ""; }),
+      setStreaming: vi.fn(),
+      setStreamTokens: vi.fn(),
+      updateUsage: vi.fn(),
+      setContextUsage: vi.fn(),
+      setCompacting: vi.fn(),
+      setStatus: vi.fn(),
+      addToolCall: vi.fn(),
+      updateToolCallArgs: vi.fn(),
+      addToolResult: vi.fn(),
+      onAbortRequest: vi.fn(),
+      hasPendingMessages: vi.fn(() => false),
+      flushPendingMessages: vi.fn(),
+    };
+    const session = {
+      getTotalCost: () => 0,
+      getChatMessages: () => [{ role: "user", content: "make a index.html file thats cool" }],
+      addMessage: vi.fn(),
+      addUsage: vi.fn(),
+      recordTurn: vi.fn(),
+      recordToolResult: vi.fn(),
+      recordShellRecovery: vi.fn(),
+      recordIdleCacheCliff: vi.fn(),
+      replaceConversation: vi.fn(),
+      recordCompaction: vi.fn(),
+      getContextOptimizer: () => ({ optimizeMessages: (messages: any[]) => messages, nextTurn: vi.fn(), trackFileRead: vi.fn() }),
+      getTotalInputTokens: () => 0,
+      getTotalOutputTokens: () => 0,
+      getName: () => "Existing Session",
+    } as any;
+
+    streamTextMock
+      .mockReturnValueOnce({
+        fullStream: (async function* () {
+          yield { type: "text-delta", text: "Added index.html with a modern, dark-themed landing page. Commit/push now." };
+        })(),
+        usage: Promise.resolve({ inputTokens: 1, outputTokens: 1 }),
+      })
+      .mockReturnValueOnce({
+        fullStream: (async function* () {
+          yield { type: "tool-input-start", toolName: "writeFile" };
+          yield { type: "tool-call", toolName: "writeFile", input: { path: "index.html", content: "<html></html>" } };
+          yield { type: "tool-result", toolName: "writeFile", output: { success: true } } as any;
+          yield { type: "text-delta", text: "Created index.html." };
+        })(),
+        usage: Promise.resolve({ inputTokens: 2, outputTokens: 3 }),
+      });
+
+    await runModelTurn({
+      app: app as any,
+      session,
+      text: "make a index.html file thats cool",
+      activeModel: { provider: { id: "llamacpp", name: "llama.cpp", defaultModel: "default", models: ["default"] }, runtime: "sdk", model: {} as any, modelId: "default" },
+      currentModelId: "default",
+      smallModel: null,
+      smallModelId: "",
+      currentMode: "build",
+      systemPrompt: "system",
+      buildTools: () => ({ writeFile: {} }),
+      hooks: { emit: () => {} },
+      lastToolCalls: [],
+      lastActivityTime: Date.now(),
+    });
+
+    expect(streamTextMock).toHaveBeenCalledTimes(2);
+    expect(app.rollbackLastAssistantMessage).toHaveBeenCalled();
+    expect(app.setStatus).toHaveBeenCalledWith("model answered without acting - retrying with tool requirement");
+    expect(app.addToolCall).toHaveBeenCalledWith("writeFile", "...");
+    expect(session.addMessage).toHaveBeenCalledWith("assistant", "Created index.html.");
+    expect(session.addMessage).not.toHaveBeenCalledWith("assistant", "Added index.html with a modern, dark-themed landing page. Commit/push now.");
+  });
+
   it("does not reuse the previous assistant turn when a new turn emits no text", async () => {
     const app = {
       addMessage: vi.fn(),
@@ -319,6 +400,7 @@ describe("stream tool steps", () => {
       appendThinking: vi.fn(),
       setThinkingRequested: vi.fn(),
       getLastAssistantContent: vi.fn(() => "old answer"),
+      rollbackLastAssistantMessage: vi.fn(),
       setStreaming: vi.fn(),
       setStreamTokens: vi.fn(),
       updateUsage: vi.fn(),

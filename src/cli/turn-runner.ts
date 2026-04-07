@@ -47,6 +47,7 @@ interface TurnRunnerApp {
   onAbortRequest(callback: () => void): void;
   hasPendingMessages(delivery?: PendingDelivery): boolean;
   flushPendingMessages(delivery: PendingDelivery): void;
+  rollbackLastAssistantMessage(): void;
   getFileContexts?: () => Map<string, string>;
   setSessionName?(name: string): void;
 }
@@ -210,6 +211,36 @@ export async function runModelTurn(options: {
     resolveSpecialistModel,
   });
   nextActivityTime = result.lastActivityTime;
+
+  if (!forceRoute && !result.toolActivity && result.completion === "insufficient") {
+    app.setStatus("model answered without acting - retrying with tool requirement");
+    result = await executeTurn({
+      app,
+      session,
+      text,
+      activeModel,
+      currentModelId,
+      smallModel,
+      smallModelId,
+      currentMode,
+      selectedMessages,
+      policy,
+      effectiveImages,
+      buildTools,
+      hooks,
+      lastToolCalls,
+      contextLimit,
+      activeSystemPrompt: `${turnSystemPrompt}\n\nIMPORTANT: This request requires real repo actions. Use the available tools to inspect or modify files before any completion text. Do not claim a file was added, changed, fixed, committed, or pushed unless a tool in this turn actually did it.`,
+      optimizeMessages: (messages) => selectMessagesForTurn(messages, policy, (msgs) => getContextOptimizer().optimizeMessages(msgs)),
+      forceRoute: "main",
+      resolveSpecialistModel,
+    });
+    nextActivityTime = result.lastActivityTime;
+    if (!result.toolActivity && result.completion === "insufficient") {
+      app.addMessage("system", "Model answered without using tools. Try a stronger model with /model.");
+      return { lastToolCalls: result.nextToolCalls, lastActivityTime: nextActivityTime };
+    }
+  }
 
   if (result.resolvedRoute === "small" && !forceRoute && !result.toolActivity && (result.completion === "empty" || result.completion === "error")) {
     app.setStatus(result.completion === "error"

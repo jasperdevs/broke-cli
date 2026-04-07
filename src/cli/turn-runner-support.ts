@@ -18,6 +18,27 @@ export function shouldRequestThinkTags(model: ModelHandle, thinkingRequested: bo
   return thinkingRequested && model.runtime === "sdk";
 }
 
+export function shouldEnforceToolFirstTurn(options: {
+  text: string;
+  assistantText: string;
+  toolActivity: boolean;
+  policy: { archetype: string; allowedTools: readonly string[] };
+  model: ModelHandle;
+}): boolean {
+  const { text, assistantText, toolActivity, policy, model } = options;
+  if (toolActivity) return false;
+  if (model.runtime !== "sdk" || !canUseSdkTools(model)) return false;
+  if (policy.archetype !== "edit" && policy.archetype !== "bugfix") return false;
+  if (!policy.allowedTools.includes("writeFile") && !policy.allowedTools.includes("editFile")) return false;
+  const trimmed = assistantText.trim();
+  if (!trimmed) return false;
+  if (/[?]\s*$/.test(trimmed)) return false;
+  if (/^(what|which|where|when|how|can you|should i|do you want)\b/i.test(trimmed)) return false;
+  if (!/\b(make|create|add|write|edit|update|fix|implement|refactor|build)\b/i.test(text)) return false;
+  return /\b(added|created|updated|wrote|made|fixed|implemented|refactored|done|complete|committed|pushed)\b/i.test(trimmed)
+    || /\b[a-z0-9._-]+\.(html|css|js|ts|tsx|jsx|json|md)\b/i.test(trimmed);
+}
+
 export function canUseSdkTools(model: ModelHandle): boolean {
   return model.runtime === "sdk" && !!model.model && SDK_TOOL_PROVIDER_IDS.has(model.provider.id);
 }
