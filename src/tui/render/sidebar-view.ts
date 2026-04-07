@@ -66,7 +66,7 @@ export function buildSidebarFooter(options: {
     contextTokens,
     colors,
   });
-  return footer.length > 0 ? ["", ...footer] : footer;
+  return footer.length > 0 ? ["", ...footer, ""] : footer;
 }
 
 export function buildSidebarLines(options: {

@@ -170,6 +170,7 @@ describe("sidebar token summary", () => {
     expect(footer.some((line: string) => line.trim() === "132k ctx")).toBe(true);
     expect(footer.some((line: string) => line.includes("38%"))).toBe(true);
     expect(footer.some((line: string) => line.includes("▰") || line.includes("▱"))).toBe(true);
+    expect(footer.filter((line: string) => line.trim() === "").length).toBeGreaterThan(1);
     updateSetting("cavemanLevel", "off");
     updateSetting("showTokens", originalShowTokens);
   });

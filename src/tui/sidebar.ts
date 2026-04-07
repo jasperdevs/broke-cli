@@ -26,8 +26,8 @@ function formatContextPercentLabel(contextPercent: number): string {
 
 function buildContextMeter(width: number, contextPercent: number, colors: SidebarFooterColors): string {
   const percent = formatContextPercentLabel(contextPercent);
-  const available = Math.max(5, width - percent.length - 5);
-  const fillWidth = Math.max(5, Math.min(8, available));
+  const available = Math.max(8, width - percent.length - 3);
+  const fillWidth = Math.max(8, Math.min(12, available));
   const ratio = Math.max(0, Math.min(1, contextPercent / 100));
   const filled = ratio > 0
     ? Math.max(1, Math.min(fillWidth, Math.round(ratio * fillWidth)))
@@ -119,6 +119,7 @@ export function buildSidebarFooterLines(options: {
   }
 
   if (contextUsed !== undefined && contextTokens) {
+    if (valueLines.length > 0 || costLine) lines.push("");
     lines.push(`${colors.text}${contextTokens} ctx${RESET}`);
     lines.push(buildContextMeter(width, contextUsed, colors));
   }
