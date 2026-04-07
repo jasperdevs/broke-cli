@@ -1,4 +1,5 @@
 import { getSettings, updateSetting, type CavemanLevel, type Mode, type ModelPreferenceSlot, type ThinkingLevel } from "../core/config.js";
+import { getAvailableThinkingLevels, getEffectiveThinkingLevel } from "../ai/thinking.js";
 import type { BudgetReport } from "../core/budget-insights.js";
 import { HOME_TIPS } from "./app-shared.js";
 import type { MenuPromptKind, ModelOption, PickerItem, QuestionRequest, QuestionResult, SettingEntry } from "./app-types.js";
@@ -159,9 +160,19 @@ export function onModeToggle(app: AppState, callback: (mode: Mode) => void): voi
 export function onThinkingToggle(app: AppState, callback: (level: ThinkingLevel) => void): void { app.onThinkingChange = callback; }
 
 export function cycleThinkingMode(app: AppState): void {
-  const levels: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
   const settings = getSettings();
-  const current = settings.thinkingLevel || (settings.enableThinking ? "low" : "off");
+  const levels = getAvailableThinkingLevels({
+    providerId: app.modelProviderId,
+    modelId: app.modelName === "none" ? undefined : app.modelName,
+    runtime: app.modelRuntime,
+  });
+  const current = getEffectiveThinkingLevel({
+    providerId: app.modelProviderId,
+    modelId: app.modelName === "none" ? undefined : app.modelName,
+    runtime: app.modelRuntime,
+    level: settings.thinkingLevel,
+    enabled: settings.enableThinking,
+  });
   const idx = levels.indexOf(current);
   const next = levels[(idx + 1) % levels.length];
   updateSetting("thinkingLevel", next);

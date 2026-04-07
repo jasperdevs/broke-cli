@@ -1,10 +1,12 @@
 import { currentTheme } from "../core/themes.js";
 import { getSettings, type CavemanLevel, type Mode, type ThinkingLevel } from "../core/config.js";
+import { getEffectiveThinkingLevel } from "../ai/thinking.js";
 import { buildSidebarFooter } from "./render/sidebar-view.js";
 import { fmtCost, fmtTokens } from "./render/formatting.js";
 import { DIM, RESET } from "../utils/ansi.js";
 import { MUTED, OK, P, T, TXT } from "./app-shared.js";
 import type { ModelOption, UpdateNotice } from "./app-types.js";
+import type { ModelRuntime } from "../ai/providers.js";
 
 type AppState = any;
 
@@ -12,8 +14,10 @@ export function invalidateMsgCache(app: AppState): void {
   app.msgCacheLines = null;
 }
 
-export function setModel(app: AppState, provider: string, model: string): void {
+export function setModel(app: AppState, provider: string, model: string, meta?: { providerId?: string; runtime?: ModelRuntime }): void {
   app.providerName = provider;
+  if (meta?.providerId) app.modelProviderId = meta.providerId;
+  if (meta?.runtime) app.modelRuntime = meta.runtime;
   if (model.includes("/")) model = model.split("/").pop()!;
   model = model.replace(/-GGUF(:[^\s]*)?/g, "");
   model = model.replace(/:$/, "");
@@ -99,7 +103,13 @@ export function renderSidebarFooter(app: AppState): string[] {
   const statusParts: string[] = [];
   const modeLabel = app.mode === "plan" ? "plan" : "build";
   statusParts.push(modeLabel);
-  const thinkLevel = settings.thinkingLevel || (settings.enableThinking ? "low" : "off");
+  const thinkLevel = getEffectiveThinkingLevel({
+    providerId: app.modelProviderId,
+    modelId: app.modelName === "none" ? undefined : app.modelName,
+    runtime: app.modelRuntime,
+    level: settings.thinkingLevel,
+    enabled: settings.enableThinking,
+  });
   if (thinkLevel !== "off") statusParts.push(thinkLevel);
   const caveLevel = settings.cavemanLevel ?? "auto";
   if (caveLevel !== "off") statusParts.push(`🪨 ${caveLevel}`);
@@ -249,7 +259,7 @@ export function clearUpdateNotice(app: AppState): void {
 
 export interface AppStateCoreMethods {
   invalidateMsgCache(): void;
-  setModel(provider: string, model: string): void;
+  setModel(provider: string, model: string, meta?: { providerId?: string; runtime?: ModelRuntime }): void;
   updateUsage(cost: number, inputTokens: number, outputTokens: number): void;
   resetCost(): void;
   getLiveInputTokens(): number;
@@ -275,7 +285,7 @@ export interface AppStateCoreMethods {
 
 export const appStateCoreMethods: AppStateCoreMethods = {
   invalidateMsgCache(this: AppState) { return invalidateMsgCache(this); },
-  setModel(this: AppState, provider: string, model: string) { return setModel(this, provider, model); },
+  setModel(this: AppState, provider: string, model: string, meta?: { providerId?: string; runtime?: ModelRuntime }) { return setModel(this, provider, model, meta); },
   updateUsage(this: AppState, cost: number, inputTokens: number, outputTokens: number) { return updateUsage(this, cost, inputTokens, outputTokens); },
   resetCost(this: AppState) { return resetCost(this); },
   getLiveInputTokens(this: AppState) { return getLiveInputTokens(this); },

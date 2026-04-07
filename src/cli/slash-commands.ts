@@ -75,7 +75,10 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
         try {
           const nextModel = providerRegistry.createModel(provId, modId);
           onModelChange(nextModel, modId);
-          app.setModel(nextModel.provider.name, modId);
+          app.setModel(nextModel.provider.name, modId, {
+            providerId: nextModel.provider.id,
+            runtime: nextModel.runtime,
+          });
           session.setProviderModel(nextModel.provider.name, modId);
           updateSetting("lastModel", `${provId}/${modId}`);
         } catch (err) {

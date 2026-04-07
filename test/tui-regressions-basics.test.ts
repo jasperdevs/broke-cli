@@ -167,6 +167,7 @@ describe("sidebar token summary", () => {
       updateSetting("thinkingLevel", "low");
       updateSetting("enableThinking", true);
       updateSetting("cavemanLevel", "ultra");
+      app.setModel("OpenAI", "gpt-5.4-mini", { providerId: "openai", runtime: "sdk" });
       app.messages = [{ role: "user", content: "hello" }];
       let rendered: string[] = [];
       app.screen = { height: 16, width: 80, hasSidebar: false, mainWidth: 80, sidebarWidth: 0, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };

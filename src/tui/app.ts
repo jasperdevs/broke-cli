@@ -25,6 +25,7 @@ import { AnimCounter, HOME_TIPS } from "./app-shared.js";
 import { APP_VERSION } from "../core/app-meta.js";
 import type { BudgetView, ChatMessage, ModelOption, PendingImage, PendingMessage, PickerItem, QuestionView, SettingEntry, TodoItem, TreeView, UpdateNotice } from "./app-types.js";
 import type { ModelPreferenceSlot } from "../core/config.js";
+import type { ModelRuntime } from "../ai/providers.js";
 
 export interface App extends AppStateCoreMethods, AppStateMessageMethods, AppStateUiMethods, AppMenuMethods, AppInputMethods, AppRenderMethods, AppDrawMethods {}
 
@@ -55,6 +56,8 @@ export class App {
   private contextLimitTokens = 0;
   private modelName = "none";
   private providerName = "---";
+  private modelProviderId = "";
+  private modelRuntime: ModelRuntime = "sdk";
   private isStreaming = false;
   private spinnerFrame = 0;
   private spinnerTimer: ReturnType<typeof setInterval> | null = null;

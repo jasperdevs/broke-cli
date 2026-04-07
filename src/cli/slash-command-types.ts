@@ -10,7 +10,7 @@ export interface SlashCommandApp {
   addMessage(role: "user" | "assistant" | "system", content: string): void;
   clearMessages(): void;
   resetCost(): void;
-  setModel(provider: string, model: string): void;
+  setModel(provider: string, model: string, meta?: { providerId?: string; runtime?: import("../ai/providers.js").ModelRuntime }): void;
   setSessionName?(name: string): void;
   setDraft?(text: string): void;
   setStatus?(message: string): void;

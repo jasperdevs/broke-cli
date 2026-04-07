@@ -1,5 +1,6 @@
 import { currentTheme } from "../core/themes.js";
 import { getSettings } from "../core/config.js";
+import { getEffectiveThinkingLevel } from "../ai/thinking.js";
 import { BOLD, DIM, RESET } from "../utils/ansi.js";
 import { fmtCost } from "./render/formatting.js";
 import { ERR, P, T, TXT, WARN } from "./app-shared.js";
@@ -100,7 +101,13 @@ export function buildInfoBar(app: AppState, hasSidebar: boolean, mainW: number):
   const settings = getSettings();
   const modeLabel = app.mode === "plan" ? "plan" : "build";
   parts.push({ text: `${app.mode === "plan" ? P() : T()}${modeLabel}${RESET}`, plain: modeLabel });
-  const thinkLevel = settings.thinkingLevel || (settings.enableThinking ? "low" : "off");
+  const thinkLevel = getEffectiveThinkingLevel({
+    providerId: app.modelProviderId,
+    modelId: app.modelName === "none" ? undefined : app.modelName,
+    runtime: app.modelRuntime,
+    level: settings.thinkingLevel,
+    enabled: settings.enableThinking,
+  });
   if (thinkLevel !== "off") parts.push({ text: `${T()}${thinkLevel}${RESET}`, plain: thinkLevel });
   const caveLevel = settings.cavemanLevel ?? "auto";
   if (caveLevel !== "off") parts.push({ text: `🪨 ${WARN()}${caveLevel}${RESET}`, plain: `rock ${caveLevel}` });

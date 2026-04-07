@@ -12,6 +12,7 @@ import { TOOL_NAMES } from "../tools/registry.js";
 import type { Keypress } from "../tui/keypress.js";
 import { buildHtmlExport, buildMarkdownExport, formatRelativeMinutes } from "./exports.js";
 import { SessionManager } from "../core/session-manager.js";
+import { getAvailableThinkingLevels, getEffectiveThinkingLevel } from "../ai/thinking.js";
 
 type AnyApp = any;
 type AnyHooks = any;
@@ -42,10 +43,21 @@ export function openSettingsMenu(args: {
 }): void {
   const { app, activeModel, currentMode, onModeChange, onSystemPromptChange } = args;
   let menuMode = currentMode;
-  const thinkingLevels = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
   const modeSwitchingPolicies = ["manual", "ask", "auto"] as const;
   function buildEntries() {
     const s = getSettings();
+    const thinkingLevels = getAvailableThinkingLevels({
+      providerId: activeModel?.provider?.id,
+      modelId: activeModel?.modelId,
+      runtime: activeModel?.runtime,
+    });
+    const effectiveThinking = getEffectiveThinkingLevel({
+      providerId: activeModel?.provider?.id,
+      modelId: activeModel?.modelId,
+      runtime: activeModel?.runtime,
+      level: s.thinkingLevel,
+      enabled: s.enableThinking,
+    });
     return [
       { key: "mode", label: "Mode", value: s.mode, description: "build / plan — default mode and current slash mode" },
       { key: "modeSwitching", label: "Mode switching", value: s.modeSwitching, description: "manual / ask / auto — switch build vs plan per turn" },
@@ -53,7 +65,7 @@ export function openSettingsMenu(args: {
       { key: "autoCompact", label: "Auto-compact", value: String(s.autoCompact), description: "Automatically compress context when it gets too large" },
       { key: "autoSaveSessions", label: "Auto-save sessions", value: String(s.autoSaveSessions), description: "Save conversation history to disk" },
       { key: "gitCheckpoints", label: "Git checkpoints", value: String(s.gitCheckpoints), description: "Auto-commit before file modifications" },
-      { key: "thinkingLevel", label: "Thinking mode", value: s.thinkingLevel || (s.enableThinking ? "low" : "off"), description: "off / minimal / low / medium / high / xhigh (ctrl+t to cycle)" },
+      { key: "thinkingLevel", label: "Thinking mode", value: effectiveThinking, description: `${thinkingLevels.join(" / ")} (ctrl+t to cycle)` },
       { key: "hideSidebar", label: "Hide sidebar", value: String(s.hideSidebar), description: "Hide the right sidebar panel" },
       { key: "autoRoute", label: "Auto-route", value: String(s.autoRoute), description: "Route simple tasks to cheaper model automatically" },
       { key: "showTokens", label: "Show tokens", value: String(s.showTokens), description: "Display token count in status bar" },
@@ -79,6 +91,11 @@ export function openSettingsMenu(args: {
 
   app.openSettings(buildEntries(), (key: string) => {
     const s = getSettings();
+    const thinkingLevels = getAvailableThinkingLevels({
+      providerId: activeModel?.provider?.id,
+      modelId: activeModel?.modelId,
+      runtime: activeModel?.runtime,
+    });
     const val = s[key as keyof Settings];
     if (key === "mode") {
       const next = menuMode === "build" ? "plan" : "build";
@@ -91,7 +108,13 @@ export function openSettingsMenu(args: {
       const next = modeSwitchingPolicies[(modeSwitchingPolicies.indexOf(current as any) + 1) % modeSwitchingPolicies.length];
       updateSetting("modeSwitching", next);
     } else if (key === "thinkingLevel") {
-      const current = s.thinkingLevel || (s.enableThinking ? "low" : "off");
+      const current = getEffectiveThinkingLevel({
+        providerId: activeModel?.provider?.id,
+        modelId: activeModel?.modelId,
+        runtime: activeModel?.runtime,
+        level: s.thinkingLevel,
+        enabled: s.enableThinking,
+      });
       const next = thinkingLevels[(thinkingLevels.indexOf(current as any) + 1) % thinkingLevels.length];
       updateSetting("thinkingLevel", next);
       updateSetting("enableThinking", next !== "off");

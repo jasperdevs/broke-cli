@@ -9,7 +9,7 @@ import type { ProviderRegistry } from "../ai/provider-registry.js";
 
 interface BootstrapApp {
   addMessage(role: "user" | "assistant" | "system", content: string): void;
-  setModel(provider: string, model: string): void;
+  setModel(provider: string, model: string, meta?: { providerId?: string; runtime?: ModelHandle["runtime"] }): void;
   setMode(mode: Mode): void;
   clearStatus(): void;
 }
@@ -100,7 +100,10 @@ export async function bootstrapSession(options: {
     const activeModel = providerRegistry.createModel(providerId!, resolvedModelId);
     const currentModelId = resolvedModelId ?? activeModel.provider.defaultModel;
     const systemPrompt = buildSystemPrompt(process.cwd(), providerId!, currentMode, getSettings().cavemanLevel ?? "auto");
-    app.setModel(activeModel.provider.name, currentModelId);
+    app.setModel(activeModel.provider.name, currentModelId, {
+      providerId: activeModel.provider.id,
+      runtime: activeModel.runtime,
+    });
     app.setMode(currentMode);
     session.setProviderModel(activeModel.provider.name, currentModelId);
     updateSetting("lastModel", `${activeModel.provider.id}/${currentModelId}`);
