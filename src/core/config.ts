@@ -1,7 +1,9 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { spawnSync } from "child_process";
 import { join, resolve } from "path";
 import { homedir } from "os";
 import { parse as parseJsonc } from "jsonc-parser";
+import { getCredentials } from "./auth.js";
 export type {
   Mode,
   ThinkingLevel,
@@ -240,6 +242,37 @@ function readCodexCredential(): ProviderCredential {
   }
 }
 
+function readGitHubCopilotCredential(): ProviderCredential {
+  const envToken = process.env.COPILOT_GITHUB_TOKEN || process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
+  if (envToken?.trim()) {
+    return { kind: "native_oauth", value: envToken.trim(), source: "env" };
+  }
+  const stored = getCredentials("github-copilot");
+  if (stored) {
+    return { kind: "native_oauth", value: stored, source: "brokecli-auth" };
+  }
+  try {
+    const result = spawnSync("gh", ["auth", "token", "--hostname", "github.com"], {
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    if (result.status === 0 && !result.error) {
+      const token = result.stdout.trim();
+      if (token) return { kind: "native_oauth", value: token, source: "gh-auth" };
+    }
+  } catch {
+    // ignore
+  }
+  return { kind: "none" };
+}
+
+function readStoredOauthCredential(provider: string): ProviderCredential {
+  const token = getCredentials(provider);
+  return token
+    ? { kind: "native_oauth", value: token, source: "brokecli-auth" }
+    : { kind: "none" };
+}
+
 export function getProviderCredential(provider: string): ProviderCredential {
   const runtimeApiKey = runtimeProviderApiKeys.get(provider);
   if (runtimeApiKey) return { kind: "api_key", value: runtimeApiKey, source: "runtime" };
@@ -250,19 +283,30 @@ export function getProviderCredential(provider: string): ProviderCredential {
   switch (provider) {
     case "anthropic":
       if (process.env.ANTHROPIC_API_KEY) return { kind: "api_key", value: process.env.ANTHROPIC_API_KEY, source: "env" };
-      return readClaudeCredential();
+      {
+        const credential = readClaudeCredential();
+        return credential.kind !== "none" ? credential : readStoredOauthCredential("anthropic");
+      }
     case "openai":
       return process.env.OPENAI_API_KEY
         ? { kind: "api_key", value: process.env.OPENAI_API_KEY, source: "env" }
         : { kind: "none" };
     case "codex":
-      return readCodexCredential();
+      {
+        const credential = readCodexCredential();
+        return credential.kind !== "none" ? credential : readStoredOauthCredential("codex");
+      }
+    case "github-copilot":
+      return readGitHubCopilotCredential();
     case "google":
       return process.env.GOOGLE_API_KEY
         ? { kind: "api_key", value: process.env.GOOGLE_API_KEY, source: "env" }
         : process.env.GOOGLE_GENERATIVE_AI_API_KEY
           ? { kind: "api_key", value: process.env.GOOGLE_GENERATIVE_AI_API_KEY, source: "env" }
           : { kind: "none" };
+    case "google-gemini-cli":
+    case "google-antigravity":
+      return readStoredOauthCredential(provider);
     case "groq":
       return process.env.GROQ_API_KEY
         ? { kind: "api_key", value: process.env.GROQ_API_KEY, source: "env" }

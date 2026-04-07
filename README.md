@@ -25,7 +25,7 @@ npm install -g @jasperdevs/brokecli
 ## Core Commands
 
 - `/settings` toggle behavior and persistent preferences
-- `/login` login with subscription/oauth providers like Codex and Claude Code
+- `/login` login with subscription/oauth providers like Claude, ChatGPT Codex, GitHub Copilot, Gemini CLI, and Antigravity
 - `/connect` configure API-key providers and local endpoints
 - `/logout` clear stored brokecli credentials
 - `/model` choose the main model and pin models for `Ctrl+P` cycling

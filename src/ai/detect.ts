@@ -53,6 +53,9 @@ export async function detectProviders(): Promise<DetectedProvider[]> {
   const anthropicCredential = getProviderCredential("anthropic");
   const openaiCredential = getProviderCredential("openai");
   const codexCredential = getProviderCredential("codex");
+  const githubCopilotCredential = getProviderCredential("github-copilot");
+  const googleGeminiCliCredential = getProviderCredential("google-gemini-cli");
+  const googleAntigravityCredential = getProviderCredential("google-antigravity");
   const googleCredential = getProviderCredential("google");
   const groqCredential = getProviderCredential("groq");
   const mistralCredential = getProviderCredential("mistral");
@@ -75,8 +78,17 @@ export async function detectProviders(): Promise<DetectedProvider[]> {
   } else if (!providerDisabled("codex") && codexCredential.kind === "native_oauth" && codexCli) {
     results.push({ id: "codex", name: "Codex", available: true, reason: "native login" });
   }
+  if (!providerDisabled("github-copilot") && githubCopilotCredential.kind === "native_oauth") {
+    results.push({ id: "github-copilot", name: "GitHub Copilot", available: true, reason: "OAuth login" });
+  }
   if (!providerDisabled("google") && googleCredential.kind === "api_key") {
     results.push({ id: "google", name: "Google", available: true, reason: "API key" });
+  }
+  if (!providerDisabled("google-gemini-cli") && googleGeminiCliCredential.kind === "native_oauth") {
+    results.push({ id: "google-gemini-cli", name: "Google Cloud Code Assist", available: true, reason: "OAuth login" });
+  }
+  if (!providerDisabled("google-antigravity") && googleAntigravityCredential.kind === "native_oauth") {
+    results.push({ id: "google-antigravity", name: "Antigravity", available: true, reason: "OAuth login" });
   }
   if (!providerDisabled("groq") && groqCredential.kind === "api_key") {
     results.push({ id: "groq", name: "Groq", available: true, reason: "API key" });
@@ -122,7 +134,7 @@ export async function detectProviders(): Promise<DetectedProvider[]> {
 /** Pick the best default provider from detected ones */
 export function pickDefault(providers: DetectedProvider[]): DetectedProvider | undefined {
   // Prefer cloud providers that are available, then local
-  const priority = ["anthropic", "openai", "codex", "google", "groq", "mistral", "xai", "openrouter", "ollama", "lmstudio", "llamacpp", "jan", "vllm"];
+  const priority = ["anthropic", "github-copilot", "google-gemini-cli", "google-antigravity", "openai", "codex", "google", "groq", "mistral", "xai", "openrouter", "ollama", "lmstudio", "llamacpp", "jan", "vllm"];
   for (const id of priority) {
     const p = providers.find((x) => x.id === id && x.available);
     if (p) return p;

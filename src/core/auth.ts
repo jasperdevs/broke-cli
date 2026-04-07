@@ -25,9 +25,9 @@ function writeAuthData(data: Record<string, AuthCredentials>): void {
   writeFileSync(AUTH_FILE, JSON.stringify(data, null, 2), "utf-8");
 }
 
-export function saveCredentials(provider: string, token: string): void {
+export function saveCredentials(provider: string, token: string, expiresAt?: number): void {
   const data = readAuthData();
-  data[provider] = { provider, token };
+  data[provider] = { provider, token, expiresAt };
   writeAuthData(data);
 }
 

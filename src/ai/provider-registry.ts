@@ -30,6 +30,9 @@ export interface VisibleModelOption {
 function getNativeCliLabel(providerId: string): string {
   if (providerId === "anthropic") return "Claude Code";
   if (providerId === "codex") return "Codex";
+  if (providerId === "github-copilot") return "GitHub Copilot";
+  if (providerId === "google-gemini-cli") return "Google Cloud Code Assist";
+  if (providerId === "google-antigravity") return "Antigravity";
   return "native provider";
 }
 
