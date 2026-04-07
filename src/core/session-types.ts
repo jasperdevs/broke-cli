@@ -33,6 +33,8 @@ export interface SessionBudgetMetrics {
   plannerOutputTokens: number;
   executorInputTokens: number;
   executorOutputTokens: number;
+  toolOutputTokens: Record<string, number>;
+  toolCallsByName: Record<string, number>;
 }
 
 export interface SessionData {
@@ -78,5 +80,7 @@ export function createEmptySessionBudgetMetrics(): SessionBudgetMetrics {
     plannerOutputTokens: 0,
     executorInputTokens: 0,
     executorOutputTokens: 0,
+    toolOutputTokens: {},
+    toolCallsByName: {},
   };
 }

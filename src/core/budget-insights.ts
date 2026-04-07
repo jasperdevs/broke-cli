@@ -17,6 +17,8 @@ export interface BudgetReport {
   toolsUsed: number;
   toolExposureWaste: number;
   shellRecoveries: number;
+  toolOutputTokens: Record<string, number>;
+  toolCallsByName: Record<string, number>;
   idleCacheCliffs: number;
   autoCompactions: number;
   freshThreadCarryForwards: number;
@@ -28,6 +30,11 @@ export interface BudgetReport {
     value: number;
     pct: string;
   };
+  topToolBleeds: Array<{
+    tool: string;
+    tokens: number;
+    calls: number;
+  }>;
 }
 
 function pct(num: number, den: number): string {
@@ -59,6 +66,8 @@ function emptyMetrics(): SessionBudgetMetrics {
     toolsExposed: 0,
     toolsUsed: 0,
     shellRecoveries: 0,
+    toolOutputTokens: {},
+    toolCallsByName: {},
     plannerCacheHits: 0,
     plannerCacheMisses: 0,
     plannerInputTokens: 0,
@@ -79,6 +88,12 @@ function mergeBudgetMetrics(metricsList: SessionBudgetMetrics[]): SessionBudgetM
     merged.toolsExposed += metrics.toolsExposed;
     merged.toolsUsed += metrics.toolsUsed;
     merged.shellRecoveries += metrics.shellRecoveries;
+    for (const [tool, tokens] of Object.entries(metrics.toolOutputTokens ?? {})) {
+      merged.toolOutputTokens[tool] = (merged.toolOutputTokens[tool] ?? 0) + tokens;
+    }
+    for (const [tool, calls] of Object.entries(metrics.toolCallsByName ?? {})) {
+      merged.toolCallsByName[tool] = (merged.toolCallsByName[tool] ?? 0) + calls;
+    }
     merged.plannerCacheHits += metrics.plannerCacheHits;
     merged.plannerCacheMisses += metrics.plannerCacheMisses;
     merged.plannerInputTokens += metrics.plannerInputTokens;
@@ -109,6 +124,14 @@ function buildBudgetReportFromParts(parts: {
     { key: "idle cliff", value: metrics.idleCacheCliffs, den: totalTurns },
     { key: "compact", value: metrics.autoCompactions, den: totalTurns },
   ].sort((a, b) => b.value - a.value || b.den - a.den)[0];
+  const topToolBleeds = Object.entries(metrics.toolOutputTokens ?? {})
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 3)
+    .map(([tool, tokens]) => ({
+      tool,
+      tokens,
+      calls: metrics.toolCallsByName?.[tool] ?? 0,
+    }));
 
   return {
     sessionCount: parts.sessionCount,
@@ -127,6 +150,8 @@ function buildBudgetReportFromParts(parts: {
     toolsUsed: metrics.toolsUsed,
     toolExposureWaste,
     shellRecoveries: metrics.shellRecoveries,
+    toolOutputTokens: { ...(metrics.toolOutputTokens ?? {}) },
+    toolCallsByName: { ...(metrics.toolCallsByName ?? {}) },
     idleCacheCliffs: metrics.idleCacheCliffs,
     autoCompactions: metrics.autoCompactions,
     freshThreadCarryForwards: metrics.freshThreadCarryForwards,
@@ -138,6 +163,7 @@ function buildBudgetReportFromParts(parts: {
       value: bleedCandidates.value,
       pct: pct(bleedCandidates.value, bleedCandidates.den),
     },
+    topToolBleeds,
   };
 }
 
@@ -216,8 +242,8 @@ export function renderBudgetDashboard(options: {
     metric("tools used", `${report.toolsUsed} (${(report.toolsUsed / totalTurns).toFixed(1)}/turn)`),
     metric("shell saves", String(report.shellRecoveries)),
     metric("carry forwards", String(report.freshThreadCarryForwards)),
-    "",
-    "ROUTING",
+  "",
+  "ROUTING",
     metric("small turns", `${report.smallModelTurns}  ${pct(report.smallModelTurns, totalTurns)}`),
     metric("reuse", pct(report.plannerCacheHits, Math.max(report.plannerCacheHits + report.plannerCacheMisses, 1))),
     metric("plan hits", String(report.plannerCacheHits)),
@@ -226,6 +252,13 @@ export function renderBudgetDashboard(options: {
     metric("small bar", bar(report.smallModelTurns, totalTurns, chartWidth)),
   );
 
+  if ((report.topToolBleeds ?? []).length > 0) {
+    lines.push("", "HOT TOOLS");
+    for (const entry of report.topToolBleeds ?? []) {
+      lines.push(metric(entry.tool, `${entry.tokens.toLocaleString()} tok  ${entry.calls} calls`));
+    }
+  }
+
   return lines;
 }
 
@@ -233,5 +266,8 @@ export function summarizeBudgetMetrics(metrics: SessionBudgetMetrics): string {
   const totalTurns = Math.max(metrics.totalTurns, 1);
   const plannerTokens = metrics.plannerInputTokens + metrics.plannerOutputTokens;
   const executorTokens = metrics.executorInputTokens + metrics.executorOutputTokens;
-  return `small ${pct(metrics.smallModelTurns, totalTurns)} · cliffs ${metrics.idleCacheCliffs} · tool waste ${Math.max(0, metrics.toolsExposed - metrics.toolsUsed)} · shell saves ${metrics.shellRecoveries} · planner ${plannerTokens} · executor ${executorTokens} · plan hits ${metrics.plannerCacheHits}`;
+  const hottestTool = Object.entries(metrics.toolOutputTokens ?? {})
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
+  const hotToolPart = hottestTool ? ` · hot ${hottestTool[0]} ${hottestTool[1]}` : "";
+  return `small ${pct(metrics.smallModelTurns, totalTurns)} · cliffs ${metrics.idleCacheCliffs} · tool waste ${Math.max(0, metrics.toolsExposed - metrics.toolsUsed)} · shell saves ${metrics.shellRecoveries} · planner ${plannerTokens} · executor ${executorTokens} · plan hits ${metrics.plannerCacheHits}${hotToolPart}`;
 }

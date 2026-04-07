@@ -8,7 +8,9 @@ import { createCheckpoint } from "../core/git.js";
 /** Max chars to return from file reads (~2000 tokens) */
 const MAX_READ_CHARS = 8000;
 /** Max lines from grep matches */
-const MAX_GREP_MATCHES = 30;
+const MAX_GREP_MATCHES = 18;
+/** Max file entries from listFiles */
+const MAX_LIST_FILES = 120;
 /** Max semantic search results */
 const MAX_SEM_SEARCH_RESULTS = 8;
 const SKIP_DIRS = new Set([".git", "node_modules", "dist", "coverage", ".omx", ".tmp"]);
@@ -138,7 +140,7 @@ function buildGrepSummary(matches: Array<{ file: string; line: number; text: str
   return Object.entries(grouped).map(([file, fileMatches]) => ({
     file,
     count: fileMatches.length,
-    examples: fileMatches.slice(0, 3),
+    examples: fileMatches.slice(0, 2),
   }));
 }
 
@@ -225,6 +227,8 @@ export function readFileDirect({ path, offset, limit, mode, tail }: ReadFileDire
 export function listFilesDirect({ path: dir = ".", maxDepth, include }: { path?: string; maxDepth?: number; include?: string }) {
   const max = maxDepth ?? 3;
   const files: string[] = [];
+  let totalEntries = 0;
+  let capped = false;
   const visit = (current: string, depth: number): boolean => {
     if (depth > max) return false;
     try {
@@ -235,14 +239,22 @@ export function listFilesDirect({ path: dir = ".", maxDepth, include }: { path?:
         const stat = statSync(full);
         const rel = relative(process.cwd(), full);
         if (stat.isDirectory()) {
-          files.push(rel.replace(/\\/g, "/") + "/");
-          if (files.length >= 200) return true;
+          totalEntries += 1;
+          if (files.length < MAX_LIST_FILES) files.push(rel.replace(/\\/g, "/") + "/");
+          if (totalEntries >= MAX_LIST_FILES) {
+            capped = true;
+            return true;
+          }
           if (visit(full, depth + 1)) return true;
           continue;
         }
         if (!matchesInclude(rel, include)) continue;
-        files.push(rel.replace(/\\/g, "/"));
-        if (files.length >= 200) return true;
+        totalEntries += 1;
+        if (files.length < MAX_LIST_FILES) files.push(rel.replace(/\\/g, "/"));
+        if (totalEntries >= MAX_LIST_FILES) {
+          capped = true;
+          return true;
+        }
       }
     } catch {
       return false;
@@ -250,7 +262,7 @@ export function listFilesDirect({ path: dir = ".", maxDepth, include }: { path?:
     return false;
   };
   visit(dir, 0);
-  return { files };
+  return { files, totalEntries, truncated: capped };
 }
 
 export function grepDirect({ pattern, path: dir = ".", include }: { pattern: string; path?: string; include?: string }) {
@@ -400,7 +412,7 @@ export const editFileTool = tool({
 });
 
 export const listFilesTool = tool({
-  description: "List files and directories recursively. Use as a first step when exploring unfamiliar code. Skips hidden files and node_modules. Returns up to 200 entries.",
+  description: "List files and directories recursively. Use as a first step when exploring unfamiliar code. Skips hidden files and node_modules. Returns a compact list capped at 120 entries plus total count.",
   inputSchema: z.object({
     path: z.string().describe("Directory to list (default: current dir)").default("."),
     maxDepth: z.number().optional().describe("Max recursion depth (default 3)"),
@@ -410,7 +422,7 @@ export const listFilesTool = tool({
 });
 
 export const grepTool = tool({
-  description: "Search file contents with regex. Returns grouped results by file with example lines, plus raw matches for exact follow-up. Use this before broad shell grep where possible.",
+  description: "Search file contents with regex. Returns grouped results by file with compact example lines, plus capped raw matches for exact follow-up. Use this before broad shell grep where possible.",
   inputSchema: z.object({
     pattern: z.string().describe("Regex pattern (case-insensitive)"),
     path: z.string().describe("Directory to search (default: current dir)").default("."),

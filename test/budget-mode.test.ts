@@ -54,6 +54,8 @@ describe("session budget metrics", () => {
     session.addUsage(200, 40, 0.001);
     session.recordTurn({ smallModel: true, toolsExposed: 6, toolsUsed: 2, plannerCacheHit: true });
     session.recordShellRecovery();
+    session.recordToolResult("readFile", 120);
+    session.recordToolResult("grep", 45);
     session.recordIdleCacheCliff();
     session.recordCompaction({ freshThreadCarryForward: true });
     session.recordTurn({ plannerInputTokens: 120, plannerOutputTokens: 30, executorInputTokens: 200, executorOutputTokens: 40 });
@@ -69,11 +71,14 @@ describe("session budget metrics", () => {
     expect(report.toolExposureWaste).toBe(4);
     expect(report.shellRecoveries).toBe(1);
     expect(report.freshThreadCarryForwards).toBe(1);
+    expect(report.topToolBleeds[0]).toEqual({ tool: "readFile", tokens: 120, calls: 1 });
     expect(dashboard).toContain("TOKENS");
     expect(dashboard).toContain("SCAFFOLDS");
     expect(dashboard).toContain("planner");
     expect(dashboard).toContain("executor");
     expect(dashboard).toContain("BLEED");
+    expect(dashboard).toContain("HOT TOOLS");
+    expect(dashboard).toContain("readFile");
     expect(dashboard).toContain("scope");
     expect(dashboard).toContain("current session");
     expect(dashboard).toContain("live ctx");
@@ -82,6 +87,7 @@ describe("session budget metrics", () => {
     expect(summary).toContain("tool waste 4");
     expect(summary).toContain("shell saves 1");
     expect(summary).toContain("planner 150");
+    expect(summary).toContain("hot readFile 120");
   });
 
   it("aggregates budget metrics across sessions", () => {

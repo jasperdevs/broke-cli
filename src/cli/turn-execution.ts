@@ -46,6 +46,17 @@ interface ExtensionHooks {
   emit(event: string, payload: Record<string, unknown>): void;
 }
 
+function estimateToolResultTokens(result: unknown): number {
+  try {
+    const serialized = JSON.stringify(result);
+    if (!serialized) return 0;
+    const capped = serialized.length > 12000 ? `${serialized.slice(0, 12000)}…` : serialized;
+    return estimateTextTokens(capped);
+  } catch {
+    return 0;
+  }
+}
+
 export async function executeTurn(options: {
   app: TurnExecutionApp;
   session: Session;
@@ -281,6 +292,7 @@ export async function executeTurn(options: {
       onToolResult: (_name, result) => {
         hooks.emit("on_tool_result", { name: _name, result });
         if (_name === "todoWrite") return;
+        session.recordToolResult(_name, estimateToolResultTokens(result));
         const r = result as { success?: boolean; output?: string; error?: string; content?: string; matches?: unknown[]; files?: string[] };
         let detail: string | undefined;
         if (_name === "bash") {
@@ -304,8 +316,14 @@ export async function executeTurn(options: {
           detail = `${lineCount} lines`;
           const readPath = (result as any)?.path ?? "";
           if (readPath) session.getContextOptimizer().trackFileRead(readPath, lineCount);
-        } else if (_name === "grep" && r.matches) detail = `${(r.matches as unknown[]).length} matches`;
-        else if (_name === "listFiles" && r.files) detail = `${(r.files as string[]).length} files`;
+        } else if (_name === "grep" && r.matches) {
+          const capped = (result as any)?.capped;
+          detail = `${(r.matches as unknown[]).length} matches${capped ? " capped" : ""}`;
+        } else if (_name === "listFiles" && r.files) {
+          const totalEntries = (result as any)?.totalEntries;
+          const shown = (r.files as string[]).length;
+          detail = totalEntries && totalEntries > shown ? `${shown}/${totalEntries} entries` : `${shown} entries`;
+        }
         else if (_name === "semSearch") detail = `${((result as any)?.results as unknown[] | undefined)?.length ?? 0} ranked hits`;
         else if (_name === "agent") {
           const agent = result as { success?: boolean; model?: string; toolsUsed?: string[]; result?: string; error?: string };

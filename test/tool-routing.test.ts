@@ -3,7 +3,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, describe, expect, it } from "vitest";
 import { bashTool } from "../src/tools/bash.js";
-import { semSearchDirect } from "../src/tools/file-ops.js";
+import { listFilesDirect, semSearchDirect } from "../src/tools/file-ops.js";
 
 describe("tool routing", () => {
   const tempDirs: string[] = [];
@@ -64,6 +64,25 @@ describe("tool routing", () => {
       expect(result.results.length).toBeGreaterThan(0);
       expect(result.results[0]?.file).toContain("auth.ts");
       expect(result.results[0]?.excerpt.toLowerCase()).toContain("token");
+    } finally {
+      process.chdir(previous);
+    }
+  });
+
+  it("caps native file listings to avoid oversized tool payloads", () => {
+    const dir = mkdtempSync(join(tmpdir(), "brokecli-list-"));
+    tempDirs.push(dir);
+    for (let i = 0; i < 150; i++) {
+      writeFileSync(join(dir, `file-${i}.ts`), `export const value${i} = ${i};\n`, "utf-8");
+    }
+
+    const previous = process.cwd();
+    process.chdir(dir);
+    try {
+      const result = listFilesDirect({ path: ".", maxDepth: 1, include: "*.ts" });
+      expect(result.files.length).toBeLessThanOrEqual(120);
+      expect(result.totalEntries).toBe(120);
+      expect(result.truncated).toBe(true);
     } finally {
       process.chdir(previous);
     }

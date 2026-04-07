@@ -293,6 +293,13 @@ export class Session {
     this.save();
   }
 
+  recordToolResult(toolName: string, approxTokens: number): void {
+    if (!toolName || approxTokens <= 0) return;
+    this.budgetMetrics.toolOutputTokens[toolName] = (this.budgetMetrics.toolOutputTokens[toolName] ?? 0) + approxTokens;
+    this.budgetMetrics.toolCallsByName[toolName] = (this.budgetMetrics.toolCallsByName[toolName] ?? 0) + 1;
+    this.save();
+  }
+
   recordIdleCacheCliff(): void {
     this.budgetMetrics.idleCacheCliffs += 1;
     this.save();
