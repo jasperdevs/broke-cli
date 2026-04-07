@@ -114,6 +114,27 @@ describe("message wrapping", () => {
     }).map((line) => stripAnsi(line));
     expect(lines.some((line) => line.startsWith("▌"))).toBe(true);
   });
+
+  it("drops markdown ANSI styling in light themes so assistant text stays readable", () => {
+    const originalTheme = getSettings().theme;
+    updateSetting("theme", "brokecli-light");
+    try {
+      const lines = renderStaticMessages({
+        messages: [{ role: "assistant", content: "Use `npm run build` and **watch** the output." }],
+        maxWidth: 60,
+        toolOutputCollapsed: false,
+        isToolOutput: () => false,
+        wordWrap,
+        colors: { imageTagBg: "", userBg: "", userText: "", userAccent: "", border: "", muted: "", text: "" },
+        reset: "",
+        bold: "",
+      });
+      expect(lines.join("")).not.toContain("\x1b[");
+      expect(lines.join("\n")).toContain("npm run build");
+    } finally {
+      updateSetting("theme", originalTheme);
+    }
+  });
 });
 
 describe("default session naming", () => {
@@ -190,7 +211,7 @@ describe("sidebar token summary", () => {
     expect(footer).toContain("$0.0016");
     expect(footer).toContain("150 in");
     expect(footer).toContain("60 out");
-    expect(footer).toContain("132 ctx");
+    expect(footer).toContain("132/344k ctx");
     expect(footer).toContain("<1%");
     expect(footer).toContain("▰");
     updateSetting("showTokens", originalShowTokens);
@@ -209,7 +230,7 @@ describe("sidebar token summary", () => {
     expect(footer.some((line: string) => line.trim() === "$0.0016")).toBe(true);
     expect(footer.some((line: string) => line.trim() === "150 in")).toBe(true);
     expect(footer.some((line: string) => line.trim() === "60 out")).toBe(true);
-    expect(footer.some((line: string) => line.trim() === "132k ctx")).toBe(true);
+    expect(footer.some((line: string) => line.trim() === "132k/344k ctx")).toBe(true);
     expect(footer.some((line: string) => line.includes("38%"))).toBe(true);
     expect(footer.some((line: string) => line.includes("▰") || line.includes("▱"))).toBe(true);
     expect(footer.filter((line: string) => line.trim() === "").length).toBeGreaterThan(1);
@@ -224,7 +245,7 @@ describe("sidebar token summary", () => {
     app.setContextUsage(822, 400_000);
     app.updateUsage(0.0016, 150, 60);
     const footer = app.renderSidebarFooter().map((line: string) => stripAnsi(line)).join("\n");
-    expect(footer).toContain("822 ctx");
+    expect(footer).toContain("822/400k ctx");
     expect(footer).toContain("<1%");
     expect(footer).toContain("▰");
     updateSetting("showTokens", originalShowTokens);
@@ -364,8 +385,8 @@ describe("startup home view", () => {
     app.messages = [{ role: "user", content: "hello" }];
     app.drawImmediate();
     const output = rendered.map((line) => stripAnsi(line)).join("\n");
+    expect(output).toContain("BTW");
     expect(output).toContain("Design/UI");
-    expect(output).toContain("Architecture");
     expect(output).toContain("v more");
   });
 
@@ -512,6 +533,28 @@ describe("input editing", () => {
     app.input.paste("/");
     app.handleKey({ name: "return", char: "", ctrl: false, meta: false, shift: true });
     expect(app.input.getText()).toBe("/\n");
+  });
+
+  it("renders a /btw bubble above the input and dismisses it from the keyboard", () => {
+    const app = new App() as any;
+    let rendered: string[] = [];
+    app.screen = { height: 18, width: 80, hasSidebar: false, mainWidth: 80, sidebarWidth: 0, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
+    app.openBtwBubble({ question: "what changed?", answer: "footer spacing", modelLabel: "Claude Sonnet 4.6", pending: false });
+    app.drawImmediate();
+    const output = rendered.map((line) => stripAnsi(line)).join("\n");
+    expect(output).toContain("/btw");
+    expect(output).toContain("what changed?");
+    expect(output).toContain("footer spacing");
+    app.handleKey({ name: "escape", char: "", ctrl: false, meta: false, shift: false });
+    expect(app.btwBubble).toBeNull();
+  });
+
+  it("keeps shift-enter as a newline while a /btw bubble is visible", () => {
+    const app = new App() as any;
+    app.openBtwBubble({ question: "status?", answer: "", modelLabel: "Claude Sonnet 4.6", pending: true });
+    app.input.paste("line one");
+    app.handleKey({ name: "return", char: "", ctrl: false, meta: false, shift: true });
+    expect(app.input.getText()).toBe("line one\n");
   });
 
   it("does not show an empty reasoning block when no reasoning text arrives", () => {

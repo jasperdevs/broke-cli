@@ -1,6 +1,7 @@
 import stripAnsi from "strip-ansi";
 import { renderMarkdown } from "../../utils/markdown.js";
 import { getSettings } from "../../core/config.js";
+import { currentTheme } from "../../core/themes.js";
 
 export interface RenderChatMessage {
   role: "user" | "assistant" | "system";
@@ -61,7 +62,7 @@ export function renderStaticMessages(options: {
       }
       lines.push("");
     } else if (msg.role === "assistant") {
-      const rendered = renderMarkdown(msg.content);
+      const rendered = currentTheme().dark ? renderMarkdown(msg.content) : stripAnsi(renderMarkdown(msg.content));
       const wrapW = maxWidth - 4;
       for (const cl of rendered.split("\n")) {
         const plain = stripAnsi(cl);

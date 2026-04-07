@@ -86,6 +86,7 @@ export interface HandleSlashCommandOptions {
   onModeChange: (mode: Mode) => void;
   onModelRoutingChange?: () => void;
   onSystemPromptChange: (systemPrompt: string) => void;
+  onBtw?: (question: string) => Promise<void>;
   hooks: ExtensionHooks;
   onProjectChange: (cwd: string) => void;
 }

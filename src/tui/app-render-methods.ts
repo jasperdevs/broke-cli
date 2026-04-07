@@ -1,5 +1,6 @@
 import { existsSync } from "fs";
 import { join } from "path";
+import stripAnsi from "strip-ansi";
 import { BOX, BOLD, DIM, RESET } from "../utils/ansi.js";
 import { padVisible, visibleWidth } from "../utils/terminal-width.js";
 import { currentTheme } from "../core/themes.js";
@@ -105,6 +106,34 @@ export function renderCompactHeader(app: AppState): string {
   const model = `${T()}${getPrettyModelName(app.modelName, app.modelProviderId)}${RESET}`;
   const git = app.gitBranch ? ` ${MUTED()}${app.gitBranch}${app.gitDirty ? "*" : ""}${RESET}` : "";
   return ` ${model}${git}`;
+}
+
+export function renderBtwBubble(app: AppState, width: number): string[] {
+  const bubble = app.btwBubble;
+  if (!bubble) return [];
+  const innerWidth = Math.max(18, Math.min(width - 4, 62));
+  const label = bubble.pending ? `${app.sparkleSpinner(app.spinnerFrame)} ${app.shimmerText("/btw", app.spinnerFrame)}` : `${T()}${BOLD}/btw${RESET}`;
+  const model = `${MUTED()}${bubble.modelLabel}${RESET}`;
+  const header = `${label} ${DIM}·${RESET} ${model}`;
+  const wrappedQuestion = wordWrap(bubble.question, Math.max(12, innerWidth - 4)).map((line) => `${TXT()}Q:${RESET} ${TXT()}${line}${RESET}`);
+  const answerText = bubble.error
+    ? `${ERR()}${bubble.error}${RESET}`
+    : bubble.answer.trim()
+      ? `${TXT()}${bubble.answer.trim()}${RESET}`
+      : `${MUTED()}Answering from current session context...${RESET}`;
+  const wrappedAnswer = wordWrap(stripAnsi(answerText), Math.max(12, innerWidth - 2)).map((line) => bubble.error ? `${ERR()}${line}${RESET}` : `${TXT()}${line}${RESET}`);
+  const footer = bubble.pending
+    ? `${DIM}esc cancel${RESET}`
+    : `${DIM}space/enter/esc dismiss${RESET}`;
+  return buildRenderHomeBox({
+    width: innerWidth,
+    title: ` ${header} `,
+    body: [...wrappedQuestion, "", ...wrappedAnswer, "", footer],
+    box: BOX,
+    frameColor: currentTheme().sidebarBorder,
+    reset: RESET,
+    padLine: (line, inner) => app.padLine(line, inner),
+  });
 }
 
 export function shouldShowSidebar(app: AppState): boolean {
@@ -272,7 +301,7 @@ export function renderUpdateBanner(app: AppState, width: number): string[] {
 }
 
 export function buildSidebarLines(app: AppState): string[] {
-  const resolveSlotLabel = (slot: "default" | "small" | "review" | "planning" | "ui" | "architecture"): string => {
+  const resolveSlotLabel = (slot: "default" | "small" | "btw" | "review" | "planning" | "ui" | "architecture"): string => {
     const configured = getConfiguredModelPreference(slot);
     if (!configured) return getPrettyModelName(app.modelName, app.modelProviderId);
     const slashIndex = configured.indexOf("/");
@@ -287,6 +316,7 @@ export function buildSidebarLines(app: AppState): string[] {
     modelSlots: [
       { label: "Chat", value: getPrettyModelName(app.modelName, app.modelProviderId) },
       { label: "Fast", value: resolveSlotLabel("small") },
+      { label: "BTW", value: resolveSlotLabel("btw") },
       { label: "Review", value: resolveSlotLabel("review") },
       { label: "Planning", value: resolveSlotLabel("planning") },
       { label: "Design/UI", value: resolveSlotLabel("ui") },

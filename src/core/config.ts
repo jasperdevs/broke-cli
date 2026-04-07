@@ -155,6 +155,7 @@ export function updateSettingsPatch(patch: Partial<Settings>, scope: "global" | 
 const MODEL_PREFERENCE_KEYS: Record<ModelPreferenceSlot, keyof BrokeConfig> = {
   default: "defaultModel",
   small: "defaultSmallModel",
+  btw: "defaultBtwModel",
   review: "defaultReviewModel",
   planning: "defaultPlanningModel",
   ui: "defaultUiModel",

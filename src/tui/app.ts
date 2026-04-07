@@ -23,7 +23,7 @@ import type { AppStateUiMethods } from "./app-state-ui.js";
 import { appStateUiMethods } from "./app-state-ui.js";
 import { AnimCounter, HOME_TIPS } from "./app-shared.js";
 import { APP_VERSION } from "../core/app-meta.js";
-import type { BudgetView, ChatMessage, ModelLaneOption, ModelOption, PendingImage, PendingMessage, PickerItem, QuestionView, SettingEntry, TodoItem, TreeView, UpdateNotice } from "./app-types.js";
+import type { BtwBubble, BudgetView, ChatMessage, ModelLaneOption, ModelOption, PendingImage, PendingMessage, PickerItem, QuestionView, SettingEntry, TodoItem, TreeView, UpdateNotice } from "./app-types.js";
 import type { ModelPreferenceSlot } from "../core/config.js";
 import type { ModelRuntime } from "../ai/providers.js";
 import { createDefaultSessionName } from "../core/session.js";
@@ -135,6 +135,7 @@ export class App {
   private hideCursorUntil = 0;
   private hideCursorTimer: NodeJS.Timeout | null = null;
   private activeMenuClickTargets = new Map<number, () => void>();
+  private btwBubble: BtwBubble | null = null;
   private homeTip = HOME_TIPS[0];
   private mascotPathCache: string | null | undefined = undefined;
   private mascotGridCache = new Map<string, Array<Array<RgbColor | null>>>();

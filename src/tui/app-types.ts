@@ -23,7 +23,7 @@ export interface ModelOption {
 
 export interface ModelLaneOption {
   id: string;
-  slot: "all" | "default" | "small" | "review" | "planning" | "ui" | "architecture";
+  slot: "all" | "default" | "small" | "btw" | "review" | "planning" | "ui" | "architecture";
   label: string;
   detail: string;
   assignedModelLabel?: string;
@@ -40,6 +40,15 @@ export interface PickerItem {
   id: string;
   label: string;
   detail?: string;
+}
+
+export interface BtwBubble {
+  question: string;
+  answer: string;
+  modelLabel: string;
+  pending: boolean;
+  error?: string;
+  abort?: () => void;
 }
 
 export interface BudgetView {

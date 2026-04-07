@@ -225,6 +225,7 @@ describe("picker menus", () => {
     const originalPrefs = {
       default: getConfiguredModelPreference("default") ?? null,
       small: getConfiguredModelPreference("small") ?? null,
+      btw: getConfiguredModelPreference("btw") ?? null,
       review: getConfiguredModelPreference("review") ?? null,
       planning: getConfiguredModelPreference("planning") ?? null,
       ui: getConfiguredModelPreference("ui") ?? null,
@@ -234,6 +235,7 @@ describe("picker menus", () => {
     try {
       updateModelPreference("default", "openai/gpt-5.4-mini");
       updateModelPreference("small", "openai/gpt-4o-mini");
+      updateModelPreference("btw", "openai/gpt-4.1-mini");
       updateModelPreference("review", "openai/gpt-4.1");
       updateModelPreference("planning", "openai/o3");
       updateModelPreference("ui", "openai/gpt-5.4-mini");
@@ -263,6 +265,9 @@ describe("picker menus", () => {
       expect(output).toContain("Use everywhere");
       expect(output).toContain("Use for fast (GPT-4o mini)");
       expect(output).toContain("Use for chat (already selected)");
+      expect(output).toContain("Use for /btw");
+      app.handleKey({ name: "down", char: "", ctrl: false, meta: false, shift: false });
+      app.handleKey({ name: "down", char: "", ctrl: false, meta: false, shift: false });
       app.handleKey({ name: "down", char: "", ctrl: false, meta: false, shift: false });
       app.handleKey({ name: "down", char: "", ctrl: false, meta: false, shift: false });
       app.handleKey({ name: "down", char: "", ctrl: false, meta: false, shift: false });
@@ -274,6 +279,7 @@ describe("picker menus", () => {
       expect(assignedCalls).toEqual([
         ["openai", "gpt-5.4-mini", "default"],
         ["openai", "gpt-5.4-mini", "small"],
+        ["openai", "gpt-5.4-mini", "btw"],
         ["openai", "gpt-5.4-mini", "review"],
         ["openai", "gpt-5.4-mini", "planning"],
         ["openai", "gpt-5.4-mini", "ui"],
@@ -282,6 +288,7 @@ describe("picker menus", () => {
     } finally {
       updateModelPreference("default", originalPrefs.default);
       updateModelPreference("small", originalPrefs.small);
+      updateModelPreference("btw", originalPrefs.btw);
       updateModelPreference("review", originalPrefs.review);
       updateModelPreference("planning", originalPrefs.planning);
       updateModelPreference("ui", originalPrefs.ui);

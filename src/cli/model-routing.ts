@@ -4,7 +4,7 @@ import { getSmallModelId } from "../ai/router.js";
 import { getConfiguredModelPreference, type Mode, type ModelPreferenceSlot } from "../core/config.js";
 import type { TurnArchetype } from "../core/turn-policy.js";
 
-export type SpecialistModelRole = Exclude<ModelPreferenceSlot, "default" | "small">;
+export type SpecialistModelRole = Exclude<ModelPreferenceSlot, "default" | "small" | "btw">;
 
 export interface ResolvedModelRef {
   providerId: string;
@@ -36,7 +36,7 @@ export function getResolvedModelPreference(slot: ModelPreferenceSlot, fallbackPr
 }
 
 export function listResolvedModelPreferences(fallbackProviderId: string): Partial<Record<ModelPreferenceSlot, ResolvedModelRef>> {
-  const slots: ModelPreferenceSlot[] = ["default", "small", "review", "planning", "ui", "architecture"];
+  const slots: ModelPreferenceSlot[] = ["default", "small", "btw", "review", "planning", "ui", "architecture"];
   const result: Partial<Record<ModelPreferenceSlot, ResolvedModelRef>> = {};
   for (const slot of slots) {
     const resolved = getResolvedModelPreference(slot, fallbackProviderId);

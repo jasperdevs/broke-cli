@@ -208,6 +208,18 @@ export function handleKey(app: AppState, key: Keypress): void {
     return;
   }
 
+  if (app.btwBubble) {
+    const dismissWithInputlessKey = app.input.getText().trim().length === 0
+      && !key.ctrl
+      && !key.meta
+      && !key.shift
+      && (key.name === "space" || key.name === "return" || key.name === "enter");
+    if (key.name === "escape" || dismissWithInputlessKey) {
+      app.dismissBtwBubble();
+      return;
+    }
+  }
+
   if (handleEscapeAndBindings(app, key)) return;
 
   if (key.ctrl && key.name === "o") {

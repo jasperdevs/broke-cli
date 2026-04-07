@@ -2,7 +2,7 @@ import { getSettings, updateSetting, type CavemanLevel, type Mode, type ModelPre
 import { getAvailableThinkingLevels, getEffectiveThinkingLevel } from "../ai/thinking.js";
 import type { BudgetReport } from "../core/budget-insights.js";
 import { HOME_TIPS } from "./app-shared.js";
-import type { MenuPromptKind, ModelOption, PickerItem, QuestionRequest, QuestionResult, SettingEntry } from "./app-types.js";
+import type { BtwBubble, MenuPromptKind, ModelOption, PickerItem, QuestionRequest, QuestionResult, SettingEntry } from "./app-types.js";
 import type { Keypress } from "./keypress.js";
 import { showQuestion, showQuestionnaire } from "./question-state.js";
 import type { Session } from "../core/session.js";
@@ -205,6 +205,44 @@ export function assignModelSlot(app: AppState, cursor: number, slot: ModelPrefer
   app.draw();
 }
 
+export function openBtwBubble(app: AppState, bubble: Omit<BtwBubble, "answer"> & { answer?: string }): void {
+  app.btwBubble = {
+    question: bubble.question,
+    answer: bubble.answer ?? "",
+    modelLabel: bubble.modelLabel,
+    pending: bubble.pending,
+    error: bubble.error,
+    abort: bubble.abort,
+  };
+  if (bubble.pending) app.ensureUiSpinner();
+  else app.releaseUiSpinnerIfIdle();
+  app.draw();
+}
+
+export function appendBtwBubble(app: AppState, delta: string): void {
+  if (!app.btwBubble) return;
+  app.btwBubble.answer += delta;
+  app.draw();
+}
+
+export function finishBtwBubble(app: AppState, options?: { error?: string }): void {
+  if (!app.btwBubble) return;
+  app.btwBubble.pending = false;
+  app.btwBubble.abort = undefined;
+  if (options?.error) app.btwBubble.error = options.error;
+  app.releaseUiSpinnerIfIdle();
+  app.draw();
+}
+
+export function dismissBtwBubble(app: AppState): void {
+  if (!app.btwBubble) return;
+  const abort = app.btwBubble.abort;
+  app.btwBubble = null;
+  abort?.();
+  app.releaseUiSpinnerIfIdle();
+  app.draw();
+}
+
 export interface AppStateUiMethods {
   openModelPicker(options: ModelOption[], onSelect: (providerId: string, modelId: string) => void, onPin?: (providerId: string, modelId: string, pinned: boolean) => void, onAssign?: (providerId: string, modelId: string, slot: ModelPreferenceSlot) => void, initialCursor?: number, initialScope?: "all" | "scoped"): void;
   updateModelPickerOptions(options: ModelOption[], focusKey?: string): void;
@@ -228,6 +266,10 @@ export interface AppStateUiMethods {
   showQuestionnaire(request: QuestionRequest): Promise<QuestionResult>;
   onScopedModelCycle(handler: () => void): void;
   assignModelSlot(cursor: number, slot: ModelPreferenceSlot): void;
+  openBtwBubble(bubble: Omit<BtwBubble, "answer"> & { answer?: string }): void;
+  appendBtwBubble(delta: string): void;
+  finishBtwBubble(options?: { error?: string }): void;
+  dismissBtwBubble(): void;
 }
 
 export const appStateUiMethods: AppStateUiMethods = {
@@ -253,4 +295,8 @@ export const appStateUiMethods: AppStateUiMethods = {
   showQuestionnaire(this: AppState, request) { return showQuestionnaire(this, request); },
   onScopedModelCycle(this: AppState, handler) { return onScopedModelCycle(this, handler); },
   assignModelSlot(this: AppState, cursor, slot) { return assignModelSlot(this, cursor, slot); },
+  openBtwBubble(this: AppState, bubble) { return openBtwBubble(this, bubble); },
+  appendBtwBubble(this: AppState, delta) { return appendBtwBubble(this, delta); },
+  finishBtwBubble(this: AppState, options) { return finishBtwBubble(this, options); },
+  dismissBtwBubble(this: AppState) { return dismissBtwBubble(this); },
 };

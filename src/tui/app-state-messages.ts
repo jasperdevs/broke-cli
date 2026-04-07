@@ -120,17 +120,11 @@ export function setCompacting(app: AppState, compacting: boolean, tokenCount?: n
     app.compactTokens = tokenCount ?? 0;
     app.invalidateMsgCache();
     app.scrollToBottom();
-    if (!app.spinnerTimer) {
-      app.spinnerFrame = 0;
-      app.spinnerTimer = setInterval(() => {
-        app.spinnerFrame = (app.spinnerFrame + 1) % 4;
-        app.draw();
-      }, app.constructor.ANIMATION_INTERVAL_MS);
-    }
-  } else if (!app.isStreaming && app.spinnerTimer) {
-    clearInterval(app.spinnerTimer);
-    app.spinnerTimer = null;
+    app.ensureUiSpinner();
+  } else if (!app.isStreaming) {
+    app.releaseUiSpinnerIfIdle();
   }
+  app.refreshWindowTitle?.();
   app.draw();
 }
 

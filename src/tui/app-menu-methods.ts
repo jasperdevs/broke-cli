@@ -34,11 +34,12 @@ export function getSidebarViewportHeight(app: AppState): number {
 
 export function getBottomLineCount(app: AppState, mainW: number, maxHeight: number): number {
   const maxVisibleRows = Math.max(1, getSettings().autocompleteMaxVisible);
+  const btwBubbleLineCount = app.renderBtwBubble(mainW).length;
   const inputLineCount = app.getWrappedInputLines(app.input.getText(), mainW).length;
   const pendingImageLineCount = getPendingImagePromptLines(app, mainW).length;
   const statusLineCount = app.statusMessage ? 2 : 0;
   const tailReserve = 2;
-  let count = 2 + pendingImageLineCount + inputLineCount + statusLineCount;
+  let count = 2 + pendingImageLineCount + inputLineCount + statusLineCount + btwBubbleLineCount;
   const baseCount = count;
 
   if (app.filePicker) {
@@ -289,6 +290,7 @@ export function getModelPickerEntries(app: AppState): MenuEntry[] {
     now: "current",
     default: "chat",
     small: "fast",
+    btw: "btw",
     review: "review",
     plan: "planning",
     ui: "design/UI",

@@ -62,8 +62,13 @@ export function drawImmediate(app: AppState): void {
   const bottomMenuClicks: Array<{ lineIndex: number; action: () => void }> = [];
   const pendingImageLines = getPendingImagePromptLines(app, mainW);
   const statusLines = getStatusPromptLines(app);
+  const btwBubbleLines = app.renderBtwBubble(mainW);
 
   bottomLines.push("");
+  if (btwBubbleLines.length > 0) {
+    bottomLines.push(...btwBubbleLines);
+    bottomLines.push("");
+  }
   bottomLines.push(...pendingImageLines);
   bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
   const inputStartIndex = bottomLines.length;

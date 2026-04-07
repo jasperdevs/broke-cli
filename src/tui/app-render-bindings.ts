@@ -10,6 +10,7 @@ import {
   pickHomeTipIndex,
   refreshHomeScreenData,
   renderCompactHeader,
+  renderBtwBubble,
   renderHomeBox,
   renderHomeView,
   renderUpdateBanner,
@@ -34,6 +35,7 @@ export interface AppRenderMethods {
   renderToolCallBlock(tc: { name: string; preview: string; args?: unknown; resultDetail?: string; result?: string; error?: boolean; expanded: boolean; streamOutput?: string }, maxWidth: number): string[];
   renderMessages(maxWidth: number): string[];
   renderCompactHeader(): string;
+  renderBtwBubble(width: number): string[];
   shouldShowSidebar(): boolean;
   pickHomeTipIndex(): number;
   refreshHomeScreenData(): void;
@@ -61,6 +63,7 @@ export const appRenderMethods: AppRenderMethods = {
   renderToolCallBlock(this: AppState, tc: typeof this.toolCallGroups[0], maxWidth: number) { return renderToolCallBlock(this, tc, maxWidth); },
   renderMessages(this: AppState, maxWidth: number) { return renderMessages(this, maxWidth); },
   renderCompactHeader(this: AppState) { return renderCompactHeader(this); },
+  renderBtwBubble(this: AppState, width: number) { return renderBtwBubble(this, width); },
   shouldShowSidebar(this: AppState) { return shouldShowSidebar(this); },
   pickHomeTipIndex(this: AppState) { return pickHomeTipIndex(this); },
   refreshHomeScreenData(this: AppState) { return refreshHomeScreenData(this); },

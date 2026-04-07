@@ -8,16 +8,6 @@ import { openExtensionsMenu, openPermissionsMenu, openSettingsMenu, openThemeMen
 import type { HandleSlashCommandOptions, SlashCommandResult } from "./slash-command-types.js";
 import { handleUiSlashCommand } from "./slash-command-ui.js";
 import { getResolvedModelPreference } from "./model-routing.js";
-import { getPrettyModelName } from "../ai/model-catalog.js";
-
-const SLOT_LABELS: Array<{ slot: Exclude<ModelPreferenceSlot, "default"> | "chat"; label: string }> = [
-  { slot: "chat", label: "Chat" },
-  { slot: "small", label: "Fast" },
-  { slot: "review", label: "Review" },
-  { slot: "planning", label: "Planning" },
-  { slot: "ui", label: "Design/UI" },
-  { slot: "architecture", label: "Architecture" },
-];
 
 export async function handleSlashCommand(options: HandleSlashCommandOptions): Promise<SlashCommandResult> {
   const {
@@ -39,6 +29,7 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
     onModeChange,
     onModelRoutingChange,
     onSystemPromptChange,
+    onBtw,
     hooks,
     onProjectChange,
   } = options;
@@ -95,7 +86,7 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
           });
           session.setProviderModel(nextModel.provider.name, modId);
           updateSetting("lastModel", key);
-          for (const slot of ["default", "small", "review", "planning", "ui", "architecture"] as const) {
+          for (const slot of ["default", "small", "btw", "review", "planning", "ui", "architecture"] as const) {
             if (!getConfiguredModelPreference(slot)) updateModelPreference(slot, key);
           }
           onModelRoutingChange?.();
@@ -118,62 +109,17 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
       }, 0);
       return { handled: true };
     }
-    case "switch": {
-      if (!activeModel || !currentModelId) {
-        app.setStatus?.("No active model available.");
+    case "btw": {
+      if (!restText) {
+        app.setDraft?.("/btw ");
+        app.setStatus?.("Ask a side question after /btw.");
         return { handled: true };
       }
-      const models = new Map<string, { providerId: string; modelId: string; lanes: string[] }>();
-      const pushModel = (providerId: string, modelId: string, lane: string) => {
-        const key = `${providerId}/${modelId}`;
-        const existing = models.get(key);
-        if (existing) {
-          if (!existing.lanes.includes(lane)) existing.lanes.push(lane);
-          return;
-        }
-        models.set(key, { providerId, modelId, lanes: [lane] });
-      };
-
-      pushModel(activeModel.provider.id, currentModelId, "Chat");
-      for (const { slot, label } of SLOT_LABELS) {
-        if (slot === "chat") continue;
-        const resolved = getResolvedModelPreference(slot, activeModel.provider.id);
-        if (resolved) pushModel(resolved.providerId, resolved.modelId, label);
-      }
-
-      const items = Array.from(models.values()).map((entry) => {
-        const key = `${entry.providerId}/${entry.modelId}`;
-        return {
-          id: key,
-          label: getPrettyModelName(entry.modelId, entry.providerId),
-          detail: entry.lanes.join(" · "),
-        };
-      });
-
-      if (items.length === 0) {
-        app.setStatus?.("No sidebar models available. Run /model first.");
+      if (!onBtw) {
+        app.setStatus?.("/btw is unavailable in this runtime.");
         return { handled: true };
       }
-
-      const initialCursor = Math.max(0, items.findIndex((item) => item.id === `${activeModel.provider.id}/${currentModelId}`));
-      app.openItemPicker("Switch model", items, (id: string) => {
-        const slashIndex = id.indexOf("/");
-        const providerId = slashIndex > 0 ? id.slice(0, slashIndex) : activeModel.provider.id;
-        const modelId = slashIndex > 0 ? id.slice(slashIndex + 1) : id;
-        try {
-          const nextModel = providerRegistry.createModel(providerId, modelId);
-          onModelChange(nextModel, modelId);
-          app.setModel(nextModel.provider.name, modelId, {
-            providerId: nextModel.provider.id,
-            runtime: nextModel.runtime,
-          });
-          session.setProviderModel(nextModel.provider.name, modelId);
-          updateSetting("lastModel", `${providerId}/${modelId}`);
-          app.setStatus?.(`Switched to ${getPrettyModelName(modelId, providerId)}`);
-        } catch (err) {
-          app.setStatus?.(`Failed: ${(err as Error).message}`);
-        }
-      }, { initialCursor });
+      await onBtw(restText);
       return { handled: true };
     }
     case "settings": {

@@ -49,6 +49,7 @@ export function buildVisibleRuntimeModelOptions(
       if (key === currentKey) badges.push("now");
       if (preferences.default?.key === key) badges.push("default");
       if (preferences.small?.key === key) badges.push("small");
+      if (preferences.btw?.key === key) badges.push("btw");
       if (preferences.review?.key === key) badges.push("review");
       if (preferences.planning?.key === key) badges.push("plan");
       if (preferences.ui?.key === key) badges.push("ui");

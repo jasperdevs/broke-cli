@@ -26,9 +26,12 @@ import { createProgram } from "../src/cli/program.js";
 import { ensureConfiguredPackagesInstalled } from "../src/core/package-manager.js";
 import { checkForNewVersion } from "../src/core/update.js";
 import { isSkippedPromptAnswer, isValidHttpBaseUrl, normalizeThinkingLevel, normalizeProgramArgv, readPromptArg, splitModelArg } from "../src/cli/cli-helpers.js";
-import { resolvePreferredMode, type SpecialistModelRole } from "../src/cli/model-routing.js";
+import { resolveConfiguredModelHandle, resolvePreferredMode, type SpecialistModelRole } from "../src/cli/model-routing.js";
 import { buildVisibleRuntimeModelOptions, rebuildSmallModelState as computeSmallModelState, resolveSpecialistRuntimeModel } from "../src/cli/runtime-models.js";
 import { getTurnPolicy } from "../src/core/turn-policy.js";
+import { startStream } from "../src/ai/stream.js";
+import { startNativeStream } from "../src/ai/native-stream.js";
+import { getPrettyModelName } from "../src/ai/model-catalog.js";
 const program = createProgram(APP_VERSION);
 
 program.action(async (promptParts, opts) => {
@@ -275,6 +278,86 @@ program.action(async (promptParts, opts) => {
     return buildVisibleRuntimeModelOptions(providerRegistry, activeModel, currentModelId, providers);
   }
 
+  async function runBtwQuestion(question: string): Promise<void> {
+    if (!activeModel) {
+      app.setStatus("No provider configured. Run /connect.");
+      return;
+    }
+
+    const configured = resolveConfiguredModelHandle(providerRegistry, activeModel, currentModelId, "btw");
+    const btwModel = configured?.model ?? activeModel;
+    const btwModelId = configured?.modelId ?? currentModelId;
+    const modelLabel = getPrettyModelName(btwModelId, btwModel.provider.id);
+    const abortController = new AbortController();
+    const sessionMessages = session.getChatMessages();
+    const latestAssistant = app.getLastAssistantContent().trim();
+    const lastSessionAssistant = [...sessionMessages].reverse().find((message) => message.role === "assistant")?.content.trim() ?? "";
+    const visibleMessages = [...sessionMessages];
+    if (latestAssistant && latestAssistant !== lastSessionAssistant) {
+      visibleMessages.push({ role: "assistant", content: latestAssistant });
+    }
+    const sideMessages = [...visibleMessages, { role: "user" as const, content: question.trim() }];
+    const sideSystemPrompt = [
+      "You are answering a side question about the current coding session.",
+      "Use only information already present in this session context.",
+      "Do not call tools, do not assume file contents you have not already seen, and do not change the main task.",
+      "Reply briefly and directly.",
+    ].join(" ");
+
+    app.openBtwBubble({
+      question: question.trim(),
+      modelLabel,
+      pending: true,
+      abort: () => abortController.abort(),
+    });
+
+    const onFinish = (usage: { inputTokens: number; outputTokens: number; cost: number }) => {
+      session.addUsage(usage.inputTokens, usage.outputTokens, usage.cost);
+      app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
+      if ((app as any).btwBubble?.pending) app.finishBtwBubble();
+    };
+
+    const onError = (error: Error) => {
+      if (error.name === "AbortError") return;
+      app.finishBtwBubble({ error: error.message || "Failed to answer side question." });
+    };
+
+    if (btwModel.runtime === "native-cli") {
+      await startNativeStream({
+        providerId: btwModel.provider.id as "anthropic" | "codex",
+        modelId: btwModelId,
+        system: sideSystemPrompt,
+        messages: sideMessages,
+        abortSignal: abortController.signal,
+        enableThinking: false,
+        yoloMode: false,
+        cwd: process.cwd(),
+      }, {
+        onText: (delta) => app.appendBtwBubble(delta),
+        onReasoning: () => {},
+        onFinish,
+        onError,
+      });
+      return;
+    }
+
+    await startStream({
+      model: btwModel.model!,
+      modelId: btwModelId,
+      providerId: btwModel.provider.id,
+      system: sideSystemPrompt,
+      messages: sideMessages,
+      abortSignal: abortController.signal,
+      enableThinking: false,
+      maxToolSteps: 1,
+    }, {
+      onText: (delta) => app.appendBtwBubble(delta),
+      onReasoning: () => {},
+      onFinish,
+      onError,
+    });
+  }
+
   const initPromise = (async () => {
     const boot = await bootstrapSession({
       opts,
@@ -384,6 +467,9 @@ program.action(async (promptParts, opts) => {
         },
         onSystemPromptChange: (nextSystemPrompt) => {
           systemPrompt = nextSystemPrompt;
+        },
+        onBtw: async (question) => {
+          await runBtwQuestion(question);
         },
         hooks,
         onProjectChange: (cwd) => {

@@ -30,7 +30,7 @@ describe("command aliases", () => {
     expect(all).toContain("tree");
     expect(all).not.toContain("cost");
     expect(all).not.toContain("notify");
-    expect(all).not.toContain("btw");
+    expect(all).toContain("btw");
     expect(all).toContain("thinking");
   });
 
@@ -115,7 +115,7 @@ describe("sidebar scrolling", () => {
     expect(footerText).toContain("8.8k total");
     expect(footerText).toContain("8.2k in");
     expect(footerText).toContain("621 out");
-    expect(footerText).toContain("120k ctx");
+    expect(footerText).toContain("120k/128k ctx");
     expect(footerText).toContain("94%");
     expect(footerText).toContain("▰");
     expect(footerText).not.toContain("plan");
@@ -158,7 +158,7 @@ describe("sidebar scrolling", () => {
       expect(output).toContain("Commands");
       expect(output).toContain("settings");
       expect(output).not.toContain("help");
-      expect(output).toContain("120k ctx");
+      expect(output).toContain("120k/128k ctx");
       expect(output).toContain("621 out");
       expect(stripAnsi(rendered[cursorRow - 1] ?? "")).toContain("/");
     } finally {
@@ -211,8 +211,8 @@ describe("sidebar scrolling", () => {
     app.drawImmediate();
     const output = rendered.map((line) => stripAnsi(line)).join("\n");
     expect(output).toContain("Commands");
+    expect(output).toContain("BTW");
     expect(output).toContain("Design/UI");
-    expect(output).toContain("Architecture");
     expect(output).toContain("v more");
     expect(output).not.toContain("same as chat");
     expect(output).not.toContain("Files");
@@ -278,13 +278,13 @@ describe("sidebar scrolling", () => {
       app.input.setText("hi");
       const footerWhileTyping = app.renderSidebarFooter().map((line: string) => stripAnsi(line)).join("\n");
       expect(footerWhileTyping).toContain("8.8k total");
-      expect(footerWhileTyping).toContain("120k ctx");
+      expect(footerWhileTyping).toContain("120k/128k ctx");
 
       app.input.clear();
       app.setStreaming(true);
       const footerWhileStreaming = app.renderSidebarFooter().map((line: string) => stripAnsi(line)).join("\n");
       expect(footerWhileStreaming).toContain("8.8k total");
-      expect(footerWhileStreaming).toContain("120k ctx");
+      expect(footerWhileStreaming).toContain("120k/128k ctx");
       if (app.spinnerTimer) clearInterval(app.spinnerTimer);
     } finally {
       updateSetting("showTokens", originalShowTokens);

@@ -14,13 +14,33 @@ const WINDOW_TITLE_SPINNER = ["·", "✧", "✦", "✧"];
 
 function formatWindowTitle(app: AppState): string {
   const baseName = (app.sessionName?.trim?.() || "broke-cli").replace(/\s+/g, " ").trim();
-  if (!app.isStreaming && !app.isCompacting) return baseName;
+  if (!app.isStreaming && !app.isCompacting && !app.btwBubble?.pending) return baseName;
   const spinner = WINDOW_TITLE_SPINNER[app.spinnerFrame % WINDOW_TITLE_SPINNER.length] ?? WINDOW_TITLE_SPINNER[0];
   return `${spinner} ${baseName}`;
 }
 
 export function refreshWindowTitle(app: AppState): void {
   setWindowTitle(formatWindowTitle(app));
+}
+
+export function ensureUiSpinner(app: AppState): void {
+  if (app.spinnerTimer) return;
+  app.spinnerTimer = setInterval(() => {
+    app.spinnerFrame++;
+    app.animTokens.tick();
+    app.animCost.tick();
+    app.animStreamTokens.tick();
+    app.animContext.tick();
+    refreshWindowTitle(app);
+    app.draw();
+  }, app.constructor.ANIMATION_INTERVAL_MS);
+}
+
+export function releaseUiSpinnerIfIdle(app: AppState): void {
+  if (app.isStreaming || app.isCompacting || app.btwBubble?.pending) return;
+  if (!app.spinnerTimer) return;
+  clearInterval(app.spinnerTimer);
+  app.spinnerTimer = null;
 }
 
 export function invalidateMsgCache(app: AppState): void {
@@ -129,7 +149,7 @@ export function renderSidebarFooter(app: AppState): string[] {
     statusParts,
     tokenParts: app.renderTokenSummaryParts(),
     contextUsed: app.contextLimitTokens > 0 ? app.contextUsed : undefined,
-    contextTokens: app.contextLimitTokens > 0 ? fmtTokens(app.contextTokenCount) : undefined,
+    contextTokens: app.contextLimitTokens > 0 ? `${fmtTokens(app.contextTokenCount)}/${fmtTokens(app.contextLimitTokens)}` : undefined,
     colors: {
       accent: app.getModeAccent(),
       muted: MUTED(),
@@ -230,18 +250,9 @@ export function setStreaming(app: AppState, streaming: boolean): void {
     app.streamTokens = 0;
     app.animStreamTokens.reset();
     app.toolCallGroups = [];
-    app.spinnerTimer = setInterval(() => {
-      app.spinnerFrame++;
-      app.animTokens.tick();
-      app.animCost.tick();
-      app.animStreamTokens.tick();
-      app.animContext.tick();
-      refreshWindowTitle(app);
-      app.draw();
-    }, app.constructor.ANIMATION_INTERVAL_MS);
-  } else if (app.spinnerTimer) {
-    clearInterval(app.spinnerTimer);
-    app.spinnerTimer = null;
+    app.ensureUiSpinner();
+  } else {
+    app.releaseUiSpinnerIfIdle();
   }
   refreshWindowTitle(app);
   app.invalidateMsgCache();
@@ -291,6 +302,8 @@ export interface AppStateCoreMethods {
   setStreaming(streaming: boolean): void;
   setThinkingRequested(requested: boolean): void;
   refreshWindowTitle(): void;
+  ensureUiSpinner(): void;
+  releaseUiSpinnerIfIdle(): void;
   setDetectedProviders(providers: string[]): void;
   setSessionName(name: string): void;
   setVersion(v: string): void;
@@ -318,6 +331,8 @@ export const appStateCoreMethods: AppStateCoreMethods = {
   setStreaming(this: AppState, streaming: boolean) { return setStreaming(this, streaming); },
   setThinkingRequested(this: AppState, requested: boolean) { return setThinkingRequested(this, requested); },
   refreshWindowTitle(this: AppState) { return refreshWindowTitle(this); },
+  ensureUiSpinner(this: AppState) { return ensureUiSpinner(this); },
+  releaseUiSpinnerIfIdle(this: AppState) { return releaseUiSpinnerIfIdle(this); },
   setDetectedProviders(this: AppState, providers: string[]) { return setDetectedProviders(this, providers); },
   setSessionName(this: AppState, name: string) { return setSessionName(this, name); },
   setVersion(this: AppState, v: string) { return setVersion(this, v); },

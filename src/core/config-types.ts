@@ -3,7 +3,7 @@ export type ModeSwitchingPolicy = "manual" | "ask" | "auto";
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
 export type CavemanLevel = "off" | "lite" | "auto" | "ultra";
 export type TreeFilterMode = "default" | "no-tools" | "user-only" | "labeled-only" | "all";
-export type ModelPreferenceSlot = "default" | "small" | "review" | "planning" | "ui" | "architecture";
+export type ModelPreferenceSlot = "default" | "small" | "btw" | "review" | "planning" | "ui" | "architecture";
 
 export interface PackageFilterSource {
   source: string;
@@ -108,6 +108,7 @@ export interface BrokeConfig {
   defaultProvider?: string;
   defaultModel?: string;
   defaultSmallModel?: string;
+  defaultBtwModel?: string;
   defaultReviewModel?: string;
   defaultPlanningModel?: string;
   defaultUiModel?: string;

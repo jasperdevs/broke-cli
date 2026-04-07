@@ -7,9 +7,10 @@ import type { MenuEntry, ModelLaneOption } from "./app-types.js";
 type AppState = any;
 
 const MODEL_LANE_OPTIONS: ModelLaneOption[] = [
-  { id: "all", slot: "all", label: "Use everywhere", detail: "set this as chat, fast, review, planning, design/UI, and architecture" },
+  { id: "all", slot: "all", label: "Use everywhere", detail: "set this as chat, fast, btw, review, planning, design/UI, and architecture" },
   { id: "default", slot: "default", label: "Use for chat", detail: "switch to it now and make it the main chat model" },
   { id: "small", slot: "small", label: "Use for fast", detail: "auto-route, cheap turns, and chat naming" },
+  { id: "btw", slot: "btw", label: "Use for /btw", detail: "ephemeral side questions that stay out of the main thread" },
   { id: "review", slot: "review", label: "Use for review", detail: "audits and code review" },
   { id: "planning", slot: "planning", label: "Use for planning", detail: "plans and research" },
   { id: "ui", slot: "ui", label: "Use for design/UI", detail: "frontend and styling work" },
@@ -61,7 +62,7 @@ export function selectModelLaneEntry(app: AppState, index: number): void {
   if (!choice || !selected) return;
   if (choice.slot === "all") {
     app.onModelSelect?.(selected.providerId, selected.modelId);
-    for (const slot of ["default", "small", "review", "planning", "ui", "architecture"] as const) {
+    for (const slot of ["default", "small", "btw", "review", "planning", "ui", "architecture"] as const) {
       app.onModelAssign?.(selected.providerId, selected.modelId, slot);
     }
   } else if (choice.slot === "default") {
