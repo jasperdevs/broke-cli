@@ -1,22 +1,16 @@
 import {
-  buildMenuView,
   clampMenuCursor,
   closeItemPicker,
   getActiveMenuPromptKind,
   getBottomLineCount,
   getChatHeight,
   getSidebarViewportHeight,
-  getCommandSuggestionEntries,
-  getFilePickerEntries,
   getFilteredItems,
   getFilteredModels,
   getFilteredSettings,
   getInputCursorLayout,
-  getItemPickerEntries,
   getMenuFilterQuery,
   getMenuPromptPrefix,
-  getModelPickerEntries,
-  getSettingsPickerEntries,
   getSidebarBorder,
   getSidebarMaxScroll,
   getWrappedInputLines,
@@ -24,7 +18,6 @@ import {
   hideCursorBriefly,
   openMenuPrompt,
   previewCurrentItem,
-  registerMenuClickTarget,
   scrollActiveMenu,
   scrollSidebar,
   scrollToBottom,
@@ -39,6 +32,15 @@ import {
   toggleSettingEntry,
   applyCommandSuggestion,
 } from "./app-menu-methods.js";
+import {
+  buildMenuView,
+  getCommandSuggestionEntries,
+  getFilePickerEntries,
+  getItemPickerEntries,
+  getModelPickerEntries,
+  getSettingsPickerEntries,
+  registerMenuClickTarget,
+} from "./app-menu-entries.js";
 import { getModelLanePickerEntries, openModelLanePicker, selectModelLaneEntry } from "./model-lane-picker.js";
 import type { Keypress } from "./keypress.js";
 import type { MenuEntry, MenuPromptKind, ModelOption, PickerItem, SettingEntry } from "./app-types.js";

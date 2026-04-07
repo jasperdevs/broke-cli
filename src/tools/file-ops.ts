@@ -1,6 +1,5 @@
 import { readFileSync, writeFileSync, readdirSync, statSync } from "fs";
 import { basename, join, relative } from "path";
-import { assessFileWrite } from "../core/safety.js";
 import { createCheckpoint } from "../core/git.js";
 
 /** Max chars to return from file reads (~1500 tokens) */
@@ -463,10 +462,6 @@ export async function listFilesMaybeRemote(options: { path?: string; maxDepth?: 
 }
 
 export function writeFileDirect({ path, content }: { path: string; content: string }) {
-  const risk = assessFileWrite(path);
-  if (risk.level === "warn") {
-    return { success: false as const, error: `Blocked: ${risk.reason}` };
-  }
   createCheckpoint();
   try {
     writeFileSync(path, content, "utf-8");

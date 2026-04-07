@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { ContextOptimizer } from "./context-optimizer.js";
 import { getSettings, type TreeFilterMode } from "./config.js";
 import { buildCompactionContextMessage } from "./compact.js";
+import { createDefaultSessionName } from "./session-naming.js";
 import {
   type CompactionSummaryState,
   createEmptySessionBudgetMetrics,
@@ -26,6 +27,7 @@ export type {
   SessionListItem,
   SessionTreeItem,
 } from "./session-types.js";
+export { createDefaultSessionName, isDefaultSessionName } from "./session-naming.js";
 
 function makeEntry(message: Message, parentId: string | null): SessionEntry {
   return { ...message, id: randomUUID(), parentId };
@@ -97,22 +99,6 @@ function matchesTreeFilter(entry: SessionEntry, mode: TreeFilterMode): boolean {
     default:
       return entry.role !== "system";
   }
-}
-
-const DEFAULT_SESSION_NAME_RE = /^[A-Z][a-z]{2} \d{1,2} #\d{4}$/;
-
-export function createDefaultSessionName(now = new Date(), randomNumber = Math.floor(1000 + Math.random() * 9000)): string {
-  const stamp = now.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
-  const safeNumber = Math.max(1000, Math.min(9999, Math.floor(randomNumber)));
-  return `${stamp} #${safeNumber}`;
-}
-
-export function isDefaultSessionName(name: string | null | undefined): boolean {
-  const trimmed = name?.trim() ?? "";
-  return !trimmed || trimmed === "New Session" || DEFAULT_SESSION_NAME_RE.test(trimmed);
 }
 
 export class Session {

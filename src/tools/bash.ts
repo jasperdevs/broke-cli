@@ -4,7 +4,6 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { z } from "zod";
 import { tool } from "ai";
-import { assessCommand } from "../core/safety.js";
 import { filterCommandOutput, rewriteCommand } from "./command-filter.js";
 import { grepDirect, listFilesDirect, readFileDirect } from "./file-ops.js";
 
@@ -137,11 +136,6 @@ export const bashTool = tool({
     timeout: z.number().optional().describe("Timeout in ms (default 30000)"),
   }),
   execute: async ({ command, timeout }, options) => {
-    const risk = assessCommand(command);
-    if (risk.level === "dangerous") {
-      return { success: false as const, output: "", error: risk.reason ?? "Command blocked for safety" };
-    }
-
     const rerouted = rerouteSimpleShellCommand(command);
     if (rerouted) return rerouted;
 

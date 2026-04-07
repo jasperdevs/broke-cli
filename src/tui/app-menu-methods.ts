@@ -1,16 +1,25 @@
 import stripAnsi from "strip-ansi";
-import { currentTheme } from "../core/themes.js";
 import { getSettings } from "../core/config.js";
 import { filterFiles, readFileForContext } from "./file-picker.js";
 import type { Keypress } from "./keypress.js";
-import { BOLD, DIM, RESET } from "../utils/ansi.js";
-import { T, TXT, MUTED } from "./app-shared.js";
+import { DIM } from "../utils/ansi.js";
+import { MUTED } from "./app-shared.js";
 import { wordWrap } from "./render/formatting.js";
-import type { MenuEntry, MenuPromptKind, ModelOption, PickerItem, SettingEntry } from "./app-types.js";
+import type { MenuPromptKind, ModelOption, PickerItem, SettingEntry } from "./app-types.js";
 import { moveTreeSelection } from "./tree-view.js";
 import { getPendingImagePromptLines } from "./bottom-ui.js";
 import { getQuestionMenuLineCount, scrollQuestionMenu } from "./question-menu.js";
 import { getModelLanePickerEntries, openModelLanePicker, selectModelLaneEntry } from "./model-lane-picker.js";
+import {
+  buildMenuView,
+  getCommandSuggestionEntries,
+  getFilePickerEntries,
+  getItemPickerEntries,
+  getModelPickerEntries,
+  getSettingsPickerEntries,
+  getSidebarBorderLine,
+  registerMenuClickTarget,
+} from "./app-menu-entries.js";
 type AppState = any;
 function getMenuVisibleRows(maxHeight: number, baseCount: number, tailReserve: number, chromeLines: number): number {
   return Math.max(1, maxHeight - baseCount - tailReserve - 1 - chromeLines);
@@ -235,106 +244,6 @@ export function clampMenuCursor(_app: AppState, cursor: number, itemCount: numbe
   return Math.max(0, Math.min(itemCount - 1, cursor));
 }
 
-export function buildMenuView(_app: AppState, entries: MenuEntry[], cursor: number, maxVisible: number): MenuEntry[] {
-  if (entries.length <= maxVisible) return entries;
-  let cursorEntryIndex = entries.findIndex((entry) => entry.selectIndex === cursor);
-  if (cursorEntryIndex < 0) cursorEntryIndex = entries.findIndex((entry) => entry.selectIndex !== undefined);
-  if (cursorEntryIndex < 0) cursorEntryIndex = 0;
-  let start = Math.max(0, cursorEntryIndex - Math.floor(maxVisible / 2));
-  if (start + maxVisible > entries.length) start = Math.max(0, entries.length - maxVisible);
-  return entries.slice(start, start + maxVisible);
-}
-
-export function registerMenuClickTarget(_app: AppState, targets: Array<{ lineIndex: number; action: () => void }>, lines: string[], action: () => void): void {
-  targets.push({ lineIndex: lines.length, action });
-}
-
-export function getFilePickerEntries(app: AppState): MenuEntry[] {
-  if (!app.filePicker) return [];
-  return app.filePicker.filtered.map((file: string, i: number) => {
-    const isCursor = i === app.filePicker.cursor;
-    const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
-    const color = isCursor ? `${TXT()}${BOLD}` : DIM;
-    return { text: ` ${arrow}${color}${file}${RESET}`, selectIndex: i };
-  });
-}
-
-export function getSettingsPickerEntries(app: AppState): MenuEntry[] {
-  if (!app.settingsPicker) return [];
-  const filtered = app.getFilteredSettings();
-  return filtered.map((entry: SettingEntry, i: number) => {
-    const isCursor = i === app.settingsPicker.cursor;
-    const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
-    const nameCol = isCursor ? `${TXT()}${BOLD}` : T();
-    const pad = " ".repeat(Math.max(1, 22 - entry.label.length));
-    const valColor = entry.value === "true" ? T() : DIM;
-    return { text: ` ${arrow}${nameCol}${entry.label}${RESET}${pad}${valColor}${entry.value}${RESET}`, selectIndex: i };
-  });
-}
-
-export function getItemPickerEntries(app: AppState): MenuEntry[] {
-  if (!app.itemPicker) return [];
-  const filtered = app.getFilteredItems();
-  return filtered.map((item: PickerItem, i: number) => {
-    const isCursor = i === app.itemPicker.cursor;
-    const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
-    const labelCol = isCursor ? `${TXT()}${BOLD}` : T();
-    return { text: ` ${arrow}${labelCol}${item.label}${RESET}${item.detail ? ` ${DIM}${item.detail}${RESET}` : ""}`, selectIndex: i };
-  });
-}
-
-export function getModelPickerEntries(app: AppState): MenuEntry[] {
-  if (!app.modelPicker) return [];
-  const badgeLabels: Record<string, string> = {
-    now: "current",
-    default: "chat",
-    small: "fast",
-    btw: "btw",
-    review: "review",
-    plan: "planning",
-    ui: "design/UI",
-    arch: "architecture",
-  };
-  const filtered = app.getFilteredModels();
-  const byProvider = new Map<string, ModelOption[]>();
-  for (const opt of filtered) {
-    if (!byProvider.has(opt.providerName)) byProvider.set(opt.providerName, []);
-    byProvider.get(opt.providerName)!.push(opt);
-  }
-  const entries: MenuEntry[] = [];
-  let currentIdx = 0;
-  const showProviderHeaders = byProvider.size > 1;
-  entries.push({ text: ` ${DIM}enter choose use · space favorite · type filter${RESET}` });
-  for (const [provider, opts] of byProvider) {
-    if (showProviderHeaders) entries.push({ text: ` ${DIM}${provider}${RESET}` });
-    for (const opt of opts) {
-      const isCursor = currentIdx === app.modelPicker.cursor;
-      const pin = opt.active ? ` ${T()}*${RESET}` : "";
-      const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
-      const nameCol = isCursor ? `${TXT()}${BOLD}` : T();
-      const badges = opt.badges && opt.badges.length > 0
-        ? ` ${DIM}${opt.badges.map((badge) => badgeLabels[badge] ?? badge).join(" · ")}${RESET}`
-        : "";
-      entries.push({ text: `  ${arrow}${nameCol}${opt.displayName ?? opt.modelId}${RESET}${pin}${badges}`, selectIndex: currentIdx });
-      currentIdx++;
-    }
-  }
-  return entries;
-}
-
-export function getCommandSuggestionEntries(app: AppState): MenuEntry[] {
-  const matches = app.getCommandMatches();
-  if (matches.length === 0) return [];
-  const cursor = Math.min(app.cmdSuggestionCursor, matches.length - 1);
-  return matches.map((entry: any, i: number) => {
-    const arrow = i === cursor ? `${T()}> ${RESET}` : "  ";
-    const nameColor = i === cursor ? `${TXT()}${BOLD}` : T();
-    const pad = " ".repeat(Math.max(1, 16 - entry.name.length));
-    const detail = entry.hotkey ? `${entry.desc} (${entry.hotkey})` : entry.desc;
-    return { text: ` ${arrow}${nameColor}${entry.name}${RESET}${pad}${DIM}${detail}${RESET}`, selectIndex: i };
-  });
-}
-
 export function scrollSidebar(app: AppState, delta: number, visibleHeight: number): void {
   const maxScroll = app.getSidebarMaxScroll(visibleHeight);
   app.sidebarScrollOffset = Math.max(0, Math.min(maxScroll, app.sidebarScrollOffset + delta));
@@ -471,7 +380,8 @@ export function hideCursorBriefly(app: AppState, durationMs = 140): void {
 }
 
 export function getSidebarBorder(app: AppState): string {
-  return `${currentTheme().sidebarBorder}│${RESET}`;
+  void app;
+  return getSidebarBorderLine();
 }
 
 export function scrollTranscript(app: AppState, delta: number): boolean {

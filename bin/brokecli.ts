@@ -1,5 +1,4 @@
 import { execSync } from "child_process";
-import { writeFileSync } from "fs";
 import { App } from "../src/tui/app.js";
 import type { DetectedProvider } from "../src/ai/detect.js";
 import type { ModelHandle } from "../src/ai/providers.js";
@@ -21,7 +20,6 @@ import { resolveOneShotModel, runOneShotPrompt } from "../src/cli/oneshot.js";
 import { bootstrapSession } from "../src/cli/session-bootstrap.js";
 import { runModelTurn } from "../src/cli/turn-runner.js";
 import { handleSlashCommand } from "../src/cli/slash-commands.js";
-import { buildHtmlExport } from "../src/cli/exports.js";
 import { createProgram } from "../src/cli/program.js";
 import { ensureConfiguredPackagesInstalled } from "../src/core/package-manager.js";
 import { checkForNewVersion } from "../src/core/update.js";
@@ -30,37 +28,17 @@ import { resolveConfiguredModelHandle, resolvePreferredMode, type SpecialistMode
 import { buildVisibleRuntimeModelOptions, rebuildSmallModelState as computeSmallModelState, resolveSpecialistRuntimeModel } from "../src/cli/runtime-models.js";
 import { getTurnPolicy } from "../src/core/turn-policy.js";
 import { runBtwQuestion as runBtwQuestionRuntime } from "../src/cli/btw-runtime.js";
+import { applyProgramRuntimeSettings, applyRuntimeToolSelection, runExportMode } from "../src/cli/program-runtime.js";
 const program = createProgram(APP_VERSION);
 
 program.action(async (promptParts, opts) => {
-  clearRuntimeSettings();
   const parsedModel = splitModelArg(opts.model);
   const thinkingOverride = normalizeThinkingLevel(opts.thinking ?? parsedModel.thinking);
-  if (opts.sessionDir) setRuntimeSettings({ sessionDir: opts.sessionDir });
-  if (opts.session === false) setRuntimeSettings({ autoSaveSessions: false });
-  if (thinkingOverride) setRuntimeSettings({ thinkingLevel: thinkingOverride, enableThinking: thinkingOverride !== "off", defaultThinkingLevel: thinkingOverride });
-  if (opts.theme) setRuntimeSettings({ theme: opts.theme });
-  if (opts.models) setRuntimeSettings({ enabledModels: opts.models.split(",").map((entry: string) => entry.trim()).filter(Boolean) });
-  if (opts.verbose) setRuntimeSettings({ quietStartup: false });
-  if (opts.extensions === false) setRuntimeSettings({ discoverExtensions: false });
-  if (opts.skills === false) setRuntimeSettings({ discoverSkills: false });
-  if (opts.promptTemplates === false) setRuntimeSettings({ discoverPrompts: false });
-  if (opts.themes === false) setRuntimeSettings({ discoverThemes: false });
-  if (opts.extension?.length) setRuntimeSettings({ extensions: opts.extension });
-  if (opts.skill?.length) setRuntimeSettings({ skills: opts.skill });
-  if (opts.promptTemplate?.length) setRuntimeSettings({ prompts: opts.promptTemplate });
-  if (opts.themePath?.length) setRuntimeSettings({ themes: opts.themePath });
-  if (opts.apiKey) setRuntimeProviderApiKey(parsedModel.provider ?? opts.provider ?? "openai", opts.apiKey);
+  applyProgramRuntimeSettings(opts, parsedModel, thinkingOverride);
   const toolsDisabled = process.argv.includes("--no-tools");
-  if (toolsDisabled) setRuntimeSettings({ deniedTools: [...TOOL_NAMES] });
 
   if (opts.export) {
-    const manager = SessionManager.open(opts.export, opts.sessionDir);
-    const session = manager.getSession();
-    const outputPath = opts.exportOut || `${session.getId()}.html`;
-    const content = buildHtmlExport(session.getMessages(), session.getProvider() || "unknown", session.getModel() || "unknown", session.getCwd());
-    writeFileSync(outputPath, content, "utf-8");
-    process.stdout.write(`${outputPath}\n`);
+    runExportMode(opts.export, opts.sessionDir, opts.exportOut);
     return;
   }
 
@@ -87,17 +65,7 @@ program.action(async (promptParts, opts) => {
   }
 
   if (opts.mode === "text") opts.print = true;
-  if (opts.tools && !toolsDisabled) {
-    const requested = String(opts.tools).split(",").map((entry: string) => entry.trim()).filter(Boolean);
-    const allowSet = new Set<string>();
-    const denySet = new Set<string>();
-    for (const entry of requested) {
-      if (entry.startsWith("!") || entry.startsWith("-")) denySet.add(entry.slice(1));
-      else allowSet.add(entry.startsWith("+") ? entry.slice(1) : entry);
-    }
-    const denied = TOOL_NAMES.filter((tool: ToolName) => (allowSet.size > 0 && !allowSet.has(tool)) || denySet.has(tool));
-    setRuntimeSettings({ deniedTools: [...new Set<string>(denied)] });
-  }
+  applyRuntimeToolSelection(opts.tools, toolsDisabled);
 
   if (opts.print || opts.mode === "json") {
     const prompt = await readPromptArg(promptParts);
