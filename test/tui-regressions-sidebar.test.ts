@@ -50,7 +50,7 @@ describe("sidebar scrolling", () => {
     const app = new App() as any;
     app.messages = [{ role: "user", content: "hello" }];
     app.screen = { height: 18, width: 100, hasSidebar: true, mainWidth: 73, sidebarWidth: 24, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
-    expect(app.shouldEnableMenuMouse()).toBe(false);
+    expect(app.shouldEnableMenuMouse()).toBe(true);
   });
 
   it("still supports expanding directories through keyboard-driven sidebar state", () => {
@@ -116,6 +116,10 @@ describe("sidebar scrolling", () => {
     app.handleKey({ name: "scrolldown", char: "", ctrl: false, meta: false, shift: false });
     expect(app.sidebarScrollOffset).toBeGreaterThan(0);
     expect(app.itemPicker.cursor).toBe(0);
+
+    app.sidebarFocused = false;
+    app.handleKey({ name: "pagedown", char: "", ctrl: false, meta: false, shift: false });
+    expect(app.itemPicker.cursor).toBeGreaterThan(0);
 
     app.mode = "plan";
     app.setContextUsage(120_000, 128_000);

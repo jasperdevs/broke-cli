@@ -1,6 +1,7 @@
 import {
   appendFilePicker,
   appendItemPicker,
+  appendTreePicker,
   appendModelPicker,
   appendSettingsPicker,
   decorateFrameLine,
@@ -28,6 +29,7 @@ export interface AppDrawMethods {
   appendFilePicker(lines: string[], maxTotal: number, clickTargets: Array<{ lineIndex: number; action: () => void }>): void;
   appendSettingsPicker(lines: string[], maxTotal: number, clickTargets: Array<{ lineIndex: number; action: () => void }>): void;
   appendItemPicker(lines: string[], maxTotal: number, clickTargets: Array<{ lineIndex: number; action: () => void }>): void;
+  appendTreePicker(lines: string[], maxTotal: number, clickTargets: Array<{ lineIndex: number; action: () => void }>): void;
   getCommandMatches(): ReturnType<typeof getCommandMatches>;
   start(): void;
   stop(): void;
@@ -45,6 +47,7 @@ export const appDrawMethods: AppDrawMethods = {
   appendFilePicker(this: AppState, lines: string[], maxTotal: number, clickTargets: Array<{ lineIndex: number; action: () => void }>) { return appendFilePicker(this, lines, maxTotal, clickTargets); },
   appendSettingsPicker(this: AppState, lines: string[], maxTotal: number, clickTargets: Array<{ lineIndex: number; action: () => void }>) { return appendSettingsPicker(this, lines, maxTotal, clickTargets); },
   appendItemPicker(this: AppState, lines: string[], maxTotal: number, clickTargets: Array<{ lineIndex: number; action: () => void }>) { return appendItemPicker(this, lines, maxTotal, clickTargets); },
+  appendTreePicker(this: AppState, lines: string[], maxTotal: number, clickTargets: Array<{ lineIndex: number; action: () => void }>) { return appendTreePicker(this, lines, maxTotal, clickTargets); },
   getCommandMatches(this: AppState) { return getCommandMatches(this); },
   start(this: AppState) { return start(this); },
   stop(this: AppState) { return stop(this); },

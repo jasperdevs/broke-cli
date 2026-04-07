@@ -7,8 +7,13 @@ import { BOLD, DIM, RESET } from "../utils/ansi.js";
 import { T, TXT, MUTED } from "./app-shared.js";
 import { wordWrap } from "./render/formatting.js";
 import type { MenuEntry, MenuPromptKind, ModelOption, PickerItem, SettingEntry } from "./app-types.js";
+import { moveTreeSelection } from "./tree-view.js";
 
 type AppState = any;
+
+function getMenuVisibleRows(maxHeight: number, baseCount: number, tailReserve: number, chromeLines: number): number {
+  return Math.max(1, maxHeight - baseCount - tailReserve - 1 - chromeLines);
+}
 
 export function scrollToBottom(app: AppState): void {
   const chatHeight = app.getChatHeight();
@@ -28,52 +33,47 @@ export function getChatHeight(app: AppState): number {
 export function getBottomLineCount(app: AppState, mainW: number, maxHeight: number): number {
   const inputLineCount = app.getWrappedInputLines(app.input.getText(), mainW).length;
   const tailReserve = 2 + (app.statusMessage ? 1 : 0);
-  let count = 0;
-  count += 2; // visual gap above the input bar
-  count += 1; // separator above the input
-  count += inputLineCount;
-
-  const menuBodyCapacity = (sepAlreadyAdded = false): number => {
-    const projected = count + (sepAlreadyAdded ? 0 : 1);
-    return Math.max(1, maxHeight - projected - tailReserve);
-  };
+  let count = 3 + inputLineCount;
+  const baseCount = count;
 
   if (app.filePicker) {
     const entries = app.getFilePickerEntries();
-    const visible = Math.min(entries.length, Math.max(1, menuBodyCapacity(true) - 1));
-    count += 1; // menu separator
-    count += 1; // title
-    count += visible;
+    const visible = entries.length === 0
+      ? 1
+      : Math.min(entries.length, getMenuVisibleRows(maxHeight, baseCount, tailReserve, 1));
+    count += 2 + visible;
   } else if (app.itemPicker) {
     const entries = app.getItemPickerEntries();
-    const visible = entries.length === 0 ? 1 : Math.min(entries.length, Math.max(1, menuBodyCapacity(true) - 1));
-    count += 1; // menu separator
-    count += 1; // title
-    count += visible;
+    const visible = entries.length === 0
+      ? 1
+      : Math.min(entries.length, getMenuVisibleRows(maxHeight, baseCount, tailReserve, 1));
+    count += 2 + visible;
   } else if (app.settingsPicker) {
     const entries = app.getSettingsPickerEntries();
-    const visible = entries.length === 0 ? 1 : Math.min(entries.length, Math.max(1, menuBodyCapacity(true) - 1));
-    count += 1; // menu separator
-    count += 1; // title
-    count += visible;
+    const visible = entries.length === 0
+      ? 1
+      : Math.min(entries.length, getMenuVisibleRows(maxHeight, baseCount, tailReserve, 1));
+    count += 2 + visible;
   } else if (app.modelPicker) {
     const entries = app.getModelPickerEntries();
-    const visible = entries.length === 0 ? 1 : Math.min(entries.length, Math.max(1, menuBodyCapacity(true) - 4));
-    count += 1; // menu separator
-    count += 1; // title
-    count += 1; // scope
-    count += 2; // hints
-    count += visible;
+    const visible = entries.length === 0
+      ? 1
+      : Math.min(entries.length, getMenuVisibleRows(maxHeight, baseCount, tailReserve, 3));
+    count += 4 + visible;
+  } else if (app.treeView) {
+    const rows = app.getVisibleTreeRows();
+    const visible = rows.length === 0
+      ? 1
+      : Math.min(rows.length, getMenuVisibleRows(maxHeight, baseCount, tailReserve, 2));
+    count += 3 + visible;
   } else {
     const allSuggestions = app.getCommandSuggestionEntries();
     if (allSuggestions.length > 0) {
       const visible = Math.min(
         allSuggestions.length,
-        Math.max(1, Math.min(getSettings().autocompleteMaxVisible, menuBodyCapacity(true) - 1)),
+        Math.max(1, Math.min(getSettings().autocompleteMaxVisible, getMenuVisibleRows(maxHeight, baseCount, tailReserve, 1))),
       );
-      count += 1; // menu separator
-      count += 1; // title
-      count += visible;
+      count += 2 + visible;
     }
   }
 
@@ -173,6 +173,7 @@ export function getMenuPromptPrefix(_app: AppState, kind: MenuPromptKind): strin
 export function getActiveMenuPromptKind(app: AppState): MenuPromptKind | null {
   if (app.settingsPicker) return "settings";
   if (app.modelPicker) return "model";
+  if (app.treeView) return "tree";
   if (app.itemPicker?.kind) return app.itemPicker.kind;
   return null;
 }
@@ -341,6 +342,10 @@ export function scrollActiveMenu(app: AppState, delta: number): boolean {
     app.filePicker.cursor = app.clampMenuCursor(app.filePicker.cursor + delta, app.filePicker.filtered.length);
     return true;
   }
+  if (app.treeView) {
+    moveTreeSelection(app, delta);
+    return true;
+  }
   const suggestions = app.getCommandMatches();
   if (suggestions.length > 0) {
     app.cmdSuggestionCursor = app.clampMenuCursor(app.cmdSuggestionCursor + delta, suggestions.length);
@@ -397,7 +402,9 @@ export function selectModelEntry(app: AppState, index: number): void {
 export function selectTreeEntry(app: AppState): void {
   const selectedId = app.treeView?.selectedId;
   if (!selectedId || !app.onTreeSelect) return;
-  void app.onTreeSelect(selectedId);
+  const onSelect = app.onTreeSelect;
+  app.closeTreeView();
+  void onSelect(selectedId);
 }
 
 export function selectFileEntry(app: AppState, index: number): void {
@@ -456,6 +463,14 @@ export function scrollTranscript(app: AppState, delta: number): boolean {
 }
 
 export function shouldEnableMenuMouse(app: AppState): boolean {
-  void app;
-  return false;
+  return !!(
+    app.filePicker
+    || app.itemPicker
+    || app.settingsPicker
+    || app.modelPicker
+    || app.treeView
+    || app.budgetView
+    || app.questionView
+    || (app.screen.hasSidebar && app.shouldShowSidebar())
+  );
 }

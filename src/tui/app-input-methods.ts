@@ -67,18 +67,26 @@ function handleClickOrScroll(app: AppState, key: Keypress): boolean {
   }
   if (key.name === "pageup" || (key.ctrl && key.name === "up")) {
     app.hideCursorBriefly();
-    app.scrollOffset = Math.max(0, app.scrollOffset - 3);
-    app.invalidateMsgCache();
+    if (app.sidebarFocused && app.screen.hasSidebar && !getSettings().hideSidebar) {
+      app.scrollSidebar(-Math.max(1, app.getChatHeight() - 2), app.getChatHeight());
+    } else if (!app.scrollActiveMenu(-Math.max(1, app.screen.height - 8))) {
+      app.scrollOffset = Math.max(0, app.scrollOffset - 3);
+      app.invalidateMsgCache();
+    }
     app.draw();
     return true;
   }
   if (key.name === "pagedown" || (key.ctrl && key.name === "down")) {
     app.hideCursorBriefly();
-    const chatHeight = app.getChatHeight();
-    const messageLines = app.renderMessages(app.screen.mainWidth - 2);
-    const maxScroll = Math.max(0, messageLines.length - chatHeight);
-    app.scrollOffset = Math.min(maxScroll, app.scrollOffset + 3);
-    app.invalidateMsgCache();
+    if (app.sidebarFocused && app.screen.hasSidebar && !getSettings().hideSidebar) {
+      app.scrollSidebar(Math.max(1, app.getChatHeight() - 2), app.getChatHeight());
+    } else if (!app.scrollActiveMenu(Math.max(1, app.screen.height - 8))) {
+      const chatHeight = app.getChatHeight();
+      const messageLines = app.renderMessages(app.screen.mainWidth - 2);
+      const maxScroll = Math.max(0, messageLines.length - chatHeight);
+      app.scrollOffset = Math.min(maxScroll, app.scrollOffset + 3);
+      app.invalidateMsgCache();
+    }
     app.draw();
     return true;
   }
@@ -150,10 +158,6 @@ export function handleKey(app: AppState, key: Keypress): void {
     handleBudgetViewKey(app, key);
     return;
   }
-  if (app.treeView) {
-    handleTreeViewKey(app, key);
-    return;
-  }
 
   if (app.isCompacting) {
     if (key.ctrl && key.name === "c") {
@@ -168,6 +172,11 @@ export function handleKey(app: AppState, key: Keypress): void {
 
   if (app.questionView) {
     handleQuestionViewKey(app, key);
+    return;
+  }
+
+  if (app.treeView) {
+    handleTreeViewKey(app, key);
     return;
   }
 

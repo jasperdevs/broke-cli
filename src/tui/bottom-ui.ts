@@ -18,31 +18,37 @@ export function appendBottomMenus(
   separatorColor: string,
 ): void {
   const tailReserve = 2 + (app.statusMessage ? 1 : 0);
-  const getAvailableBodyRows = (): number => Math.max(1, height - bottomLines.length - tailReserve);
+  const getAvailableBodyRows = (chromeLines: number): number =>
+    Math.max(1, height - bottomLines.length - tailReserve - 1 - chromeLines);
 
   if (app.filePicker) {
     bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
-    app.appendFilePicker(bottomLines, getAvailableBodyRows(), bottomMenuClicks);
+    app.appendFilePicker(bottomLines, getAvailableBodyRows(1), bottomMenuClicks);
     return;
   }
   if (app.itemPicker) {
     bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
-    app.appendItemPicker(bottomLines, getAvailableBodyRows(), bottomMenuClicks);
+    app.appendItemPicker(bottomLines, getAvailableBodyRows(1), bottomMenuClicks);
     return;
   }
   if (app.settingsPicker) {
     bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
-    app.appendSettingsPicker(bottomLines, getAvailableBodyRows(), bottomMenuClicks);
+    app.appendSettingsPicker(bottomLines, getAvailableBodyRows(1), bottomMenuClicks);
     return;
   }
   if (app.modelPicker) {
     bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
-    app.appendModelPicker(bottomLines, getAvailableBodyRows(), bottomMenuClicks);
+    app.appendModelPicker(bottomLines, getAvailableBodyRows(3), bottomMenuClicks);
+    return;
+  }
+  if (app.treeView) {
+    bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
+    app.appendTreePicker(bottomLines, getAvailableBodyRows(2), bottomMenuClicks);
     return;
   }
 
   const allSuggestions = app.getCommandSuggestionEntries();
-  const maxVisible = Math.max(1, Math.min(getSettings().autocompleteMaxVisible, getAvailableBodyRows() - 1));
+  const maxVisible = Math.max(1, Math.min(getSettings().autocompleteMaxVisible, getAvailableBodyRows(1)));
   const suggestions = app.buildMenuView(allSuggestions, app.cmdSuggestionCursor, maxVisible);
   if (suggestions.length > 0) {
     bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);

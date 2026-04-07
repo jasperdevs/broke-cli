@@ -74,7 +74,7 @@ describe("budget inspector", () => {
 });
 
 describe("session tree", () => {
-  it("opens as a fullscreen mode with session details", () => {
+  it("opens as a bottom modal instead of taking over the full screen", () => {
     const app = new App() as any;
     let rendered: string[] = [];
     app.screen = { height: 12, width: 60, hasSidebar: true, mainWidth: 38, sidebarWidth: 19, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
@@ -85,7 +85,8 @@ describe("session tree", () => {
     app.drawImmediate();
     const output = rendered.map((line) => stripAnsi(line)).join("\n");
     expect(output).toContain("Session Tree");
-    expect(output).toContain("enter jump");
+    expect(output).toContain("/tree");
+    expect(output).toContain("shift+l label");
     expect(output).toContain("Review the failing t");
     expect(output).toContain("continueRecent");
   });

@@ -12,7 +12,7 @@ import { APP_BG, ERR, MUTED, OK, P, T, TXT, WARN } from "./app-shared.js";
 import { drawQuestionView } from "./question-view.js";
 import { drawBudgetView } from "./fullscreen-views.js";
 import { appendBottomMenus, buildInfoBar } from "./bottom-ui.js";
-import { drawTreeView } from "./tree-view.js";
+import { getTreePickerEntries, getVisibleTreeRows } from "./tree-view.js";
 
 type AppState = any;
 
@@ -46,10 +46,6 @@ export function drawImmediate(app: AppState): void {
   app.keypress.setMouseTracking(app.shouldEnableMenuMouse());
   if (app.budgetView) {
     drawBudgetView(app);
-    return;
-  }
-  if (app.treeView) {
-    drawTreeView(app);
     return;
   }
   if (app.questionView) {
@@ -88,7 +84,7 @@ export function drawImmediate(app: AppState): void {
   });
   app.screen.render(frameLines.map((line) => app.decorateFrameLine(line, width)));
 
-  if (app.isStreaming || app.isCompacting || app.modelPicker || app.settingsPicker || app.itemPicker || Date.now() < app.hideCursorUntil) {
+  if (app.isStreaming || app.isCompacting || app.modelPicker || app.settingsPicker || app.itemPicker || app.treeView || Date.now() < app.hideCursorUntil) {
     app.screen.hideCursor();
     return;
   }
@@ -191,7 +187,7 @@ export function shimmerText(_app: AppState, text: string, frame: number, color =
 export function appendModelPicker(app: AppState, lines: string[], _maxTotal: number, clickTargets: Array<{ lineIndex: number; action: () => void }>): void {
   const picker = app.modelPicker!;
   const total = app.getFilteredModels().length;
-  const maxItems = Math.max(1, _maxTotal - 4);
+  const maxItems = Math.max(1, _maxTotal);
   lines.push(` ${T()}${BOLD}Select model${RESET} ${renderMenuCount(total === 0 ? 0 : picker.cursor + 1, total)}`);
   const allLabel = picker.scope === "all" ? `${TXT()}${BOLD}all${RESET}` : `${MUTED()}all${RESET}`;
   const scopedLabel = picker.scope === "scoped" ? `${TXT()}${BOLD}pinned${RESET}` : `${MUTED()}pinned${RESET}`;
@@ -220,7 +216,7 @@ export function decorateFrameLine(_app: AppState, line: string, targetWidth: num
 export function appendFilePicker(app: AppState, lines: string[], maxTotal: number, clickTargets: Array<{ lineIndex: number; action: () => void }>): void {
   const picker = app.filePicker!;
   lines.push(` ${T()}${BOLD}Files${RESET} ${renderMenuCount(picker.filtered.length === 0 ? 0 : picker.cursor + 1, picker.filtered.length)}`);
-  const maxItems = Math.max(1, maxTotal - 4);
+  const maxItems = Math.max(1, maxTotal);
   for (const entry of app.buildMenuView(app.getFilePickerEntries(), picker.cursor, maxItems)) {
     if (entry.selectIndex !== undefined) app.registerMenuClickTarget(clickTargets, lines, () => app.selectFileEntry(entry.selectIndex!));
     lines.push(entry.text);
@@ -236,7 +232,7 @@ export function appendSettingsPicker(app: AppState, lines: string[], _maxTotal: 
     lines.push(`  ${DIM}no matches${RESET}`);
     return;
   }
-  const maxItems = Math.max(1, _maxTotal - 1);
+  const maxItems = Math.max(1, _maxTotal);
   for (const entry of app.buildMenuView(app.getSettingsPickerEntries(), picker.cursor, maxItems)) {
     if (entry.selectIndex !== undefined) app.registerMenuClickTarget(clickTargets, lines, () => app.toggleSettingEntry(entry.selectIndex!));
     lines.push(entry.text);
@@ -251,9 +247,32 @@ export function appendItemPicker(app: AppState, lines: string[], _maxTotal: numb
     lines.push(`  ${DIM}no matches${RESET}`);
     return;
   }
-  const maxItems = Math.max(1, _maxTotal - 1);
+  const maxItems = Math.max(1, _maxTotal);
   for (const entry of app.buildMenuView(app.getItemPickerEntries(), picker.cursor, maxItems)) {
     if (entry.selectIndex !== undefined) app.registerMenuClickTarget(clickTargets, lines, () => app.selectItemEntry(entry.selectIndex!));
+    lines.push(entry.text);
+  }
+}
+
+export function appendTreePicker(app: AppState, lines: string[], maxItems: number, clickTargets: Array<{ lineIndex: number; action: () => void }>): void {
+  const rows = getVisibleTreeRows(app);
+  const selectedIndex = Math.max(0, rows.findIndex((row) => row.item.id === app.treeView?.selectedId));
+  const total = rows.length;
+  lines.push(` ${T()}${BOLD}${app.treeView!.title}${RESET} ${renderMenuCount(total === 0 ? 0 : selectedIndex + 1, total)}`);
+  lines.push(` ${DIM}enter jump · shift+l label · shift+t time · ctrl+u user · ctrl+o all · esc back${RESET}`);
+  if (rows.length === 0) {
+    lines.push(`  ${DIM}no matches${RESET}`);
+    return;
+  }
+  for (const entry of app.buildMenuView(getTreePickerEntries(app), selectedIndex, Math.max(1, maxItems))) {
+    if (entry.selectIndex !== undefined) {
+      app.registerMenuClickTarget(clickTargets, lines, () => {
+        const target = rows[entry.selectIndex!];
+        if (!target) return;
+        app.treeView.selectedId = target.item.id;
+        app.selectTreeEntry();
+      });
+    }
     lines.push(entry.text);
   }
 }

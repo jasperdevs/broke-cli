@@ -56,7 +56,12 @@ export function handleBudgetViewKey(app: AppState, key: Keypress): void {
 }
 
 export function handleTreeViewKey(app: AppState, key: Keypress): void {
-  if (key.name === "escape" || isPlainBackspace(key) || key.name === "q" || (key.ctrl && key.name === "c")) {
+  const queryEmpty = app.getMenuFilterQuery().length === 0;
+  if (key.name === "escape" || key.name === "q" || (key.ctrl && key.name === "c")) {
+    app.closeTreeView();
+    return;
+  }
+  if (isPlainBackspace(key) && queryEmpty) {
     app.closeTreeView();
     return;
   }
@@ -68,6 +73,10 @@ export function handleTreeViewKey(app: AppState, key: Keypress): void {
   } else if (key.name === "end") {
     const rows = getVisibleTreeRows(app);
     app.treeView.selectedId = rows[rows.length - 1]?.item.id ?? app.treeView.selectedId;
+  } else if (key.name === "pageup") {
+    pageTreeSelection(app, -1);
+  } else if (key.name === "pagedown") {
+    pageTreeSelection(app, 1);
   } else if (key.name === "left" && !key.ctrl && !key.meta) {
     pageTreeSelection(app, -1);
   } else if (key.name === "right" && !key.ctrl && !key.meta) {
@@ -87,6 +96,12 @@ export function handleTreeViewKey(app: AppState, key: Keypress): void {
   } else if ((key.name === "return" || key.name === "enter") && !key.shift && !key.meta && !key.ctrl) {
     app.selectTreeEntry?.();
     return;
+  } else if (app.handleMenuPromptKey(key)) {
+    const rows = getVisibleTreeRows(app);
+    app.treeView.selectedId = rows.find((row) => row.item.active)?.item.id ?? rows[0]?.item.id ?? null;
+    app.treeView.scrollOffset = 0;
+  } else if (isPlainBackspace(key) && !queryEmpty) {
+    app.handleMenuPromptKey(key);
   }
   app.draw();
 }

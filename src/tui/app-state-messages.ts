@@ -123,7 +123,7 @@ export function setCompacting(app: AppState, compacting: boolean, tokenCount?: n
     if (!app.spinnerTimer) {
       app.spinnerFrame = 0;
       app.spinnerTimer = setInterval(() => {
-        app.spinnerFrame = (app.spinnerFrame + 1) % app.constructor.SPINNER.length;
+        app.spinnerFrame = (app.spinnerFrame + 1) % 4;
         app.draw();
       }, app.constructor.ANIMATION_INTERVAL_MS);
     }

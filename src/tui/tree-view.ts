@@ -2,7 +2,7 @@ import { BOLD, DIM, RESET } from "../utils/ansi.js";
 import { visibleWidth } from "../utils/terminal-width.js";
 import type { SessionTreeItem } from "../core/session.js";
 import type { TreeFilterMode } from "../core/config.js";
-import type { TreeRow } from "./app-types.js";
+import type { MenuEntry, TreeRow } from "./app-types.js";
 import { ERR, T, TXT, WARN } from "./app-shared.js";
 import { wordWrap } from "./render/formatting.js";
 
@@ -48,6 +48,7 @@ export function getVisibleTreeRows(app: AppState): TreeRow[] {
   const view = app.treeView;
   if (!view) return [];
   const items = view.session.getTreeItems(view.filterMode as TreeFilterMode);
+  const query = app.getMenuFilterQuery().trim().toLowerCase();
   const rows: TreeRow[] = [];
   const ancestorStack: string[] = [];
   let previousDepth = 0;
@@ -56,14 +57,20 @@ export function getVisibleTreeRows(app: AppState): TreeRow[] {
     previousDepth = item.depth;
     const hidden = shouldHideByFold(item, view.collapsedIds, ancestorStack);
     const collapsed = view.collapsedIds.has(item.id);
+    const matchesQuery = !query || [item.role, item.label ?? "", summarizeEntry(item), item.content]
+      .join("\n")
+      .toLowerCase()
+      .includes(query);
     if (!hidden) {
-      rows.push({
-        item,
-        marker: markerForRow(item, collapsed),
-        text: renderRowText(item, collapsed, view.showLabelTimestamps),
-        branchStart: item.hasChildren,
-        collapsed,
-      });
+      if (matchesQuery) {
+        rows.push({
+          item,
+          marker: markerForRow(item, collapsed),
+          text: renderRowText(item, collapsed, view.showLabelTimestamps),
+          branchStart: item.hasChildren,
+          collapsed,
+        });
+      }
     }
     ancestorStack[item.depth] = item.id;
   }
@@ -134,6 +141,17 @@ export function drawTreeView(app: AppState): void {
   while (frame.length < height) frame.push("");
   app.screen.render(frame.map((line: string) => app.decorateFrameLine(line, width)));
   app.screen.hideCursor();
+}
+
+export function getTreePickerEntries(app: AppState): MenuEntry[] {
+  const rows = getVisibleTreeRows(app);
+  const selectedIndex = Math.max(0, rows.findIndex((row) => row.item.id === app.treeView?.selectedId));
+  return rows.map((row, index) => {
+    const isCursor = index === selectedIndex;
+    const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
+    const text = isCursor ? `${TXT()}${BOLD}${row.text}${RESET}` : row.text;
+    return { text: ` ${arrow}${text}`, selectIndex: index };
+  });
 }
 
 export function moveTreeSelection(app: AppState, delta: number): void {

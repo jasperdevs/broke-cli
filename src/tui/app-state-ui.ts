@@ -127,12 +127,14 @@ export function openTreeView(app: AppState, title: string, session: Session, onS
     showLabelTimestamps: false,
   };
   app.onTreeSelect = onSelect;
+  app.openMenuPrompt("tree");
   app.drawNow();
 }
 
 export function closeTreeView(app: AppState): void {
   app.treeView = null;
   app.onTreeSelect = null;
+  app.input.clear();
   app.drawNow();
 }
 
