@@ -28,6 +28,8 @@ export interface NativeStreamOptions {
   thinkingLevel?: string;
   yoloMode?: boolean;
   cwd?: string;
+  permissionMode?: "acceptEdits" | "plan";
+  denyToolUse?: boolean;
 }
 
 function formatNativePrompt(system: string, messages: NativeMessage[]): string {
@@ -164,7 +166,7 @@ function buildClaudeArgs(opts: NativeStreamOptions): string[] {
   if (opts.yoloMode) {
     args.push("--dangerously-skip-permissions");
   } else {
-    args.push("--permission-mode", "acceptEdits");
+    args.push("--permission-mode", opts.permissionMode ?? "acceptEdits");
   }
 
   return args;
@@ -188,6 +190,17 @@ function buildCodexArgs(opts: NativeStreamOptions): string[] {
   }
 
   return args;
+}
+
+function extractClaudeToolUseNames(message: unknown): string[] {
+  const record = typeof message === "object" && message !== null ? message as Record<string, unknown> : {};
+  const content = Array.isArray(record.content) ? record.content : [];
+  return content
+    .filter((block) => typeof block === "object" && block !== null && (block as Record<string, unknown>).type === "tool_use")
+    .map((block) => {
+      const name = (block as Record<string, unknown>).name;
+      return typeof name === "string" && name.trim() ? name : "a tool";
+    });
 }
 
 function needsWindowsShell(command: string): boolean {
@@ -300,6 +313,10 @@ export async function startNativeStream(
       if (type === "item.completed") {
         const item = typeof event.item === "object" && event.item !== null ? event.item as Record<string, unknown> : {};
         const itemType = typeof item.type === "string" ? item.type : "";
+        if (opts.denyToolUse && itemType.includes("tool")) {
+          fail("Side question attempted to use a tool.");
+          return;
+        }
         const text = extractCodexItemText(item);
         if ((itemType === "agent_message" || itemType === "message") && text) {
           emittedText = emitDelta(text, emittedText, callbacks.onText);
@@ -326,6 +343,13 @@ export async function startNativeStream(
 
       if (type === "assistant") {
         const message = typeof event.message === "object" && event.message !== null ? event.message : null;
+        if (opts.denyToolUse) {
+          const toolNames = extractClaudeToolUseNames(message);
+          if (toolNames.length > 0) {
+            fail(`Side question attempted to use ${toolNames.join(", ")}.`);
+            return;
+          }
+        }
         const text = extractClaudeText(message, "text");
         const reasoning = extractClaudeText(message, "thinking");
         if (text) emittedText = emitDelta(text, emittedText, callbacks.onText);

@@ -5,6 +5,7 @@ const configMocks = vi.hoisted(() => ({
   getApiKey: vi.fn(),
   getBaseUrl: vi.fn(),
   spawnSync: vi.fn(),
+  spawn: vi.fn(),
   existsSync: vi.fn(),
 }));
 
@@ -19,6 +20,7 @@ vi.mock("child_process", async () => {
   return {
     ...actual,
     spawnSync: configMocks.spawnSync,
+    spawn: configMocks.spawn,
   };
 });
 
@@ -31,7 +33,7 @@ vi.mock("fs", async () => {
 });
 
 import { createModel, shouldUseNativeProvider } from "../src/ai/providers.js";
-import { normalizeNativeUsage, resolveNativeSpawnCommand } from "../src/ai/native-stream.js";
+import { normalizeNativeUsage, resolveNativeSpawnCommand, startNativeStream } from "../src/ai/native-stream.js";
 
 describe("native provider runtime selection", () => {
   beforeEach(() => {
@@ -39,6 +41,7 @@ describe("native provider runtime selection", () => {
     configMocks.getBaseUrl.mockReset();
     configMocks.getProviderCredential.mockReset();
     configMocks.spawnSync.mockReset();
+    configMocks.spawn.mockReset();
     configMocks.existsSync.mockReset();
     configMocks.getProviderCredential.mockImplementation(() => ({ kind: "none" }));
     configMocks.spawnSync.mockReturnValue({ status: 0, stdout: "/usr/bin/mock\n", error: undefined });
@@ -148,5 +151,48 @@ describe("native provider runtime selection", () => {
 
     expect(usage.inputTokens).toBe(1810);
     expect(usage.outputTokens).toBe(55);
+  });
+
+  it("fails a native side question if Claude emits tool_use blocks", async () => {
+    const stdoutHandlers: Record<string, (chunk: string) => void> = {};
+    const stderrHandlers: Record<string, (chunk: string) => void> = {};
+    const processHandlers: Record<string, (code?: number) => void> = {};
+    configMocks.spawn.mockReturnValue({
+      stdout: { on: (event: string, handler: (chunk: string) => void) => { stdoutHandlers[event] = handler; } },
+      stderr: { on: (event: string, handler: (chunk: string) => void) => { stderrHandlers[event] = handler; } },
+      stdin: { end: vi.fn() },
+      on: (event: string, handler: (code?: number) => void) => { processHandlers[event] = handler; },
+      kill: vi.fn(),
+    });
+
+    const onError = vi.fn();
+    const onFinish = vi.fn();
+    const pending = startNativeStream({
+      providerId: "anthropic",
+      modelId: "claude-sonnet-4-6",
+      system: "system",
+      messages: [{ role: "user", content: "status?" }],
+      denyToolUse: true,
+      permissionMode: "plan",
+    }, {
+      onText: vi.fn(),
+      onReasoning: vi.fn(),
+      onFinish,
+      onError,
+    });
+
+    stdoutHandlers.data?.(`${JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [{ type: "tool_use", name: "Read" }],
+      },
+    })}\n`);
+    processHandlers.close?.(0);
+
+    await pending;
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.stringContaining("Side question attempted to use Read"),
+    }));
+    expect(onFinish).not.toHaveBeenCalled();
   });
 });

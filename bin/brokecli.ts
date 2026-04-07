@@ -29,31 +29,8 @@ import { isSkippedPromptAnswer, isValidHttpBaseUrl, normalizeThinkingLevel, norm
 import { resolveConfiguredModelHandle, resolvePreferredMode, type SpecialistModelRole } from "../src/cli/model-routing.js";
 import { buildVisibleRuntimeModelOptions, rebuildSmallModelState as computeSmallModelState, resolveSpecialistRuntimeModel } from "../src/cli/runtime-models.js";
 import { getTurnPolicy } from "../src/core/turn-policy.js";
-import { startStream } from "../src/ai/stream.js";
-import { startNativeStream } from "../src/ai/native-stream.js";
-import { getPrettyModelName } from "../src/ai/model-catalog.js";
+import { runBtwQuestion as runBtwQuestionRuntime } from "../src/cli/btw-runtime.js";
 const program = createProgram(APP_VERSION);
-
-function buildBtwPrompt(question: string): string {
-  return `<system-reminder>This is a side question from the user. You must answer this question directly in a single response.
-
-IMPORTANT CONTEXT:
-- You are a separate, lightweight agent spawned to answer this one question
-- The main agent is NOT interrupted - it continues working independently in the background
-- You share the conversation context but are a completely separate instance
-- Do NOT reference being interrupted or what you were "previously doing" - that framing is incorrect
-
-CRITICAL CONSTRAINTS:
-- You have NO tools available - you cannot read files, run commands, search, or take any actions
-- This is a one-off response - there will be no follow-up turns
-- You can ONLY provide information based on what you already know from the conversation context
-- NEVER say things like "Let me try...", "I'll now...", "Let me check...", or promise to take any action
-- If you don't know the answer, say so - do not offer to look it up or investigate
-
-Simply answer the question with the information you have.</system-reminder>
-
-${question.trim()}`;
-}
 
 program.action(async (promptParts, opts) => {
   clearRuntimeSettings();
@@ -308,68 +285,20 @@ program.action(async (promptParts, opts) => {
     const configured = resolveConfiguredModelHandle(providerRegistry, activeModel, currentModelId, "btw");
     const btwModel = configured?.model ?? activeModel;
     const btwModelId = configured?.modelId ?? currentModelId;
-    const modelLabel = getPrettyModelName(btwModelId, btwModel.provider.id);
-    const abortController = new AbortController();
-    const sideMessages = [...session.getChatMessages(), { role: "user" as const, content: buildBtwPrompt(question) }];
-    const sideSystemPrompt = configured
-      ? buildRuntimeSystemPrompt(btwModel.provider.id)
-      : systemPrompt;
-    const useThinking = getSettings().enableThinking;
-    const thinkingLevel = getSettings().thinkingLevel || "low";
-
-    app.openBtwBubble({
-      question: question.trim(),
-      modelLabel,
-      pending: true,
-      abort: () => abortController.abort(),
-    });
-
-    const onFinish = (usage: { inputTokens: number; outputTokens: number; cost: number }) => {
-      session.addUsage(usage.inputTokens, usage.outputTokens, usage.cost);
-      app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
-      if ((app as any).btwBubble?.pending) app.finishBtwBubble();
-    };
-
-    const onError = (error: Error) => {
-      if (error.name === "AbortError") return;
-      app.finishBtwBubble({ error: error.message || "Failed to answer side question." });
-    };
-
-    if (btwModel.runtime === "native-cli") {
-      await startNativeStream({
-        providerId: btwModel.provider.id as "anthropic" | "codex",
-        modelId: btwModelId,
-        system: sideSystemPrompt,
-        messages: sideMessages,
-        abortSignal: abortController.signal,
-        enableThinking: useThinking,
-        thinkingLevel,
-        yoloMode: false,
-        cwd: process.cwd(),
-      }, {
-        onText: (delta) => app.appendBtwBubble(delta),
-        onReasoning: () => {},
-        onFinish,
-        onError,
-      });
-      return;
-    }
-
-    await startStream({
-      model: btwModel.model!,
+    await runBtwQuestionRuntime({
+      session,
+      question,
+      activeModel,
+      currentModelId,
+      model: btwModel,
       modelId: btwModelId,
-      providerId: btwModel.provider.id,
-      system: sideSystemPrompt,
-      messages: sideMessages,
-      abortSignal: abortController.signal,
-      enableThinking: useThinking,
-      thinkingLevel,
-      maxToolSteps: 1,
-    }, {
-      onText: (delta) => app.appendBtwBubble(delta),
-      onReasoning: () => {},
-      onFinish,
-      onError,
+      systemPrompt,
+      buildRuntimeSystemPrompt,
+      onUsage: (usage) => {
+        session.addUsage(usage.inputTokens, usage.outputTokens, usage.cost);
+        app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
+      },
+      app,
     });
   }
 
