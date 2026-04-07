@@ -275,4 +275,30 @@ describe("slash command handling", () => {
     expect(result.handled).toBe(true);
     expect(asked).toBe("does this touch the tests?");
   });
+
+  it("opens /model with the typed query prefilled", async () => {
+    const app = createAppStub();
+    let pickerQuery = "";
+    let pickerCursor = -1;
+    app.openModelPicker = (_options: any[], _onSelect: any, _onPin: any, _onAssign: any, initialCursor?: number, _initialScope?: "all" | "scoped", initialQuery?: string) => {
+      pickerCursor = initialCursor ?? -1;
+      pickerQuery = initialQuery ?? "";
+    };
+
+    const result = await handleSlashCommand({
+      text: "/model haiku",
+      app,
+      session: new Session(`test-model-query-${Date.now()}`),
+      ...createSlashArgs({
+        buildVisibleModelOptions: () => [
+          { providerId: "anthropic", providerName: "Anthropic", modelId: "claude-sonnet-4-6", displayName: "Claude Sonnet 4.6", active: true },
+          { providerId: "anthropic", providerName: "Anthropic", modelId: "claude-haiku-4-5", displayName: "Claude Haiku 4.5", active: false },
+        ] as any,
+      }),
+    });
+
+    expect(result.handled).toBe(true);
+    expect(pickerQuery).toBe("haiku");
+    expect(pickerCursor).toBe(1);
+  });
 });

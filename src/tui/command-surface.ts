@@ -13,6 +13,13 @@ export interface CommandSurfaceContext {
   hasStoredAuth?: boolean;
 }
 
+export interface ParsedCommandInput {
+  raw: string;
+  command: string;
+  args: string;
+  hasArgs: boolean;
+}
+
 export const COMMANDS: CommandEntry[] = [
   { name: "settings", desc: "configure options", sortPriority: -1 },
   { name: "login", desc: "login with subscription/oauth" },
@@ -61,9 +68,33 @@ function isCommandVisible(command: CommandEntry, context?: CommandSurfaceContext
   }
 }
 
+export function parseCommandInput(inputText: string): ParsedCommandInput | null {
+  if (!inputText.startsWith("/")) return null;
+  const body = inputText.slice(1);
+  const firstSpace = body.search(/\s/);
+  if (firstSpace < 0) {
+    return {
+      raw: body,
+      command: body.toLowerCase(),
+      args: "",
+      hasArgs: false,
+    };
+  }
+  const command = body.slice(0, firstSpace).toLowerCase();
+  const args = body.slice(firstSpace + 1);
+  return {
+    raw: body,
+    command,
+    args,
+    hasArgs: args.trim().length > 0,
+  };
+}
+
 export function getCommandMatches(inputText: string, context?: CommandSurfaceContext): CommandEntry[] {
-  if (!inputText.startsWith("/")) return [];
-  const query = inputText.slice(1).toLowerCase();
+  const parsed = parseCommandInput(inputText);
+  if (!parsed) return [];
+  if (parsed.raw.includes(" ")) return [];
+  const query = parsed.command;
   const visibleCommands = COMMANDS.filter((command) => isCommandVisible(command, context));
   const matches = (!query && inputText === "/") ? [...visibleCommands] : visibleCommands.filter((c) => {
     const matchesName = c.name.startsWith(query) && c.name !== query;

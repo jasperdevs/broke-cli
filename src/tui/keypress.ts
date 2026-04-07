@@ -80,7 +80,7 @@ export class KeypressHandler {
           "\x1b[13;3u": { name: "return", char: "", ctrl: false, meta: true, shift: false },
           "\x1b[10;3u": { name: "linefeed", char: "", ctrl: false, meta: true, shift: false },
           "\x1b[27;3;13~": { name: "return", char: "", ctrl: false, meta: true, shift: false },
-          "\x1b\r": { name: "return", char: "", ctrl: false, meta: true, shift: false },
+          "\x1b\r": { name: "return", char: "", ctrl: false, meta: false, shift: true },
           "\x1b[127;5u": { name: "backspace", char: "", ctrl: true, meta: false, shift: false },
           "\x1b[8;5u": { name: "backspace", char: "", ctrl: true, meta: false, shift: false },
           "\x1b\b": { name: "backspace", char: "", ctrl: false, meta: true, shift: false },

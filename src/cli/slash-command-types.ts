@@ -22,6 +22,7 @@ export interface SlashCommandApp {
     onAssign?: (providerId: string, modelId: string, slot: ModelPreferenceSlot) => void,
     initialCursor?: number,
     initialScope?: "all" | "scoped",
+    initialQuery?: string,
   ): void;
   updateModelPickerOptions?(options: ModelOption[], focusKey?: string): void;
   openSettings(entries: SettingEntry[], onToggle: (key: string) => void): void;

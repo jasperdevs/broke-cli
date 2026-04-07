@@ -75,6 +75,19 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
         app.setStatus?.("No connected providers found. Run /connect.");
         return { handled: true };
       }
+      const normalizedQuery = restText.toLowerCase();
+      const filteredOptions = normalizedQuery
+        ? allOptions.filter((option) =>
+          option.modelId.toLowerCase().includes(normalizedQuery)
+          || option.providerId.toLowerCase().includes(normalizedQuery)
+          || option.providerName.toLowerCase().includes(normalizedQuery)
+          || (option.displayName ?? "").toLowerCase().includes(normalizedQuery))
+        : allOptions;
+      const initialCursor = normalizedQuery && filteredOptions.length > 0
+        ? allOptions.findIndex((option) =>
+          option.providerId === filteredOptions[0]!.providerId
+          && option.modelId === filteredOptions[0]!.modelId)
+        : 0;
       app.openModelPicker(allOptions, (provId, modId) => {
         try {
           const key = `${provId}/${modId}`;
@@ -106,7 +119,7 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
         updateModelPreference(slot, current?.key === key ? null : key);
         onModelRoutingChange?.();
         app.updateModelPickerOptions?.(buildVisibleModelOptions(), key);
-      }, 0);
+      }, initialCursor >= 0 ? initialCursor : 0, "all", restText);
       return { handled: true };
     }
     case "btw": {

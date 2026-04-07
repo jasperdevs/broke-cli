@@ -6,6 +6,7 @@ import { Session } from "../src/core/session.js";
 import { currentTheme } from "../src/core/themes.js";
 import { getSettings, updateSetting } from "../src/core/config.js";
 import type { Keypress } from "../src/tui/keypress.js";
+import { getCommandMatches } from "../src/tui/command-surface.js";
 
 describe("theme-derived panels", () => {
   it("derives a distinct sidebar panel background for light themes", () => {
@@ -224,6 +225,21 @@ describe("input editing", () => {
     app.input.paste("/");
     app.handleKey({ name: "return", char: "", ctrl: false, meta: false, shift: true });
     expect(app.input.getText()).toBe("/\n");
+  });
+
+  it("hides global slash suggestions once command arguments begin", () => {
+    expect(getCommandMatches("/bt")).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "btw" })]),
+    );
+    expect(getCommandMatches("/btw hey")).toEqual([]);
+    expect(getCommandMatches("/model haiku")).toEqual([]);
+  });
+
+  it("treats kitty esc-enter as a newline instead of meta-enter submit", () => {
+    const app = new App() as any;
+    app.input.paste("hello");
+    app.handleKey({ name: "return", char: "", ctrl: false, meta: false, shift: true });
+    expect(app.input.getText()).toBe("hello\n");
   });
 
   it("renders a /btw bubble above the input and dismisses it from the keyboard", () => {

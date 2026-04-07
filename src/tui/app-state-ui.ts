@@ -17,13 +17,15 @@ export function openModelPicker(
   onAssign?: (providerId: string, modelId: string, slot: ModelPreferenceSlot) => void,
   initialCursor?: number,
   initialScope: "all" | "scoped" = "all",
+  initialQuery = "",
 ): void {
   const cursorIdx = initialCursor ?? options.findIndex((o) => o.badges?.includes("now") || o.active);
   app.modelPicker = { options, cursor: cursorIdx >= 0 ? cursorIdx : 0, scope: initialScope };
   app.onModelSelect = onSelect;
   app.onModelPin = onPin ?? null;
   app.onModelAssign = onAssign ?? null;
-  app.openMenuPrompt("model");
+  app.input.setText(`/model ${initialQuery}`.trimEnd());
+  if (initialQuery.length === 0) app.openMenuPrompt("model");
   app.drawNow();
 }
 
