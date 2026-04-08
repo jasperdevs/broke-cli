@@ -38,9 +38,10 @@ export function insertInlineImageChip(app: AppState): void {
   const label = getImageChipLabel((app.pendingImages?.length ?? 1) - 1);
   const text = app.input.getText();
   const cursor = app.input.getCursor();
+  const leadingSpace = cursor > 0 && text[cursor - 1] !== " " && text[cursor - 1] !== "\n" ? " " : "";
   const trailingSpace = text[cursor] === " " || text[cursor] === "\n" ? "" : " ";
-  app.input.setText(`${text.slice(0, cursor)}${label}${trailingSpace}${text.slice(cursor)}`, false);
-  app.input.setCursor(cursor + label.length + trailingSpace.length);
+  app.input.setText(`${text.slice(0, cursor)}${leadingSpace}${label}${trailingSpace}${text.slice(cursor)}`, false);
+  app.input.setCursor(cursor + leadingSpace.length + label.length + trailingSpace.length);
 }
 
 export function ensureInlineImageChips(app: AppState): void {

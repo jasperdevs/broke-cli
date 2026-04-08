@@ -101,10 +101,17 @@ function looksLikeImageDraft(text: string): boolean {
   return !!getImageExtension(normalizePastedPath(text.trim()));
 }
 
+function draftStillContainsRawImagePath(app: AppState, rawText: string): boolean {
+  const normalizedPath = normalizePastedPath(rawText);
+  const currentText = app.input.getText();
+  return currentText.includes(normalizedPath) || currentText.trim() === normalizedPath;
+}
+
 function scheduleDeferredPastedImageLoad(app: AppState, rawText: string): void {
   if (!looksLikeImageDraft(rawText)) return;
-  for (const delayMs of [40, 140]) {
+  for (const delayMs of [40, 140, 300, 600, 1000, 1500, 2200]) {
     setTimeout(() => {
+      if (!draftStillContainsRawImagePath(app, rawText)) return;
       if (!tryLoadImageFromPath(app, rawText)) return;
       stripMirroredImagePathFromDraft(app, rawText);
       ensureInlineImageChips(app);

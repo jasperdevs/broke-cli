@@ -240,6 +240,25 @@ describe("image attachments", () => {
     expect(app.input.getText()).toBe("hey [Image #1] ");
   });
 
+  it("waits long enough for a delayed Yoink save before giving up on attachment", async () => {
+    updateSetting("terminal", { ...getSettings().terminal, showImages: true });
+    const app = new App() as any;
+    const dir = mkdtempSync(join(tmpdir(), "brokecli-image-"));
+    tempDirs.push(dir);
+    const yoinkDir = join(dir, "Yoink");
+    mkdirSync(yoinkDir);
+    const transientPath = join(yoinkDir, "yoink_--_--_aaa.png");
+    const actualImagePath = join(yoinkDir, "yoink_2026-04-08_17-34-07_3aaa.png");
+
+    app.input.setText("hey ");
+    app.handlePaste(transientPath);
+    setTimeout(() => writeFileSync(actualImagePath, "fakepng", "utf-8"), 700);
+    await new Promise((resolve) => setTimeout(resolve, 2400));
+
+    expect(app.pendingImages).toHaveLength(1);
+    expect(app.input.getText()).toBe("hey [Image #1] ");
+  });
+
   it("removes the last attachment chip with backspace when the draft is empty", () => {
     const app = new App() as any;
     app.pendingImages = [{ mimeType: "image/png", data: "abc" }];
@@ -298,7 +317,7 @@ describe("image attachments", () => {
     app.handlePaste(imagePath);
 
     expect(app.pendingImages).toHaveLength(1);
-    expect(app.input.getText()).toBe("[exports.ts][Image #1] ");
+    expect(app.input.getText()).toBe("[exports.ts] [Image #1] ");
   });
 
   it("submits image-only prompts instead of dropping the attachment", () => {
