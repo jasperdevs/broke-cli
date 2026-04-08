@@ -4,13 +4,12 @@ import stripAnsi from "strip-ansi";
 import { BOX, BOLD, DIM, RESET } from "../utils/ansi.js";
 import { padVisible, visibleWidth } from "../utils/terminal-width.js";
 import { currentTheme } from "../core/themes.js";
-import { getConfiguredModelPreference, getSettings } from "../core/config.js";
+import { getSettings } from "../core/config.js";
 import { listExtensions } from "../core/extensions.js";
 import { listSkills } from "../core/skills.js";
 import { listTemplates } from "../core/templates.js";
 import { listInstalledPackages } from "../core/package-manager.js";
 import { getPrettyModelName } from "../ai/model-catalog.js";
-import { supportsProviderModel } from "../ai/providers.js";
 import { renderAnsiColorGrid, parseMascotSvgGrid, resolveMascotPath, type RgbColor } from "./render/mascot.js";
 import { renderHomeBox as buildRenderHomeBox, renderHomeView as buildRenderHomeView } from "./render/home.js";
 import { renderStaticMessages as buildStaticMessages } from "./render/messages.js";
@@ -303,29 +302,14 @@ export function renderUpdateBanner(app: AppState, width: number): string[] {
 }
 
 export function buildSidebarLines(app: AppState): string[] {
-  const resolveSlotLabel = (slot: "default" | "small" | "btw" | "review" | "planning" | "ui" | "architecture"): string => {
-    const configured = getConfiguredModelPreference(slot);
-    if (!configured) return getPrettyModelName(app.modelName, app.modelProviderId);
-    const slashIndex = configured.indexOf("/");
-    const providerId = slashIndex > 0 ? configured.slice(0, slashIndex) : app.modelProviderId;
-    const modelId = slashIndex > 0 ? configured.slice(slashIndex + 1) : configured;
-    if (!supportsProviderModel(providerId, modelId)) return "unset";
-    return getPrettyModelName(modelId, providerId);
-  };
   return composeSidebarLines({
     width: app.screen.sidebarWidth,
     sessionName: app.sessionName,
     appVersion: app.appVersion,
-    modelSlots: [
-      { label: "Chat", value: getPrettyModelName(app.modelName, app.modelProviderId) },
-      { label: "Fast", value: resolveSlotLabel("small") },
-      { label: "BTW", value: resolveSlotLabel("btw") },
-      { label: "Review", value: resolveSlotLabel("review") },
-      { label: "Planning", value: resolveSlotLabel("planning") },
-      { label: "Design/UI", value: resolveSlotLabel("ui") },
-      { label: "Architecture", value: resolveSlotLabel("architecture") },
-    ],
-    mcpConnections: app.mcpConnections,
+    modelSlots: app.modelName === "none"
+      ? []
+      : [{ label: "Model", value: getPrettyModelName(app.modelName, app.modelProviderId) }],
+    mcpConnections: [],
     shortCwd: app.formatShortCwd(Math.max(4, app.screen.sidebarWidth - 2)),
     gitBranch: app.gitBranch,
     gitDirty: app.gitDirty,

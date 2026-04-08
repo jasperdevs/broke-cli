@@ -71,9 +71,8 @@ describe("startup home view", () => {
     app.messages = [{ role: "user", content: "hello" }];
     app.drawImmediate();
     const output = rendered.map((line) => stripAnsi(line)).join("\n");
-    expect(output).toContain("BTW");
-    expect(output).toContain("Design/UI");
-    expect(output).toContain("v more");
+    expect(output).toContain("Directory");
+    expect(output).toContain("main");
   });
 
   it("drops the startup card entirely on very narrow widths", () => {
