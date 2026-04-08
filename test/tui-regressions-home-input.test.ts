@@ -389,4 +389,17 @@ describe("input editing", () => {
     expect(app.input.getCursor()).toBe("hey @".length);
     expect(app.filePicker?.query).toBe("");
   });
+
+  it("does not trap backspace when a stale file picker remains open without an active @ token", () => {
+    const app = new App() as any;
+    app.projectFiles = ["AGENTS.md", "README.md"];
+    app.filePicker = { files: app.projectFiles, filtered: app.projectFiles, query: "AG", cursor: 0 };
+    app.input.setText("hello ");
+    app.input.setCursor("hello ".length);
+
+    app.handleKey({ name: "backspace", char: "", ctrl: false, meta: false, shift: false });
+
+    expect(app.filePicker).toBeNull();
+    expect(app.input.getText()).toBe("hello");
+  });
 });

@@ -14,6 +14,7 @@ import {
   queueCurrentInput,
   restoreQueuedMessage,
   submitInput,
+  shouldKeepFilePickerOpen,
   tryConsumeImageDraft,
 } from "./app-input-routes.js";
 
@@ -198,6 +199,10 @@ function handleEscapeAndBindings(app: AppState, key: Keypress): boolean {
 
 export function handleKey(app: AppState, key: Keypress): void {
   hydrateInlineComposerElements(app);
+
+  if (app.filePicker && !shouldKeepFilePickerOpen(app)) {
+    app.filePicker = null;
+  }
 
   if (app.budgetView) {
     handleBudgetViewKey(app, key);

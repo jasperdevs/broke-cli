@@ -280,6 +280,10 @@ export function handleFilePickerKey(app: AppState, key: Keypress): void {
   app.draw();
 }
 
+export function shouldKeepFilePickerOpen(app: AppState): boolean {
+  return syncFilePickerFromComposer(app);
+}
+
 export function submitInput(app: AppState): void {
   submitQueuedInput(app, "steering");
 }
