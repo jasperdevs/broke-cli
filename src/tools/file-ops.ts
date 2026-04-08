@@ -161,10 +161,12 @@ export function readFileDirect({ path, offset, limit, mode, tail, refresh }: Rea
       const memoized = memoContext?.getMemoizedToolResult<{ totalLines: number; mode: ReadMode; firstSeenTurn: number }>(
         memoKey,
         fingerprint,
+        1,
       );
       if (memoized) {
         return {
           success: true as const,
+          path,
           content: buildMemoizedReadSummary(path, memoized),
           totalLines: memoized.totalLines,
           mode: memoized.mode,
@@ -190,11 +192,12 @@ export function readFileDirect({ path, offset, limit, mode, tail, refresh }: Rea
 
     if (content.length > MAX_READ_CHARS) {
       content = content.slice(0, MAX_READ_CHARS);
-      return {
-        success: true as const,
-        content,
-        totalLines,
-        truncated: true,
+        return {
+          success: true as const,
+          path,
+          content,
+          totalLines,
+          truncated: true,
         mode: readMode,
         note: `File truncated in ${readMode} mode. Use offset/limit to read specific sections.`,
       };
@@ -206,7 +209,7 @@ export function readFileDirect({ path, offset, limit, mode, tail, refresh }: Rea
       firstSeenTurn: memoContext.getCurrentTurn(),
     });
 
-    return { success: true as const, content, totalLines, mode: readMode };
+    return { success: true as const, path, content, totalLines, mode: readMode };
   } catch (err: unknown) {
     return { success: false as const, error: (err as Error).message };
   }
@@ -223,12 +226,12 @@ export function listFilesDirect({ path: dir = ".", maxDepth, include }: { path?:
     files: string[];
     totalEntries: number;
     truncated: boolean;
-  }>(memoKey, memoKey, 1);
+  }>(memoKey, memoKey, 0);
   if (memoized) {
     return {
       ...memoized,
       memoized: true as const,
-      note: "Reused unchanged file listing from the previous turn.",
+      note: "Reused unchanged file listing from earlier in this turn.",
     };
   }
   const max = maxDepth ?? 3;
@@ -289,7 +292,7 @@ export function grepDirect({ pattern, path: dir = ".", include }: { pattern: str
   const memoized = memoContext?.getMemoizedToolResult<{
     summary: Array<{ file: string; count: number; examples: Array<{ line: number; text: string }> }>;
     totalMatches: number;
-  }>(memoKey, memoKey, 1);
+  }>(memoKey, memoKey, 0);
   if (memoized) {
     return {
       matches: [],
@@ -297,7 +300,7 @@ export function grepDirect({ pattern, path: dir = ".", include }: { pattern: str
       totalMatches: memoized.totalMatches,
       capped: false,
       memoized: true as const,
-      note: "Reused unchanged grep results from the previous turn.",
+      note: "Reused unchanged grep results from earlier in this turn.",
     };
   }
 
@@ -370,7 +373,7 @@ export function semSearchDirect({
     results: Array<{ file: string; line: number; excerpt: string; score: number }>;
     totalResults: number;
     terms: string[];
-  }>(memoKey, memoKey, 1);
+  }>(memoKey, memoKey, 0);
   if (memoized) {
     return {
       results: memoized.results,
@@ -378,7 +381,7 @@ export function semSearchDirect({
       query,
       terms: memoized.terms,
       memoized: true as const,
-      note: "Reused unchanged semantic search results from the previous turn.",
+      note: "Reused unchanged semantic search results from earlier in this turn.",
     };
   }
   const tokens = tokenizeSearchQuery(query);

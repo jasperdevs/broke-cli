@@ -23,7 +23,6 @@ import type { Session } from "../core/session.js";
 import { sendResponseNotification } from "./notify.js";
 import type { SpecialistModelRole } from "./model-routing.js";
 import { applyTurnFrame } from "./turn-frame.js";
-
 type PendingDelivery = "steering" | "followup";
 
 interface TurnExecutionApp {
@@ -50,9 +49,7 @@ interface TurnExecutionApp {
 interface ExtensionHooks {
   emit(event: string, payload: Record<string, unknown>): void;
 }
-
 const MAX_TOOL_RESULT_SERIALIZED_CHARS = 6000;
-
 function createStreamTokenTracker(
   app: TurnExecutionApp,
   executionModelId: string,
@@ -289,6 +286,7 @@ export async function executeTurn(options: {
     contextOptimizer: session.getContextOptimizer(),
     memoizedToolResults: getSettings().memoizeToolResults !== false,
   });
+
   const streamCallbacks = {
     onText: (delta: string) => {
       const nextText = streamedText + delta;
@@ -438,6 +436,9 @@ export async function executeTurn(options: {
           hooks.emit("on_tool_result", { name: _name, result });
           if (_name === "todoWrite") return;
           session.recordToolResult(_name, estimateToolResultTokens(result));
+          if (_name === "bash" && !(result as any)?.rerouted) {
+            session.getContextOptimizer().invalidateToolResults();
+          }
           const r = result as { success?: boolean; output?: string; error?: string; content?: string; matches?: unknown[]; files?: string[] };
           let detail: string | undefined;
           if (_name === "bash") {

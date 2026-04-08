@@ -4,6 +4,7 @@ import { createHash } from "crypto";
 import { calculateCost, type TokenUsage } from "./cost.js";
 import { estimateConversationTokens, estimateTextTokens } from "./tokens.js";
 import { resolveThinkingConfig } from "./thinking.js";
+import { getProviderCapabilities } from "./provider-capabilities.js";
 import { getSettings } from "../core/config.js";
 import { buildPromptCacheKey } from "../core/context.js";
 
@@ -40,10 +41,12 @@ export async function startStream(
   process.stderr.write = () => true;
 
   try {
+    const providerCapabilities = getProviderCapabilities(opts.providerId);
     // Convert messages to AI SDK format with images
     const messages = opts.messages.map((m, index) => {
-      const anthropicCacheable = opts.providerId === "anthropic" && index < Math.min(2, Math.max(0, opts.messages.length - 1));
-      const messageProviderOptions = anthropicCacheable
+      const messageCacheable = providerCapabilities.cacheHints?.messageEphemeral
+        && index < Math.min(2, Math.max(0, opts.messages.length - 1));
+      const messageProviderOptions = messageCacheable
         ? { anthropic: { cacheControl: { type: "ephemeral" } } }
         : undefined;
       if (m.images && m.images.length > 0 && m.role === "user") {
@@ -69,21 +72,21 @@ export async function startStream(
       level: opts.thinkingLevel,
     });
     if (thinking.enabled) {
-      if (opts.providerId === "anthropic") {
+      if (providerCapabilities.reasoningProvider === "anthropic") {
         providerOptions.anthropic = { thinking: { type: "enabled", budgetTokens: thinking.budgetTokens ?? 4096 } };
-      } else if (opts.providerId === "openai") {
+      } else if (providerCapabilities.reasoningProvider === "openai") {
         providerOptions.openai = { reasoningEffort: { value: thinking.effort ?? "low" } };
-      } else if (opts.providerId === "google") {
+      } else if (providerCapabilities.reasoningProvider === "google") {
         providerOptions.google = { thinkingConfig: { thinkingBudget: thinking.budgetTokens ?? 4096 } };
       }
     }
     if (getSettings().enablePromptCaching !== false) {
-      if (opts.providerId === "anthropic") {
+      if (providerCapabilities.cacheHints?.topLevelEphemeral) {
         providerOptions.anthropic = {
           ...(providerOptions.anthropic ?? {}),
           cacheControl: { type: "ephemeral" },
         };
-      } else if (opts.providerId === "openai" || opts.providerId === "codex") {
+      } else if (providerCapabilities.cacheHints?.promptCacheKey) {
         providerOptions.openai = {
           ...(providerOptions.openai ?? {}),
           promptCacheKey: `${buildPromptCacheKey({

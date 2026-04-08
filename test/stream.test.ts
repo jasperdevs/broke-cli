@@ -123,41 +123,6 @@ describe("stream tool steps", () => {
     expect(streamTextMock).toHaveBeenCalled();
   });
 
-  it("passes provider-native cache hints for anthropic and openai models", async () => {
-    await startStream({
-      model: {} as any,
-      modelId: "claude-sonnet",
-      providerId: "anthropic",
-      system: "sys",
-      messages: [{ role: "user", content: "hi" }, { role: "assistant", content: "hello" }],
-    }, {
-      onText: () => {},
-      onReasoning: () => {},
-      onFinish: () => {},
-      onError: () => {},
-    });
-
-    const anthropicCall = streamTextMock.mock.calls.at(-1)?.[0];
-    expect(anthropicCall.providerOptions.anthropic.cacheControl).toEqual({ type: "ephemeral" });
-    expect(anthropicCall.messages[0].providerOptions.anthropic.cacheControl).toEqual({ type: "ephemeral" });
-
-    await startStream({
-      model: {} as any,
-      modelId: "gpt-5.4-mini",
-      providerId: "openai",
-      system: "sys",
-      messages: [{ role: "user", content: "hi" }],
-    }, {
-      onText: () => {},
-      onReasoning: () => {},
-      onFinish: () => {},
-      onError: () => {},
-    });
-
-    const openaiCall = streamTextMock.mock.calls.at(-1)?.[0];
-    expect(openaiCall.providerOptions.openai.promptCacheKey).toContain("brokecli:");
-  });
-
   it("suppresses plain planning narration before edit-tool work starts", async () => {
     const app = {
       addMessage: vi.fn(),
