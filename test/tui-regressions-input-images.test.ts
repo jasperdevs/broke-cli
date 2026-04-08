@@ -238,6 +238,7 @@ describe("image attachments", () => {
 
     expect(app.pendingImages).toHaveLength(1);
     expect(app.input.getText()).toBe("hey [Image #1] ");
+    expect(app.pendingImages[0].pendingPath).toBeUndefined();
   });
 
   it("waits long enough for a delayed Yoink save before giving up on attachment", async () => {
@@ -257,6 +258,7 @@ describe("image attachments", () => {
 
     expect(app.pendingImages).toHaveLength(1);
     expect(app.input.getText()).toBe("hey [Image #1] ");
+    expect(app.pendingImages[0].pendingPath).toBeUndefined();
   });
 
   it("removes the last attachment chip with backspace when the draft is empty", () => {

@@ -68,6 +68,116 @@ function looksLikeIncompleteEscapeSequence(sequence: string): boolean {
 type KeyHandler = (key: Keypress) => void;
 type PasteHandler = (text: string) => void;
 
+class PasteBurst {
+  private static readonly HOLD_MS = 18;
+  private static readonly GAP_MS = 10;
+
+  private heldChar: string | null = null;
+  private buffer = "";
+  private lastAt = 0;
+  private flushTimer: NodeJS.Timeout | null = null;
+
+  constructor(
+    private readonly onKey: KeyHandler,
+    private readonly onPaste: PasteHandler,
+  ) {}
+
+  clear(): void {
+    this.heldChar = null;
+    this.buffer = "";
+    this.lastAt = 0;
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+  }
+
+  flush(): boolean {
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+    if (this.buffer) {
+      const pasted = this.buffer;
+      this.buffer = "";
+      this.heldChar = null;
+      this.lastAt = 0;
+      this.onPaste(pasted);
+      return true;
+    }
+    if (this.heldChar) {
+      const char = this.heldChar;
+      this.heldChar = null;
+      this.lastAt = 0;
+      this.onKey({ name: char, char, ctrl: false, meta: false, shift: false });
+      return true;
+    }
+    return false;
+  }
+
+  ingestPlainText(text: string): boolean {
+    if (!text) return false;
+    const now = Date.now();
+    if (text === "\n" || text === "\r" || text === "\r\n") {
+      if (this.buffer) {
+        this.buffer += "\n";
+        this.lastAt = now;
+        this.scheduleFlush();
+        return true;
+      }
+      return false;
+    }
+
+    if (text.length !== 1) {
+      this.promoteHeldChar();
+      this.buffer += text;
+      this.lastAt = now;
+      this.scheduleFlush();
+      return true;
+    }
+
+    if (this.buffer) {
+      if (now - this.lastAt <= PasteBurst.GAP_MS) {
+        this.buffer += text;
+        this.lastAt = now;
+        this.scheduleFlush();
+        return true;
+      }
+      this.flush();
+    }
+
+    if (this.heldChar) {
+      if (now - this.lastAt <= PasteBurst.HOLD_MS) {
+        this.buffer = this.heldChar + text;
+        this.heldChar = null;
+        this.lastAt = now;
+        this.scheduleFlush();
+        return true;
+      }
+      this.flush();
+    }
+
+    this.heldChar = text;
+    this.lastAt = now;
+    this.scheduleFlush();
+    return true;
+  }
+
+  private promoteHeldChar(): void {
+    if (!this.heldChar) return;
+    this.buffer += this.heldChar;
+    this.heldChar = null;
+  }
+
+  private scheduleFlush(): void {
+    if (this.flushTimer) clearTimeout(this.flushTimer);
+    this.flushTimer = setTimeout(() => {
+      this.flushTimer = null;
+      this.flush();
+    }, PasteBurst.HOLD_MS);
+  }
+}
+
 /**
  * Raw terminal input handler.
  * Uses Node's readline keypress parsing (works cross-platform).
@@ -84,10 +194,12 @@ export class KeypressHandler {
   private keypressListener: ((str: string | undefined, key: readline.Key) => void) | null = null;
   private pendingEscapeSequence: string | null = null;
   private pendingEscapeTimer: NodeJS.Timeout | null = null;
+  private pasteBurst: PasteBurst;
 
   constructor(onKey: KeyHandler, onPaste: PasteHandler) {
     this.onKey = onKey;
     this.onPaste = onPaste;
+    this.pasteBurst = new PasteBurst(onKey, onPaste);
   }
 
   /** Start listening for input */
@@ -127,6 +239,7 @@ export class KeypressHandler {
         }
         const specialKey = decodeSpecialKeySequence(s);
         if (specialKey) {
+          this.pasteBurst.flush();
           this.onKey(specialKey);
           return false;
         }
@@ -135,6 +248,7 @@ export class KeypressHandler {
           this.pendingEscapeTimer = setTimeout(() => {
             this.pendingEscapeSequence = null;
             this.pendingEscapeTimer = null;
+            this.pasteBurst.flush();
             if (s === "\x1b") {
               this.onKey({ name: "escape", char: "", ctrl: false, meta: false, shift: false });
               return;
@@ -199,6 +313,7 @@ export class KeypressHandler {
 
       // Bracketed paste detection
       if (str === "\x1b[200~") {
+        this.pasteBurst.flush();
         this.isPasting = true;
         this.pasteBuffer = "";
         return;
@@ -229,6 +344,17 @@ export class KeypressHandler {
         kp.name = "linefeed";
       }
 
+      const isPlainBurstCandidate = !kp.ctrl && !kp.meta && (
+        (kp.char && kp.char.length > 0)
+        || kp.name === "linefeed"
+      );
+      if (isPlainBurstCandidate) {
+        const burstText = kp.name === "linefeed" ? "\n" : kp.char;
+        if (this.pasteBurst.ingestPlainText(burstText)) return;
+      } else {
+        this.pasteBurst.flush();
+      }
+
       this.onKey(kp);
     };
     process.stdin.on("keypress", this.keypressListener);
@@ -255,6 +381,7 @@ export class KeypressHandler {
       this.pendingEscapeTimer = null;
     }
     this.pendingEscapeSequence = null;
+    this.pasteBurst.clear();
     if (process.stdin.isTTY) {
       process.stdin.setRawMode(false);
     }

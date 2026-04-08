@@ -2,7 +2,7 @@ import stripAnsi from "strip-ansi";
 import { getSettings } from "../core/config.js";
 import { currentTheme } from "../core/themes.js";
 import { filterFiles, readFileForContext } from "./file-picker.js";
-import { getFileChipLabel, getImageChipLabel } from "./inline-chip-utils.js";
+import { insertInlineFileChip } from "./inline-chip-utils.js";
 import type { Keypress } from "./keypress.js";
 import { BOLD, RESET, bg, fg } from "../utils/ansi.js";
 import { DIM } from "../utils/ansi.js";
@@ -26,11 +26,6 @@ import {
 } from "./app-menu-entries.js";
 type AppState = any;
 
-function getComposerAttachmentTokens(app: AppState): string[] {
-  void app;
-  return [];
-}
-
 function renderAttachmentChip(token: string): string {
   return `${currentTheme().imageTagBg}${BOLD}${TXT()}${token}${RESET}`;
 }
@@ -39,49 +34,19 @@ function renderFileChip(token: string): string {
   return `${bg(245, 245, 245)}${fg(16, 16, 16)}${BOLD}${token}${RESET}`;
 }
 
-function styleInlineFileChips(app: AppState, line: string): string {
-  let output = line;
-  for (const file of Array.from(app.fileContexts.keys()) as string[]) {
-    const label = getFileChipLabel(file);
-    output = output.split(label).join(renderFileChip(label));
-  }
-  if (getSettings().terminal.showImages && app.pendingImages) {
-    for (let index = 0; index < app.pendingImages.length; index++) {
-      const label = getImageChipLabel(index);
-      output = output.split(label).join(renderAttachmentChip(label));
-    }
-  }
-  return output;
-}
-
 function styleComposerLine(app: AppState, line: string): string {
-  const tokens = getComposerAttachmentTokens(app);
-  if (tokens.length === 0) return styleInlineFileChips(app, line);
-  let remaining = line;
-  let leading = "";
-  while (remaining.startsWith(" ")) {
-    leading += " ";
-    remaining = remaining.slice(1);
+  let styled = line;
+  const elements = app.input.getElements?.() ?? [];
+  for (const element of elements) {
+    const render = element.kind === "file" ? renderFileChip : renderAttachmentChip;
+    styled = styled.split(element.label).join(render(element.label));
   }
-  let built = leading;
-  let matchedAny = false;
-  for (const token of tokens) {
-    if (!remaining.startsWith(token)) break;
-    built += renderAttachmentChip(token);
-    remaining = remaining.slice(token.length);
-    matchedAny = true;
-    if (remaining.startsWith(" ")) {
-      built += " ";
-      remaining = remaining.slice(1);
-    }
-  }
-  return styleInlineFileChips(app, matchedAny ? `${built}${remaining}` : line);
+  return styled;
 }
 
 function getComposerSourceLines(app: AppState, text: string): string[] {
-  const attachmentTokens = getComposerAttachmentTokens(app);
-  const prefix = attachmentTokens.length > 0 ? `${attachmentTokens.join(" ")}${text ? " " : ""}` : "";
-  return `${prefix}${text || ""}`.split("\n");
+  void app;
+  return `${text || ""}`.split("\n");
 }
 
 function wrapComposerLines(app: AppState, text: string, width: number, styled: boolean): string[] {
@@ -406,13 +371,11 @@ export function selectFileEntry(app: AppState, index: number): void {
   if (!selected) return;
   app.filePicker.cursor = index;
   const text = app.input.getText();
-  const atIdx = text.lastIndexOf("@");
-  const label = `${getFileChipLabel(selected)} `;
-  if (atIdx >= 0) {
-    app.input.setText(`${text.slice(0, atIdx)}${label}`, true);
-  } else {
-    app.input.setText(`${text}${label}`, true);
-  }
+  const cursor = app.input.getCursor();
+  const atIdx = text.lastIndexOf("@", Math.max(0, cursor - 1));
+  const replaceStart = atIdx >= 0 ? atIdx : cursor;
+  const replaceEnd = cursor;
+  insertInlineFileChip(app, selected, replaceStart, replaceEnd);
   const content = readFileForContext(app.cwd, selected);
   app.fileContexts.set(selected, content);
   app.filePicker = null;

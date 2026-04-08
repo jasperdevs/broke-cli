@@ -1,146 +1,19 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "fs";
-import { basename, dirname, extname, join } from "path";
-import { fileURLToPath } from "url";
 import { renderBudgetDashboard } from "../core/budget-insights.js";
 import { filterFiles } from "./file-picker.js";
 import type { Keypress } from "./keypress.js";
-import { ensureInlineImageChips, getImageChipLabel, insertInlineImageChip, snapCursorOutsideInlineChip, stripInlineChipLabels } from "./inline-chip-utils.js";
-import { DIM, RESET } from "../utils/ansi.js";
-import { T } from "./app-shared.js";
-import { getSelectedTreeItem, getVisibleTreeRows, moveTreeSelection, pageTreeSelection, toggleTreeFilter, toggleTreeFold, toggleTreeLabel, toggleTreeTimestampMode } from "./tree-view.js";
+import { stripInlineChipLabels, syncInlineImageChipLabels } from "./inline-chip-utils.js";
+import {
+  handleImagePaste,
+  resolvePendingImagesBeforeSubmit,
+  scheduleDeferredImageDraftConsume,
+  tryConsumeImageDraft,
+} from "./composer-image-attachments.js";
+import { getVisibleTreeRows, moveTreeSelection, pageTreeSelection, toggleTreeFilter, toggleTreeFold, toggleTreeLabel, toggleTreeTimestampMode } from "./tree-view.js";
 
 type AppState = any;
 
-function normalizePastedPath(text: string): string {
-  let normalized = text.trim();
-  if ((normalized.startsWith('"') && normalized.endsWith('"')) || (normalized.startsWith("'") && normalized.endsWith("'"))) {
-    normalized = normalized.slice(1, -1).trim();
-  }
-  if (/^file:\/\//i.test(normalized)) {
-    try {
-      normalized = fileURLToPath(normalized);
-    } catch {
-      // Fall back to the original text if URL parsing fails.
-    }
-  }
-  return normalized;
-}
-
-function getImageExtension(normalizedPath: string): string | null {
-  const ext = extname(normalizedPath).toLowerCase();
-  return [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"].includes(ext) ? ext : null;
-}
-
-function resolveImagePath(rawText: string): string | null {
-  const normalizedPath = normalizePastedPath(rawText);
-  const imageExt = getImageExtension(normalizedPath);
-  if (!imageExt) return null;
-  if (existsSync(normalizedPath)) return normalizedPath;
-
-  const parentDir = dirname(normalizedPath);
-  if (!parentDir || !existsSync(parentDir)) return null;
-
-  // Yoink on Windows can paste a transient filename before the actual saved file name settles.
-  const parentName = basename(parentDir).toLowerCase();
-  if (parentName !== "yoink") return null;
-
-  const now = Date.now();
-  const fallback = readdirSync(parentDir)
-    .filter((entry) => extname(entry).toLowerCase() === imageExt)
-    .map((entry) => {
-      const fullPath = join(parentDir, entry);
-      try {
-        return { path: fullPath, mtimeMs: statSync(fullPath).mtimeMs };
-      } catch {
-        return null;
-      }
-    })
-    .filter((entry): entry is { path: string; mtimeMs: number } => !!entry)
-    .filter((entry) => now - entry.mtimeMs < 10_000)
-    .sort((a, b) => b.mtimeMs - a.mtimeMs)[0];
-
-  return fallback?.path ?? null;
-}
-
 function isPlainBackspace(key: Keypress): boolean {
   return key.name === "backspace" && !key.ctrl && !key.meta && !key.shift;
-}
-
-function tryLoadImageFromPath(app: AppState, rawText: string, insertChip = false): boolean {
-  const resolvedPath = resolveImagePath(rawText);
-  if (!resolvedPath) return false;
-  try {
-    const data = readFileSync(resolvedPath);
-    const ext = resolvedPath.split(".").pop()?.toLowerCase() || "png";
-    const mimeType = `image/${ext === "jpg" ? "jpeg" : ext}`;
-    const base64 = data.toString("base64");
-    app.pendingImages.push({ mimeType, data: base64 });
-    if (insertChip) insertInlineImageChip(app);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function stripMirroredImagePathFromDraft(app: AppState, rawText: string): void {
-  const normalizedPath = normalizePastedPath(rawText);
-  const currentText = app.input.getText();
-  const trimmedCurrent = currentText.trim();
-  if (trimmedCurrent === normalizedPath) {
-    app.input.clear();
-    ensureInlineImageChips(app);
-    return;
-  }
-  if (currentText.endsWith(normalizedPath)) {
-    app.input.setText(currentText.slice(0, currentText.length - normalizedPath.length).trimEnd(), true);
-    ensureInlineImageChips(app);
-  }
-}
-
-function looksLikeImageDraft(text: string): boolean {
-  return !!getImageExtension(normalizePastedPath(text.trim()));
-}
-
-function draftStillContainsRawImagePath(app: AppState, rawText: string): boolean {
-  const normalizedPath = normalizePastedPath(rawText);
-  const currentText = app.input.getText();
-  return currentText.includes(normalizedPath) || currentText.trim() === normalizedPath;
-}
-
-function scheduleDeferredPastedImageLoad(app: AppState, rawText: string): void {
-  if (!looksLikeImageDraft(rawText)) return;
-  for (const delayMs of [40, 140, 300, 600, 1000, 1500, 2200]) {
-    setTimeout(() => {
-      if (!draftStillContainsRawImagePath(app, rawText)) return;
-      if (!tryLoadImageFromPath(app, rawText)) return;
-      stripMirroredImagePathFromDraft(app, rawText);
-      ensureInlineImageChips(app);
-      queueMicrotask(() => stripMirroredImagePathFromDraft(app, rawText));
-      app.draw?.();
-    }, delayMs);
-  }
-}
-
-export function tryConsumeImageDraft(app: AppState): boolean {
-  snapCursorOutsideInlineChip(app);
-  const text = app.input.getText().trim();
-  if (!text) return false;
-  if (!tryLoadImageFromPath(app, text)) return false;
-  app.input.clear();
-  insertInlineImageChip(app);
-  return true;
-}
-
-export function scheduleDeferredImageDraftConsume(app: AppState): void {
-  const draft = app.input.getText().trim();
-  if (!draft || !looksLikeImageDraft(draft)) return;
-  for (const delayMs of [40, 140]) {
-    setTimeout(() => {
-      if (app.input.getText().trim() !== draft) return;
-      if (!tryConsumeImageDraft(app)) return;
-      app.draw?.();
-    }, delayMs);
-  }
 }
 
 export function handleBudgetViewKey(app: AppState, key: Keypress): void {
@@ -261,8 +134,7 @@ export function handlePickerKey(app: AppState, key: Keypress): void {
       app.input.clear();
       app.drawNow();
       return;
-    }
-    else if (key.name === "escape" || (key.ctrl && key.name === "c")) {
+    } else if (key.name === "escape" || (key.ctrl && key.name === "c")) {
       app.settingsPicker = null;
       app.input.clear();
       app.drawNow();
@@ -400,34 +272,16 @@ export function restoreQueuedMessage(app: AppState): void {
     app.pendingImages = [...queued.images, ...app.pendingImages];
   }
   app.input.setText(queued.text);
+  syncInlineImageChipLabels(app);
   app.drawNow();
 }
 
 export function handlePaste(app: AppState, text: string): void {
-  snapCursorOutsideInlineChip(app);
-  if (text.startsWith("data:image/")) {
-    const match = text.match(/^data:image\/(\w+);base64,(.+)$/);
-    if (match) {
-      const mimeType = `image/${match[1]}`;
-      const data = match[2];
-      app.pendingImages.push({ mimeType, data });
-      insertInlineImageChip(app);
-      app.setStatus?.(`${T()}✓ Image attached (${mimeType})${RESET}`);
-      app.draw();
-      return;
-    }
-  }
-
-  if (tryLoadImageFromPath(app, text)) {
-    stripMirroredImagePathFromDraft(app, text);
-    ensureInlineImageChips(app);
-    queueMicrotask(() => stripMirroredImagePathFromDraft(app, text));
-    setTimeout(() => stripMirroredImagePathFromDraft(app, text), 0);
+  if (handleImagePaste(app, text)) {
     app.draw();
     return;
   }
   app.input.paste(text);
-  scheduleDeferredPastedImageLoad(app, text);
   if (tryConsumeImageDraft(app)) {
     app.draw();
     return;
@@ -436,23 +290,22 @@ export function handlePaste(app: AppState, text: string): void {
   app.draw();
 }
 
+export { scheduleDeferredImageDraftConsume, tryConsumeImageDraft } from "./composer-image-attachments.js";
+
 function submitQueuedInput(app: AppState, delivery: "steering" | "followup"): void {
-  const rawText = app.input.submit();
-  const text = stripInlineChipLabels(app, rawText);
-  if (!app.pendingImages.length && tryLoadImageFromPath(app, text.trim())) {
+  const text = stripInlineChipLabels(app);
+  if (!resolvePendingImagesBeforeSubmit(app)) {
     app.draw();
     return;
   }
-  const images = app.takePendingImages();
+  app.input.submit();
+  const images = (app.takePendingImages() as Array<{ mimeType?: string; data?: string }>)
+    .filter((image) => image.mimeType && image.data)
+    .map((image) => ({ mimeType: image.mimeType!, data: image.data! }));
   if ((!text && images.length === 0) || !app.onSubmit) return;
   const trimmed = text.trimStart();
   const shouldBypassQueue = trimmed.startsWith("/btw ");
-  if (!app.isStreaming) {
-    if (images.length > 0) (app.onSubmit as (text: string, images?: Array<{ mimeType: string; data: string }>) => void)(text, images);
-    else app.onSubmit(text);
-    return;
-  }
-  if (shouldBypassQueue) {
+  if (!app.isStreaming || shouldBypassQueue) {
     if (images.length > 0) (app.onSubmit as (text: string, images?: Array<{ mimeType: string; data: string }>) => void)(text, images);
     else app.onSubmit(text);
     return;

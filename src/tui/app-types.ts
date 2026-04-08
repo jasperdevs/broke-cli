@@ -8,7 +8,7 @@ import type { TreeFilterMode } from "../core/config.js";
 export interface ChatMessage {
   role: "user" | "assistant" | "system";
   content: string;
-  images?: Array<{ mimeType: string; data: string }>;
+  images?: ResolvedImage[];
 }
 
 export interface ModelOption {
@@ -158,7 +158,10 @@ export interface MenuEntry {
   selectIndex?: number;
 }
 
-export type PendingImage = { mimeType: string; data: string };
-export type PendingMessage = { text: string; images?: PendingImage[]; delivery: PendingDelivery };
+export type ResolvedImage = { mimeType: string; data: string };
+export type PendingImage =
+  | (ResolvedImage & { attachmentId?: string; resolvedPath?: string; pendingPath?: undefined })
+  | { attachmentId?: string; pendingPath: string; resolvedPath?: undefined; mimeType?: undefined; data?: undefined };
+export type PendingMessage = { text: string; images?: ResolvedImage[]; delivery: PendingDelivery };
 export type TodoItem = { id: string; text: string; status: "pending" | "in_progress" | "done" };
 export type MascotGrid = Array<Array<RgbColor | null>>;

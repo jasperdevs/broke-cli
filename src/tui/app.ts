@@ -4,6 +4,7 @@ import { fileURLToPath } from "url";
 import { Screen } from "./screen.js";
 import { KeypressHandler } from "./keypress.js";
 import { InputWidget } from "./input.js";
+import { insertInlineImageChip } from "./inline-chip-utils.js";
 import type { Mode, ThinkingLevel, CavemanLevel } from "../core/config.js";
 import type { SidebarTreeItem } from "./sidebar.js";
 import type { RgbColor } from "./render/mascot.js";
@@ -157,6 +158,17 @@ export class App {
   constructor() {
     this.screen = new Screen();
     this.input = new InputWidget();
+    this.input.onChange((text) => {
+      const normalized = text.trim();
+      if (!normalized) return;
+      const mirrored = this.pendingImages.find((image) =>
+        image.attachmentId
+        && (image.pendingPath === normalized || image.resolvedPath === normalized),
+      );
+      if (!mirrored?.attachmentId) return;
+      this.input.setText("");
+      insertInlineImageChip(this as any, mirrored.attachmentId);
+    });
     this.keypress = new KeypressHandler(
       (key) => this.handleKey(key),
       (text) => this.handlePaste(text),

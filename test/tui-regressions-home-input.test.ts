@@ -343,6 +343,9 @@ describe("input editing", () => {
     const app = new App() as any;
     let rendered: string[] = [];
     app.fileContexts.set("src/index.ts", "export {}");
+    app.input.setText("check [index.ts] ", true, [
+      { id: "file:src/index.ts", kind: "file", label: "[index.ts]", start: 6, end: 16, meta: { file: "src/index.ts" } },
+    ]);
     app.screen = { height: 18, width: 80, hasSidebar: false, mainWidth: 80, sidebarWidth: 0, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
     app.drawImmediate();
     const output = rendered.map((line) => stripAnsi(line)).join("\n");

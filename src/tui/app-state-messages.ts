@@ -1,4 +1,4 @@
-import type { PendingDelivery, PendingImage, PendingMessage, TodoItem } from "./app-types.js";
+import type { PendingDelivery, PendingImage, PendingMessage, ResolvedImage, TodoItem } from "./app-types.js";
 
 type AppState = any;
 
@@ -16,7 +16,7 @@ export function setDraft(app: AppState, text: string): void {
   app.drawNow();
 }
 
-export function addMessage(app: AppState, role: "user" | "assistant" | "system", content: string, images?: PendingImage[]): void {
+export function addMessage(app: AppState, role: "user" | "assistant" | "system", content: string, images?: ResolvedImage[]): void {
   if (role === "user") {
     app.thinkingBuffer = "";
     app.thinkingStartTime = 0;
@@ -205,7 +205,7 @@ export function clearStatus(app: AppState): void {
   app.draw();
 }
 
-export function onInput(app: AppState, handler: (text: string, images?: PendingImage[]) => void): void {
+export function onInput(app: AppState, handler: (text: string, images?: ResolvedImage[]) => void): void {
   app.onSubmit = handler as (text: string) => void;
 }
 
@@ -219,7 +219,7 @@ export function takePendingImages(app: AppState): PendingImage[] {
   return images;
 }
 
-export function addPendingMessage(app: AppState, text: string, images?: PendingImage[], delivery: PendingDelivery = "followup"): void {
+export function addPendingMessage(app: AppState, text: string, images?: ResolvedImage[], delivery: PendingDelivery = "followup"): void {
   app.pendingMessages.push({ text, images, delivery });
   app.draw();
 }
@@ -263,7 +263,7 @@ export function onAbortRequest(app: AppState, handler: () => void): void { app.o
 export interface AppStateMessageMethods {
   clearMessages(): void;
   setDraft(text: string): void;
-  addMessage(role: "user" | "assistant" | "system", content: string, images?: PendingImage[]): void;
+  addMessage(role: "user" | "assistant" | "system", content: string, images?: ResolvedImage[]): void;
   appendToLastMessage(text: string): void;
   replaceLastAssistantMessage(text: string): void;
   appendThinking(delta: string): void;
@@ -280,10 +280,10 @@ export interface AppStateMessageMethods {
   getFileContexts(): Map<string, string>;
   setStatus(message: string): void;
   clearStatus(): void;
-  onInput(handler: (text: string, images?: PendingImage[]) => void): void;
+  onInput(handler: (text: string, images?: ResolvedImage[]) => void): void;
   onPendingMessagesReadyHandler(handler: (delivery: PendingDelivery) => void): void;
   takePendingImages(): PendingImage[];
-  addPendingMessage(text: string, images?: PendingImage[], delivery?: PendingDelivery): void;
+  addPendingMessage(text: string, images?: ResolvedImage[], delivery?: PendingDelivery): void;
   takePendingMessages(delivery?: PendingDelivery): PendingMessage[];
   takeLastPendingMessage(): PendingMessage | undefined;
   clearPendingMessages(delivery?: PendingDelivery): void;
