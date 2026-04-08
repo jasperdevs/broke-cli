@@ -89,6 +89,16 @@ function compactPreview(text: string, maxLength = 88): string {
   return normalized.length <= maxLength ? normalized : `${normalized.slice(0, maxLength - 3)}...`;
 }
 
+function compactArgs(args: unknown, maxLength = 72): string {
+  if (args == null) return "";
+  try {
+    const serialized = JSON.stringify(args);
+    return serialized && serialized !== "{}" ? compactPreview(serialized, maxLength) : "";
+  } catch {
+    return "";
+  }
+}
+
 function ensureOverlayGap(lines: string[]): void {
   if (lines.length === 0) return;
   if (lines[lines.length - 1] !== "") lines.push("");
@@ -126,17 +136,12 @@ function renderPrefixedWrappedLines(prefix: string, text: string, width: number)
 
 export function toolDescription(tc: ToolCallRenderGroup): string {
   const a = tc.args as Record<string, string> | undefined;
+  const argsPreview = compactArgs(tc.args);
   switch (tc.name) {
-    case "readFile": return `Reading ${tc.preview}`;
-    case "listFiles": return `Listing ${tc.preview}`;
-    case "grep": return `Searching for ${a?.pattern ? `"${a.pattern}"` : "pattern"}`;
-    case "writeFile": return `Writing ${tc.preview}`;
-    case "editFile": return `Updating ${tc.preview}`;
-    case "bash": return `Running \`${tc.preview}\``;
-    case "webSearch": return `Searching web for "${a?.query ?? tc.preview}"`;
-    case "webFetch": return `Fetching ${a?.url ?? tc.preview}`;
-    case "todoWrite": return "Updating task list";
-    default: return `${tc.name} ${tc.preview}`;
+    case "bash":
+      return `Ran ${tc.preview}`;
+    default:
+      return argsPreview ? `Called ${tc.name}(${argsPreview})` : `Called ${tc.name}`;
   }
 }
 
@@ -160,12 +165,7 @@ export function renderToolCallBlock(options: {
   const done = !!tc.result;
   const running = !done;
   const branch = "\u2514";
-
-  const icon = tc.error ? `${colors.error}\u25CF${reset}`
-    : done ? `${colors.muted}\u25CF${reset}`
-    : (spinnerFrame % 2 === 0 ? `${colors.ok}\u25CF${reset}` : `${colors.accent2}\u25CF${reset}`);
-
-  lines.push(`  ${icon} ${done ? colors.muted : colors.text}${toolDescription(tc)}${running ? "..." : ""}${reset}`);
+  lines.push(`  ${done ? colors.muted : colors.text}• ${toolDescription(tc)}${running ? "" : ""}${reset}`);
 
   const a = tc.args as Record<string, string> | undefined;
 

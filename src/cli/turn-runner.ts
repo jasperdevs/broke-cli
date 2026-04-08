@@ -191,9 +191,7 @@ export async function runModelTurn(options: {
       : null;
     const outcome = await executeTurn(turnOptions);
     if (activeModel.runtime === "native-cli" && outcome.completion === "success") {
-      const touched = recordNativeWorkspaceDelta(session, baseline);
-      const evidence = !outcome.toolActivity ? buildTouchedFilesEvidence(touched) : null;
-      if (evidence) app.addMessage("system", evidence);
+      recordNativeWorkspaceDelta(session, baseline);
     }
     return outcome;
   };
