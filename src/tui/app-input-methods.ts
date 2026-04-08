@@ -2,7 +2,7 @@ import { collectProjectFiles } from "./file-picker.js";
 import type { Keypress } from "./keypress.js";
 import { matchesBinding, loadKeybindings } from "../core/keybindings.js";
 import { getSettings } from "../core/config.js";
-import { ensureInlineChipElements, syncInlineImageChipLabels } from "./inline-chip-utils.js";
+import { ensureInlineChipElements, getFileChipLabel, getImageChipLabel, syncInlineImageChipLabels } from "./inline-chip-utils.js";
 import { handleQuestionViewKey } from "./question-view.js";
 import {
   handleBudgetViewKey,
@@ -40,6 +40,53 @@ function syncComposerAttachmentsFromInput(app: AppState): void {
     !image.attachmentId || activeImages.has(image.attachmentId),
   );
   syncInlineImageChipLabels(app);
+}
+
+function tryDeleteVisiblePlaceholderFallback(app: AppState, key: Keypress, beforeText: string, beforeCursor: number): boolean {
+  if (!((key.name === "backspace" || key.name === "delete") && !key.ctrl && !key.meta && !key.shift)) return false;
+  const placeholders: Array<{ kind: "file" | "image"; id: string; label: string; start: number; end: number }> = [];
+  for (const file of Array.from(app.fileContexts.keys()) as string[]) {
+    const label = getFileChipLabel(file);
+    let searchFrom = 0;
+    while (searchFrom < beforeText.length) {
+      const start = beforeText.indexOf(label, searchFrom);
+      if (start < 0) break;
+      placeholders.push({ kind: "file", id: file, label, start, end: start + label.length });
+      searchFrom = start + label.length;
+    }
+  }
+  for (let index = 0; index < (app.pendingImages?.length ?? 0); index++) {
+    const image = app.pendingImages[index];
+    const label = getImageChipLabel(index);
+    let searchFrom = 0;
+    while (searchFrom < beforeText.length) {
+      const start = beforeText.indexOf(label, searchFrom);
+      if (start < 0) break;
+      placeholders.push({ kind: "image", id: image.attachmentId ?? String(index), label, start, end: start + label.length });
+      searchFrom = start + label.length;
+    }
+  }
+  const target = placeholders.find((entry) => {
+    if (key.name === "backspace") return beforeCursor === entry.end || (beforeCursor === entry.end + 1 && beforeText[entry.end] === " ");
+    return beforeCursor === entry.start;
+  });
+  if (!target) return false;
+  let deleteStart = target.start;
+  let deleteEnd = target.end;
+  if (beforeText[deleteEnd] === " ") deleteEnd += 1;
+  else if (deleteStart > 0 && beforeText[deleteStart - 1] === " ") deleteStart -= 1;
+  app.input.setText(beforeText.slice(0, deleteStart) + beforeText.slice(deleteEnd), false);
+  app.input.setCursor(deleteStart);
+  if (target.kind === "image") {
+    app.pendingImages = app.pendingImages.filter((image: { attachmentId?: string }, index: number) =>
+      (image.attachmentId ?? String(index)) !== target.id,
+    );
+  } else {
+    app.fileContexts.delete(target.id);
+  }
+  ensureInlineChipElements(app);
+  syncComposerAttachmentsFromInput(app);
+  return true;
 }
 
 export { handlePaste } from "./app-input-routes.js";
@@ -326,8 +373,14 @@ export function handleKey(app: AppState, key: Keypress): void {
     app.cmdSuggestionCursor = 0;
   }
 
+  const beforeText = app.input.getText();
+  const beforeCursor = app.input.getCursor();
   const action = app.input.handleKey(key);
   if (action === "none") syncComposerAttachmentsFromInput(app);
+  if (action === "none" && app.input.getText() === beforeText && app.input.getCursor() === beforeCursor && tryDeleteVisiblePlaceholderFallback(app, key, beforeText, beforeCursor)) {
+    app.draw();
+    return;
+  }
   if (action === "none" && tryConsumeImageDraft(app)) {
     app.draw();
     return;

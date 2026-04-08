@@ -281,6 +281,19 @@ describe("image attachments", () => {
     expect(app.input.getText()).toBe("hey ");
   });
 
+  it("deletes a visible image placeholder on backspace even if chip metadata drifted", () => {
+    const app = new App() as any;
+    app.pendingImages = [{ attachmentId: "i1", mimeType: "image/png", data: "abc" }];
+    app.input.setText("hey [Image #1] ");
+    app.input.replaceElements([]);
+    app.input.setCursor("hey [Image #1] ".length);
+
+    app.handleKey({ name: "backspace", char: "", ctrl: false, meta: false, shift: false });
+
+    expect(app.pendingImages).toHaveLength(0);
+    expect(app.input.getText()).toBe("hey ");
+  });
+
   it("inserts selected @ files inline instead of pinning them to the prompt prefix", () => {
     const app = new App() as any;
     app.filePicker = { files: ["AGENTS.md"], filtered: ["AGENTS.md"], query: "AG", cursor: 0 };
