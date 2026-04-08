@@ -10,10 +10,33 @@ import { getSelectedTreeItem, getVisibleTreeRows, moveTreeSelection, pageTreeSel
 
 type AppState = any;
 
+function getFileChipLabel(file: string): string {
+  return `[${file.split(/[\\/]/).pop() || file}]`;
+}
+
+function snapCursorOutsideInlineFileChip(app: AppState): void {
+  const text = app.input.getText();
+  const cursor = app.input.getCursor();
+  for (const file of Array.from(app.fileContexts?.keys?.() ?? []) as string[]) {
+    const label = getFileChipLabel(file);
+    let searchFrom = 0;
+    while (searchFrom < text.length) {
+      const index = text.indexOf(label, searchFrom);
+      if (index < 0) break;
+      const end = index + label.length;
+      if (cursor > index && cursor < end) {
+        app.input.setCursor(end);
+        return;
+      }
+      searchFrom = end;
+    }
+  }
+}
+
 function stripInlineFileChipLabels(app: AppState, text: string): string {
   let sanitized = text;
   for (const file of Array.from(app.fileContexts?.keys?.() ?? []) as string[]) {
-    const label = `[${file.split(/[\\/]/).pop() || file}]`;
+    const label = getFileChipLabel(file);
     sanitized = sanitized.split(label).join("");
   }
   return sanitized.replace(/[ \t]+\n/g, "\n").replace(/[ \t]{2,}/g, " ").trim();
@@ -107,6 +130,7 @@ function looksLikeImageDraft(text: string): boolean {
 }
 
 export function tryConsumeImageDraft(app: AppState): boolean {
+  snapCursorOutsideInlineFileChip(app);
   const text = app.input.getText().trim();
   if (!text) return false;
   if (!tryLoadImageFromPath(app, text)) return false;
@@ -387,6 +411,7 @@ export function restoreQueuedMessage(app: AppState): void {
 }
 
 export function handlePaste(app: AppState, text: string): void {
+  snapCursorOutsideInlineFileChip(app);
   if (text.startsWith("data:image/")) {
     const match = text.match(/^data:image\/(\w+);base64,(.+)$/);
     if (match) {

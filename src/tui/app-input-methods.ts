@@ -18,6 +18,89 @@ import {
 
 type AppState = any;
 
+function getFileChipRanges(app: AppState): Array<{ file: string; start: number; end: number }> {
+  const text = app.input.getText();
+  const ranges: Array<{ file: string; start: number; end: number }> = [];
+  for (const file of Array.from(app.fileContexts.keys()) as string[]) {
+    const label = `[${file.split(/[\\/]/).pop() || file}]`;
+    let searchFrom = 0;
+    while (searchFrom < text.length) {
+      const index = text.indexOf(label, searchFrom);
+      if (index < 0) break;
+      ranges.push({ file, start: index, end: index + label.length });
+      searchFrom = index + label.length;
+    }
+  }
+  return ranges.sort((a, b) => a.start - b.start);
+}
+
+function getContainingFileChip(app: AppState, cursor: number): { file: string; start: number; end: number } | null {
+  for (const range of getFileChipRanges(app)) {
+    if (cursor > range.start && cursor < range.end) return range;
+  }
+  return null;
+}
+
+function getAdjacentFileChip(app: AppState, cursor: number, direction: "left" | "right" | "backspace" | "delete"): { file: string; start: number; end: number } | null {
+  for (const range of getFileChipRanges(app)) {
+    if ((direction === "left" || direction === "backspace") && cursor === range.end) return range;
+    if ((direction === "right" || direction === "delete") && cursor === range.start) return range;
+  }
+  return null;
+}
+
+function removeFileChip(app: AppState, range: { file: string; start: number; end: number }): void {
+  const text = app.input.getText();
+  let nextText = `${text.slice(0, range.start)}${text.slice(range.end)}`;
+  if (nextText.startsWith(" ")) nextText = nextText.slice(1);
+  nextText = nextText.replace(/ {2,}/g, " ");
+  app.input.setText(nextText, false);
+  app.input.setCursor(range.start);
+  app.fileContexts.delete(range.file);
+}
+
+function handleAtomicFileChipKey(app: AppState, key: Keypress): boolean {
+  const cursor = app.input.getCursor();
+  const containing = getContainingFileChip(app, cursor);
+  if (containing) {
+    if (key.name === "left") {
+      app.input.setCursor(containing.start);
+      app.draw();
+      return true;
+    }
+    if (key.name === "right") {
+      app.input.setCursor(containing.end);
+      app.draw();
+      return true;
+    }
+    if (key.name === "backspace" || key.name === "delete" || (!!key.char && !key.ctrl && !key.meta)) {
+      removeFileChip(app, containing);
+      app.draw();
+      return true;
+    }
+  }
+
+  if (key.name === "left" || key.name === "backspace") {
+    const adjacent = getAdjacentFileChip(app, cursor, key.name === "left" ? "left" : "backspace");
+    if (adjacent) {
+      if (key.name === "left") app.input.setCursor(adjacent.start);
+      else removeFileChip(app, adjacent);
+      app.draw();
+      return true;
+    }
+  }
+  if (key.name === "right" || key.name === "delete") {
+    const adjacent = getAdjacentFileChip(app, cursor, key.name === "right" ? "right" : "delete");
+    if (adjacent) {
+      if (key.name === "right") app.input.setCursor(adjacent.end);
+      else removeFileChip(app, adjacent);
+      app.draw();
+      return true;
+    }
+  }
+  return false;
+}
+
 export { handlePaste } from "./app-input-routes.js";
 
 function getPointerPosition(key: Keypress): { col: number; row: number } | null {
@@ -223,6 +306,8 @@ export function handleKey(app: AppState, key: Keypress): void {
   }
 
   if (handleEscapeAndBindings(app, key)) return;
+
+  if (handleAtomicFileChipKey(app, key)) return;
 
   if (key.name === "backspace" && !key.ctrl && !key.meta && !key.shift && app.input.getText().length === 0) {
     const fileKeys = Array.from(app.fileContexts.keys());

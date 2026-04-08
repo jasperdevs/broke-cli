@@ -237,6 +237,24 @@ describe("image attachments", () => {
     expect(submitted).toBe("check now");
   });
 
+  it("keeps pasted image paths out of the middle of an inline file chip", () => {
+    updateSetting("terminal", { ...getSettings().terminal, showImages: true });
+    const app = new App() as any;
+    const dir = mkdtempSync(join(tmpdir(), "brokecli-image-"));
+    tempDirs.push(dir);
+    const imagePath = join(dir, "inside-chip.png");
+    writeFileSync(imagePath, "fakepng", "utf-8");
+
+    app.fileContexts.set("exports.ts", "export {}");
+    app.input.setText("[exports.ts] ");
+    app.input.setCursor(4);
+
+    app.handlePaste(imagePath);
+
+    expect(app.pendingImages).toHaveLength(1);
+    expect(app.input.getText()).toBe("[exports.ts] ");
+  });
+
   it("submits image-only prompts instead of dropping the attachment", () => {
     const app = new App() as any;
     let submitted: { text: string; images?: Array<{ mimeType: string; data: string }> } | null = null;
