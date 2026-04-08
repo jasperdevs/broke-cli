@@ -116,6 +116,22 @@ describe("image attachments", () => {
     expect(app.input.getText()).toBe("");
   });
 
+  it("clears a mirrored image path that arrives one tick after attachment", async () => {
+    updateSetting("terminal", { ...getSettings().terminal, showImages: true });
+    const app = new App() as any;
+    const dir = mkdtempSync(join(tmpdir(), "brokecli-image-"));
+    tempDirs.push(dir);
+    const imagePath = join(dir, "delayed.png");
+    writeFileSync(imagePath, "fakepng", "utf-8");
+
+    app.handlePaste(imagePath);
+    app.input.setText(imagePath);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(app.pendingImages).toHaveLength(1);
+    expect(app.input.getText()).toBe("");
+  });
+
   it("auto-attaches an image path typed into an empty draft", () => {
     updateSetting("terminal", { ...getSettings().terminal, showImages: true });
     const app = new App() as any;

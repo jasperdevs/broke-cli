@@ -46,6 +46,19 @@ function tryLoadImageFromPath(app: AppState, rawText: string): boolean {
   }
 }
 
+function stripMirroredImagePathFromDraft(app: AppState, rawText: string): void {
+  const normalizedPath = normalizePastedPath(rawText);
+  const currentText = app.input.getText();
+  const trimmedCurrent = currentText.trim();
+  if (trimmedCurrent === normalizedPath) {
+    app.input.clear();
+    return;
+  }
+  if (currentText.endsWith(normalizedPath)) {
+    app.input.setText(currentText.slice(0, currentText.length - normalizedPath.length).trimEnd(), true);
+  }
+}
+
 export function tryConsumeImageDraft(app: AppState): boolean {
   const text = app.input.getText().trim();
   if (!text) return false;
@@ -328,14 +341,9 @@ export function handlePaste(app: AppState, text: string): void {
   }
 
   if (tryLoadImageFromPath(app, text)) {
-    const normalizedPath = normalizePastedPath(text);
-    const currentText = app.input.getText();
-    const trimmedCurrent = currentText.trim();
-    if (trimmedCurrent === normalizedPath) {
-      app.input.clear();
-    } else if (currentText.endsWith(normalizedPath)) {
-      app.input.setText(currentText.slice(0, currentText.length - normalizedPath.length).trimEnd(), true);
-    }
+    stripMirroredImagePathFromDraft(app, text);
+    queueMicrotask(() => stripMirroredImagePathFromDraft(app, text));
+    setTimeout(() => stripMirroredImagePathFromDraft(app, text), 0);
     app.draw();
     return;
   }
