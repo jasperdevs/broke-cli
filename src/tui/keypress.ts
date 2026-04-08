@@ -344,7 +344,7 @@ export class KeypressHandler {
         kp.name = "linefeed";
       }
 
-      const isPlainBurstCandidate = !kp.ctrl && !kp.meta && (
+      const isPlainBurstCandidate = !kp.ctrl && !kp.meta && kp.name !== "backspace" && kp.name !== "delete" && (
         (kp.char && kp.char.length > 0)
         || kp.name === "linefeed"
       );
