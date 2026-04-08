@@ -18,7 +18,7 @@ export type TurnArchetype =
   | "research"
   | "planning";
 
-export type PromptProfile = "full" | "casual";
+export type PromptProfile = "full" | "casual" | "lean" | "edit";
 export type ScaffoldSource = "builtin" | "planned";
 
 export interface PlannerContext {
@@ -61,13 +61,13 @@ const PLANNABLE_ARCHETYPES = new Set<TurnArchetype>(["question", "explore", "she
 
 const STATIC_SCAFFOLDS: Record<TurnArchetype, string> = {
   casual: "lane cheap\nanswer brief\nno tools",
-  question: "lane direct\nanswer first\nuse tools only if clearly needed",
-  explore: "lane cheap\nsearch first\nread only what matches\nno broad shell search",
-  shell: "lane cheap\nprefer native read/search tools\nuse shell only for real commands",
-  edit: "lane main\nread targets first\nmake the smallest correct edit\nverify once",
-  bugfix: "lane main\nfind root cause from evidence\npatch once\nverify narrowly",
-  review: "lane cheap\nstay read-only\nreport concrete issues ordered by severity",
-  research: "lane cheap\nprefer docs plus local evidence\nreturn verified facts only",
+  question: "lane direct\nanswer first\nuse tools only if clearly needed\nfinal one short answer",
+  explore: "lane cheap\nsearch first\nread only what matches\nanswer only what was asked",
+  shell: "lane cheap\nprefer native read/search tools\nuse shell only for real commands\nfinal one short answer",
+  edit: "lane main\nread targets first\nmake the smallest correct edit\nverify once\nfinal two short lines",
+  bugfix: "lane main\nfind root cause from evidence\npatch once\nverify narrowly\nfinal two short lines",
+  review: "lane cheap\nstay read-only\nreport concrete issues ordered by severity\nno recap",
+  research: "lane cheap\nprefer docs plus local evidence\nreturn verified facts only\nkeep it short",
   planning: "lane cheap\nproduce bounded steps risks and checks\nno long prose",
 };
 
@@ -113,7 +113,7 @@ function getBuiltInPolicy(archetype: TurnArchetype): TurnPolicy {
         scaffold: STATIC_SCAFFOLDS[archetype],
         scaffoldSource: "builtin",
         preferSmallExecutor: true,
-        promptProfile: "full",
+        promptProfile: "lean",
         historyWindow: null,
       };
     case "explore":
@@ -124,7 +124,7 @@ function getBuiltInPolicy(archetype: TurnArchetype): TurnPolicy {
         scaffold: STATIC_SCAFFOLDS[archetype],
         scaffoldSource: "builtin",
         preferSmallExecutor: true,
-        promptProfile: "full",
+        promptProfile: "lean",
         historyWindow: null,
       };
     case "shell":
@@ -135,7 +135,7 @@ function getBuiltInPolicy(archetype: TurnArchetype): TurnPolicy {
         scaffold: STATIC_SCAFFOLDS[archetype],
         scaffoldSource: "builtin",
         preferSmallExecutor: true,
-        promptProfile: "full",
+        promptProfile: "lean",
         historyWindow: null,
       };
     case "review":
@@ -146,7 +146,7 @@ function getBuiltInPolicy(archetype: TurnArchetype): TurnPolicy {
         scaffold: STATIC_SCAFFOLDS[archetype],
         scaffoldSource: "builtin",
         preferSmallExecutor: true,
-        promptProfile: "full",
+        promptProfile: "lean",
         historyWindow: null,
       };
     case "research":
@@ -157,7 +157,7 @@ function getBuiltInPolicy(archetype: TurnArchetype): TurnPolicy {
         scaffold: STATIC_SCAFFOLDS[archetype],
         scaffoldSource: "builtin",
         preferSmallExecutor: true,
-        promptProfile: "full",
+        promptProfile: "lean",
         historyWindow: null,
       };
     case "planning":
@@ -168,7 +168,7 @@ function getBuiltInPolicy(archetype: TurnArchetype): TurnPolicy {
         scaffold: STATIC_SCAFFOLDS[archetype],
         scaffoldSource: "builtin",
         preferSmallExecutor: true,
-        promptProfile: "full",
+        promptProfile: "lean",
         historyWindow: null,
       };
     case "edit":
@@ -179,7 +179,7 @@ function getBuiltInPolicy(archetype: TurnArchetype): TurnPolicy {
         scaffold: STATIC_SCAFFOLDS[archetype],
         scaffoldSource: "builtin",
         preferSmallExecutor: false,
-        promptProfile: "full",
+        promptProfile: "edit",
         historyWindow: null,
       };
     case "bugfix":
@@ -191,7 +191,7 @@ function getBuiltInPolicy(archetype: TurnArchetype): TurnPolicy {
         scaffold: STATIC_SCAFFOLDS.bugfix,
         scaffoldSource: "builtin",
         preferSmallExecutor: false,
-        promptProfile: "full",
+        promptProfile: "edit",
         historyWindow: null,
       };
   }

@@ -21,6 +21,7 @@ describe("turn policy", () => {
     expect(policy.allowedTools).not.toContain("agent");
     expect(policy.allowedTools).not.toContain("todoWrite");
     expect(policy.maxToolSteps).toBeLessThanOrEqual(2);
+    expect(policy.promptProfile).toBe("lean");
   });
 
   it("keeps edit turns on the broader edit-capable tool set", () => {
@@ -29,6 +30,7 @@ describe("turn policy", () => {
     expect(policy.allowedTools).toContain("editFile");
     expect(policy.allowedTools).toContain("writeFile");
     expect(policy.maxToolSteps).toBeGreaterThanOrEqual(6);
+    expect(policy.promptProfile).toBe("edit");
   });
 
   it("drops writeFile for existing-file edit requests to enforce patch-first behavior", () => {

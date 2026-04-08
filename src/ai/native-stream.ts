@@ -36,20 +36,18 @@ function formatNativePrompt(system: string, messages: NativeMessage[]): string {
   const conversation = messages
     .map((message) => {
       const imageNote = message.images?.length
-        ? `\n[${message.images.length} image(s) were attached to this turn in the original session.]`
+        ? `\n[${message.images.length} image attachment(s)]`
         : "";
-      return `${message.role.toUpperCase()}:\n${message.content}${imageNote}`;
+      return `${message.role === "user" ? "USER" : "ASSISTANT"}\n${message.content}${imageNote}`;
     })
     .join("\n\n");
 
   return [
-    "System instructions:",
+    "SYSTEM",
     system.trim(),
-    "",
-    "Conversation transcript:",
+    "MESSAGES",
     conversation,
-    "",
-    "Respond as the assistant to the latest user message.",
+    "Reply to the latest USER message.",
   ].join("\n");
 }
 

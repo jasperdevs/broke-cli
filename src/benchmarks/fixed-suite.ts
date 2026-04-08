@@ -11,6 +11,7 @@ import { getTools, type ToolName } from "../tools/registry.js";
 import { runModelTurn } from "../cli/turn-runner.js";
 import { resolveOneShotModel } from "../cli/oneshot.js";
 import { rebuildSmallModelState } from "../cli/runtime-models.js";
+import { resolveTurnPolicy } from "../core/turn-policy.js";
 import { getFixedBenchmarkTasks, type FixedBenchmarkTask, type TaskCategory, type TaskVerification } from "./fixed-suite-task-definitions.js";
 export { getFixedBenchmarkTasks } from "./fixed-suite-task-definitions.js";
 const DEFAULT_MAX_TURNS = 3;
@@ -288,7 +289,6 @@ export async function runFixedBenchmarkSuite(options: FixedBenchmarkOptions = {}
       const session = new Session(`benchmark-${task.id}-${Date.now()}`);
       session.setProviderModel(activeModel.provider.name, modelId);
       const app = new BenchmarkTurnApp();
-      const systemPrompt = buildSystemPrompt(resolve(workspace), providerId, mode, "auto", "full");
       const turns: BenchmarkTurnResult[] = [];
       let lastToolCalls: string[] = [];
       let lastActivityTime = Date.now();
@@ -302,6 +302,14 @@ export async function runFixedBenchmarkSuite(options: FixedBenchmarkOptions = {}
         const previousCwd = process.cwd();
         process.chdir(workspace);
         try {
+          const policy = await resolveTurnPolicy(
+            prompt,
+            lastToolCalls,
+            activeModel.runtime === "sdk" && activeModel.model
+              ? { model: activeModel.model, modelId, providerId }
+              : null,
+          );
+          const systemPrompt = buildSystemPrompt(resolve(workspace), providerId, mode, "auto", policy.promptProfile);
           const outcome = await runModelTurn({
             app,
             session,

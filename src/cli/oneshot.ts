@@ -2,7 +2,7 @@ import type { LanguageModel } from "ai";
 import { pickDefault, type DetectedProvider } from "../ai/detect.js";
 import { startNativeStream } from "../ai/native-stream.js";
 import { startStream } from "../ai/stream.js";
-import { buildSystemPrompt, buildTaskExecutionAddendum, resolveCavemanLevel } from "../core/context.js";
+import { buildSystemPrompt, resolveCavemanLevel } from "../core/context.js";
 import { Session } from "../core/session.js";
 import { getTools, type ToolName } from "../tools/registry.js";
 import { getSettings, type Mode } from "../core/config.js";
@@ -10,6 +10,7 @@ import { resolveTurnPolicy } from "../core/turn-policy.js";
 import type { ProviderRegistry } from "../ai/provider-registry.js";
 import type { ModelHandle } from "../ai/providers.js";
 import { tryCsvToParquetFastPath, tryLostGitRecoveryFastPath } from "./oneshot-fastpath.js";
+import { applyTurnFrame } from "./turn-frame.js";
 
 function canUseSdkTools(model: ModelHandle): boolean {
   return model.runtime === "sdk"
@@ -115,17 +116,20 @@ export async function runOneShotPrompt(options: {
     resolveCavemanLevel(getSettings().cavemanLevel ?? "auto", prompt),
     policy.promptProfile,
   );
-  const systemPromptBase = opts.systemPrompt
+  const systemPrompt = opts.systemPrompt
     ? opts.systemPrompt
     : opts.appendSystemPrompt
       ? `${baseSystemPrompt}\n\n${opts.appendSystemPrompt}`
       : baseSystemPrompt;
-  const systemPrompt = `${systemPromptBase}\n\nExecution scaffold (${policy.archetype}): ${policy.scaffold}`;
-  const taskAddendum = buildTaskExecutionAddendum(prompt);
-  const finalSystemPrompt = taskAddendum ? `${systemPrompt}\n\n${taskAddendum}` : systemPrompt;
-  const turnMessages = policy.historyWindow && session.getChatMessages().length > policy.historyWindow
+  const baseMessages = policy.historyWindow && session.getChatMessages().length > policy.historyWindow
     ? session.getChatMessages().slice(-policy.historyWindow)
     : session.getChatMessages();
+  const turnMessages = applyTurnFrame(
+    baseMessages,
+    prompt,
+    `${policy.archetype}: ${policy.scaffold}`,
+    policy.allowedTools,
+  );
 
   let content = "";
   let usage = { inputTokens: 0, outputTokens: 0, cost: 0 };
@@ -160,7 +164,7 @@ export async function runOneShotPrompt(options: {
       {
         providerId: activeModel.provider.id as "anthropic" | "codex",
         modelId,
-        system: finalSystemPrompt,
+        system: systemPrompt,
         messages: turnMessages,
         enableThinking: getSettings().enableThinking,
         thinkingLevel: getSettings().thinkingLevel || "low",
@@ -173,7 +177,7 @@ export async function runOneShotPrompt(options: {
       {
         model: activeModel.model as LanguageModel,
         modelId,
-        system: finalSystemPrompt,
+        system: systemPrompt,
         messages: turnMessages,
         tools: canUseSdkTools(activeModel) ? tools : undefined,
         maxToolSteps: policy.maxToolSteps,

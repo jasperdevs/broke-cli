@@ -146,7 +146,7 @@ function resolveTurnExecution(options: {
   const optimizedMessages = applyTurnFrame(
     injectTransientUserContext(optimizeMessages(session.getChatMessages()), transientUserContext),
     text,
-    `Execution scaffold (${policy.archetype}): ${policy.scaffold}`,
+    `${policy.archetype}: ${policy.scaffold}`,
     policy.allowedTools,
   );
   const ctxTokens = getTotalContextTokens(optimizedMessages, turnSystemPrompt, executionModelId);

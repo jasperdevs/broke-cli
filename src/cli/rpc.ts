@@ -12,6 +12,7 @@ import { ProviderRegistry } from "../ai/provider-registry.js";
 import type { ModelHandle } from "../ai/providers.js";
 import { loadExtensions } from "../core/extensions.js";
 import type { ToolName } from "../tools/registry.js";
+import { applyTurnFrame } from "./turn-frame.js";
 
 function canUseSdkTools(model: ModelHandle): boolean {
   return model.runtime === "sdk"
@@ -157,15 +158,20 @@ export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts:
       resolveCavemanLevel(getSettings().cavemanLevel ?? "auto", msg.content),
       policy.promptProfile,
     );
-    const systemPromptSeed = opts.systemPrompt
+    const systemPrompt = opts.systemPrompt
       ? opts.systemPrompt
       : opts.appendSystemPrompt
         ? `${baseSystemPrompt}\n\n${opts.appendSystemPrompt}`
         : baseSystemPrompt;
-    const systemPrompt = `${systemPromptSeed}\n\nExecution scaffold (${policy.archetype}): ${policy.scaffold}`;
-    const turnMessages = policy.historyWindow && session.getChatMessages().length > policy.historyWindow
+    const baseMessages = policy.historyWindow && session.getChatMessages().length > policy.historyWindow
       ? session.getChatMessages().slice(-policy.historyWindow)
       : session.getChatMessages();
+    const turnMessages = applyTurnFrame(
+      baseMessages,
+      msg.content,
+      `${policy.archetype}: ${policy.scaffold}`,
+      policy.allowedTools,
+    );
 
     if (activeModel.runtime === "native-cli") {
       await startNativeStream(

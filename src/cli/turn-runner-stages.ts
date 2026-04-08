@@ -70,7 +70,7 @@ export async function compactForModel(
 
 export function selectMessagesForTurn(
   messages: TurnChatMessage[],
-  policy: { promptProfile: "full" | "casual"; historyWindow: number | null },
+  policy: { promptProfile: "full" | "casual" | "lean" | "edit"; historyWindow: number | null },
   optimizeMessages: (messages: TurnChatMessage[]) => TurnChatMessage[],
   budget?: { maxTokens: number; modelId?: string },
 ): TurnChatMessage[] {
@@ -214,7 +214,7 @@ export function prepareTurnContext(options: {
       modelId: previewTarget.executionModelId,
     }), transientUserContext),
     text,
-    `Execution scaffold (${policy.archetype}): ${policy.scaffold}`,
+    `${policy.archetype}: ${policy.scaffold}`,
     policy.allowedTools,
   );
   const contextTokens = getTotalContextTokens(selectedMessages, turnSystemPrompt, currentModelId);
@@ -261,7 +261,7 @@ export async function maybeAutoCompactTurnContext(options: {
         modelId: currentModelId,
       }), transientUserContext),
       "",
-      `Execution scaffold (${policy.archetype}): ${policy.scaffold}`,
+      `${policy.archetype}: ${policy.scaffold}`,
       policy.allowedTools,
     );
     const contextTokens = getTotalContextTokens(selectedMessages, prepared.turnSystemPrompt, currentModelId);

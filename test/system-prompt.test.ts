@@ -2,44 +2,39 @@ import { describe, expect, it } from "vitest";
 import { buildSystemPrompt, buildTaskExecutionAddendum } from "../src/core/context.js";
 
 describe("system prompt", () => {
-  it("explicitly allows benign non-coding requests instead of refusing them", () => {
-    const prompt = buildSystemPrompt(process.cwd(), "openai", "build", "off");
+  it("keeps the lean profile short and direct", () => {
+    const prompt = buildSystemPrompt(process.cwd(), "openai", "build", "off", "lean");
 
-    expect(prompt).toContain("Never refuse a benign user request just because it is not code.");
-    expect(prompt).toContain("writing, explanation, brainstorming, planning, or general help");
+    expect(prompt).toContain("You are a terminal coding assistant.");
+    expect(prompt).toContain("Answer directly.");
+    expect(prompt).toContain("Keep the final answer short and factual.");
+    expect(prompt).not.toContain("--- AGENTS.md ---");
+    expect(prompt).not.toContain("<autonomy>");
   });
 
-  it("forbids exposing raw tool protocol text to the user", () => {
-    const prompt = buildSystemPrompt(process.cwd(), "openai", "build", "off");
+  it("keeps the edit profile patch-oriented and brief", () => {
+    const prompt = buildSystemPrompt(process.cwd(), "openai", "build", "off", "edit");
 
-    expect(prompt).toContain("Never expose raw tool calls");
-    expect(prompt).toContain("Never print pseudo-tool calls");
-    expect(prompt).toContain("do not fake it");
-  });
-
-  it("tells the agent to keep required long-running services alive for verification", () => {
-    const prompt = buildSystemPrompt(process.cwd(), "openai", "build", "off");
-
-    expect(prompt).toContain("long-running process");
-    expect(prompt).toContain("leave it running");
-    expect(prompt).toContain("nohup");
-    expect(prompt).toContain("do not rely on plain `&`");
+    expect(prompt).toContain("inspect first, then make the smallest correct change");
+    expect(prompt).toContain("Prefer editFile for existing files");
+    expect(prompt).toContain("reply in at most 2 short lines");
   });
 
   it("uses a much smaller lightweight prompt for casual turns", () => {
-    const fullPrompt = buildSystemPrompt(process.cwd(), "openai", "build", "off", "full");
+    const leanPrompt = buildSystemPrompt(process.cwd(), "openai", "build", "off", "lean");
     const casualPrompt = buildSystemPrompt(process.cwd(), "openai", "build", "off", "casual");
 
-    expect(casualPrompt).toContain("This is a lightweight casual turn.");
-    expect(casualPrompt).not.toContain("<tool-tips>");
+    expect(casualPrompt).toContain("Casual turn: answer naturally in 1-2 short sentences.");
     expect(casualPrompt).not.toContain("--- AGENTS.md ---");
-    expect(casualPrompt.length).toBeLessThan(fullPrompt.length);
+    expect(casualPrompt.length).toBeLessThan(leanPrompt.length);
   });
 
-  it("does not advertise tools that are not registered in the normal runtime", () => {
-    const prompt = buildSystemPrompt(process.cwd(), "openai", "build", "off");
+  it("keeps full profile richer than lean", () => {
+    const fullPrompt = buildSystemPrompt(process.cwd(), "openai", "build", "off", "full");
+    const leanPrompt = buildSystemPrompt(process.cwd(), "openai", "build", "off", "lean");
 
-    expect(prompt).not.toContain("askUser");
+    expect(fullPrompt).toContain("<autonomy>");
+    expect(fullPrompt.length).toBeGreaterThan(leanPrompt.length);
   });
 
   it("adds detached-launch rules for server tasks", () => {
