@@ -89,22 +89,10 @@ export function listThemes(): Theme[] {
   return [toTheme(BASE_PALETTE)];
 }
 
-export function getTheme(_themeKey?: string | null): Theme {
-  return toTheme(getModePalette());
-}
-
-export function getThemeNames(): string[] {
-  return [BASE_PALETTE.key];
-}
-
 export function currentTheme(): Theme {
   return toTheme(getModePalette());
 }
 
 export function getPlanColor(): string {
   return currentTheme().plan;
-}
-
-export function setPreviewTheme(_themeKey: string | null): void {
-  // Theme switching is intentionally disabled for now.
 }

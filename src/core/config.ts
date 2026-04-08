@@ -14,7 +14,6 @@ export type {
   PackageFilterSource,
   PackageSource,
   CompactionSettings,
-  BranchSummarySettings,
   RetrySettings,
   TerminalSettings,
   ImageSettings,
@@ -43,7 +42,6 @@ function mergeSettings(base: Partial<Settings> | undefined, override: Partial<Se
     ...(override ?? {}),
     thinkingBudgets: { ...(base?.thinkingBudgets ?? {}), ...(override?.thinkingBudgets ?? {}) },
     compaction: { ...(base?.compaction ?? {}), ...(override?.compaction ?? {}) },
-    branchSummary: { ...(base?.branchSummary ?? {}), ...(override?.branchSummary ?? {}) },
     retry: { ...(base?.retry ?? {}), ...(override?.retry ?? {}) },
     terminal: { ...(base?.terminal ?? {}), ...(override?.terminal ?? {}) },
     images: { ...(base?.images ?? {}), ...(override?.images ?? {}) },
@@ -109,17 +107,20 @@ export function loadConfig(): BrokeConfig {
 
 export function getSettings(): Settings {
   const config = loadConfig();
+  const legacyDisabledTools = Array.isArray((config.settings as Record<string, unknown> | undefined)?.deniedTools)
+    ? ((config.settings as Record<string, unknown>).deniedTools as string[])
+    : [];
   const merged = {
     ...DEFAULT_SETTINGS,
     ...mergeSettings(DEFAULT_SETTINGS, config.settings),
     ...runtimeSettings,
     thinkingBudgets: { ...DEFAULT_SETTINGS.thinkingBudgets, ...config.settings?.thinkingBudgets, ...runtimeSettings.thinkingBudgets },
     compaction: { ...DEFAULT_SETTINGS.compaction, ...config.settings?.compaction, ...runtimeSettings.compaction },
-    branchSummary: { ...DEFAULT_SETTINGS.branchSummary, ...config.settings?.branchSummary, ...runtimeSettings.branchSummary },
     retry: { ...DEFAULT_SETTINGS.retry, ...config.settings?.retry, ...runtimeSettings.retry },
     terminal: { ...DEFAULT_SETTINGS.terminal, ...config.settings?.terminal, ...runtimeSettings.terminal },
     images: { ...DEFAULT_SETTINGS.images, ...config.settings?.images, ...runtimeSettings.images },
     markdown: { ...DEFAULT_SETTINGS.markdown, ...config.settings?.markdown, ...runtimeSettings.markdown },
+    disabledTools: [...new Set([...(config.settings?.disabledTools ?? []), ...legacyDisabledTools, ...(runtimeSettings.disabledTools ?? [])])],
   };
   return merged as Settings;
 }

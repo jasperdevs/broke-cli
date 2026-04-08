@@ -10,17 +10,14 @@ type ParsedModelArg = { provider?: string; model?: string; thinking?: string };
 type RuntimeProgramOptions = {
   sessionDir?: string;
   session?: boolean;
-  theme?: string;
   models?: string;
   verbose?: boolean;
   extensions?: boolean;
   skills?: boolean;
   promptTemplates?: boolean;
-  themes?: boolean;
   extension?: string[];
   skill?: string[];
   promptTemplate?: string[];
-  themePath?: string[];
   apiKey?: string;
   provider?: string;
   exportOut?: string;
@@ -31,24 +28,21 @@ export function applyProgramRuntimeSettings(opts: RuntimeProgramOptions, parsedM
   clearRuntimeSettings();
   if (opts.sessionDir) setRuntimeSettings({ sessionDir: opts.sessionDir });
   if (opts.session === false) setRuntimeSettings({ autoSaveSessions: false });
-  if (thinkingOverride) setRuntimeSettings({ thinkingLevel: thinkingOverride, enableThinking: thinkingOverride !== "off", defaultThinkingLevel: thinkingOverride });
-  if (opts.theme) setRuntimeSettings({ theme: opts.theme });
+  if (thinkingOverride) setRuntimeSettings({ thinkingLevel: thinkingOverride, enableThinking: thinkingOverride !== "off" });
   if (opts.models) setRuntimeSettings({ enabledModels: opts.models.split(",").map((entry) => entry.trim()).filter(Boolean) });
   if (opts.verbose) setRuntimeSettings({ quietStartup: false });
   if (opts.extensions === false) setRuntimeSettings({ discoverExtensions: false });
   if (opts.skills === false) setRuntimeSettings({ discoverSkills: false });
   if (opts.promptTemplates === false) setRuntimeSettings({ discoverPrompts: false });
-  if (opts.themes === false) setRuntimeSettings({ discoverThemes: false });
   if (opts.extension?.length) setRuntimeSettings({ extensions: opts.extension });
   if (opts.skill?.length) setRuntimeSettings({ skills: opts.skill });
   if (opts.promptTemplate?.length) setRuntimeSettings({ prompts: opts.promptTemplate });
-  if (opts.themePath?.length) setRuntimeSettings({ themes: opts.themePath });
   if (opts.apiKey) setRuntimeProviderApiKey(parsedModel.provider ?? opts.provider ?? "openai", opts.apiKey);
 }
 
 export function applyRuntimeToolSelection(toolsOption: string | undefined, toolsDisabled: boolean): void {
   if (toolsDisabled) {
-    setRuntimeSettings({ deniedTools: [...TOOL_NAMES] });
+    setRuntimeSettings({ disabledTools: [...TOOL_NAMES] });
     return;
   }
   if (!toolsOption) return;
@@ -60,7 +54,7 @@ export function applyRuntimeToolSelection(toolsOption: string | undefined, tools
     else allowSet.add(entry.startsWith("+") ? entry.slice(1) : entry);
   }
   const denied = TOOL_NAMES.filter((tool: ToolName) => (allowSet.size > 0 && !allowSet.has(tool)) || denySet.has(tool));
-  setRuntimeSettings({ deniedTools: [...new Set<string>(denied)] });
+  setRuntimeSettings({ disabledTools: [...new Set<string>(denied)] });
 }
 
 export function runExportMode(sessionId: string, sessionDir: string | undefined, exportOut?: string): void {

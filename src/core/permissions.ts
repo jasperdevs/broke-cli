@@ -1,8 +1,8 @@
 import { getSettings, updateSetting } from "./config.js";
 
 export function isToolAllowed(name: string): boolean {
-  const denied = new Set(getSettings().deniedTools ?? []);
-  return !denied.has(name);
+  const disabled = new Set(getSettings().disabledTools ?? []);
+  return !disabled.has(name);
 }
 
 export function isExtensionEnabled(name: string): boolean {

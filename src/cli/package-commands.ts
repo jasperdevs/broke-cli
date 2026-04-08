@@ -24,7 +24,6 @@ function renderConfigOverview(): string {
     lines.push(`  ext:    ${resources.extensions.length > 0 ? resources.extensions.join(", ") : "-"}`);
     lines.push(`  skills: ${resources.skills.length > 0 ? resources.skills.join(", ") : "-"}`);
     lines.push(`  prompts:${resources.prompts.length > 0 ? ` ${resources.prompts.join(", ")}` : " -"}`);
-    lines.push(`  themes: ${resources.themes.length > 0 ? resources.themes.join(", ") : "-"}`);
     lines.push("");
   }
   return lines.length > 0 ? lines.join("\n").trimEnd() : "No installed packages.";
@@ -102,7 +101,7 @@ export function registerPackageCommands(program: Command): void {
     .command("config")
     .argument("[source]")
     .option("-l, --local", "edit project package settings")
-    .option("--type <type>", "resource type: extensions, skills, prompts, themes")
+    .option("--type <type>", "resource type: extensions, skills, prompts")
     .option("--patterns <patterns>", "comma-separated filter patterns")
     .description("Inspect or configure package resources")
     .action((source: string | undefined, opts: { local?: boolean; type?: string; patterns?: string }) => {
@@ -111,11 +110,11 @@ export function registerPackageCommands(program: Command): void {
         process.stdout.write(`${renderConfigOverview()}\n\nconfig files:\n  global: ${paths.global}\n  project: ${paths.project}\n`);
         return;
       }
-      if (!["extensions", "skills", "prompts", "themes"].includes(opts.type)) {
-        throw new Error("type must be extensions, skills, prompts, or themes");
+      if (!["extensions", "skills", "prompts"].includes(opts.type)) {
+        throw new Error("type must be extensions, skills, or prompts");
       }
       const patterns = opts.patterns.split(",").map((entry) => entry.trim()).filter(Boolean);
-      setPackageResourceConfig(source, opts.type as "extensions" | "skills" | "prompts" | "themes", patterns, opts.local ? "project" : "global");
+      setPackageResourceConfig(source, opts.type as "extensions" | "skills" | "prompts", patterns, opts.local ? "project" : "global");
       process.stdout.write(`Updated ${opts.type} filters for ${source}\n`);
     });
 }

@@ -229,7 +229,7 @@ export async function updatePackages(source?: string): Promise<void> {
 
 export function setPackageResourceConfig(
   source: string,
-  type: "extensions" | "skills" | "prompts" | "themes",
+  type: "extensions" | "skills" | "prompts",
   patterns: string[],
   scope: "global" | "project" = "global",
 ): void {
@@ -243,13 +243,12 @@ export function setPackageResourceConfig(
   savePackages(next, scope);
 }
 
-export function describePackageResources(root: string): { extensions: string[]; skills: string[]; prompts: string[]; themes: string[] } {
+export function describePackageResources(root: string): { extensions: string[]; skills: string[]; prompts: string[] } {
   const packageJsonPath = join(root, "package.json");
   const defaults = {
     extensions: existsSync(join(root, "extensions")) ? ["extensions"] : [],
     skills: existsSync(join(root, "skills")) ? ["skills"] : [],
     prompts: existsSync(join(root, "prompts")) ? ["prompts"] : [],
-    themes: existsSync(join(root, "themes")) ? ["themes"] : [],
   };
   if (!existsSync(packageJsonPath)) return defaults;
   try {
@@ -259,7 +258,6 @@ export function describePackageResources(root: string): { extensions: string[]; 
       extensions: normalizeManifestEntries(manifest.extensions, defaults.extensions),
       skills: normalizeManifestEntries(manifest.skills, defaults.skills),
       prompts: normalizeManifestEntries(manifest.prompts, defaults.prompts),
-      themes: normalizeManifestEntries(manifest.themes, defaults.themes),
     };
   } catch {
     return defaults;

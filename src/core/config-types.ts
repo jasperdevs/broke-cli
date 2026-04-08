@@ -10,7 +10,6 @@ export interface PackageFilterSource {
   extensions?: string[];
   skills?: string[];
   prompts?: string[];
-  themes?: string[];
 }
 
 export type PackageSource = string | PackageFilterSource;
@@ -19,11 +18,6 @@ export interface CompactionSettings {
   enabled: boolean;
   reserveTokens: number;
   keepRecentTokens: number;
-}
-
-export interface BranchSummarySettings {
-  reserveTokens: number;
-  skipPrompt: boolean;
 }
 
 export interface RetrySettings {
@@ -60,34 +54,28 @@ export interface Settings {
   hideSidebar: boolean;
   autoRoute: boolean;
   scopedModels: string[];
-  favoriteThemes: string[];
   lastModel: string;
   mode: Mode;
   modeSwitching: ModeSwitchingPolicy;
   cavemanLevel: CavemanLevel;
-  theme: string;
   autoLint: boolean;
   autoTest: boolean;
   autoFixValidation: boolean;
   lintCommand: string;
   testCommand: string;
-  deniedTools: string[];
+  disabledTools: string[];
   disabledExtensions: string[];
   quietStartup: boolean;
   editorPaddingX: number;
   autocompleteMaxVisible: number;
   showHardwareCursor: boolean;
   sessionDir: string;
-  defaultThinkingLevel: ThinkingLevel;
   hideThinkingBlock: boolean;
   thinkingBudgets: Partial<Record<Exclude<ThinkingLevel, "off">, number>>;
   compaction: CompactionSettings;
-  branchSummary: BranchSummarySettings;
   retry: RetrySettings;
   terminal: TerminalSettings;
   images: ImageSettings;
-  shellPath: string;
-  shellCommandPrefix: string;
   npmCommand: string[];
   enabledModels: string[];
   markdown: MarkdownSettings;
@@ -95,12 +83,10 @@ export interface Settings {
   extensions: string[];
   skills: string[];
   prompts: string[];
-  themes: string[];
   enableSkillCommands: boolean;
   discoverExtensions: boolean;
   discoverSkills: boolean;
   discoverPrompts: boolean;
-  discoverThemes: boolean;
 }
 
 export interface BrokeConfig {

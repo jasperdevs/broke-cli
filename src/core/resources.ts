@@ -4,7 +4,6 @@ import { homedir } from "os";
 import { describePackageResources, resolvePackageRoots } from "./package-manager.js";
 import { getSettings, type PackageSource } from "./config.js";
 import { isExtensionEnabled } from "./permissions.js";
-import type { ThemePalette } from "./theme-types.js";
 
 export interface ExtensionResource {
   id: string;
@@ -25,14 +24,6 @@ export interface SkillResource {
   description: string;
   path: string;
   baseDir: string;
-  source: string;
-}
-
-export interface ThemeResource {
-  key: string;
-  label: string;
-  palette: ThemePalette;
-  path: string;
   source: string;
 }
 
@@ -112,11 +103,11 @@ function packageScans(): Array<{ source: PackageSource; scope: "global" | "proje
   }));
 }
 
-function packageSourcePatterns(source: PackageSource, type: "extensions" | "skills" | "prompts" | "themes"): string[] | undefined {
+function packageSourcePatterns(source: PackageSource, type: "extensions" | "skills" | "prompts"): string[] | undefined {
   return typeof source === "string" ? undefined : source[type];
 }
 
-function resolvePackageEntries(type: "extensions" | "skills" | "prompts" | "themes"): Array<{ dir: string; source: string; patterns?: string[] }> {
+function resolvePackageEntries(type: "extensions" | "skills" | "prompts"): Array<{ dir: string; source: string; patterns?: string[] }> {
   const scans = packageScans();
   const results: Array<{ dir: string; source: string; patterns?: string[] }> = [];
   for (const scan of scans) {
@@ -284,52 +275,6 @@ export function listSkills(): SkillResource[] {
     }
   }
   return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
-}
-
-function isPalette(value: unknown): value is ThemePalette {
-  return typeof value === "object" && value !== null
-    && typeof (value as ThemePalette).key === "string"
-    && Array.isArray((value as ThemePalette).primary)
-    && Array.isArray((value as ThemePalette).secondary);
-}
-
-export function listThemeResources(): ThemeResource[] {
-  const settings = getSettings();
-  const configured = settings.themes ?? [];
-  const bases: Array<{ dir: string; source: string; patterns?: string[] }> = [
-    ...(settings.discoverThemes ? [
-      { dir: join(GLOBAL_ROOT, "themes"), source: "global:themes" },
-      { dir: join(PROJECT_ROOT, "themes"), source: "project:themes" },
-    ] : []),
-    ...configured.map((path) => ({ dir: resolveConfiguredPath(path, PROJECT_ROOT), source: `config:${path}` })),
-    ...resolvePackageEntries("themes"),
-  ];
-  const byKey = new Map<string, ThemeResource>();
-  for (const base of bases) {
-    const stat = safeStat(base.dir);
-    if (!stat) continue;
-    const files = stat.isDirectory() ? walk(base.dir, { recursive: false }) : [base.dir];
-    const jsonFiles = files.filter((file) => extname(file).toLowerCase() === ".json");
-    const relativeFiles = jsonFiles.map((file) => stat.isDirectory() ? relative(base.dir, file).replace(/\\/g, "/") : basename(file));
-    const visible = "patterns" in base ? applyPatterns(relativeFiles, base.patterns) : relativeFiles;
-    for (const rel of visible) {
-      const filePath = stat.isDirectory() ? join(base.dir, rel) : base.dir;
-      try {
-        const parsed = JSON.parse(readFileSync(filePath, "utf-8"));
-        if (!isPalette(parsed)) continue;
-        byKey.set(parsed.key, {
-          key: parsed.key,
-          label: parsed.label,
-          palette: parsed,
-          path: filePath,
-          source: base.source,
-        });
-      } catch {
-        // ignore bad theme
-      }
-    }
-  }
-  return [...byKey.values()].sort((a, b) => a.label.localeCompare(b.label));
 }
 
 export function loadPromptTemplate(name: string): string | null {
