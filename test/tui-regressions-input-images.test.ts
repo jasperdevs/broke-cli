@@ -101,6 +101,35 @@ describe("image attachments", () => {
     expect(output).not.toContain(imagePath);
   });
 
+  it("keeps the cursor directly after the image chip instead of counting ANSI bytes", () => {
+    updateSetting("terminal", { ...getSettings().terminal, showImages: true });
+    const app = new App() as any;
+    const dir = mkdtempSync(join(tmpdir(), "brokecli-image-"));
+    tempDirs.push(dir);
+    const imagePath = join(dir, "cursor.png");
+    writeFileSync(imagePath, "fakepng", "utf-8");
+    let cursorRow = 0;
+    let cursorCol = 0;
+    app.screen = {
+      height: 12,
+      width: 60,
+      hasSidebar: false,
+      mainWidth: 60,
+      sidebarWidth: 0,
+      render: () => {},
+      setCursor: (row: number, col: number) => { cursorRow = row; cursorCol = col; },
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+
+    app.handlePaste(imagePath);
+    app.drawImmediate();
+
+    expect(app.pendingImages).toHaveLength(1);
+    expect(cursorRow).toBeGreaterThan(0);
+    expect(cursorCol).toBeLessThan(20);
+  });
+
   it("clears a raw pasted image path from the draft when the attachment loads", () => {
     updateSetting("terminal", { ...getSettings().terminal, showImages: true });
     const app = new App() as any;
@@ -114,6 +143,7 @@ describe("image attachments", () => {
 
     expect(app.pendingImages).toHaveLength(1);
     expect(app.input.getText()).toBe("");
+    expect(app.statusMessage).toBeUndefined();
   });
 
   it("clears a mirrored image path that arrives one tick after attachment", async () => {

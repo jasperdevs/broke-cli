@@ -5,6 +5,7 @@ import { filterFiles, readFileForContext } from "./file-picker.js";
 import type { Keypress } from "./keypress.js";
 import { BOLD, RESET } from "../utils/ansi.js";
 import { DIM } from "../utils/ansi.js";
+import { visibleWidth } from "../utils/terminal-width.js";
 import { MUTED, TXT } from "./app-shared.js";
 import { wordWrap } from "./render/formatting.js";
 import type { MenuPromptKind, ModelOption, PickerItem, SettingEntry } from "./app-types.js";
@@ -61,6 +62,27 @@ function styleComposerLine(app: AppState, line: string): string {
   }
   return matchedAny ? `${built}${remaining}` : line;
 }
+
+function getComposerSourceLines(app: AppState, text: string): string[] {
+  const attachmentTokens = getComposerAttachmentTokens(app);
+  const prefix = attachmentTokens.length > 0 ? `${attachmentTokens.join(" ")}${text ? " " : ""}` : "";
+  return `${prefix}${text || ""}`.split("\n");
+}
+
+function wrapComposerLines(app: AppState, text: string, width: number, styled: boolean): string[] {
+  const padX = Math.max(0, getSettings().editorPaddingX | 0);
+  const usableWidth = Math.max(1, width - 2 - (padX * 2));
+  const wrapped: string[] = [];
+  for (const line of getComposerSourceLines(app, text)) {
+    const lineParts = line.length === 0 ? [""] : wordWrap(line, usableWidth);
+    for (const part of lineParts) {
+      const plainLine = `${" ".repeat(padX)}${part}`;
+      wrapped.push(styled ? styleComposerLine(app, plainLine) : plainLine);
+    }
+  }
+  return wrapped.length > 0 ? wrapped : [" ".repeat(padX)];
+}
+
 function getMenuVisibleRows(maxHeight: number, baseCount: number, tailReserve: number, chromeLines: number): number {
   return Math.max(1, maxHeight - baseCount - tailReserve - 1 - chromeLines);
 }
@@ -132,27 +154,14 @@ export function getBottomLineCount(app: AppState, mainW: number, maxHeight: numb
   return count;
 }
 export function getWrappedInputLines(app: AppState, text: string, width: number): string[] {
-  const padX = Math.max(0, getSettings().editorPaddingX | 0);
-  const usableWidth = Math.max(1, width - 2 - (padX * 2));
-  const attachmentTokens = getComposerAttachmentTokens(app);
-  const prefix = attachmentTokens.length > 0 ? `${attachmentTokens.join(" ")}${text ? " " : ""}` : "";
-  const sourceLines = `${prefix}${text || ""}`.split("\n");
-  const wrapped: string[] = [];
-  for (const line of sourceLines) {
-    const lineParts = line.length === 0 ? [""] : wordWrap(line, usableWidth);
-    wrapped.push(...lineParts.map((part) => styleComposerLine(app, `${" ".repeat(padX)}${part}`)));
-  }
-  return wrapped.length > 0 ? wrapped : [" ".repeat(padX)];
+  return wrapComposerLines(app, text, width, true);
 }
 
 export function getInputCursorLayout(app: AppState, text: string, cursor: number, width: number): { lines: string[]; row: number; col: number } {
   const lines = app.getWrappedInputLines(text, width);
-  const attachmentTokens = getComposerAttachmentTokens(app);
-  const prefix = attachmentTokens.length > 0 ? `${attachmentTokens.join(" ")}${text ? " " : ""}` : "";
-  const beforeCursor = `${prefix}${text.slice(0, cursor)}`;
-  const cursorLines = app.getWrappedInputLines(beforeCursor, width);
+  const cursorLines = wrapComposerLines(app, text.slice(0, cursor), width, false);
   const currentLine = cursorLines[cursorLines.length - 1] ?? "";
-  return { lines, row: Math.max(0, cursorLines.length - 1), col: currentLine.length };
+  return { lines, row: Math.max(0, cursorLines.length - 1), col: visibleWidth(currentLine) };
 }
 export function getFilteredModels(app: AppState): ModelOption[] {
   if (!app.modelPicker) return [];

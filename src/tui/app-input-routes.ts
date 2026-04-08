@@ -74,7 +74,6 @@ function tryLoadImageFromPath(app: AppState, rawText: string): boolean {
     const mimeType = `image/${ext === "jpg" ? "jpeg" : ext}`;
     const base64 = data.toString("base64");
     app.pendingImages.push({ mimeType, data: base64 });
-    app.setStatus?.(`${T()}✓ Image loaded${RESET}`);
     return true;
   } catch {
     return false;
