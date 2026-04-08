@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSystemPrompt } from "../src/core/context.js";
+import { buildSystemPrompt, buildTaskExecutionAddendum } from "../src/core/context.js";
 
 describe("system prompt", () => {
   it("explicitly allows benign non-coding requests instead of refusing them", () => {
@@ -17,6 +17,15 @@ describe("system prompt", () => {
     expect(prompt).toContain("do not fake it");
   });
 
+  it("tells the agent to keep required long-running services alive for verification", () => {
+    const prompt = buildSystemPrompt(process.cwd(), "openai", "build", "off");
+
+    expect(prompt).toContain("long-running process");
+    expect(prompt).toContain("leave it running");
+    expect(prompt).toContain("nohup");
+    expect(prompt).toContain("do not rely on plain `&`");
+  });
+
   it("uses a much smaller lightweight prompt for casual turns", () => {
     const fullPrompt = buildSystemPrompt(process.cwd(), "openai", "build", "off", "full");
     const casualPrompt = buildSystemPrompt(process.cwd(), "openai", "build", "off", "casual");
@@ -31,5 +40,19 @@ describe("system prompt", () => {
     const prompt = buildSystemPrompt(process.cwd(), "openai", "build", "off");
 
     expect(prompt).not.toContain("askUser");
+  });
+
+  it("adds detached-launch rules for server tasks", () => {
+    const addendum = buildTaskExecutionAddendum("Create and run a server on port 3000 with one endpoint");
+
+    expect(addendum).toContain("Server task rule");
+    expect(addendum).toContain("nohup");
+    expect(addendum).toContain("Do not rely on plain `&`");
+    expect(addendum).toContain("JSON number");
+    expect(addendum).toContain("curl");
+  });
+
+  it("does not add server rules for ordinary file edits", () => {
+    expect(buildTaskExecutionAddendum("Rename this setting and update the docs")).toBe("");
   });
 });

@@ -2,7 +2,7 @@ import type { LanguageModel } from "ai";
 import { pickDefault, type DetectedProvider } from "../ai/detect.js";
 import { startNativeStream } from "../ai/native-stream.js";
 import { startStream } from "../ai/stream.js";
-import { buildSystemPrompt, resolveCavemanLevel } from "../core/context.js";
+import { buildSystemPrompt, buildTaskExecutionAddendum, resolveCavemanLevel } from "../core/context.js";
 import { Session } from "../core/session.js";
 import { getTools, type ToolName } from "../tools/registry.js";
 import { getSettings, type Mode } from "../core/config.js";
@@ -101,6 +101,8 @@ export async function runOneShotPrompt(options: {
       ? `${baseSystemPrompt}\n\n${opts.appendSystemPrompt}`
       : baseSystemPrompt;
   const systemPrompt = `${systemPromptBase}\n\nExecution scaffold (${policy.archetype}): ${policy.scaffold}`;
+  const taskAddendum = buildTaskExecutionAddendum(prompt);
+  const finalSystemPrompt = taskAddendum ? `${systemPrompt}\n\n${taskAddendum}` : systemPrompt;
   const turnMessages = policy.historyWindow && session.getChatMessages().length > policy.historyWindow
     ? session.getChatMessages().slice(-policy.historyWindow)
     : session.getChatMessages();
@@ -138,7 +140,7 @@ export async function runOneShotPrompt(options: {
       {
         providerId: activeModel.provider.id as "anthropic" | "codex",
         modelId,
-        system: systemPrompt,
+        system: finalSystemPrompt,
         messages: turnMessages,
         enableThinking: getSettings().enableThinking,
         thinkingLevel: getSettings().thinkingLevel || "low",
@@ -151,7 +153,7 @@ export async function runOneShotPrompt(options: {
       {
         model: activeModel.model as LanguageModel,
         modelId,
-        system: systemPrompt,
+        system: finalSystemPrompt,
         messages: turnMessages,
         tools: canUseSdkTools(activeModel) ? tools : undefined,
         maxToolSteps: policy.maxToolSteps,

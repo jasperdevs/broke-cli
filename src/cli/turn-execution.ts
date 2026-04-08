@@ -3,7 +3,7 @@ import { startStream } from "../ai/stream.js";
 import { estimateTextTokens } from "../ai/tokens.js";
 import type { ModelHandle } from "../ai/providers.js";
 import { rewriteAssistantForCaveman } from "../core/caveman.js";
-import { buildSystemPrompt, resolveCavemanLevel } from "../core/context.js";
+import { buildSystemPrompt, buildTaskExecutionAddendum, resolveCavemanLevel } from "../core/context.js";
 import { getTotalContextTokens } from "../core/compact.js";
 import { getSettings, type Mode } from "../core/config.js";
 import type { TurnPolicy } from "../core/turn-policy.js";
@@ -257,6 +257,10 @@ export async function executeTurn(options: {
     resolveSpecialistModel,
   });
   let turnSystemPrompt = initialTurnSystemPrompt;
+  const taskExecutionAddendum = buildTaskExecutionAddendum(text);
+  if (taskExecutionAddendum) {
+    turnSystemPrompt += `\n\n${taskExecutionAddendum}`;
+  }
   const nextToolCalls: string[] = [];
   let abortController: AbortController | null = new AbortController();
   let steeringInterruptRequested = false;

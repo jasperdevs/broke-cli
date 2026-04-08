@@ -46,7 +46,7 @@ vi.mock("fs", async () => {
 });
 
 import { createModel, shouldUseNativeProvider } from "../src/ai/providers.js";
-import { normalizeNativeUsage, resolveNativeSpawnCommand, startNativeStream } from "../src/ai/native-stream.js";
+import { isIsolatedLinuxContainerRuntime, normalizeNativeUsage, resolveCodexSandboxMode, resolveNativeSpawnCommand, startNativeStream } from "../src/ai/native-stream.js";
 
 describe("native provider runtime selection", () => {
   beforeEach(() => {
@@ -277,5 +277,41 @@ describe("native provider runtime selection", () => {
     controller.abort();
     await pending;
     expect(kill).toHaveBeenCalled();
+  });
+
+  it("detects isolated Linux container runtimes from standard marker files", () => {
+    const platform = Object.getOwnPropertyDescriptor(process, "platform");
+    Object.defineProperty(process, "platform", { value: "linux" });
+    configMocks.existsSync.mockImplementation((path: string) => path === "/.dockerenv");
+
+    try {
+      expect(isIsolatedLinuxContainerRuntime()).toBe(true);
+    } finally {
+      if (platform) Object.defineProperty(process, "platform", platform);
+    }
+  });
+
+  it("falls back to danger-full-access inside isolated Linux containers", () => {
+    const platform = Object.getOwnPropertyDescriptor(process, "platform");
+    Object.defineProperty(process, "platform", { value: "linux" });
+    configMocks.existsSync.mockImplementation((path: string) => path === "/.dockerenv");
+
+    try {
+      expect(resolveCodexSandboxMode({ denyToolUse: false })).toBe("danger-full-access");
+    } finally {
+      if (platform) Object.defineProperty(process, "platform", platform);
+    }
+  });
+
+  it("keeps read-only Codex sandboxing for side questions even in containers", () => {
+    const platform = Object.getOwnPropertyDescriptor(process, "platform");
+    Object.defineProperty(process, "platform", { value: "linux" });
+    configMocks.existsSync.mockImplementation((path: string) => path === "/.dockerenv");
+
+    try {
+      expect(resolveCodexSandboxMode({ denyToolUse: true })).toBe("read-only");
+    } finally {
+      if (platform) Object.defineProperty(process, "platform", platform);
+    }
   });
 });

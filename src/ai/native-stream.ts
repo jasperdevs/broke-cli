@@ -1,4 +1,5 @@
 import { spawn, type SpawnOptionsWithoutStdio } from "child_process";
+import { existsSync } from "fs";
 import { calculateCost, type TokenUsage } from "./cost.js";
 import { estimateConversationTokens, estimateTextTokens } from "./tokens.js";
 import { resolveNativeCommand } from "./native-cli.js";
@@ -178,6 +179,30 @@ function buildClaudeArgs(opts: NativeStreamOptions): string[] {
   return args;
 }
 
+export function isIsolatedLinuxContainerRuntime(): boolean {
+  if (process.platform !== "linux") return false;
+  return existsSync("/.dockerenv") || existsSync("/run/.containerenv");
+}
+
+export function resolveCodexSandboxMode(opts: Pick<NativeStreamOptions, "denyToolUse">): "read-only" | "workspace-write" | "danger-full-access" {
+  if (opts.denyToolUse) return "read-only";
+
+  const autonomy = getAutonomySettings();
+
+  // Native Codex relies on nested sandboxing for workspace-write mode. In
+  // already-isolated Linux containers that often fails with bubblewrap/userns
+  // errors, so prefer the outer container boundary instead of breaking tool use.
+  if (
+    isIsolatedLinuxContainerRuntime()
+    && !autonomy.allowWriteOutsideWorkspace
+    && !autonomy.allowShellOutsideWorkspace
+  ) {
+    return "danger-full-access";
+  }
+
+  return "workspace-write";
+}
+
 function buildCodexArgs(opts: NativeStreamOptions): string[] {
   const workspaceRoot = getWorkspaceRoot(opts.cwd ?? process.cwd());
   const autonomy = getAutonomySettings();
@@ -190,7 +215,7 @@ function buildCodexArgs(opts: NativeStreamOptions): string[] {
     "-C",
     opts.cwd ?? process.cwd(),
     "--sandbox",
-    opts.denyToolUse ? "read-only" : "workspace-write",
+    resolveCodexSandboxMode(opts),
     "--add-dir",
     workspaceRoot,
   ];

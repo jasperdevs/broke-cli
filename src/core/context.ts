@@ -22,6 +22,35 @@ const MAX_CONVENTION_CHARS = 3200; // ~800 tokens
 
 let cachedPrompts = new Map<string, string>();
 
+const SERVER_TASK_PATTERNS = [
+  /\bserver\b/i,
+  /\bport\s+\d+\b/i,
+  /\bendpoint\b/i,
+  /\bhttp\b/i,
+  /\blisten(?:ing)?\b/i,
+  /\bwatcher\b/i,
+  /\bdaemon\b/i,
+];
+
+export function buildTaskExecutionAddendum(userMessage: string): string {
+  const text = userMessage.trim();
+  if (!text) return "";
+
+  if (SERVER_TASK_PATTERNS.some((pattern) => pattern.test(text))) {
+    return [
+      "<task-rules>",
+      "Server task rule: the service must still be reachable after your shell command finishes.",
+      "Start long-running services with a durable detached launch such as `nohup <cmd> >/tmp/<name>.log 2>&1 & echo $!` on Unix.",
+      "Do not rely on plain `&`, a foreground `npm start`, or the current shell session staying open.",
+      "If the API response schema expects a number, return a JSON number, not a quoted string.",
+      "Before you finish, probe the running service using a fresh command such as `curl` or another separate request.",
+      "</task-rules>",
+    ].join("\n");
+  }
+
+  return "";
+}
+
 export function buildSystemPrompt(cwd: string, providerId?: string, mode?: Mode, cavemanLevel?: CavemanLevel, profile: PromptProfile = "full"): string {
   const cacheKey = `${providerId ?? "default"}:${mode ?? "build"}:${cavemanLevel ?? "off"}:${profile}:${cwd}`;
   const cached = cachedPrompts.get(cacheKey);
@@ -60,6 +89,8 @@ export function buildSystemPrompt(cwd: string, providerId?: string, mode?: Mode,
 - Prefer semSearch for conceptual code discovery, grep for exact text, readFile for known files.
 - Do not use bash for cat/find/head/tail/grep-style repo exploration when native tools can do it cheaper.
 - Verify after changes when possible — run tests or the build to catch errors.
+- If the task requires a server, watcher, or other long-running process for follow-up verification, start it in a detached/background-safe way and leave it running until tests can reach it.
+- For long-running shell processes, do not rely on plain \`&\`. Use a durable detached launch such as \`nohup <cmd> >/tmp/<name>.log 2>&1 & echo $!\` on Unix, then probe the service before you finish.
 - Follow existing patterns. Match the project's style, naming, and conventions.
 - Do not re-read files already in context.
 - Only explore the project when the task requires it. Do NOT list files unprompted.
@@ -87,7 +118,7 @@ todoWrite: Task checklist for 3+ step work.
 </tool-tips>`);
   } else if (profile === "full") {
     parts.push(`<tool-tips>
-bash: Use for running tests, builds, git commands, installs, and real shell workflows. Prefer tools over bash for file operations and repo exploration (don't cat/find/head/tail/grep via bash). Commands timeout at 30s by default.
+bash: Use for running tests, builds, git commands, installs, and real shell workflows. Prefer tools over bash for file operations and repo exploration (don't cat/find/head/tail/grep via bash). Commands timeout at 30s by default. For servers/watchers, use a detached launch pattern like nohup ... & echo $! and verify with a probe.
 semSearch: Natural-language code discovery when you know behavior/intent but not exact filenames or symbols. Prefer this before broad grep on unfamiliar codebases.
 readFile: Use offset/limit for large files — don't read entire files over 500 lines.
 editFile: old_string must be an EXACT match of existing text. Include enough surrounding context to be unique. Prefer this over writeFile for changes.

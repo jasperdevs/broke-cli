@@ -66,6 +66,7 @@ vi.mock("../src/core/compact.js", () => ({
 
 vi.mock("../src/core/context.js", () => ({
   buildSystemPrompt: () => "system",
+  buildTaskExecutionAddendum: () => "",
   resolveCavemanLevel: () => "auto",
 }));
 
