@@ -228,6 +228,13 @@ function handleEscapeAndBindings(app: AppState, key: Keypress): boolean {
 export function handleKey(app: AppState, key: Keypress): void {
   ensureInlineChipElements(app);
 
+  const preText = app.input.getText();
+  const preCursor = app.input.getCursor();
+  if (tryDeleteVisiblePlaceholderFallback(app, key, preText, preCursor)) {
+    app.draw();
+    return;
+  }
+
   if (app.filePicker && !shouldKeepFilePickerOpen(app)) {
     app.filePicker = null;
   }
