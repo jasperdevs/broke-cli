@@ -1,5 +1,7 @@
 import { spawn, type SpawnOptionsWithoutStdio } from "child_process";
-import { existsSync } from "fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import { calculateCost, type TokenUsage } from "./cost.js";
 import { createNativeEventHandlers } from "./native-stream-event-handlers.js";
 import { getCodexOutputSchemaPath, parseStructuredFinalText } from "./native-output.js";
@@ -193,6 +195,32 @@ function buildCodexArgs(opts: NativeStreamOptions): string[] {
   return args;
 }
 
+function imageExtensionForMimeType(mimeType: string): string {
+  switch (mimeType.toLowerCase()) {
+    case "image/jpeg": return "jpg";
+    case "image/png": return "png";
+    case "image/gif": return "gif";
+    case "image/webp": return "webp";
+    case "image/bmp": return "bmp";
+    default: return "png";
+  }
+}
+
+function materializeCodexImages(messages: NativeMessage[]): { dir: string; paths: string[] } | null {
+  const images = messages.flatMap((message) => message.role === "user" ? (message.images ?? []) : []);
+  if (images.length === 0) return null;
+  const dir = mkdtempSync(join(tmpdir(), "brokecli-codex-images-"));
+  const paths: string[] = [];
+  for (let index = 0; index < images.length; index++) {
+    const image = images[index]!;
+    const ext = imageExtensionForMimeType(image.mimeType);
+    const path = join(dir, `image-${index + 1}.${ext}`);
+    writeFileSync(path, Buffer.from(image.data, "base64"));
+    paths.push(path);
+  }
+  return { dir, paths };
+}
+
 function needsWindowsShell(command: string): boolean {
   return process.platform === "win32" && /\.(cmd|bat)$/i.test(command);
 }
@@ -251,6 +279,10 @@ export async function startNativeStream(
   const commandName = opts.providerId === "anthropic" ? "claude" : "codex";
   const command = resolveNativeCommand(commandName) ?? commandName;
   const args = opts.providerId === "anthropic" ? buildClaudeArgs(opts) : buildCodexArgs(opts);
+  const codexImages = opts.providerId === "codex" ? materializeCodexImages(opts.messages) : null;
+  if (codexImages) {
+    for (const path of codexImages.paths) args.push("--image", path);
+  }
 
   await new Promise<void>((resolve) => {
     let stdoutBuffer = "";
@@ -332,6 +364,7 @@ export async function startNativeStream(
       opts.abortSignal.addEventListener("abort", () => {
         aborted = true;
         child.kill();
+        if (codexImages) rmSync(codexImages.dir, { recursive: true, force: true });
         resolve();
       }, { once: true });
     }
@@ -350,6 +383,7 @@ export async function startNativeStream(
     });
 
     child.on("close", (code) => {
+      if (codexImages) rmSync(codexImages.dir, { recursive: true, force: true });
       if (aborted || finished) return;
       if (stdoutBuffer.trim()) {
         handleJsonLine(stdoutBuffer.trim());
