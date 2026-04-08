@@ -1,6 +1,7 @@
 import { spawn, type SpawnOptionsWithoutStdio } from "child_process";
 import { existsSync } from "fs";
 import { calculateCost, type TokenUsage } from "./cost.js";
+import { createNativeEventHandlers } from "./native-stream-event-handlers.js";
 import { getCodexOutputSchemaPath, parseStructuredFinalText } from "./native-output.js";
 import { estimateConversationTokens, estimateTextTokens } from "./tokens.js";
 import { resolveNativeCommand } from "./native-cli.js";
@@ -18,6 +19,10 @@ interface NativeStreamCallbacks {
   onReasoning: (delta: string) => void;
   onFinish: (usage: TokenUsage) => void;
   onError: (error: Error) => void;
+  onToolCallStart?: (toolName: string) => void;
+  onToolCall?: (toolName: string, args: unknown) => void;
+  onToolResult?: (toolName: string, result: unknown) => void;
+  onAfterToolCall?: () => void;
   onAfterResponse?: () => void;
 }
 
@@ -95,49 +100,6 @@ export function normalizeNativeUsage(options: {
   if (cacheWriteTokens < 0) cacheWriteTokens = 0;
 
   return { inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens };
-}
-
-function extractClaudeText(message: unknown, blockType: "text" | "thinking"): string {
-  const record = typeof message === "object" && message !== null ? message as Record<string, unknown> : {};
-  const content = Array.isArray(record.content) ? record.content : [];
-  return content
-    .filter((block) => {
-      const kind = typeof block === "object" && block !== null ? (block as Record<string, unknown>).type : undefined;
-      return kind === blockType;
-    })
-    .map((block) => {
-      const text = typeof block === "object" && block !== null ? (block as Record<string, unknown>).text : undefined;
-      return typeof text === "string" ? text : "";
-    })
-    .join("");
-}
-
-function extractCodexItemText(item: unknown): string {
-  const record = typeof item === "object" && item !== null ? item as Record<string, unknown> : {};
-  if (typeof record.text === "string") return record.text;
-  if (Array.isArray(record.content)) {
-    return record.content
-      .map((entry) => {
-        if (typeof entry === "string") return entry;
-        if (typeof entry === "object" && entry !== null && typeof (entry as Record<string, unknown>).text === "string") {
-          return (entry as Record<string, unknown>).text as string;
-        }
-        return "";
-      })
-      .join("");
-  }
-  return "";
-}
-
-function emitDelta(next: string, previous: string, emit: (delta: string) => void): string {
-  if (!next) return previous;
-  if (next.startsWith(previous)) {
-    const delta = next.slice(previous.length);
-    if (delta) emit(delta);
-  } else {
-    emit(next);
-  }
-  return next;
 }
 
 function buildClaudeArgs(opts: NativeStreamOptions): string[] {
@@ -231,17 +193,6 @@ function buildCodexArgs(opts: NativeStreamOptions): string[] {
   return args;
 }
 
-function extractClaudeToolUseNames(message: unknown): string[] {
-  const record = typeof message === "object" && message !== null ? message as Record<string, unknown> : {};
-  const content = Array.isArray(record.content) ? record.content : [];
-  return content
-    .filter((block) => typeof block === "object" && block !== null && (block as Record<string, unknown>).type === "tool_use")
-    .map((block) => {
-      const name = (block as Record<string, unknown>).name;
-      return typeof name === "string" && name.trim() ? name : "a tool";
-    });
-}
-
 function needsWindowsShell(command: string): boolean {
   return process.platform === "win32" && /\.(cmd|bat)$/i.test(command);
 }
@@ -304,9 +255,6 @@ export async function startNativeStream(
   await new Promise<void>((resolve) => {
     let stdoutBuffer = "";
     let stderrBuffer = "";
-    let emittedText = "";
-    let visibleText = "";
-    let emittedReasoning = "";
     let finished = false;
     let aborted = false;
     let lineHadParseError = false;
@@ -324,7 +272,7 @@ export async function startNativeStream(
         providerId: opts.providerId,
         reported: extractUsage(usageData),
         estimatedInputTokens,
-        estimatedOutputTokens: estimateTextTokens(emittedText + emittedReasoning, opts.modelId),
+        estimatedOutputTokens: estimateTextTokens(handlers.getCombinedOutputText(), opts.modelId),
       });
       callbacks.onAfterResponse?.();
       callbacks.onFinish(calculateCost(
@@ -346,75 +294,15 @@ export async function startNativeStream(
       callbacks.onError(new Error(message));
       resolve();
     };
-
-    const handleCodexEvent = (event: Record<string, unknown>) => {
-      const type = typeof event.type === "string" ? event.type : "";
-
-      if (type === "item.completed") {
-        const item = typeof event.item === "object" && event.item !== null ? event.item as Record<string, unknown> : {};
-        const itemType = typeof item.type === "string" ? item.type : "";
-        if (opts.denyToolUse && itemType.includes("tool")) {
-          fail("Side question attempted to use a tool.");
-          return;
-        }
-        const text = extractCodexItemText(item);
-        if ((itemType === "agent_message" || itemType === "message") && text) {
-          emittedText = text;
-          if (!opts.structuredFinalResponse) {
-            visibleText = emitDelta(text, visibleText, callbacks.onText);
-          }
-        }
-        if (itemType.includes("reason") && text) {
-          emittedReasoning = emitDelta(text, emittedReasoning, callbacks.onReasoning);
-        }
-        return;
-      }
-
-      if (type === "turn.completed") {
-        if (opts.structuredFinalResponse) {
-          const parsed = parseStructuredFinalText(emittedText);
-          visibleText = emitDelta(parsed, visibleText, callbacks.onText);
-          emittedText = parsed;
-        }
-        finishWithUsage(event.usage);
-        return;
-      }
-
-      if (type === "error") {
-        const message = typeof event.message === "string" ? event.message : "Codex stream failed";
-        fail(message);
-      }
-    };
-
-    const handleClaudeEvent = (event: Record<string, unknown>) => {
-      const type = typeof event.type === "string" ? event.type : "";
-
-      if (type === "assistant") {
-        const message = typeof event.message === "object" && event.message !== null ? event.message : null;
-        if (opts.denyToolUse) {
-          const toolNames = extractClaudeToolUseNames(message);
-          if (toolNames.length > 0) {
-            fail(`Side question attempted to use ${toolNames.join(", ")}.`);
-            return;
-          }
-        }
-        const text = extractClaudeText(message, "text");
-        const reasoning = extractClaudeText(message, "thinking");
-        if (text) emittedText = emitDelta(text, emittedText, callbacks.onText);
-        if (reasoning) emittedReasoning = emitDelta(reasoning, emittedReasoning, callbacks.onReasoning);
-        return;
-      }
-
-      if (type === "result") {
-        const isError = event.is_error === true;
-        const resultText = typeof event.result === "string" ? event.result : "";
-        if (isError) {
-          fail(resultText || "Claude stream failed");
-          return;
-        }
-        finishWithUsage(event.usage);
-      }
-    };
+    const handlers = createNativeEventHandlers({
+      providerId: opts.providerId,
+      denyToolUse: opts.denyToolUse,
+      structuredFinalResponse: opts.structuredFinalResponse,
+      callbacks,
+      fail,
+      finishWithUsage,
+      parseStructuredFinalText,
+    });
 
     const handleJsonLine = (line: string) => {
       if (!line.trim()) return;
@@ -427,11 +315,7 @@ export async function startNativeStream(
         return;
       }
 
-      if (opts.providerId === "anthropic") {
-        handleClaudeEvent(event);
-      } else {
-        handleCodexEvent(event);
-      }
+      handlers.handleJsonEvent(event);
     };
 
     const flushStdout = () => {
@@ -476,11 +360,11 @@ export async function startNativeStream(
       const fallbackUsage = calculateCost(
         opts.modelId,
         estimatedInputTokens,
-        estimateTextTokens(emittedText + emittedReasoning, opts.modelId),
+        estimateTextTokens(handlers.getCombinedOutputText(), opts.modelId),
         opts.providerId,
       );
 
-      if (code === 0 && (emittedText || emittedReasoning)) {
+      if (code === 0 && handlers.getCombinedOutputText()) {
         callbacks.onAfterResponse?.();
         callbacks.onFinish(fallbackUsage);
         resolve();

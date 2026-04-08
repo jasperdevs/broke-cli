@@ -25,6 +25,7 @@ import {
 import type { Session } from "../core/session.js";
 import { sendResponseNotification } from "./notify.js";
 import type { SpecialistModelRole } from "./model-routing.js";
+import { createLiveToolCallbacks } from "./turn-tool-callbacks.js";
 import { applyTurnFrame } from "./turn-frame.js";
 import { injectTransientUserContext } from "./turn-runner-stages.js";
 import { createStreamTokenTracker } from "./stream-token-tracker.js";
@@ -262,6 +263,20 @@ export async function executeTurn(options: {
   const streamTokenTracker = createStreamTokenTracker(app.setStreamTokens.bind(app), executionModelId, () => streamedText + streamedReasoning);
   let nextActivityTime = Date.now();
   const lastToolArgsByName = new Map<string, unknown>();
+  const liveToolCallbacks = createLiveToolCallbacks({
+    app,
+    hooks,
+    session,
+    nextToolCalls,
+    lastToolArgsByName,
+    onToolActivity: () => { sawToolActivity = true; },
+    onSteeringInterrupt: () => {
+      if (!abortController) return;
+      steeringInterruptRequested = true;
+      abortController.abort();
+    },
+    buildToolPreview,
+  });
   app.setThinkingRequested(thinkingRequested);
   setActiveToolContext({
     contextOptimizer: session.getContextOptimizer(),
@@ -403,7 +418,7 @@ export async function executeTurn(options: {
         structuredFinalResponse: executionModel.provider.id === "codex" && minimalOutputPolicy
           ? { maxChars: minimalOutputPolicy.maxChars }
           : null,
-      }, streamCallbacks);
+      }, { ...streamCallbacks, ...liveToolCallbacks });
     } else {
       await startStream({
         model: executionModel.model!,
@@ -421,33 +436,7 @@ export async function executeTurn(options: {
         maxOutputTokens: minimalOutputPolicy?.maxOutputTokens,
       }, {
         ...streamCallbacks,
-        onToolCallStart: (name) => {
-          sawToolActivity = true;
-          if (name !== "todoWrite") app.addToolCall(name, "...");
-        },
-        onToolCall: (name, args) => {
-          sawToolActivity = true;
-          hooks.emit("on_tool_call", { name, args });
-          nextToolCalls.push(name);
-          lastToolArgsByName.set(name, args);
-          if (name === "todoWrite") return;
-          app.updateToolCallArgs(name, buildToolPreview(name, args), args);
-        },
-        onToolResult: (_name, result) => {
-          hooks.emit("on_tool_result", { name: _name, result });
-          if (_name === "todoWrite") return;
-          const r = result as { success?: boolean; output?: string; error?: string; content?: string; matches?: unknown[]; files?: string[] };
-          const toolArgs = lastToolArgsByName.get(_name) as Record<string, unknown> | undefined;
-          const detail = observeToolResult({ session, toolName: _name, result: r, toolArgs });
-          if (r.success === false && r.error) app.addToolResult(_name, r.error.slice(0, 80), true);
-          else app.addToolResult(_name, "ok", false, detail);
-        },
-        onAfterToolCall: () => {
-          if (!app.hasPendingMessages("steering")) return;
-          if (!abortController) return;
-          steeringInterruptRequested = true;
-          abortController.abort();
-        },
+        ...liveToolCallbacks,
       });
     }
   } finally {

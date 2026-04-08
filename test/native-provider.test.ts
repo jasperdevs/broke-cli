@@ -244,6 +244,99 @@ describe("native provider runtime selection", () => {
     expect(onFinish).not.toHaveBeenCalled();
   });
 
+  it("surfaces Claude tool_use blocks through native stream callbacks", async () => {
+    const stdoutHandlers: Record<string, (chunk: string) => void> = {};
+    const processHandlers: Record<string, (code?: number) => void> = {};
+    configMocks.spawn.mockReturnValue({
+      stdout: { on: (event: string, handler: (chunk: string) => void) => { stdoutHandlers[event] = handler; } },
+      stderr: { on: vi.fn() },
+      stdin: { end: vi.fn() },
+      on: (event: string, handler: (code?: number) => void) => { processHandlers[event] = handler; },
+      kill: vi.fn(),
+    });
+
+    const onToolCallStart = vi.fn();
+    const onToolCall = vi.fn();
+    const onToolResult = vi.fn();
+    const pending = startNativeStream({
+      providerId: "anthropic",
+      modelId: "claude-sonnet-4-6",
+      system: "system",
+      messages: [{ role: "user", content: "status?" }],
+    }, {
+      onText: vi.fn(),
+      onReasoning: vi.fn(),
+      onFinish: vi.fn(),
+      onError: vi.fn(),
+      onToolCallStart,
+      onToolCall,
+      onToolResult,
+      onAfterToolCall: vi.fn(),
+    });
+
+    stdoutHandlers.data?.(`${JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [{ type: "tool_use", id: "toolu_1", name: "Read", input: { file_path: "README.md" } }],
+      },
+    })}\n`);
+    stdoutHandlers.data?.(`${JSON.stringify({
+      type: "user",
+      message: {
+        content: [{ type: "tool_result", tool_use_id: "toolu_1", content: "ok" }],
+      },
+    })}\n`);
+    processHandlers.close?.(0);
+
+    await pending;
+    expect(onToolCallStart).toHaveBeenCalledWith("Read");
+    expect(onToolCall).toHaveBeenCalledWith("Read", { file_path: "README.md" });
+    expect(onToolResult).toHaveBeenCalledWith("Read", "ok");
+  });
+
+  it("surfaces Codex native tool items through callbacks", async () => {
+    const stdoutHandlers: Record<string, (chunk: string) => void> = {};
+    const processHandlers: Record<string, (code?: number) => void> = {};
+    configMocks.spawn.mockReturnValue({
+      stdout: { on: (event: string, handler: (chunk: string) => void) => { stdoutHandlers[event] = handler; } },
+      stderr: { on: vi.fn() },
+      stdin: { end: vi.fn() },
+      on: (event: string, handler: (code?: number) => void) => { processHandlers[event] = handler; },
+      kill: vi.fn(),
+    });
+
+    const onToolCallStart = vi.fn();
+    const onToolCall = vi.fn();
+    const pending = startNativeStream({
+      providerId: "codex",
+      modelId: "gpt-5.4-mini",
+      system: "system",
+      messages: [{ role: "user", content: "status?" }],
+    }, {
+      onText: vi.fn(),
+      onReasoning: vi.fn(),
+      onFinish: vi.fn(),
+      onError: vi.fn(),
+      onToolCallStart,
+      onToolCall,
+    });
+
+    stdoutHandlers.data?.(`${JSON.stringify({
+      type: "item.completed",
+      item: {
+        type: "function_call",
+        call_id: "call_1",
+        name: "readFile",
+        arguments: { path: "README.md" },
+      },
+    })}\n`);
+    processHandlers.close?.(0);
+
+    await pending;
+    expect(onToolCallStart).toHaveBeenCalledWith("readFile");
+    expect(onToolCall).toHaveBeenCalledWith("readFile", { path: "README.md" });
+  });
+
   it("launches Claude native runs with scoped workspace permissions", async () => {
     const handlers: Record<string, (code?: number) => void> = {};
     const kill = vi.fn();
