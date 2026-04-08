@@ -11,7 +11,7 @@ import { fmtCost, fmtTokens, wordWrap } from "./render/formatting.js";
 import { APP_BG, ERR, MUTED, OK, P, SIDEBAR_BG, T, TXT, WARN } from "./app-shared.js";
 import { getQuestionCursor } from "./question-view.js";
 import { drawBudgetView } from "./fullscreen-views.js";
-import { appendBottomMenus, buildFooterLines, getPendingFilePromptLines, getPendingImagePromptLines, getPendingMessagePromptLines, getStatusPromptLines } from "./bottom-ui.js";
+import { appendBottomMenus, buildFooterLines, getPendingMessagePromptLines, getStatusPromptLines } from "./bottom-ui.js";
 import { getTreePickerEntries, getVisibleTreeRows } from "./tree-view.js";
 
 type AppState = any;
@@ -60,23 +60,17 @@ export function drawImmediate(app: AppState): void {
   const inputContinueLeadWidth = 2;
   const bottomLines: string[] = [];
   const bottomMenuClicks: Array<{ lineIndex: number; action: () => void }> = [];
-  const pendingFileLines = getPendingFilePromptLines(app, mainW);
-  const pendingImageLines = getPendingImagePromptLines(app, mainW);
   const pendingMessageLines = getPendingMessagePromptLines(app, mainW);
   const statusLines = getStatusPromptLines(app);
   const btwBubbleLines = app.renderBtwBubble(mainW);
 
-  const inputTopPadding = pendingFileLines.length > 0 || pendingImageLines.length > 0 || pendingMessageLines.length > 0 ? 1 : 2;
+  const inputTopPadding = pendingMessageLines.length > 0 ? 1 : 2;
   for (let i = 0; i < inputTopPadding; i++) bottomLines.push("");
   if (btwBubbleLines.length > 0) {
     bottomLines.push(...btwBubbleLines);
     bottomLines.push("");
   }
-  bottomLines.push(...pendingFileLines);
-  if (pendingFileLines.length > 0 && pendingImageLines.length > 0) bottomLines.push("");
-  bottomLines.push(...pendingImageLines);
   if (pendingMessageLines.length > 0) {
-    if (pendingFileLines.length > 0 || pendingImageLines.length > 0) bottomLines.push("");
     bottomLines.push(...pendingMessageLines);
     bottomLines.push("");
   }

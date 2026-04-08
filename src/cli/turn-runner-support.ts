@@ -142,7 +142,6 @@ export function shouldSuppressPlanningNarration(
   policy: { archetype: string },
   modelRuntime?: ModelHandle["runtime"],
 ): boolean {
-  if (modelRuntime === "native-cli") return false;
   if (policy.archetype !== "edit" && policy.archetype !== "bugfix") return false;
   const normalized = nextText.trimStart().toLowerCase();
   return normalized.startsWith("using ")
@@ -181,7 +180,6 @@ export function getMinimalOutputPolicy(options: {
 }): MinimalOutputPolicy | null {
   const { text, policy, modelRuntime } = options;
   if (!shouldForceMinimalResponse({ text, policy })) return null;
-  if (modelRuntime === "native-cli" && (policy.archetype === "edit" || policy.archetype === "bugfix")) return null;
 
   switch (policy.archetype) {
     case "casual":
@@ -235,9 +233,10 @@ export function formatTurnErrorMessage(options: {
 
 export function buildToolPreview(name: string, args: unknown): string {
   if (name === "Read" || name === "readFile") return (args as any)?.file_path ?? (args as any)?.path ?? "?";
+  if (name === "Write" || name === "writeFile") return (args as any)?.file_path ?? (args as any)?.path ?? "?";
+  if (name === "Edit" || name === "editFile") return (args as any)?.file_path ?? (args as any)?.path ?? "?";
   if (name === "Glob" || name === "glob") return (args as any)?.pattern ?? (args as any)?.path ?? "?";
   if (name === "LS" || name === "listFiles") return (args as any)?.path ?? "?";
-  if (name === "writeFile" || name === "editFile") return (args as any)?.path ?? "?";
   if (name === "grep") return (args as any)?.path ?? (args as any)?.pattern ?? "?";
   if (name === "semSearch") return (args as any)?.query ?? (args as any)?.path ?? "?";
   if (name === "bash") {

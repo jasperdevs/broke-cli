@@ -105,6 +105,8 @@ export function toolDescription(tc: ToolCallRenderGroup): string {
     case "bash":
       return `Ran ${tc.preview}`;
     case "Read":
+    case "Write":
+    case "Edit":
     case "Glob":
     case "LS":
     case "grep":

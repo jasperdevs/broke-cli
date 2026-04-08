@@ -50,12 +50,10 @@ export function getBottomLineCount(app: AppState, mainW: number, maxHeight: numb
   const maxVisibleRows = Math.max(1, getSettings().autocompleteMaxVisible);
   const btwBubbleLineCount = app.renderBtwBubble(mainW).length;
   const inputLineCount = app.getWrappedInputLines(app.input.getText(), mainW).length;
-  const pendingFileLineCount = getPendingFilePromptLines(app, mainW).length;
-  const pendingImageLineCount = getPendingImagePromptLines(app, mainW).length;
   const statusLineCount = app.statusMessage ? 2 : 0;
   const footerLineCount = buildFooterLines(app, app.shouldShowSidebar(), mainW).length;
   const tailReserve = 2;
-  let count = 1 + footerLineCount + pendingFileLineCount + pendingImageLineCount + inputLineCount + statusLineCount + btwBubbleLineCount;
+  let count = 1 + footerLineCount + inputLineCount + statusLineCount + btwBubbleLineCount;
   const baseCount = count;
 
   if (app.filePicker) {
@@ -96,7 +94,15 @@ export function getBottomLineCount(app: AppState, mainW: number, maxHeight: numb
 export function getWrappedInputLines(app: AppState, text: string, width: number): string[] {
   const padX = Math.max(0, getSettings().editorPaddingX | 0);
   const usableWidth = Math.max(1, width - 2 - (padX * 2));
-  const sourceLines = (text || "").split("\n");
+  const fileContextKeys = Array.from(app.fileContexts.keys()) as string[];
+  const attachmentTokens = [
+    ...fileContextKeys.map((file) => `[${file.split(/[\\/]/).pop() || file}]`),
+    ...((getSettings().terminal.showImages && app.pendingImages)
+      ? app.pendingImages.map((_: unknown, index: number) => `[Image #${index + 1}]`)
+      : []),
+  ];
+  const prefix = attachmentTokens.length > 0 ? `${attachmentTokens.join(" ")}${text ? " " : ""}` : "";
+  const sourceLines = `${prefix}${text || ""}`.split("\n");
   const wrapped: string[] = [];
   for (const line of sourceLines) {
     const lineParts = line.length === 0 ? [""] : wordWrap(line, usableWidth);
@@ -107,7 +113,15 @@ export function getWrappedInputLines(app: AppState, text: string, width: number)
 
 export function getInputCursorLayout(app: AppState, text: string, cursor: number, width: number): { lines: string[]; row: number; col: number } {
   const lines = app.getWrappedInputLines(text, width);
-  const beforeCursor = text.slice(0, cursor);
+  const fileContextKeys = Array.from(app.fileContexts.keys()) as string[];
+  const attachmentTokens = [
+    ...fileContextKeys.map((file) => `[${file.split(/[\\/]/).pop() || file}]`),
+    ...((getSettings().terminal.showImages && app.pendingImages)
+      ? app.pendingImages.map((_: unknown, index: number) => `[Image #${index + 1}]`)
+      : []),
+  ];
+  const prefix = attachmentTokens.length > 0 ? `${attachmentTokens.join(" ")}${text ? " " : ""}` : "";
+  const beforeCursor = `${prefix}${text.slice(0, cursor)}`;
   const cursorLines = app.getWrappedInputLines(beforeCursor, width);
   const currentLine = cursorLines[cursorLines.length - 1] ?? "";
   return { lines, row: Math.max(0, cursorLines.length - 1), col: currentLine.length };
