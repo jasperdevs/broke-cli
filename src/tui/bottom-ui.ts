@@ -1,5 +1,6 @@
 import { getSettings } from "../core/config.js";
 import { getEffectiveThinkingLevel } from "../ai/thinking.js";
+import { getPrettyModelName } from "../ai/model-catalog.js";
 import { BOLD, DIM, RESET } from "../utils/ansi.js";
 import { ERR, P, T, TXT, WARN } from "./app-shared.js";
 import { visibleWidth } from "../utils/terminal-width.js";
@@ -13,6 +14,8 @@ type AppState = any;
 function renderMenuCount(current: number, total: number): string {
   return `${DIM}(${current}/${total})${RESET}`;
 }
+
+type FooterPart = { text: string; plain: string };
 
 function appendMenuDetailLine(app: AppState, bottomLines: string[], mainW: number): void {
   const detail = getActiveMenuDetail(app);
@@ -126,8 +129,8 @@ export function appendBottomMenus(
   }
 }
 
-export function buildInfoBar(app: AppState, hasSidebar: boolean, mainW: number): string {
-  const parts: Array<{ text: string; plain: string }> = [];
+function buildInfoBarParts(app: AppState, hasSidebar: boolean): FooterPart[] {
+  const parts: FooterPart[] = [];
   if (app.ctrlCCount === 1) parts.push({ text: `${ERR()}Ctrl+C again to exit${RESET}`, plain: "Ctrl+C again to exit" });
   else if (app.escPrimed) {
     const escLabel = app.escAction === "tree" ? "Esc again for tree" : "Esc again to stop";
@@ -152,19 +155,40 @@ export function buildInfoBar(app: AppState, hasSidebar: boolean, mainW: number):
   if (settings.showTokens && !hasSidebar && liveTokens > 0) {
     const tokenPart = app.renderTokenSummaryParts()
       .filter((part: string) => !(part.startsWith("$") || part === "local/unpriced"))
-      .join(" ")
+      .join(" ");
     const statStr = tokenPart;
     parts.push({ text: `${DIM}${statStr}${RESET}`, plain: statStr });
   }
+  return parts;
+}
 
-  const visible = [...parts];
-  const sep = " | ";
-  while (visible.length > 1) {
-    const totalWidth = visible.reduce((s, part) => s + part.plain.length, 0) + (visible.length - 1) * sep.length + 2;
-    if (totalWidth <= mainW) break;
-    visible.pop();
+function packFooterParts(parts: FooterPart[], width: number): string[] {
+  const rows: string[] = [];
+  const sepText = `${DIM} | ${RESET}`;
+  const sepPlain = " | ";
+  let currentText = " ";
+  let currentPlain = "";
+
+  for (const part of parts) {
+    if (!part.plain.trim()) continue;
+    const candidatePlain = currentPlain ? `${currentPlain}${sepPlain}${part.plain}` : part.plain;
+    if (currentPlain && visibleWidth(` ${candidatePlain}`) > width) {
+      rows.push(currentText);
+      currentText = ` ${part.text}`;
+      currentPlain = part.plain;
+      continue;
+    }
+    currentText += currentPlain ? `${sepText}${part.text}` : part.text;
+    currentPlain = candidatePlain;
   }
-  return ` ${visible.map((part) => part.text).join(`${DIM}${sep}${RESET}`)}`;
+
+  if (currentPlain) rows.push(currentText);
+  return rows;
+}
+
+export function buildInfoBar(app: AppState, hasSidebar: boolean, mainW: number): string {
+  const rows = packFooterParts(buildInfoBarParts(app, hasSidebar), mainW);
+  return rows[0] ?? "";
 }
 
 function formatFooterBinding(binding: string): string {
@@ -196,10 +220,32 @@ function renderFooterRow(
 }
 
 export function buildFooterLines(app: AppState, hasSidebar: boolean, mainW: number): string[] {
-  void app;
-  void hasSidebar;
-  void mainW;
-  return [];
+  if (hasSidebar) return [];
+  const rows: FooterPart[] = [];
+  if (!hasSidebar && app.messages.length > 0) {
+    if (app.modelName !== "none") {
+      const modelLabel = getPrettyModelName(app.modelName, app.modelProviderId);
+      rows.push({ text: `${T()}${modelLabel}${RESET}`, plain: modelLabel });
+    }
+    if (app.gitBranch) {
+      const gitLabel = `${app.gitBranch}${app.gitDirty ? "*" : ""}`;
+      rows.push({ text: `${DIM}${gitLabel}${RESET}`, plain: gitLabel });
+    }
+  }
+
+  rows.push(...buildInfoBarParts(app, hasSidebar));
+
+  const newlineBinding = formatFooterBinding(getKeybinding("newline"));
+  rows.push(
+    renderFooterShortcut("/", "commands"),
+    renderFooterShortcut("!", "shell"),
+    renderFooterShortcut("@", "files"),
+    renderFooterShortcut(newlineBinding, "newline"),
+    renderFooterShortcut("tab", "queue"),
+    renderFooterShortcut(app.isStreaming ? "esc" : "ctrl + c", app.isStreaming ? "stop" : "exit"),
+  );
+
+  return packFooterParts(rows, mainW);
 }
 
 export function buildLegacyFooterLines(app: AppState, hasSidebar: boolean, mainW: number): string[] {

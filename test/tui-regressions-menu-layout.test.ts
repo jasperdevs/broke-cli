@@ -71,4 +71,34 @@ describe("menu layout regressions", () => {
       global.clearInterval = originalClearInterval;
     }
   });
+
+  it("keeps compact chat metadata visible by merging it into the bottom bar", () => {
+    const app = new App() as any;
+    let rendered: string[] = [];
+    app.messages = [{ role: "assistant", content: "hello" }];
+    app.modelName = "gpt-5.4-mini";
+    app.modelProviderId = "openai";
+    app.gitBranch = "main";
+    app.mode = "plan";
+    app.screen = {
+      height: 12,
+      width: 60,
+      hasSidebar: false,
+      mainWidth: 60,
+      sidebarWidth: 0,
+      render: (lines: string[]) => { rendered = lines; },
+      setCursor: () => {},
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+
+    app.drawImmediate();
+
+    const output = rendered.map((line) => stripAnsi(line)).join("\n");
+    expect(output).toContain("GPT-5.4 mini");
+    expect(output).toContain("main");
+    expect(output).toContain("plan");
+    expect(output).toContain("/ commands");
+    expect(output).toContain("@ files");
+  });
 });
