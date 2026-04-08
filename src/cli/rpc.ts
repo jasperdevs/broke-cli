@@ -66,7 +66,7 @@ export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts:
     return;
   }
 
-  const currentModelId = modelId ?? activeModel.provider.defaultModel;
+  const currentModelId = activeModel.modelId;
   const session = new Session();
 
   await hooks.emit("on_session_start", { cwd: process.cwd(), rpc: true });

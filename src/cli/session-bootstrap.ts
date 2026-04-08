@@ -98,7 +98,7 @@ export async function bootstrapSession(options: {
       resolvedModelId = undefined;
     }
     const activeModel = providerRegistry.createModel(providerId!, resolvedModelId);
-    const currentModelId = resolvedModelId ?? activeModel.provider.defaultModel;
+    const currentModelId = activeModel.modelId;
     const systemPrompt = buildSystemPrompt(process.cwd(), providerId!, currentMode, getSettings().cavemanLevel ?? "auto");
     app.setModel(activeModel.provider.name, currentModelId, {
       providerId: activeModel.provider.id,

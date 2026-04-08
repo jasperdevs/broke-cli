@@ -59,7 +59,7 @@ export async function resolveOneShotModel(options: {
   }
 
   const activeModel = providerRegistry.createModel(providerId, modelId);
-  return { activeModel, providerId, modelId: modelId ?? activeModel.provider.defaultModel };
+  return { activeModel, providerId, modelId: activeModel.modelId };
 }
 
 export async function runOneShotPrompt(options: {

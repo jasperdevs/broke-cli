@@ -4,6 +4,7 @@ import { createMistral } from "@ai-sdk/mistral";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createXai } from "@ai-sdk/xai";
 import { getApiKey, getBaseUrl, getProviderCredential } from "../core/config.js";
+import { getProviderNativeDefaultModelId } from "./model-catalog.js";
 import { hasNativeCommand } from "./native-cli.js";
 import { type ModelHandle, PROVIDERS } from "./provider-definitions.js";
 
@@ -17,20 +18,24 @@ export function createModel(providerId: string, modelId?: string): ModelHandle {
   const info = PROVIDERS[providerId];
   if (!info) throw new Error(`Unknown provider: ${providerId}`);
 
-  const model = modelId ?? info.defaultModel;
+  const useNative = shouldUseNativeProvider(providerId);
+  const nativeDefaultModel = useNative
+    ? getProviderNativeDefaultModelId(providerId) ?? info.defaultModel
+    : info.defaultModel;
+  const model = modelId ?? nativeDefaultModel;
 
-  if (providerId === "anthropic" && shouldUseNativeProvider(providerId)) {
+  if (providerId === "anthropic" && useNative) {
     return {
-      provider: { ...info, name: "Claude Code" },
+      provider: { ...info, name: "Claude Code", defaultModel: nativeDefaultModel },
       modelId: model,
       runtime: "native-cli",
       nativeCommand: "claude",
     };
   }
 
-  if (providerId === "codex" && shouldUseNativeProvider(providerId)) {
+  if (providerId === "codex" && useNative) {
     return {
-      provider: info,
+      provider: { ...info, defaultModel: nativeDefaultModel },
       modelId: model,
       runtime: "native-cli",
       nativeCommand: "codex",

@@ -198,6 +198,7 @@ const providerAliases: Record<string, string> = {
 
 interface ProviderModelProfile {
   defaultModel: string;
+  nativeDefaultModel?: string;
   smallModel?: string;
   preferredDisplay: string[];
   maxVisible?: number;
@@ -218,6 +219,7 @@ const PROVIDER_MODEL_PROFILES: Record<string, ProviderModelProfile> = {
   },
   codex: {
     defaultModel: "gpt-5-mini",
+    nativeDefaultModel: "gpt-5.4-mini",
     smallModel: "gpt-5-mini",
     preferredDisplay: ["gpt-5-mini", "gpt-5.4-mini", "gpt-5.4", "o4-mini", "o3"],
     maxVisible: 8,
@@ -348,6 +350,10 @@ export function getCatalogModelIds(providerId: string): string[] | null {
 
 export function getProviderDefaultModelId(providerId: string): string | undefined {
   return PROVIDER_MODEL_PROFILES[providerId]?.defaultModel;
+}
+
+export function getProviderNativeDefaultModelId(providerId: string): string | undefined {
+  return PROVIDER_MODEL_PROFILES[providerId]?.nativeDefaultModel;
 }
 
 export function getProviderSmallModelId(providerId: string): string | undefined {

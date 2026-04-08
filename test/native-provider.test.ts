@@ -47,6 +47,8 @@ vi.mock("fs", async () => {
 
 import { createModel, shouldUseNativeProvider } from "../src/ai/providers.js";
 import { isIsolatedLinuxContainerRuntime, normalizeNativeUsage, resolveCodexSandboxMode, resolveNativeSpawnCommand, startNativeStream } from "../src/ai/native-stream.js";
+import { ProviderRegistry } from "../src/ai/provider-registry.js";
+import { resolveOneShotModel } from "../src/cli/oneshot.js";
 
 describe("native provider runtime selection", () => {
   beforeEach(() => {
@@ -137,9 +139,36 @@ describe("native provider runtime selection", () => {
     }
   });
 
-  it("prefers a GPT-5 default for the Codex provider", () => {
+  it("keeps the cheaper GPT-5 mini default for SDK Codex", () => {
     const model = createModel("codex");
     expect(model.modelId).toBe("gpt-5-mini");
+  });
+
+  it("uses a ChatGPT-compatible default for native Codex", () => {
+    configMocks.getProviderCredential.mockImplementation((providerId: string) => (
+      providerId === "codex" ? { kind: "native_oauth", source: "codex-chatgpt" } : { kind: "none" }
+    ));
+
+    const model = createModel("codex");
+    expect(model.runtime).toBe("native-cli");
+    expect(model.modelId).toBe("gpt-5.4-mini");
+    expect(model.provider.defaultModel).toBe("gpt-5.4-mini");
+  });
+
+  it("propagates the runtime-resolved native Codex default through one-shot resolution", async () => {
+    configMocks.getProviderCredential.mockImplementation((providerId: string) => (
+      providerId === "codex" ? { kind: "native_oauth", source: "codex-chatgpt" } : { kind: "none" }
+    ));
+
+    const resolved = await resolveOneShotModel({
+      opts: { provider: "codex" },
+      providers: [{ id: "codex", name: "Codex", available: true, reason: "native login" }],
+      providerRegistry: new ProviderRegistry(),
+    });
+
+    expect(resolved.activeModel.runtime).toBe("native-cli");
+    expect(resolved.activeModel.modelId).toBe("gpt-5.4-mini");
+    expect(resolved.modelId).toBe("gpt-5.4-mini");
   });
 
   it("clamps wildly inflated native Codex input usage back to estimated prompt size", () => {
