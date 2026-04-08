@@ -21,3 +21,10 @@ describe("decodeSpecialKeySequence", () => {
     expect(decodeSpecialKeySequence("\x1b[13;2~")).toEqual({ name: "return", char: "", ctrl: false, meta: false, shift: true });
   });
 });
+
+describe("escape sequence assembly", () => {
+  it("treats partial CSI enter sequences as incomplete until the terminator arrives", () => {
+    expect(decodeSpecialKeySequence("\x1b[13;2")).toBeNull();
+    expect(decodeSpecialKeySequence("\x1b[13;2u")).toEqual({ name: "return", char: "", ctrl: false, meta: false, shift: true });
+  });
+});

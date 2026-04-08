@@ -57,6 +57,14 @@ export function decodeSpecialKeySequence(sequence: string): Keypress | null {
   return null;
 }
 
+function looksLikeIncompleteEscapeSequence(sequence: string): boolean {
+  if (!sequence.startsWith("\x1b")) return false;
+  if (sequence === "\x1b") return true;
+  if (/^\x1b\[[0-9;<>?]*$/u.test(sequence)) return true;
+  if (/^\x1b\[M[\x00-\xff]{0,2}$/u.test(sequence)) return true;
+  return false;
+}
+
 type KeyHandler = (key: Keypress) => void;
 type PasteHandler = (text: string) => void;
 
@@ -122,12 +130,17 @@ export class KeypressHandler {
           this.onKey(specialKey);
           return false;
         }
-        if (s === "\x1b") {
+        if (looksLikeIncompleteEscapeSequence(s)) {
           this.pendingEscapeSequence = s;
           this.pendingEscapeTimer = setTimeout(() => {
             this.pendingEscapeSequence = null;
             this.pendingEscapeTimer = null;
-            this.onKey({ name: "escape", char: "", ctrl: false, meta: false, shift: false });
+            if (s === "\x1b") {
+              this.onKey({ name: "escape", char: "", ctrl: false, meta: false, shift: false });
+              return;
+            }
+            // Fall back to readline for sequences we could not complete in time.
+            origEmit("data", s);
           }, 12);
           return false;
         }
