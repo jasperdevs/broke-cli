@@ -1,13 +1,14 @@
 import { getContextLimit } from "../ai/cost.js";
 import type { ModelHandle } from "../ai/providers.js";
 import { buildSystemPrompt, resolveCavemanLevel } from "../core/context.js";
-import { compactMessages, getTotalContextTokens, splitCompactedMessages } from "../core/compact.js";
+import { COMPACTION_SUMMARY_PREFIX, compactMessages, getTotalContextTokens, splitCompactedMessages } from "../core/compact.js";
 import { getModelContextLimitOverride, getSettings, type Mode } from "../core/config.js";
 import type { TurnPolicy } from "../core/turn-policy.js";
 import type { Session } from "../core/session.js";
 import { resolveExecutionTarget } from "./turn-runner-support.js";
 import type { SpecialistModelRole } from "./model-routing.js";
 import { applyTurnFrame } from "./turn-frame.js";
+import { estimateTextTokens } from "../ai/tokens.js";
 
 export type TurnChatMessage = {
   role: "user" | "assistant";
@@ -51,12 +52,28 @@ export function selectMessagesForTurn(
   messages: TurnChatMessage[],
   policy: { promptProfile: "full" | "casual"; historyWindow: number | null },
   optimizeMessages: (messages: TurnChatMessage[]) => TurnChatMessage[],
+  budget?: { maxTokens: number; modelId?: string },
 ): TurnChatMessage[] {
   const baseMessages = policy.promptProfile === "casual" ? messages : optimizeMessages(messages);
-  if (policy.historyWindow && baseMessages.length > policy.historyWindow) {
-    return baseMessages.slice(-policy.historyWindow);
+  const windowed = policy.historyWindow && baseMessages.length > policy.historyWindow
+    ? baseMessages.slice(-policy.historyWindow)
+    : baseMessages;
+  if (!budget || budget.maxTokens <= 0) return windowed;
+
+  const summary = windowed[0]?.role === "user" && windowed[0].content.startsWith(COMPACTION_SUMMARY_PREFIX)
+    ? windowed[0]
+    : null;
+  const tail = summary ? windowed.slice(1) : windowed;
+  const selected: TurnChatMessage[] = [];
+  let tokenCount = summary ? estimateTextTokens(summary.content, budget.modelId) : 0;
+  for (let i = tail.length - 1; i >= 0; i--) {
+    const message = tail[i]!;
+    const nextCost = estimateTextTokens(message.content, budget.modelId);
+    if (selected.length > 0 && tokenCount + nextCost > budget.maxTokens) break;
+    selected.unshift(message);
+    tokenCount += nextCost;
   }
-  return baseMessages;
+  return summary ? [summary, ...selected] : selected;
 }
 
 export async function maybeRefreshIdleContext(options: {
@@ -160,6 +177,13 @@ export function prepareTurnContext(options: {
   const contextLimit = getModelContextLimitOverride(previewTarget.executionModel.provider.id, previewTarget.executionModelId)
     ?? getContextLimit(previewTarget.executionModelId, previewTarget.executionModel.provider.id)
     ?? 128000;
+  const contextBudget = Math.max(
+    4000,
+    Math.min(
+      getSettings().compaction.keepRecentTokens,
+      Math.max(4000, Math.floor(contextLimit * 0.4)),
+    ),
+  );
   let turnSystemPrompt = buildSystemPrompt(
     process.cwd(),
     previewTarget.executionModel.provider.id,
@@ -168,9 +192,13 @@ export function prepareTurnContext(options: {
     policy.promptProfile,
   );
   const selectedMessages = applyTurnFrame(
-    selectMessagesForTurn(session.getChatMessages(), policy, optimizeMessages),
+    selectMessagesForTurn(session.getChatMessages(), policy, optimizeMessages, {
+      maxTokens: contextBudget,
+      modelId: previewTarget.executionModelId,
+    }),
     text,
     `Execution scaffold (${policy.archetype}): ${policy.scaffold}`,
+    policy.allowedTools,
   );
   const contextTokens = getTotalContextTokens(selectedMessages, turnSystemPrompt, currentModelId);
   const contextPct = contextLimit > 0 ? Math.min(100, Math.round((contextTokens / contextLimit) * 100)) : 0;
@@ -204,9 +232,19 @@ export async function maybeAutoCompactTurnContext(options: {
     app.setCompacting(false);
     app.setStatus(`Auto-compacted older context. Kept ${session.getMessages().length} visible messages.`);
     const selectedMessages = applyTurnFrame(
-      selectMessagesForTurn(session.getChatMessages(), policy, optimizeMessages),
+      selectMessagesForTurn(session.getChatMessages(), policy, optimizeMessages, {
+        maxTokens: Math.max(
+          4000,
+          Math.min(
+            getSettings().compaction.keepRecentTokens,
+            Math.max(4000, Math.floor(prepared.contextLimit * 0.4)),
+          ),
+        ),
+        modelId: currentModelId,
+      }),
       "",
       `Execution scaffold (${policy.archetype}): ${policy.scaffold}`,
+      policy.allowedTools,
     );
     const contextTokens = getTotalContextTokens(selectedMessages, prepared.turnSystemPrompt, currentModelId);
     const contextPct = prepared.contextLimit > 0 ? Math.min(100, Math.round((contextTokens / prepared.contextLimit) * 100)) : 0;

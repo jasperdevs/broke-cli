@@ -18,6 +18,25 @@ describe("turn runner stages", () => {
     expect(selected.map((entry) => entry.content)).toEqual(["2", "3"]);
   });
 
+  it("enforces a deterministic replay budget while preserving the compaction summary", () => {
+    const summary = "The conversation history before this point was compacted into the following summary:\n\n<summary>\nolder context";
+    const messages = [
+      { role: "user" as const, content: summary },
+      { role: "assistant" as const, content: "a".repeat(1500) },
+      { role: "user" as const, content: "b".repeat(1500) },
+      { role: "assistant" as const, content: "c".repeat(1500) },
+    ];
+    const selected = selectMessagesForTurn(
+      messages,
+      { promptProfile: "full", historyWindow: null },
+      vi.fn(() => messages),
+      { maxTokens: 3, modelId: "test" },
+    );
+
+    expect(selected[0]?.content).toBe(summary);
+    expect(selected.map((entry) => entry.content)).toEqual([summary, "c".repeat(1500)]);
+  });
+
   it("adds file context blocks only once when capturing the user turn", () => {
     const session = new Session(`turn-stage-${Date.now()}`);
     const app = {

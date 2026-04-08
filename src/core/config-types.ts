@@ -54,6 +54,7 @@ export interface AutonomySettings {
 export interface Settings {
   autoCompact: boolean;
   enablePromptCaching: boolean;
+  enablePlannedScaffolds: boolean;
   memoizeToolResults: boolean;
   modelGeneratedSessionNames: boolean;
   maxSessionCost: number;

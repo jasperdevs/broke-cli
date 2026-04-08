@@ -180,33 +180,6 @@ export function buildSystemPrompt(cwd: string, providerId?: string, mode?: Mode,
 
   parts.push(`<env>cwd: ${cwd} | git: ${isGit ? "yes" : "no"} | platform: ${process.platform}</env>`);
 
-  // Per-tool guidelines — compact version when caveman is aggressive
-  if (profile === "full" && cavemanLevel === "ultra") {
-    parts.push(`<tool-tips>
-bash: tests/builds/git/install. No cat/sed/grep. 30s timeout.
-semSearch: natural-language code discovery. Use before broad grep on unfamiliar code.
-readFile: offset/limit for large files. Max 500 lines.
-editFile: EXACT match old_string. Enough context for uniqueness.
-writeFile: New files only. readFile first if exists.
-listFiles: Explore code. Depth 3.
-grep: Exact strings/defs/usages. Use include glob.
-todoWrite: Task checklist for 3+ step work.
-</tool-tips>`);
-  } else if (profile === "full") {
-    parts.push(`<tool-tips>
-bash: Use for running tests, builds, git commands, installs, and real shell workflows. Prefer tools over bash for file operations and repo exploration (don't cat/find/head/tail/grep via bash). Commands timeout at 30s by default. For servers/watchers, use a detached launch pattern like nohup ... & echo $! and verify with a probe.
-semSearch: Natural-language code discovery when you know behavior/intent but not exact filenames or symbols. Prefer this before broad grep on unfamiliar codebases.
-readFile: Use offset/limit for large files — don't read entire files over 500 lines.
-editFile: old_string must be an EXACT match of existing text. Include enough surrounding context to be unique. Prefer this over writeFile for changes.
-writeFile: For new files or complete rewrites only. Always readFile first if the file exists.
-listFiles: Start here when exploring unfamiliar code. Default depth is 3.
-grep: For exact strings, definitions, usages, and regex patterns across the codebase. Use include glob to narrow search.
-webSearch: For current docs, APIs, recent events. Not for things you already know.
-webFetch: For reading specific URLs — docs pages, API references. Content is stripped of HTML.
-todoWrite: Create or update a task checklist for multi-step work. Use at the start of complex tasks (3+ steps) to show your plan, then update status as you complete each step. Helps the user track progress.
-</tool-tips>`);
-  }
-
   if (profile === "full") {
     parts.push(`<autonomy>
 ${describeAutonomyPolicy(cwd).join("\n")}

@@ -151,6 +151,13 @@ export async function compactMessages(
 
   const toSummarize = normalized.slice(0, -tailKeep);
   const toKeep = normalized.slice(-tailKeep);
+  const summarizeTokens = estimateConversationTokens("", toSummarize, "compaction");
+  if (summarizeTokens <= 12000) {
+    return [
+      { role: "user" as const, content: buildCompactionContextMessage(buildDeterministicSummary(toSummarize, options.customInstructions)) },
+      ...toKeep,
+    ];
+  }
 
   try {
     const summary = await generateCompactionSummary(toSummarize, model, options.customInstructions);

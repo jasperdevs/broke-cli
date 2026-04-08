@@ -4,6 +4,7 @@ import { join } from "path";
 import { generateText, type LanguageModel } from "ai";
 import { calculateCost, type TokenUsage } from "../ai/cost.js";
 import { estimateTextTokens } from "../ai/tokens.js";
+import { getSettings } from "./config.js";
 import type { ToolName } from "../tools/registry.js";
 
 export type TurnArchetype =
@@ -331,6 +332,7 @@ export async function resolveTurnPolicy(
   planner?: PlannerContext | null,
 ): Promise<TurnPolicy> {
   const basePolicy = getTurnPolicy(userMessage, lastToolCalls);
+  if (getSettings().enablePlannedScaffolds === false) return basePolicy;
   if (!planner?.model || !PLANNABLE_ARCHETYPES.has(basePolicy.archetype)) return basePolicy;
 
   hydratePlannedScaffoldCache();

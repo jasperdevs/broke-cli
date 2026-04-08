@@ -3,6 +3,7 @@ import type { Settings, ThinkingLevel } from "./config-types.js";
 export const DEFAULT_SETTINGS: Settings = {
   autoCompact: true,
   enablePromptCaching: true,
+  enablePlannedScaffolds: false,
   memoizeToolResults: true,
   modelGeneratedSessionNames: false,
   maxSessionCost: 0,

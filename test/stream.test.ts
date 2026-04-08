@@ -28,6 +28,7 @@ vi.mock("../src/core/config.js", () => ({
   getModelContextLimitOverride: () => undefined,
   getSettings: () => ({
     thinkingBudgets: {},
+    compaction: { keepRecentTokens: 24000 },
     images: { blockImages: false },
     autoCompact: false,
     enablePromptCaching: true,
@@ -62,6 +63,7 @@ vi.mock("../src/core/budget.js", () => ({
 }));
 
 vi.mock("../src/core/compact.js", () => ({
+  COMPACTION_SUMMARY_PREFIX: "The conversation history before this point was compacted into the following summary:\n\n<summary>\n",
   compactMessages: async (messages: any[]) => messages,
   getTotalContextTokens: () => 1,
   splitCompactedMessages: (messages: any[]) => ({ summary: null, messages }),

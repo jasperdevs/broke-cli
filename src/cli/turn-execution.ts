@@ -46,9 +46,7 @@ interface TurnExecutionApp {
   rollbackLastAssistantMessage(): void;
 }
 
-interface ExtensionHooks {
-  emit(event: string, payload: Record<string, unknown>): void;
-}
+interface ExtensionHooks { emit(event: string, payload: Record<string, unknown>): void; }
 const MAX_TOOL_RESULT_SERIALIZED_CHARS = 6000;
 function createStreamTokenTracker(
   app: TurnExecutionApp,
@@ -151,6 +149,7 @@ function resolveTurnExecution(options: {
     optimizeMessages(session.getChatMessages()),
     text,
     `Execution scaffold (${policy.archetype}): ${policy.scaffold}`,
+    policy.allowedTools,
   );
   const ctxTokens = getTotalContextTokens(optimizedMessages, turnSystemPrompt, executionModelId);
   app.setContextUsage(ctxTokens, contextLimit);

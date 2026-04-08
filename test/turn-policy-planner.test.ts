@@ -2,6 +2,7 @@ import { existsSync, rmSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { clearRuntimeSettings, setRuntimeSettings } from "../src/core/config.js";
 
 const { generateTextMock } = vi.hoisted(() => ({
   generateTextMock: vi.fn(),
@@ -27,6 +28,8 @@ describe("planned scaffolds", () => {
   beforeEach(() => {
     if (existsSync(cacheFile)) rmSync(cacheFile, { force: true });
     resetPlannedScaffoldCacheForTests();
+    clearRuntimeSettings();
+    setRuntimeSettings({ enablePlannedScaffolds: true });
     generateTextMock.mockReset();
     generateTextMock.mockResolvedValue({
       text: "lane: cheap\ngoal: inspect\nsteps: 1) read 2) answer\ntools: readFile, grep\nrules: no edits\nverify: cite evidence",
@@ -90,5 +93,16 @@ describe("planned scaffolds", () => {
 
     expect(shouldPreferSmallExecutor(question, 1, false)).toBe(true);
     expect(shouldPreferSmallExecutor(bugfix, 3, false)).toBe(false);
+  });
+
+  it("defaults planned scaffolds off to avoid hidden planner calls", async () => {
+    clearRuntimeSettings();
+    generateTextMock.mockClear();
+    const planner = { model: {} as any, modelId: "gpt-5.4-mini", providerId: "openai" };
+
+    const policy = await resolveTurnPolicy("read src/app.ts and tell me what it does", [], planner);
+
+    expect(policy.scaffoldSource).toBe("builtin");
+    expect(generateTextMock).not.toHaveBeenCalled();
   });
 });
