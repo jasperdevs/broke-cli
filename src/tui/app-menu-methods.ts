@@ -1,9 +1,12 @@
 import { getSettings } from "../core/config.js";
+import { currentTheme } from "../core/themes.js";
 import { filterFiles, readFileForContext } from "./file-picker.js";
 import { insertInlineFileChip } from "./inline-chip-utils.js";
 import type { Keypress } from "./keypress.js";
+import { BOLD, RESET } from "../utils/ansi.js";
 import { DIM } from "../utils/ansi.js";
 import { visibleWidth } from "../utils/terminal-width.js";
+import { TXT } from "./app-shared.js";
 import { wordWrap } from "./render/formatting.js";
 import type { MenuPromptKind, ModelOption, PickerItem, SettingEntry } from "./app-types.js";
 import { moveTreeSelection } from "./tree-view.js";
@@ -22,6 +25,17 @@ import {
 } from "./app-menu-entries.js";
 type AppState = any;
 
+function styleComposerLine(app: AppState, line: string): string {
+  let styled = line;
+  const elements = app.input.getElements?.() ?? [];
+  for (const element of elements) {
+    if (element.kind !== "image") continue;
+    const styledLabel = `${currentTheme().imageTagBg}${BOLD}${TXT()}${element.label}${RESET}`;
+    styled = styled.split(element.label).join(styledLabel);
+  }
+  return styled;
+}
+
 function getComposerSourceLines(app: AppState, text: string): string[] {
   void app;
   return `${text || ""}`.split("\n");
@@ -35,7 +49,7 @@ function wrapComposerLines(app: AppState, text: string, width: number, styled: b
     const lineParts = line.length === 0 ? [""] : wordWrap(line, usableWidth);
     for (const part of lineParts) {
       const plainLine = `${" ".repeat(padX)}${part}`;
-      wrapped.push(plainLine);
+      wrapped.push(styled ? styleComposerLine(app, plainLine) : plainLine);
     }
   }
   return wrapped.length > 0 ? wrapped : [" ".repeat(padX)];
