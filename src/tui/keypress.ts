@@ -72,6 +72,8 @@ export class KeypressHandler {
   private started = false;
   private origEmit: typeof process.stdin.emit | null = null;
   private keypressListener: ((str: string | undefined, key: readline.Key) => void) | null = null;
+  private pendingEscapeSequence: string | null = null;
+  private pendingEscapeTimer: NodeJS.Timeout | null = null;
 
   constructor(onKey: KeyHandler, onPaste: PasteHandler) {
     this.onKey = onKey;
@@ -103,14 +105,27 @@ export class KeypressHandler {
     this.origEmit = origEmit;
     process.stdin.emit = ((event: string, ...args: any[]) => {
       if (event === "data") {
-        const s = typeof args[0] === "string" ? args[0] : (args[0] as Buffer).toString("utf-8");
+        let s = typeof args[0] === "string" ? args[0] : (args[0] as Buffer).toString("utf-8");
+        if (this.pendingEscapeSequence) {
+          s = `${this.pendingEscapeSequence}${s}`;
+          this.pendingEscapeSequence = null;
+          if (this.pendingEscapeTimer) {
+            clearTimeout(this.pendingEscapeTimer);
+            this.pendingEscapeTimer = null;
+          }
+        }
         const specialKey = decodeSpecialKeySequence(s);
         if (specialKey) {
           this.onKey(specialKey);
           return false;
         }
         if (s === "\x1b") {
-          this.onKey({ name: "escape", char: "", ctrl: false, meta: false, shift: false });
+          this.pendingEscapeSequence = s;
+          this.pendingEscapeTimer = setTimeout(() => {
+            this.pendingEscapeSequence = null;
+            this.pendingEscapeTimer = null;
+            this.onKey({ name: "escape", char: "", ctrl: false, meta: false, shift: false });
+          }, 12);
           return false;
         }
         mouseSeqRe.lastIndex = 0;
@@ -218,6 +233,11 @@ export class KeypressHandler {
       process.stdin.emit = this.origEmit;
       this.origEmit = null;
     }
+    if (this.pendingEscapeTimer) {
+      clearTimeout(this.pendingEscapeTimer);
+      this.pendingEscapeTimer = null;
+    }
+    this.pendingEscapeSequence = null;
     if (process.stdin.isTTY) {
       process.stdin.setRawMode(false);
     }

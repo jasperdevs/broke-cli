@@ -6,6 +6,7 @@ import { ERR, P, T, TXT, WARN } from "./app-shared.js";
 import { visibleWidth } from "../utils/terminal-width.js";
 import { currentQuestionField, getQuestionBodyLines, getQuestionHeader, getQuestionOptionEntries, isQuestionSubmitTab } from "./question-view.js";
 import { getActiveMenuDetail } from "./app-menu-entries.js";
+import { renderPendingMessagesBlock } from "./render/chat.js";
 
 type AppState = any;
 
@@ -44,6 +45,15 @@ export function getPendingImagePromptLines(app: AppState, mainW: number): string
 export function getStatusPromptLines(app: AppState): string[] {
   if (!app.statusMessage) return [];
   return [` ${app.statusMessage}`];
+}
+
+export function getPendingMessagePromptLines(app: AppState, mainW: number): string[] {
+  return renderPendingMessagesBlock({
+    pendingMessages: app.pendingMessages,
+    maxWidth: mainW,
+    dim: DIM,
+    reset: RESET,
+  });
 }
 
 export function appendBottomMenus(

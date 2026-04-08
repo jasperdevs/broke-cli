@@ -11,7 +11,7 @@ import { fmtCost, fmtTokens, wordWrap } from "./render/formatting.js";
 import { APP_BG, ERR, MUTED, OK, P, SIDEBAR_BG, T, TXT, WARN } from "./app-shared.js";
 import { getQuestionCursor } from "./question-view.js";
 import { drawBudgetView } from "./fullscreen-views.js";
-import { appendBottomMenus, buildInfoBar, getPendingImagePromptLines, getStatusPromptLines } from "./bottom-ui.js";
+import { appendBottomMenus, buildInfoBar, getPendingImagePromptLines, getPendingMessagePromptLines, getStatusPromptLines } from "./bottom-ui.js";
 import { getTreePickerEntries, getVisibleTreeRows } from "./tree-view.js";
 
 type AppState = any;
@@ -61,16 +61,22 @@ export function drawImmediate(app: AppState): void {
   const bottomLines: string[] = [];
   const bottomMenuClicks: Array<{ lineIndex: number; action: () => void }> = [];
   const pendingImageLines = getPendingImagePromptLines(app, mainW);
+  const pendingMessageLines = getPendingMessagePromptLines(app, mainW);
   const statusLines = getStatusPromptLines(app);
   const btwBubbleLines = app.renderBtwBubble(mainW);
 
-  const inputTopPadding = pendingImageLines.length > 0 ? 1 : 2;
+  const inputTopPadding = pendingImageLines.length > 0 || pendingMessageLines.length > 0 ? 1 : 2;
   for (let i = 0; i < inputTopPadding; i++) bottomLines.push("");
   if (btwBubbleLines.length > 0) {
     bottomLines.push(...btwBubbleLines);
     bottomLines.push("");
   }
   bottomLines.push(...pendingImageLines);
+  if (pendingMessageLines.length > 0) {
+    if (pendingImageLines.length > 0) bottomLines.push("");
+    bottomLines.push(...pendingMessageLines);
+    bottomLines.push("");
+  }
   bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
   const inputStartIndex = bottomLines.length;
   bottomLines.push(...inputLayout.lines.map((line: string, index: number) => `${index === 0 ? inputLead : inputContinueLead}${line}`));

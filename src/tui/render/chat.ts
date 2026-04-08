@@ -21,6 +21,36 @@ export interface PendingRenderMessage {
   delivery: "steering" | "followup";
 }
 
+export function renderPendingMessagesBlock(options: {
+  pendingMessages: PendingRenderMessage[];
+  maxWidth: number;
+  dim: string;
+  reset: string;
+}): string[] {
+  const { pendingMessages, maxWidth, dim, reset } = options;
+  if (pendingMessages.length === 0) return [];
+
+  const followUps = pendingMessages.filter((item) => item.delivery === "followup").length;
+  const steering = pendingMessages.length - followUps;
+  const label = followUps > 0 && steering === 0
+    ? "Queued follow-up messages"
+    : steering > 0 && followUps === 0
+      ? "Queued steering messages"
+      : "Queued messages";
+  const lines = [`  ${dim}• ${label}${reset}`];
+
+  for (const item of pendingMessages.slice(-6)) {
+    const preview = item.text.replace(/\s+/g, " ").trim();
+    const marker = "↳";
+    for (const wrappedLine of wrapVisibleText(preview, Math.max(8, maxWidth - 8))) {
+      lines.push(`  ${dim}${marker} ${wrappedLine}${reset}`);
+    }
+  }
+
+  lines.push(`  ${dim}alt + ↑ edit last queued${reset}`);
+  return lines;
+}
+
 function stripHiddenThinkingNoise(text: string): string {
   return text
     .replace(/<[^>]+>/g, " ")
@@ -335,27 +365,6 @@ export function renderMessageOverlays(options: {
       ? "Thinking..."
       : (waitingForFirstOutput && secs >= 8 ? "Still waiting for first token..." : "Composing...");
     lines.push(`  ${sparkleSpinner(spinnerFrame)} ${shimmerText(label, spinnerFrame)} ${colors.accent}(${statParts.join(" · ")})${colors.reset}`);
-    lines.push("");
-  }
-
-  if (pendingMessages.length > 0) {
-    ensureOverlayGap(lines);
-    const followUps = pendingMessages.filter((item) => item.delivery === "followup").length;
-    const steering = pendingMessages.length - followUps;
-    const label = followUps > 0 && steering === 0
-      ? "Queued follow-up messages"
-      : steering > 0 && followUps === 0
-        ? "Queued steering messages"
-        : "Queued messages";
-    lines.push(`  ${colors.dim}• ${label}${colors.reset}`);
-    for (const item of pendingMessages.slice(-6)) {
-      const preview = item.text.replace(/\s+/g, " ").trim();
-      const marker = "↳";
-      for (const wrappedLine of wrapVisibleText(preview, Math.max(8, maxWidth - 8))) {
-        lines.push(`  ${colors.dim}${marker} ${wrappedLine}${colors.reset}`);
-      }
-    }
-    lines.push(`  ${colors.dim}alt + ↑ edit last queued${colors.reset}`);
     lines.push("");
   }
 
