@@ -4,6 +4,7 @@ export default defineConfig({
   entry: {
     brokecli: "bin/brokecli.ts",
     sdk: "src/sdk.ts",
+    "benchmark-harness": "src/benchmarks/fixed-suite.ts",
   },
   format: ["esm"],
   outDir: "dist",
