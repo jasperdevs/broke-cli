@@ -22,6 +22,23 @@ function extractAnsiPrefix(line: string): string {
   return match?.[1] ?? "";
 }
 
+function renderUserImageRows(images: Array<{ mimeType: string; data: string }>, maxWidth: number, tag: string): string[] {
+  const rows: string[] = [];
+  let current = "";
+  for (let i = 0; i < images.length; i++) {
+    const token = tag.replace("#1", `#${i + 1}`);
+    const candidate = current ? `${current} ${token}` : token;
+    if (current && stripAnsi(candidate).length > maxWidth) {
+      rows.push(current);
+      current = token;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) rows.push(current);
+  return rows;
+}
+
 export function renderStaticMessages(options: {
   messages: RenderChatMessage[];
   maxWidth: number;
@@ -46,18 +63,17 @@ export function renderStaticMessages(options: {
   while (idx < messages.length) {
     const msg = messages[idx];
     if (msg.role === "user") {
-      let content = msg.content;
-      if (getSettings().terminal.showImages && msg.images && msg.images.length > 0) {
-        for (let i = 0; i < msg.images.length; i++) {
-          const tag = `${colors.imageTagBg}${bold}${colors.text}[Image #${i + 1}]${reset}`;
-          content += ` ${tag}`;
-        }
-      }
       const accent = "▌";
       const availW = Math.max(1, maxWidth - 3);
-      for (const contentLine of content.split("\n")) {
+      for (const contentLine of msg.content.split("\n")) {
         for (const text of wordWrap(contentLine, availW)) {
           lines.push(`${colors.userAccent}${accent}${reset} ${colors.userText}${text}${reset}`);
+        }
+      }
+      if (getSettings().terminal.showImages && msg.images && msg.images.length > 0) {
+        const imageTag = `${colors.imageTagBg}${bold}${colors.text}[Image #1]${reset}`;
+        for (const row of renderUserImageRows(msg.images, availW, imageTag)) {
+          lines.push(`${colors.userAccent}${accent}${reset} ${row}`);
         }
       }
       lines.push("");

@@ -389,4 +389,31 @@ describe("image attachments", () => {
     expect(lines).toContain("[Image #1]");
     expect(lines).not.toContain("[IMAGE 1]");
   });
+
+  it("renders sent user images on rows below the user text instead of wrapping through it", () => {
+    updateSetting("terminal", { ...getSettings().terminal, showImages: true });
+    const lines = renderStaticMessages({
+      messages: [{
+        role: "user",
+        content: "whbats this?",
+        images: [
+          { mimeType: "image/png", data: "abc" },
+          { mimeType: "image/png", data: "def" },
+        ],
+      }],
+      maxWidth: 24,
+      toolOutputCollapsed: false,
+      isToolOutput: () => false,
+      wordWrap,
+      colors: { imageTagBg: "", userBg: "", userText: "", userAccent: "", border: "", muted: "", text: "" },
+      reset: "",
+      bold: "",
+    }).map((line) => stripAnsi(line));
+
+    expect(lines[0]).toContain("whbats this?");
+    const joined = lines.join("\n");
+    expect(joined).toContain("[Image #1]");
+    expect(joined).toContain("[Image #2]");
+    expect(lines.some((line) => line.includes("whbats this? [Image #1]"))).toBe(false);
+  });
 });
