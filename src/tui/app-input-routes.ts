@@ -129,6 +129,18 @@ function looksLikeImageDraft(text: string): boolean {
   return !!getImageExtension(normalizePastedPath(text.trim()));
 }
 
+function scheduleDeferredPastedImageLoad(app: AppState, rawText: string): void {
+  if (!looksLikeImageDraft(rawText)) return;
+  for (const delayMs of [40, 140]) {
+    setTimeout(() => {
+      if (!tryLoadImageFromPath(app, rawText)) return;
+      stripMirroredImagePathFromDraft(app, rawText);
+      queueMicrotask(() => stripMirroredImagePathFromDraft(app, rawText));
+      app.draw?.();
+    }, delayMs);
+  }
+}
+
 export function tryConsumeImageDraft(app: AppState): boolean {
   snapCursorOutsideInlineFileChip(app);
   const text = app.input.getText().trim();
@@ -432,6 +444,7 @@ export function handlePaste(app: AppState, text: string): void {
     return;
   }
   app.input.paste(text);
+  scheduleDeferredPastedImageLoad(app, text);
   if (tryConsumeImageDraft(app)) {
     app.draw();
     return;

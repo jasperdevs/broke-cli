@@ -207,6 +207,25 @@ describe("image attachments", () => {
     expect(app.input.getText()).toBe("");
   });
 
+  it("resolves a transient Yoink image path even when pasted after other draft text", async () => {
+    updateSetting("terminal", { ...getSettings().terminal, showImages: true });
+    const app = new App() as any;
+    const dir = mkdtempSync(join(tmpdir(), "brokecli-image-"));
+    tempDirs.push(dir);
+    const yoinkDir = join(dir, "Yoink");
+    mkdirSync(yoinkDir);
+    const transientPath = join(yoinkDir, "yoink_--_--_b.png");
+    const actualImagePath = join(yoinkDir, "yoink_2026-04-08_16-58-56_950c.png");
+    writeFileSync(actualImagePath, "fakepng", "utf-8");
+
+    app.input.setText("hey ");
+    app.handlePaste(transientPath);
+    await new Promise((resolve) => setTimeout(resolve, 160));
+
+    expect(app.pendingImages).toHaveLength(1);
+    expect(app.input.getText()).toBe("hey ");
+  });
+
   it("removes the last attachment chip with backspace when the draft is empty", () => {
     const app = new App() as any;
     app.pendingImages = [{ mimeType: "image/png", data: "abc" }];
