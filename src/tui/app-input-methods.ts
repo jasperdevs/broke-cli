@@ -3,6 +3,7 @@ import type { Keypress } from "./keypress.js";
 import { matchesBinding, loadKeybindings } from "../core/keybindings.js";
 import { getSettings } from "../core/config.js";
 import { ensureInlineChipElements, getImageChipLabel, syncInlineImageChipLabels } from "./inline-chip-utils.js";
+import { canonicalizeSlashInput } from "./command-surface.js";
 import { handleQuestionViewKey } from "./question-view.js";
 import {
   handleBudgetViewKey,
@@ -380,6 +381,18 @@ export function handleKey(app: AppState, key: Keypress): void {
   const beforeText = app.input.getText();
   const beforeCursor = app.input.getCursor();
   const action = app.input.handleKey(key);
+  if (action === "none" && key.char === " " && beforeText.startsWith("/") && !beforeText.includes(" ")) {
+    const canonical = canonicalizeSlashInput(app.input.getText(), {
+      hasMessages: app.messages.length > 0,
+      hasAssistantContent: !!app.getLastAssistantContent?.(),
+      canResume: true,
+      hasStoredAuth: true,
+    });
+    if (canonical !== app.input.getText()) {
+      app.input.setText(canonical, false);
+      app.input.setCursor(canonical.length);
+    }
+  }
   if (action === "none") syncComposerAttachmentsFromInput(app);
   if (action === "none" && app.input.getText() === beforeText && app.input.getCursor() === beforeCursor && tryDeleteVisiblePlaceholderFallback(app, key, beforeText, beforeCursor)) {
     app.draw();

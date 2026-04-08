@@ -2,6 +2,7 @@ import { renderBudgetDashboard } from "../core/budget-insights.js";
 import { filterFiles } from "./file-picker.js";
 import type { Keypress } from "./keypress.js";
 import { stripInlineChipLabels, syncInlineImageChipLabels } from "./inline-chip-utils.js";
+import { canonicalizeSlashInput } from "./command-surface.js";
 import {
   handleImagePaste,
   resolvePendingImagesBeforeSubmit,
@@ -334,7 +335,12 @@ export function handlePaste(app: AppState, text: string): void {
 export { scheduleDeferredImageDraftConsume, tryConsumeImageDraft } from "./composer-image-attachments.js";
 
 function submitQueuedInput(app: AppState, delivery: "steering" | "followup"): void {
-  const text = stripInlineChipLabels(app);
+  const text = canonicalizeSlashInput(stripInlineChipLabels(app), {
+    hasMessages: app.messages.length > 0,
+    hasAssistantContent: !!app.getLastAssistantContent?.(),
+    canResume: true,
+    hasStoredAuth: true,
+  });
   if (!resolvePendingImagesBeforeSubmit(app)) {
     app.draw();
     return;

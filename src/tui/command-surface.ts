@@ -106,3 +106,26 @@ export function getCommandMatches(inputText: string, context?: CommandSurfaceCon
     return visibleCommands.indexOf(a) - visibleCommands.indexOf(b);
   });
 }
+
+export function resolveSlashCommandName(inputText: string, context?: CommandSurfaceContext): string | null {
+  const parsed = parseCommandInput(inputText);
+  if (!parsed) return null;
+  const visibleCommands = COMMANDS.filter((command) => isCommandVisible(command, context));
+  const exact = visibleCommands.find((command) =>
+    command.name === parsed.command || command.aliases?.includes(parsed.command),
+  );
+  if (exact) return exact.name;
+
+  if (parsed.hasArgs) return null;
+  const matches = getCommandMatches(`/${parsed.command}`, context);
+  return matches.length === 1 ? matches[0]!.name : null;
+}
+
+export function canonicalizeSlashInput(inputText: string, context?: CommandSurfaceContext): string {
+  const parsed = parseCommandInput(inputText);
+  if (!parsed) return inputText;
+  const resolved = resolveSlashCommandName(inputText, context);
+  if (!resolved) return inputText;
+  const suffix = parsed.raw.slice(parsed.command.length);
+  return `/${resolved}${suffix}`;
+}

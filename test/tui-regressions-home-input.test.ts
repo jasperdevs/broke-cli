@@ -257,6 +257,26 @@ describe("input editing", () => {
     expect(submitted).toBe("/settings");
   });
 
+  it("canonicalizes a slash alias when space starts the command arguments", () => {
+    const app = new App() as any;
+    app.input.setText("/set");
+
+    app.handleKey({ name: "space", char: " ", ctrl: false, meta: false, shift: false });
+
+    expect(app.input.getText()).toBe("/settings ");
+  });
+
+  it("canonicalizes unique slash prefixes on submit before sending chat text", () => {
+    const app = new App() as any;
+    let submitted = "";
+    app.onSubmit = (text: string) => { submitted = text; };
+    app.input.setText("/budg");
+
+    app.handleKey({ name: "return", char: "", ctrl: false, meta: false, shift: false });
+
+    expect(submitted).toBe("/budget");
+  });
+
   it("treats kitty esc-enter as a newline instead of meta-enter submit", () => {
     const app = new App() as any;
     app.input.paste("hello");
