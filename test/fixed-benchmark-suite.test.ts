@@ -36,8 +36,12 @@ describe("fixed benchmark suite", () => {
         averageInputTokens: 120,
         averageOutputTokens: 40,
         averageTotalTokens: 160,
+        averageVisibleOutputTokens: 28,
+        averageHiddenOutputTokens: 12,
         averageLatencyMs: 1000,
         totalCost: 0.12,
+        costPerSuccess: 0.12,
+        averageLatencyPerSuccessMs: 1000,
       },
       tasks: [
         {
@@ -104,6 +108,8 @@ describe("fixed benchmark suite", () => {
     expect(report).toContain("planner in/out 20/5");
     expect(report).toContain("input mix: system 30");
     expect(report).toContain("output mix: visible 28");
+    expect(report).toContain("avg hidden 12");
+    expect(report).toContain("cost/success 0.120000");
     expect(report).toContain("OpenCode estimate: input 110-118");
   });
 });

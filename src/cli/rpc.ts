@@ -12,6 +12,7 @@ import { ProviderRegistry } from "../ai/provider-registry.js";
 import type { ModelHandle } from "../ai/providers.js";
 import { loadExtensions } from "../core/extensions.js";
 import type { ToolName } from "../tools/registry.js";
+import { tryRepoTaskFastPath } from "./repo-fastpath.js";
 import { applyTurnFrame } from "./turn-frame.js";
 import { buildMinimalOutputInstruction, getMinimalOutputPolicy } from "./turn-runner-support.js";
 
@@ -68,6 +69,7 @@ export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts:
 
   const currentModelId = activeModel.modelId;
   const session = new Session();
+  session.setProviderModel(activeModel.provider.name, currentModelId);
 
   await hooks.emit("on_session_start", { cwd: process.cwd(), rpc: true });
 
@@ -100,6 +102,15 @@ export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts:
 
     session.addMessage("user", msg.content);
     await hooks.emit("on_message", { role: "user", content: msg.content });
+
+    const repoFastPath = await tryRepoTaskFastPath({ root: process.cwd(), prompt: msg.content, session });
+    if (repoFastPath) {
+      session.addMessage("assistant", repoFastPath.content);
+      session.recordTurn({ toolsExposed: 0, toolsUsed: 0, visibleOutputTokens: 0, hiddenOutputTokens: 0 });
+      writeLine({ type: "text", content: repoFastPath.content });
+      writeLine({ type: "done", usage: { inputTokens: 0, outputTokens: 0, cost: 0 } });
+      continue;
+    }
 
     abortController = new AbortController();
     let assistantText = "";

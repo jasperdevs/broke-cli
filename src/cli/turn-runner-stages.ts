@@ -64,13 +64,13 @@ function buildFollowupRepoContext(session: Session, text: string): { transcriptN
   if (!/\b(test|tests|coverage|spec|without changing|which files import|what imports|where .* imported)\b/i.test(text)) {
     return null;
   }
-    return buildNativeFollowupStateContext(
-      process.cwd(),
-      repoState.recentEdits.map((entry) => entry.path),
-      importOnlyFollowup ? 3 : 2,
-      "summary",
-    );
-  }
+  return buildNativeFollowupStateContext(
+    process.cwd(),
+    repoState.recentEdits.map((entry) => entry.path),
+    importOnlyFollowup ? 3 : 2,
+    "summary",
+  );
+}
 
 export function injectTransientUserContext(messages: TurnChatMessage[], transientUserContext?: string): TurnChatMessage[] {
   if (!transientUserContext?.trim()) return messages;

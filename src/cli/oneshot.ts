@@ -10,6 +10,7 @@ import { resolveTurnPolicy } from "../core/turn-policy.js";
 import type { ProviderRegistry } from "../ai/provider-registry.js";
 import type { ModelHandle } from "../ai/providers.js";
 import { tryCsvToParquetFastPath, tryLostGitRecoveryFastPath } from "./oneshot-fastpath.js";
+import { tryRepoTaskFastPath } from "./repo-fastpath.js";
 import { applyTurnFrame } from "./turn-frame.js";
 import { buildMinimalOutputInstruction, getMinimalOutputPolicy } from "./turn-runner-support.js";
 
@@ -71,18 +72,26 @@ export async function runOneShotPrompt(options: {
   streamCallbacks?: OneShotStreamCallbacks;
 }): Promise<OneShotResult> {
   const { prompt, mode, providers, providerRegistry, opts, streamCallbacks } = options;
+  const session = new Session();
+  session.addMessage("user", prompt);
+  const deterministicMeta = { providerId: "deterministic", modelId: "fastpath" };
+  const applyDeterministicSessionMeta = (): { providerId: string; modelId: string } => {
+    session.setProviderModel("deterministic", "fastpath");
+    return deterministicMeta;
+  };
+
   const fastPath = tryCsvToParquetFastPath(prompt) ?? tryLostGitRecoveryFastPath(prompt);
   if (fastPath) {
-    const session = new Session();
-    session.addMessage("user", prompt);
+    const { providerId, modelId } = applyDeterministicSessionMeta();
     session.addMessage("assistant", fastPath.content);
+    session.recordTurn({ toolsExposed: 0, toolsUsed: 0, visibleOutputTokens: 0, hiddenOutputTokens: 0 });
     const result = {
-      providerId: "deterministic",
-      modelId: "csv-to-parquet-fastpath",
+      providerId,
+      modelId,
       content: fastPath.content,
       usage: { inputTokens: 0, outputTokens: 0, cost: 0 },
       session,
-      toolCalls: [{ name: "csvToParquetFastPath", args: prompt }],
+      toolCalls: [{ name: "deterministicFastPath", args: prompt }],
     };
     streamCallbacks?.onStart?.({ providerId: result.providerId, modelId: result.modelId });
     streamCallbacks?.onText?.(fastPath.content);
@@ -90,10 +99,32 @@ export async function runOneShotPrompt(options: {
     return result;
   }
 
+  const repoFastPath = await tryRepoTaskFastPath({ root: process.cwd(), prompt, session });
+  if (repoFastPath) {
+    const { providerId, modelId } = applyDeterministicSessionMeta();
+    session.addMessage("assistant", repoFastPath.content);
+    session.recordTurn({
+      toolsExposed: 0,
+      toolsUsed: 0,
+      visibleOutputTokens: 0,
+      hiddenOutputTokens: 0,
+    });
+    const result = {
+      providerId,
+      modelId,
+      content: repoFastPath.content,
+      usage: { inputTokens: 0, outputTokens: 0, cost: 0 },
+      session,
+      toolCalls: [{ name: repoFastPath.label, args: prompt }],
+    };
+    streamCallbacks?.onStart?.({ providerId: result.providerId, modelId: result.modelId });
+    streamCallbacks?.onText?.(repoFastPath.content);
+    streamCallbacks?.onFinish?.(result);
+    return result;
+  }
+
   const { activeModel, providerId, modelId } = await resolveOneShotModel({ opts, providers, providerRegistry });
-  const session = new Session();
   session.setProviderModel(activeModel.provider.name, modelId);
-  session.addMessage("user", prompt);
 
   const policy = await resolveTurnPolicy(
     prompt,

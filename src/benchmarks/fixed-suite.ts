@@ -98,8 +98,12 @@ export type BenchmarkSuiteSummary = {
   averageInputTokens: number;
   averageOutputTokens: number;
   averageTotalTokens: number;
+  averageVisibleOutputTokens: number;
+  averageHiddenOutputTokens: number;
   averageLatencyMs: number;
   totalCost: number;
+  costPerSuccess: number;
+  averageLatencyPerSuccessMs: number;
 };
 
 export type BenchmarkSuiteResult = {
@@ -433,8 +437,14 @@ export async function runFixedBenchmarkSuite(options: FixedBenchmarkOptions = {}
     averageInputTokens: average(taskResults.map((task) => task.totalInputTokens)),
     averageOutputTokens: average(taskResults.map((task) => task.totalOutputTokens)),
     averageTotalTokens: average(taskResults.map((task) => task.totalInputTokens + task.totalOutputTokens)),
+    averageVisibleOutputTokens: average(taskResults.map((task) => task.spend.visibleOutputTokens)),
+    averageHiddenOutputTokens: average(taskResults.map((task) => task.spend.hiddenOutputTokens)),
     averageLatencyMs: average(taskResults.map((task) => task.latencyMs)),
     totalCost: taskResults.reduce((sum, task) => sum + task.totalCost, 0),
+    costPerSuccess: taskResults.filter((task) => task.success).length > 0
+      ? Number((taskResults.reduce((sum, task) => sum + task.totalCost, 0) / taskResults.filter((task) => task.success).length).toFixed(6))
+      : 0,
+    averageLatencyPerSuccessMs: average(taskResults.filter((task) => task.success).map((task) => task.latencyMs)),
   };
 
   return {
@@ -457,7 +467,7 @@ export function renderFixedBenchmarkReport(result: BenchmarkSuiteResult): string
   const lines: string[] = [];
   lines.push(`${result.suiteName === "extended" ? "Extended" : "Fixed"} benchmark suite`);
   lines.push(`provider/model: ${result.providerId}/${result.modelId}`);
-  lines.push(`tasks: ${result.summary.taskCount} · success ${result.summary.succeeded}/${result.summary.taskCount} · avg input ${result.summary.averageInputTokens} · avg output ${result.summary.averageOutputTokens} · avg total ${result.summary.averageTotalTokens} · avg latency ${result.summary.averageLatencyMs}ms · total cost ${result.summary.totalCost.toFixed(6)}`);
+  lines.push(`tasks: ${result.summary.taskCount} · success ${result.summary.succeeded}/${result.summary.taskCount} · avg input ${result.summary.averageInputTokens} · avg output ${result.summary.averageOutputTokens} · avg total ${result.summary.averageTotalTokens} · avg visible ${result.summary.averageVisibleOutputTokens} · avg hidden ${result.summary.averageHiddenOutputTokens} · avg latency ${result.summary.averageLatencyMs}ms · cost/success ${result.summary.costPerSuccess.toFixed(6)} · total cost ${result.summary.totalCost.toFixed(6)}`);
   for (const task of result.tasks) {
     lines.push("");
     lines.push(`${task.taskId}: ${task.success ? "success" : "failure"} · turns ${task.totalTurns} · input ${task.totalInputTokens} · output ${task.totalOutputTokens} · latency ${task.latencyMs}ms · cost ${task.totalCost.toFixed(6)}`);

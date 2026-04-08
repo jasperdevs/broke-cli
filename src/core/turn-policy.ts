@@ -221,35 +221,35 @@ function refinePolicyForFollowup(policy: TurnPolicy, userMessage: string, repoSt
       archetype: "explore",
       allowedTools: [],
       maxToolSteps: 0,
-        scaffold: "lane cheap\nreuse recent edits\nno tools\nanswer only",
-        preferSmallExecutor: true,
-        promptProfile: "followup",
-        historyWindow: 1,
-      };
-    }
+      scaffold: "lane cheap\nreuse recent edits\nno tools\nanswer only",
+      preferSmallExecutor: true,
+      promptProfile: "followup",
+      historyWindow: 1,
+    };
+  }
 
   if (/\b(test|tests|coverage|spec)\b/i.test(msg)) {
     return {
       ...policy,
       archetype: policy.archetype === "bugfix" ? "bugfix" : "edit",
-        allowedTools: ["readFile", "writeFile", "editFile"],
-        maxToolSteps: 2,
-        scaffold: "lane main\nreuse recent edits\nread changed file once if needed\nwrite test then stop",
-        preferSmallExecutor: false,
-        promptProfile: "followup",
-        historyWindow: 1,
-      };
-    }
+      allowedTools: ["readFile", "writeFile", "editFile"],
+      maxToolSteps: 2,
+      scaffold: "lane main\nreuse recent edits\nread changed file once if needed\nwrite test then stop",
+      preferSmallExecutor: false,
+      promptProfile: "followup",
+      historyWindow: 1,
+    };
+  }
 
   if (policy.archetype === "edit" || policy.archetype === "bugfix") {
     return {
-        ...policy,
-        allowedTools: policy.allowedTools.filter((tool) => tool !== "semSearch" && tool !== "listFiles"),
-        maxToolSteps: Math.min(policy.maxToolSteps, 3),
-        promptProfile: "followup",
-        historyWindow: 1,
-      };
-    }
+      ...policy,
+      allowedTools: policy.allowedTools.filter((tool) => tool !== "semSearch" && tool !== "listFiles"),
+      maxToolSteps: Math.min(policy.maxToolSteps, 3),
+      promptProfile: "followup",
+      historyWindow: 1,
+    };
+  }
 
   return policy;
 }

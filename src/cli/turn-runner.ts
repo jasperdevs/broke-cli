@@ -8,6 +8,7 @@ import { runValidationSuite } from "./auto-validate.js";
 import type { ToolName } from "../tools/registry.js";
 import { executeTurn } from "./turn-execution.js";
 import { maybeAutoNameSession } from "./chat-naming.js";
+import { tryRepoTaskFastPath } from "./repo-fastpath.js";
 import type { SpecialistModelRole } from "./model-routing.js";
 import {
   addUserTurnToSession,
@@ -78,15 +79,42 @@ export async function runModelTurn(options: {
   const getContextOptimizer = (): ReturnType<Session["getContextOptimizer"]> => session.getContextOptimizer();
   const settings = getSettings();
   const effectiveImages = settings.images.blockImages ? undefined : images;
-  const repoState = typeof (session as Session & { getRepoState?: () => ReturnType<Session["getRepoState"]> }).getRepoState === "function"
-    ? (session as Session & { getRepoState: () => ReturnType<Session["getRepoState"]> }).getRepoState()
-    : undefined;
   const budget = checkBudget(session.getTotalCost());
   if (!budget.allowed) {
     app.addMessage("system", budget.warning!);
     return { lastToolCalls, lastActivityTime: Date.now() };
   }
   if (budget.warning) app.setStatus(budget.warning);
+  let nextActivityTime = Date.now();
+  const { transientUserContext } = addUserTurnToSession({ app, session, text, effectiveImages, alreadyAddedUserMessage });
+  const fastPath = await tryRepoTaskFastPath({ root: process.cwd(), prompt: text, session });
+  if (fastPath) {
+    app.addMessage("assistant", fastPath.content);
+    session.addMessage("assistant", fastPath.content);
+    session.recordTurn({
+      toolsExposed: 0,
+      toolsUsed: 0,
+      visibleOutputTokens: 0,
+      hiddenOutputTokens: 0,
+    });
+    app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
+    if (typeof (session as any).getName !== "function" || isDefaultSessionName(session.getName())) {
+      void maybeAutoNameSession({
+        app,
+        session,
+        userText: text,
+        assistantText: fastPath.content,
+        smallModel,
+        smallModelId,
+        activeModel,
+        currentModelId,
+      });
+    }
+    return { lastToolCalls, lastActivityTime: nextActivityTime };
+  }
+  const repoState = typeof (session as Session & { getRepoState?: () => ReturnType<Session["getRepoState"]> }).getRepoState === "function"
+    ? (session as Session & { getRepoState: () => ReturnType<Session["getRepoState"]> }).getRepoState()
+    : undefined;
   const policy = await resolveTurnPolicy(text, lastToolCalls, repoState, activeModel.runtime === "sdk" && activeModel.model
     ? { model: activeModel.model, modelId: currentModelId, providerId: activeModel.provider.id }
     : null);
@@ -95,8 +123,6 @@ export async function runModelTurn(options: {
     app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
   }
   await maybeRefreshIdleContext({ app, session, systemPrompt, currentModelId, activeModel, lastActivityTime });
-  let nextActivityTime = Date.now();
-  const { transientUserContext } = addUserTurnToSession({ app, session, text, effectiveImages, alreadyAddedUserMessage });
   let prepared = prepareTurnContext({
     app,
     session,
