@@ -28,6 +28,24 @@ function isPlainBackspace(key: Keypress): boolean {
   return key.name === "backspace" && !key.ctrl && !key.meta && !key.shift;
 }
 
+function tryLoadImageFromPath(app: AppState, rawText: string): boolean {
+  const normalizedPath = normalizePastedPath(rawText);
+  const imageExtensions = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"];
+  const isImagePath = imageExtensions.some((ext) => normalizedPath.toLowerCase().endsWith(ext));
+  if (!isImagePath || !existsSync(normalizedPath)) return false;
+  try {
+    const data = readFileSync(normalizedPath);
+    const ext = normalizedPath.split(".").pop()?.toLowerCase() || "png";
+    const mimeType = `image/${ext === "jpg" ? "jpeg" : ext}`;
+    const base64 = data.toString("base64");
+    app.pendingImages.push({ mimeType, data: base64 });
+    app.setStatus?.(`${T()}✓ Image loaded${RESET}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function handleBudgetViewKey(app: AppState, key: Keypress): void {
   const page = Math.max(1, app.screen.height - 7);
   const report = app.budgetView.reports[app.budgetView.scope];
@@ -301,22 +319,9 @@ export function handlePaste(app: AppState, text: string): void {
     }
   }
 
-  const imageExtensions = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"];
-  const normalizedPath = normalizePastedPath(text);
-  const isImagePath = imageExtensions.some((ext) => normalizedPath.toLowerCase().endsWith(ext));
-  if (isImagePath && (normalizedPath.includes("/") || normalizedPath.includes("\\"))) {
-    try {
-      if (existsSync(normalizedPath)) {
-        const data = readFileSync(normalizedPath);
-        const ext = normalizedPath.split(".").pop()?.toLowerCase() || "png";
-        const mimeType = `image/${ext === "jpg" ? "jpeg" : ext}`;
-        const base64 = data.toString("base64");
-        app.pendingImages.push({ mimeType, data: base64 });
-        app.setStatus?.(`${T()}✓ Image loaded${RESET}`);
-        app.draw();
-        return;
-      }
-    } catch {}
+  if (tryLoadImageFromPath(app, text)) {
+    app.draw();
+    return;
   }
   app.input.paste(text);
   app.draw();
@@ -324,6 +329,10 @@ export function handlePaste(app: AppState, text: string): void {
 
 function submitQueuedInput(app: AppState, delivery: "steering" | "followup"): void {
   const text = app.input.submit();
+  if (!app.pendingImages.length && tryLoadImageFromPath(app, text.trim())) {
+    app.draw();
+    return;
+  }
   const images = app.takePendingImages();
   if ((!text && images.length === 0) || !app.onSubmit) return;
   const trimmed = text.trimStart();

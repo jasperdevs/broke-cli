@@ -65,6 +65,7 @@ export function drawImmediate(app: AppState): void {
   const btwBubbleLines = app.renderBtwBubble(mainW);
 
   bottomLines.push("");
+  bottomLines.push("");
   if (btwBubbleLines.length > 0) {
     bottomLines.push(...btwBubbleLines);
     bottomLines.push("");

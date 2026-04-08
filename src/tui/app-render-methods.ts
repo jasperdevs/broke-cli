@@ -10,6 +10,7 @@ import { listSkills } from "../core/skills.js";
 import { listTemplates } from "../core/templates.js";
 import { listInstalledPackages } from "../core/package-manager.js";
 import { getPrettyModelName } from "../ai/model-catalog.js";
+import { supportsProviderModel } from "../ai/providers.js";
 import { renderAnsiColorGrid, parseMascotSvgGrid, resolveMascotPath, type RgbColor } from "./render/mascot.js";
 import { renderHomeBox as buildRenderHomeBox, renderHomeView as buildRenderHomeView } from "./render/home.js";
 import { renderStaticMessages as buildStaticMessages } from "./render/messages.js";
@@ -307,6 +308,7 @@ export function buildSidebarLines(app: AppState): string[] {
     const slashIndex = configured.indexOf("/");
     const providerId = slashIndex > 0 ? configured.slice(0, slashIndex) : app.modelProviderId;
     const modelId = slashIndex > 0 ? configured.slice(slashIndex + 1) : configured;
+    if (!supportsProviderModel(providerId, modelId)) return "unset";
     return getPrettyModelName(modelId, providerId);
   };
   return composeSidebarLines({

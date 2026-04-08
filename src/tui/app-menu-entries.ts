@@ -1,5 +1,7 @@
 import { currentTheme } from "../core/themes.js";
 import { BOLD, DIM, RESET } from "../utils/ansi.js";
+import { visibleWidth } from "../utils/terminal-width.js";
+import stripAnsi from "strip-ansi";
 import { ERR, MUTED, T, TXT } from "./app-shared.js";
 import { wordWrap } from "./render/formatting.js";
 import type { MenuEntry, ModelOption, PickerItem, SettingEntry } from "./app-types.js";
@@ -15,10 +17,21 @@ function getMenuBodyWidth(app: AppState): number {
 }
 
 function buildSelectableEntry(prefix: string, primary: string, detail: string | undefined, width: number, detailColor = DIM): string[] {
-  const firstLine = `${prefix}${primary}${RESET}`;
-  if (!detail) return [firstLine];
-  const detailLines = wordWrap(detail, Math.max(12, width)).map((line) => `    ${detailColor}${line}${RESET}`);
-  return [firstLine, ...detailLines];
+  const plainPrimary = stripAnsi(primary);
+  const plainDetail = detail?.trim() ?? "";
+  if (!plainDetail) return [`${prefix}${primary}${RESET}`];
+  const inlineSeparator = `${DIM} — ${RESET}`;
+  const inline = `${prefix}${primary}${inlineSeparator}${detailColor}${plainDetail}${RESET}`;
+  if (visibleWidth(inline) <= width + visibleWidth(prefix)) return [inline];
+  const available = Math.max(12, width - plainPrimary.length - 3);
+  let compactDetail = plainDetail;
+  if (plainDetail.length > available) {
+    const hotkeyMatch = plainDetail.match(/\((ctrl\+[a-z]|alt\+[↑↓]|shift\+[a-z]+)\)\s*$/i);
+    const hotkeySuffix = hotkeyMatch?.[0] ?? "";
+    const headBudget = Math.max(0, available - hotkeySuffix.length - 2);
+    compactDetail = `${plainDetail.slice(0, headBudget)}…${hotkeySuffix}`;
+  }
+  return [`${prefix}${primary}${inlineSeparator}${detailColor}${compactDetail}${RESET}`];
 }
 
 function wrapMenuLabel(prefix: string, label: string, width: number): string[] {

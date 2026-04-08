@@ -62,8 +62,8 @@ export const BOLD = `${CSI}1m`;
 export const DIM = `${CSI}2m`;
 
 // Brand colors
-export const GREEN = fg(58, 199, 58);       // #3AC73A
-export const GREEN_DIM = fg(42, 154, 42);   // #2a9a2a
+export const GREEN = fg(57, 193, 57);       // #39C139
+export const GREEN_DIM = fg(40, 145, 40);   // darker brand green
 export const WHITE = fg(255, 255, 255);
 export const GRAY = fg(128, 128, 128);
 export const RED = fg(255, 80, 80);

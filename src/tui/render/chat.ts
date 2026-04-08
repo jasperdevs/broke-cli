@@ -330,7 +330,10 @@ export function renderMessageOverlays(options: {
     if (thinkingBuffer && thinkingDuration > 0 && !thinkingStartTime) {
       statParts.push(`reasoned ${thinkingDuration}s`);
     }
-    const label = thinkingRequested ? "Thinking..." : "Composing...";
+    const waitingForFirstOutput = streamTokens === 0 && !thinkingBuffer && todoItems.length === 0;
+    const label = waitingForFirstOutput && secs >= 8
+      ? "Still waiting for first token..."
+      : (thinkingRequested ? "Thinking..." : "Composing...");
     lines.push(`  ${sparkleSpinner(spinnerFrame)} ${shimmerText(label, spinnerFrame)} ${colors.accent}(${statParts.join(" · ")})${colors.reset}`);
     lines.push("");
   }

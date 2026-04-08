@@ -8,12 +8,12 @@ const BASE_PALETTE: ThemePalette = {
   key: "brokecli",
   label: "Broke CLI",
   dark: true,
-  primary: [102, 219, 124],
-  secondary: [124, 175, 255],
+  primary: [57, 193, 57],
+  secondary: [57, 193, 57],
   dim: [107, 111, 117],
   error: [255, 112, 112],
   warning: [240, 204, 92],
-  success: [102, 219, 124],
+  success: [57, 193, 57],
   background: [20, 20, 20],
   text: [233, 236, 239],
   textMuted: [149, 153, 159],
@@ -25,7 +25,7 @@ const BASE_PALETTE: ThemePalette = {
   codeBg: [24, 24, 24],
   diffAddBg: [24, 50, 31],
   diffRemoveBg: [70, 30, 30],
-  imageTagBg: [52, 56, 62],
+  imageTagBg: [40, 145, 40],
 };
 
 function mixRgb(a: [number, number, number], b: [number, number, number], ratio: number): [number, number, number] {

@@ -1,5 +1,5 @@
 import { execSync } from "child_process";
-import { listTemplates, loadTemplate } from "../core/templates.js";
+import { createTemplate, listTemplates, loadTemplate } from "../core/templates.js";
 import { listSkills, loadSkillPrompt } from "../core/skills.js";
 import { SessionManager } from "../core/session-manager.js";
 import { Session } from "../core/session.js";
@@ -328,16 +328,31 @@ const uiSlashCommands = createSlashCommandRegistry<UiSlashCommandContext, SlashC
     names: ["templates"],
     run: ({ app }) => {
       const templates = listTemplates();
-      if (templates.length === 0) {
-        openEmptyItemMenu(app, "Templates", "add .md files to ~/.brokecli/prompts or .brokecli/prompts", "templates");
-        return { handled: true };
-      }
-      const items = templates.map((template) => ({
+      const items = [
+        { id: "__create__", label: "Create template", detail: "make a new slash template now" },
+        ...templates.map((template) => ({
         id: template.name,
         label: `/${template.name}`,
         detail: template.description || "prompt template",
-      }));
-      app.openItemPicker("Templates", items, (id: string) => {
+        })),
+      ];
+      app.openItemPicker("Templates", items, async (id: string) => {
+        if (id === "__create__") {
+          const rawName = await app.showQuestion("Template name");
+          const name = rawName?.trim();
+          if (!name) {
+            app.setStatus?.("Template creation cancelled.");
+            return;
+          }
+          try {
+            createTemplate(name);
+            app.setStatus?.(`Created template /${name}.`);
+            app.setDraft?.(`/${name} `);
+          } catch (error) {
+            app.setStatus?.(`Template create failed: ${error instanceof Error ? error.message : String(error)}`);
+          }
+          return;
+        }
         app.setDraft?.(`/${id} `);
       }, { kind: "templates" });
       return { handled: true };
