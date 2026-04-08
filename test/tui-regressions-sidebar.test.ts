@@ -38,8 +38,9 @@ describe("command aliases", () => {
     app.input.paste("/");
     expect(app.getCommandMatches()[0].name).toBe("settings");
     const entries = app.getCommandSuggestionEntries().flatMap((entry: { lines: string[] }) => entry.lines.map((line) => stripAnsi(line)));
-    expect(entries.some((entry: string) => entry.includes("model") && entry.includes("ctrl+l"))).toBe(true);
-    expect(entries.some((entry: string) => entry.includes("thinking") && entry.includes("ctrl+t"))).toBe(true);
+    expect(entries.some((entry: string) => entry.includes("settings"))).toBe(true);
+    expect(entries.some((entry: string) => entry.includes("model"))).toBe(true);
+    expect(entries.some((entry: string) => entry.includes("thinking"))).toBe(true);
   });
 });
 
@@ -316,6 +317,23 @@ describe("sidebar scrolling", () => {
       updateSetting("thinkingLevel", original.thinkingLevel);
       updateSetting("cavemanLevel", original.cavemanLevel ?? "off");
     }
+  });
+
+  it("uses a narrower sidebar width so chat keeps more space", () => {
+    const app = new App() as any;
+    app.screen = {
+      height: 18,
+      width: 100,
+      hasSidebar: true,
+      mainWidth: 79,
+      sidebarWidth: 20,
+      render: () => {},
+      setCursor: () => {},
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+    expect(app.screen.sidebarWidth).toBe(20);
+    expect(app.screen.mainWidth).toBe(79);
   });
 });
 

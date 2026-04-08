@@ -50,7 +50,7 @@ describe("menu layout regressions", () => {
     expect(output).toContain("Commands");
     expect(output).toContain("model");
     expect(output).toContain("mode");
-    expect(output).toContain("build");
+    expect(output).toContain("ctrl+l");
   });
 
   it("does not crash when compaction starts from the tree summarize flow", () => {

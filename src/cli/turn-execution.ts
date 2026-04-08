@@ -325,6 +325,15 @@ export async function executeTurn(options: {
         completion = "insufficient";
         return;
       }
+      if (looksLikeRawToolPayload(content)) {
+        app.rollbackLastAssistantMessage();
+        session.addMessage("assistant", "[raw tool payload hidden]");
+        app.addMessage("system", "Model emitted raw tool syntax. Hidden from chat.");
+        if (getSettings().notifyOnResponse) sendResponseNotification();
+        if (app.hasPendingMessages("steering")) app.flushPendingMessages("steering");
+        completion = "empty";
+        return;
+      }
       if (content) {
         session.addMessage("assistant", content);
         if (getSettings().notifyOnResponse) sendResponseNotification();
@@ -337,6 +346,7 @@ export async function executeTurn(options: {
         return;
       }
       if (looksLikeRawToolPayload(streamedText)) {
+        app.rollbackLastAssistantMessage();
         session.addMessage("assistant", "[raw tool payload hidden]");
         app.addMessage("system", "Model emitted raw tool syntax. Hidden from chat.");
       } else {

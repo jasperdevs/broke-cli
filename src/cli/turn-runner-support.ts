@@ -133,6 +133,7 @@ export function looksLikeRawToolPayload(nextText: string): boolean {
   const normalized = nextText.trimStart();
   return /^<tool_call>/i.test(normalized)
     || /^call:(writeFile|editFile|readFile|listFiles|grep|bash)\s*\{/i.test(normalized)
+    || /^(writeFile|editFile|readFile|listFiles|grep|bash)\s*\{/i.test(normalized)
     || /^(writeFile|editFile|readFile|listFiles|grep|bash)\s*\(/i.test(normalized);
 }
 

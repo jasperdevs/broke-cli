@@ -71,6 +71,7 @@ describe("picker menus", () => {
     const pickerText = rendered.map((line) => stripAnsi(line)).join("\n");
     expect(pickerText).toContain("enter choose use");
     expect(pickerText).toContain("space favorite");
+    expect(pickerText).toContain("OpenAI");
     expect(pickerText).not.toContain("a assign lane");
     expect(pickerText).not.toContain("Scope:");
   });

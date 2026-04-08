@@ -5,11 +5,22 @@ import { BOLD, DIM, RESET } from "../utils/ansi.js";
 import { ERR, P, T, TXT, WARN } from "./app-shared.js";
 import { visibleWidth } from "../utils/terminal-width.js";
 import { currentQuestionField, getQuestionBodyLines, getQuestionHeader, getQuestionOptionEntries, isQuestionSubmitTab } from "./question-view.js";
+import { getActiveMenuDetail } from "./app-menu-entries.js";
 
 type AppState = any;
 
 function renderMenuCount(current: number, total: number): string {
   return `${DIM}(${current}/${total})${RESET}`;
+}
+
+function appendMenuDetailLine(app: AppState, bottomLines: string[], mainW: number): void {
+  const detail = getActiveMenuDetail(app);
+  if (!detail) return;
+  const trimmed = detail.trim();
+  if (!trimmed) return;
+  const maxWidth = Math.max(12, mainW - 2);
+  const line = trimmed.length <= maxWidth ? trimmed : `${trimmed.slice(0, maxWidth - 1)}…`;
+  bottomLines.push(` ${DIM}${line}${RESET}`);
 }
 
 export function getPendingImagePromptLines(app: AppState, mainW: number): string[] {
@@ -56,16 +67,19 @@ export function appendBottomMenus(
   if (app.itemPicker) {
     bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
     app.appendItemPicker(bottomLines, getAvailableBodyRows(1), bottomMenuClicks);
+    appendMenuDetailLine(app, bottomLines, mainW);
     return;
   }
   if (app.settingsPicker) {
     bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
     app.appendSettingsPicker(bottomLines, getAvailableBodyRows(1), bottomMenuClicks);
+    appendMenuDetailLine(app, bottomLines, mainW);
     return;
   }
   if (app.modelPicker) {
     bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
     app.appendModelPicker(bottomLines, getAvailableBodyRows(4), bottomMenuClicks);
+    appendMenuDetailLine(app, bottomLines, mainW);
     return;
   }
   if (app.treeView) {
@@ -98,6 +112,7 @@ export function appendBottomMenus(
   if (suggestions.length > 0) {
     bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
     bottomLines.push(` ${T()}${BOLD}Commands${RESET} ${renderMenuCount(Math.min(app.cmdSuggestionCursor, allSuggestions.length - 1) + 1, allSuggestions.length)}`);
+    appendMenuDetailLine(app, bottomLines, mainW);
   }
   for (const entry of suggestions) {
     if (entry.selectIndex !== undefined) {
