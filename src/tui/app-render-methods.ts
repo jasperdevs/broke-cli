@@ -10,6 +10,7 @@ import { listSkills } from "../core/skills.js";
 import { listTemplates } from "../core/templates.js";
 import { listInstalledPackages } from "../core/package-manager.js";
 import { getPrettyModelName } from "../ai/model-catalog.js";
+import { getEffectiveThinkingLevel } from "../ai/thinking.js";
 import { supportsProviderModel } from "../ai/providers.js";
 import { renderAnsiColorGrid, parseMascotSvgGrid, resolveMascotPath, type RgbColor } from "./render/mascot.js";
 import { renderHomeBox as buildRenderHomeBox, renderHomeView as buildRenderHomeView } from "./render/home.js";
@@ -105,9 +106,21 @@ export function renderMessages(app: AppState, maxWidth: number): string[] {
 }
 
 export function renderCompactHeader(app: AppState): string {
-  const model = `${T()}${getPrettyModelName(app.modelName, app.modelProviderId)}${RESET}`;
-  const git = app.gitBranch ? ` ${MUTED()}${app.gitBranch}${app.gitDirty ? "*" : ""}${RESET}` : "";
-  return ` ${model}${git}`;
+  const settings = getSettings();
+  const parts: string[] = [];
+  parts.push(`${T()}${getPrettyModelName(app.modelName, app.modelProviderId)}${RESET}`);
+  if (app.gitBranch) parts.push(`${MUTED()}${app.gitBranch}${app.gitDirty ? "*" : ""}${RESET}`);
+  if (app.isStreaming) parts.push(`${DIM}esc stop${RESET}`);
+  parts.push(`${app.mode === "plan" ? T() : OK()}${app.mode}${RESET}`);
+  const thinkLevel = getEffectiveThinkingLevel({
+    providerId: app.modelProviderId,
+    modelId: app.modelName === "none" ? undefined : app.modelName,
+    runtime: app.modelRuntime,
+    level: settings.thinkingLevel,
+    enabled: settings.enableThinking,
+  });
+  if (thinkLevel !== "off") parts.push(`${DIM}${thinkLevel}${RESET}`);
+  return ` ${parts.join(` ${DIM}|${RESET} `)}`;
 }
 
 export function renderBtwBubble(app: AppState, width: number): string[] {

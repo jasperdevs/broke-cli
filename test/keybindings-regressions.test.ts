@@ -27,13 +27,13 @@ describe("keybinding regressions", () => {
     }
   });
 
-  it("migrates stale shift-enter newline bindings to ctrl+j when enhanced enter is unavailable", () => {
+  it("keeps shift-enter as the default newline binding on Windows too", () => {
     const bindings = applyKeybindingDefaults(
       { newline: "shift+return" },
       { TERM: "xterm-256color", TERM_PROGRAM: "" } as NodeJS.ProcessEnv,
       "win32",
     );
-    expect(bindings.newline).toBe("ctrl+j");
+    expect(bindings.newline).toBe("shift+return");
   });
 
   it("renders the active newline binding in the legacy footer helper", () => {
@@ -41,12 +41,12 @@ describe("keybinding regressions", () => {
     const previous = existsSync(keybindingsPath) ? readFileSync(keybindingsPath, "utf-8") : null;
     try {
       mkdirSync(join(homedir(), ".brokecli"), { recursive: true });
-      writeFileSync(keybindingsPath, JSON.stringify({ newline: "ctrl+j" }), "utf-8");
+      writeFileSync(keybindingsPath, JSON.stringify({ newline: "shift+return" }), "utf-8");
       reloadKeybindings();
 
       const app = new App() as any;
       const footer = buildLegacyFooterLines(app, false, 80).join("\n");
-      expect(footer).toContain("ctrl + j");
+      expect(footer).toContain("shift + enter");
       expect(footer).toContain("for newline");
     } finally {
       if (previous == null) rmSync(keybindingsPath, { force: true });

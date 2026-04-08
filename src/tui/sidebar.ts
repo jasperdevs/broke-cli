@@ -99,14 +99,15 @@ export function buildSidebarFooterLines(options: {
 }): string[] {
   const { width, statusParts, tokenParts, contextUsed, contextTokens, colors } = options;
   const lines: string[] = [];
-  const costLine = tokenParts.find((part) => part.startsWith("$") || part === "local/unpriced");
-  const valueLines = tokenParts.filter((part) => part !== costLine);
+  const uniqueTokenParts = tokenParts.filter((part, index) => tokenParts.indexOf(part) === index);
+  const costLine = uniqueTokenParts.find((part) => part.startsWith("$") || part === "local/unpriced");
+  const valueLines = uniqueTokenParts.filter((part) => part !== costLine);
   const isZeroUsage = contextUsed === undefined
-    && tokenParts.length > 0
-    && tokenParts.every((part) => /^(?:\$0(?:\.0+)?|0 total|0 in|0 out|local\/unpriced)$/.test(part));
+    && uniqueTokenParts.length > 0
+    && uniqueTokenParts.every((part) => /^(?:\$0(?:\.0+)?|0 total|0 in|0 out|local\/unpriced)$/.test(part));
 
   if (isZeroUsage) {
-    lines.push(`${colors.muted}${tokenParts.join(" · ")}${RESET}`);
+    lines.push(`${colors.muted}${uniqueTokenParts.join(" · ")}${RESET}`);
     return lines;
   }
 

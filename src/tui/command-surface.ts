@@ -21,7 +21,7 @@ export interface ParsedCommandInput {
 }
 
 export const COMMANDS: CommandEntry[] = [
-  { name: "settings", desc: "configure options", sortPriority: -1 },
+  { name: "settings", desc: "configure options", aliases: ["set"], sortPriority: -1 },
   { name: "login", desc: "login with subscription/oauth" },
   { name: "connect", desc: "connect api key or local endpoint" },
   { name: "logout", desc: "clear stored auth" },

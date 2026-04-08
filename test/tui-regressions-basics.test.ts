@@ -29,10 +29,16 @@ describe("mouse reporting mode", () => {
   });
 
   it("keeps passive sidebar mode out of mouse-capture until a modal owns the UI", () => {
-    const app = new App() as any;
-    app.messages = [{ role: "user", content: "hello" }];
-    app.screen = { height: 18, width: 100, hasSidebar: true, mainWidth: 73, sidebarWidth: 24, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
-    expect(app.shouldEnableMenuMouse()).toBe(true);
+    const originalHideSidebar = getSettings().hideSidebar;
+    updateSetting("hideSidebar", false);
+    try {
+      const app = new App() as any;
+      app.messages = [{ role: "user", content: "hello" }];
+      app.screen = { height: 18, width: 100, hasSidebar: true, mainWidth: 73, sidebarWidth: 24, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
+      expect(app.shouldEnableMenuMouse()).toBe(true);
+    } finally {
+      updateSetting("hideSidebar", originalHideSidebar);
+    }
   });
 
   it("uses button-event mouse tracking for interactive panes so wheel scrolling can reach the TUI", () => {
@@ -263,6 +269,9 @@ describe("sidebar token summary", () => {
       app.drawImmediate();
       const output = rendered.map((line) => stripAnsi(line)).join("\n");
       expect(output).toContain("GPT-5.4 mini");
+      expect(output).toContain("build");
+      expect(output).not.toContain("/ commands");
+      expect(output).not.toContain("@ files");
     } finally {
       updateSetting("thinkingLevel", original.thinkingLevel);
       updateSetting("enableThinking", original.enableThinking);

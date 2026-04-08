@@ -32,7 +32,9 @@ export function getDefaultNewlineBinding(
   env: NodeJS.ProcessEnv = process.env,
   platform = process.platform,
 ): string {
-  return detectEnhancedEnterSupport(env, platform) ? "shift+return" : "ctrl+j";
+  void env;
+  void platform;
+  return "shift+return";
 }
 
 export function applyKeybindingDefaults(
@@ -42,9 +44,7 @@ export function applyKeybindingDefaults(
 ): Keybindings {
   const defaultNewline = getDefaultNewlineBinding(env, platform);
   const savedNewline = raw?.newline?.trim().toLowerCase();
-  const migratedNewline = savedNewline === "shift+return" && defaultNewline !== "shift+return"
-    ? defaultNewline
-    : raw?.newline;
+  const migratedNewline = raw?.newline;
   return {
     ...DEFAULT_KEYBINDINGS,
     ...raw,

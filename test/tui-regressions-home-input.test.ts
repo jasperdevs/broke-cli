@@ -63,17 +63,23 @@ describe("startup home view", () => {
   });
 
   it("only enables the sidebar after chat starts", () => {
-    const app = new App() as any;
-    let rendered: string[] = [];
-    app.screen = { height: 18, width: 100, hasSidebar: true, mainWidth: 73, sidebarWidth: 24, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
-    app.drawImmediate();
-    expect(rendered.map((line) => stripAnsi(line)).join("\n")).not.toContain("Files");
-    app.messages = [{ role: "user", content: "hello" }];
-    app.drawImmediate();
-    const output = rendered.map((line) => stripAnsi(line)).join("\n");
-    expect(output).toContain("BTW");
-    expect(output).toContain("Design/UI");
-    expect(output).toContain("v more");
+    const originalHideSidebar = getSettings().hideSidebar;
+    updateSetting("hideSidebar", false);
+    try {
+      const app = new App() as any;
+      let rendered: string[] = [];
+      app.screen = { height: 18, width: 100, hasSidebar: true, mainWidth: 73, sidebarWidth: 24, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
+      app.drawImmediate();
+      expect(rendered.map((line) => stripAnsi(line)).join("\n")).not.toContain("Files");
+      app.messages = [{ role: "user", content: "hello" }];
+      app.drawImmediate();
+      const output = rendered.map((line) => stripAnsi(line)).join("\n");
+      expect(output).toContain("BTW");
+      expect(output).toContain("Design/UI");
+      expect(output).toContain("v more");
+    } finally {
+      updateSetting("hideSidebar", originalHideSidebar);
+    }
   });
 
   it("drops the startup card entirely on very narrow widths", () => {
@@ -233,8 +239,22 @@ describe("input editing", () => {
     expect(getCommandMatches("/bt")).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: "btw" })]),
     );
+    expect(getCommandMatches("/set")).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "settings" })]),
+    );
     expect(getCommandMatches("/btw hey")).toEqual([]);
     expect(getCommandMatches("/model haiku")).toEqual([]);
+  });
+
+  it("promotes /set to /settings on enter instead of submitting raw chat text", () => {
+    const app = new App() as any;
+    let submitted = "";
+    app.onSubmit = (text: string) => { submitted = text; };
+    app.input.setText("/set");
+
+    app.handleKey({ name: "return", char: "", ctrl: false, meta: false, shift: false });
+
+    expect(submitted).toBe("/settings");
   });
 
   it("treats kitty esc-enter as a newline instead of meta-enter submit", () => {

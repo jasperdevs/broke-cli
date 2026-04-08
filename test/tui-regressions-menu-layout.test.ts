@@ -27,7 +27,7 @@ describe("menu layout regressions", () => {
     expect(output).toContain("Projects");
     expect(output).toContain("Alpha");
     expect(output).toContain("Beta");
-    expect(output).toContain("build");
+    expect(output).toContain("0 total");
   });
 
   it("keeps multiple slash suggestions visible in a short pane", () => {
@@ -98,7 +98,8 @@ describe("menu layout regressions", () => {
     expect(output).toContain("GPT-5.4 mini");
     expect(output).toContain("main");
     expect(output).toContain("plan");
-    expect(output).toContain("/ commands");
-    expect(output).toContain("@ files");
+    expect(output).toContain("0 total");
+    expect(output).not.toContain("/ commands");
+    expect(output).not.toContain("@ files");
   });
 });

@@ -7,6 +7,7 @@ import { visibleWidth } from "../utils/terminal-width.js";
 import { currentQuestionField, getQuestionBodyLines, getQuestionHeader, getQuestionOptionEntries, isQuestionSubmitTab } from "./question-view.js";
 import { getActiveMenuDetail } from "./app-menu-entries.js";
 import { renderPendingMessagesBlock } from "./render/chat.js";
+import { fmtTokens } from "./render/formatting.js";
 import { getKeybinding } from "../core/keybindings.js";
 
 type AppState = any;
@@ -220,32 +221,26 @@ function renderFooterRow(
 }
 
 export function buildFooterLines(app: AppState, hasSidebar: boolean, mainW: number): string[] {
-  if (hasSidebar) return [];
-  const rows: FooterPart[] = [];
-  if (!hasSidebar && app.messages.length > 0) {
-    if (app.modelName !== "none") {
-      const modelLabel = getPrettyModelName(app.modelName, app.modelProviderId);
-      rows.push({ text: `${T()}${modelLabel}${RESET}`, plain: modelLabel });
-    }
-    if (app.gitBranch) {
-      const gitLabel = `${app.gitBranch}${app.gitDirty ? "*" : ""}`;
-      rows.push({ text: `${DIM}${gitLabel}${RESET}`, plain: gitLabel });
-    }
+  if (hasSidebar || app.messages.length === 0) return [];
+  const settings = getSettings();
+  if (!settings.showTokens) return [];
+
+  const tokenParts = app.renderTokenSummaryParts();
+  const footerParts: FooterPart[] = [];
+  const costPart = tokenParts.find((part: string) => part.startsWith("$") || part === "local/unpriced");
+  if (costPart && costPart !== "local/unpriced") {
+    footerParts.push({ text: `${TXT()}${costPart}${RESET}`, plain: costPart });
   }
-
-  rows.push(...buildInfoBarParts(app, hasSidebar));
-
-  const newlineBinding = formatFooterBinding(getKeybinding("newline"));
-  rows.push(
-    renderFooterShortcut("/", "commands"),
-    renderFooterShortcut("!", "shell"),
-    renderFooterShortcut("@", "files"),
-    renderFooterShortcut(newlineBinding, "newline"),
-    renderFooterShortcut("tab", "queue"),
-    renderFooterShortcut(app.isStreaming ? "esc" : "ctrl + c", app.isStreaming ? "stop" : "exit"),
-  );
-
-  return packFooterParts(rows, mainW);
+  for (const part of tokenParts.filter((part: string) => part !== costPart && part !== "local/unpriced")) {
+    footerParts.push({ text: `${DIM}${part}${RESET}`, plain: part });
+  }
+  if (app.contextLimitTokens > 0) {
+    const ctxText = `${app.contextTokenCount >= 0 ? fmtTokens(app.contextTokenCount) : "?"}/${fmtTokens(app.contextLimitTokens)} ctx`;
+    const pct = app.contextUsed <= 0 ? "0%" : app.contextUsed < 1 ? "<1%" : `${Math.round(app.contextUsed)}%`;
+    footerParts.push({ text: `${TXT()}${ctxText}${RESET}`, plain: ctxText });
+    footerParts.push({ text: `${app.getModeAccent()}${pct}${RESET}`, plain: pct });
+  }
+  return packFooterParts(footerParts, mainW);
 }
 
 export function buildLegacyFooterLines(app: AppState, hasSidebar: boolean, mainW: number): string[] {
