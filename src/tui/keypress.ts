@@ -30,6 +30,8 @@ function decodeModifiedKey(code: number, mod: number): Keypress | null {
 export function decodeSpecialKeySequence(sequence: string): Keypress | null {
   const directMap: Record<string, Keypress> = {
     "\x1b\r": { name: "return", char: "", ctrl: false, meta: false, shift: true },
+    "\x1b[13;2~": { name: "return", char: "", ctrl: false, meta: false, shift: true },
+    "\x1b[10;2~": { name: "linefeed", char: "", ctrl: false, meta: false, shift: true },
     "\x1b\b": { name: "backspace", char: "", ctrl: false, meta: true, shift: false },
     "\x1b\x7f": { name: "backspace", char: "", ctrl: false, meta: true, shift: false },
   };

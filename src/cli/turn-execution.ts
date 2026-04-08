@@ -28,6 +28,7 @@ import type { SpecialistModelRole } from "./model-routing.js";
 import { applyTurnFrame } from "./turn-frame.js";
 import { injectTransientUserContext } from "./turn-runner-stages.js";
 import { createStreamTokenTracker } from "./stream-token-tracker.js";
+import { executeRawToolPayloadFallback } from "./raw-tool-fallback.js";
 type PendingDelivery = "steering" | "followup";
 
 interface TurnExecutionApp {
@@ -257,6 +258,7 @@ export async function executeTurn(options: {
 
   let completion: "success" | "empty" | "error" | "insufficient" = "success";
   let errorMessage: string | undefined;
+  let rawToolPayloadText: string | null = null;
   const streamTokenTracker = createStreamTokenTracker(app.setStreamTokens.bind(app), executionModelId, () => streamedText + streamedReasoning);
   let nextActivityTime = Date.now();
   const lastToolArgsByName = new Map<string, unknown>();
@@ -327,10 +329,7 @@ export async function executeTurn(options: {
       }
       if (looksLikeRawToolPayload(content)) {
         app.rollbackLastAssistantMessage();
-        session.addMessage("assistant", "[raw tool payload hidden]");
-        app.addMessage("system", "Model emitted raw tool syntax. Hidden from chat.");
-        if (getSettings().notifyOnResponse) sendResponseNotification();
-        if (app.hasPendingMessages("steering")) app.flushPendingMessages("steering");
+        rawToolPayloadText = content;
         completion = "empty";
         return;
       }
@@ -347,8 +346,7 @@ export async function executeTurn(options: {
       }
       if (looksLikeRawToolPayload(streamedText)) {
         app.rollbackLastAssistantMessage();
-        session.addMessage("assistant", "[raw tool payload hidden]");
-        app.addMessage("system", "Model emitted raw tool syntax. Hidden from chat.");
+        rawToolPayloadText = streamedText.trim();
       } else {
         app.addMessage("system", `No response from ${executionModel.provider.name}/${executionModelId}. Try again or switch models with /model.`);
       }
@@ -454,6 +452,37 @@ export async function executeTurn(options: {
     }
   } finally {
     setActiveToolContext(null);
+  }
+
+  if (rawToolPayloadText) {
+    const fallback = await executeRawToolPayloadFallback({
+      rawToolPayloadText,
+      text,
+      executionModel,
+      policyAllowedTools: policy.allowedTools,
+      buildTools,
+      app,
+      hooks,
+      session,
+      nextToolCalls,
+      abortSignal: abortController?.signal,
+    });
+    if (fallback.handled && fallback.summary) {
+      sawToolActivity = true;
+      session.addMessage("assistant", fallback.summary);
+      if (getSettings().notifyOnResponse) sendResponseNotification();
+      if (app.hasPendingMessages("steering")) app.flushPendingMessages("steering");
+      completion = "success";
+      streamedText = fallback.summary;
+      rawToolPayloadText = null;
+    }
+  }
+
+  if (rawToolPayloadText) {
+    session.addMessage("assistant", "[raw tool payload hidden]");
+    app.addMessage("system", "Model emitted raw tool syntax. Hidden from chat.");
+    if (getSettings().notifyOnResponse) sendResponseNotification();
+    if (app.hasPendingMessages("steering")) app.flushPendingMessages("steering");
   }
   return {
     nextToolCalls,

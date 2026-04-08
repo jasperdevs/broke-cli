@@ -13,7 +13,9 @@ describe("decodeSpecialKeySequence", () => {
   it("decodes linefeed and backspace variants used by modified newline shortcuts", () => {
     expect(decodeSpecialKeySequence("\x1b[10;2u")).toEqual({ name: "linefeed", char: "", ctrl: false, meta: false, shift: true });
     expect(decodeSpecialKeySequence("\x1b[10;6u")).toEqual({ name: "linefeed", char: "", ctrl: true, meta: false, shift: true });
+    expect(decodeSpecialKeySequence("\x1b[10;2~")).toEqual({ name: "linefeed", char: "", ctrl: false, meta: false, shift: true });
     expect(decodeSpecialKeySequence("\x1b[127;5u")).toEqual({ name: "backspace", char: "", ctrl: true, meta: false, shift: false });
     expect(decodeSpecialKeySequence("\x1b\r")).toEqual({ name: "return", char: "", ctrl: false, meta: false, shift: true });
+    expect(decodeSpecialKeySequence("\x1b[13;2~")).toEqual({ name: "return", char: "", ctrl: false, meta: false, shift: true });
   });
 });

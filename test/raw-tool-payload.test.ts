@@ -85,7 +85,7 @@ vi.mock("../src/tools/todo.js", () => ({
 
 import { runModelTurn } from "../src/cli/turn-runner.js";
 
-describe("raw tool payload hiding", () => {
+describe("raw tool payload fallback", () => {
   beforeEach(() => {
     streamTextMock.mockReset();
     stepCountIsMock.mockClear();
@@ -95,7 +95,7 @@ describe("raw tool payload hiding", () => {
     });
   });
 
-  it("hides tool-like assistant text from weak local models instead of leaving it in chat", async () => {
+  it("executes tool-like assistant text from weak local models instead of leaving it in chat", async () => {
     let assistantContent = "";
     const app = {
       addMessage: vi.fn(),
@@ -124,6 +124,8 @@ describe("raw tool payload hiding", () => {
       addMessage: vi.fn(),
       addUsage: vi.fn(),
       recordTurn: vi.fn(),
+      recordToolResult: vi.fn(),
+      recordRepoEdit: vi.fn(),
       recordIdleCacheCliff: vi.fn(),
       replaceConversation: vi.fn(),
       recordCompaction: vi.fn(),
@@ -150,14 +152,19 @@ describe("raw tool payload hiding", () => {
       smallModelId: "",
       currentMode: "build",
       systemPrompt: "system",
-      buildTools: () => ({ writeFile: {} }),
+      buildTools: () => ({
+        writeFile: {
+          execute: vi.fn(async (args: Record<string, unknown>) => ({ success: true, path: args.path, content: args.content })),
+        },
+      }),
       hooks: { emit: () => {} },
       lastToolCalls: [],
       lastActivityTime: Date.now(),
     });
 
-    expect(app.rollbackLastAssistantMessage).toHaveBeenCalled();
-    expect(session.addMessage).toHaveBeenCalledWith("assistant", "[raw tool payload hidden]");
-    expect(app.addMessage).toHaveBeenCalledWith("system", "Model emitted raw tool syntax. Hidden from chat.");
+    expect(app.addToolCall).toHaveBeenCalledWith("writeFile", "...");
+    expect(app.updateToolCallArgs).toHaveBeenCalledWith("writeFile", "index.html", expect.objectContaining({ path: "index.html" }));
+    expect(app.addToolResult).toHaveBeenCalledWith("writeFile", "ok", false, undefined);
+    expect(session.addMessage).toHaveBeenCalledWith("assistant", "index.html created.");
   });
 });
