@@ -7,6 +7,7 @@ import { visibleWidth } from "../utils/terminal-width.js";
 import { currentQuestionField, getQuestionBodyLines, getQuestionHeader, getQuestionOptionEntries, isQuestionSubmitTab } from "./question-view.js";
 import { getActiveMenuDetail } from "./app-menu-entries.js";
 import { renderPendingMessagesBlock } from "./render/chat.js";
+import { getKeybinding } from "../core/keybindings.js";
 
 type AppState = any;
 
@@ -171,4 +172,68 @@ export function buildInfoBar(app: AppState, hasSidebar: boolean, mainW: number):
     visible.pop();
   }
   return ` ${visible.map((part) => part.text).join(`${DIM}${sep}${RESET}`)}`;
+}
+
+function formatFooterBinding(binding: string): string {
+  return binding
+    .replace(/return/g, "enter")
+    .replace(/\+/g, " + ");
+}
+
+function renderFooterShortcut(key: string, label: string): { text: string; plain: string } {
+  const plain = `${key} ${label}`;
+  return {
+    text: `${TXT()}${key}${RESET} ${DIM}${label}${RESET}`,
+    plain,
+  };
+}
+
+function renderFooterRow(
+  left: { text: string; plain: string },
+  right: { text: string; plain: string } | null,
+  width: number,
+): string {
+  if (!right) return ` ${left.text}`;
+  const gap = 5;
+  const leftWidth = left.plain.length;
+  const rightWidth = right.plain.length;
+  if (leftWidth + gap + rightWidth + 1 > width) return ` ${left.text}`;
+  const spacing = Math.max(gap, width - 1 - leftWidth - rightWidth);
+  return ` ${left.text}${" ".repeat(spacing)}${right.text}`;
+}
+
+export function buildFooterLines(app: AppState, hasSidebar: boolean, mainW: number): string[] {
+  const newlineBinding = formatFooterBinding(getKeybinding("newline"));
+  const rows: Array<[{ text: string; plain: string }, { text: string; plain: string } | null]> = [
+    [
+      renderFooterShortcut("/", "for commands"),
+      renderFooterShortcut("!", "for shell commands"),
+    ],
+    [
+      renderFooterShortcut(newlineBinding, "for newline"),
+      renderFooterShortcut("tab", "to queue message"),
+    ],
+    [
+      renderFooterShortcut("@", "for file paths"),
+      renderFooterShortcut("ctrl + c", "to exit"),
+    ],
+    [
+      renderFooterShortcut("ctrl + t", "to cycle thinking"),
+      renderFooterShortcut("shift + tab", "to change mode"),
+    ],
+  ];
+
+  if (app.isStreaming) {
+    rows[3] = [
+      renderFooterShortcut("esc", "to stop"),
+      renderFooterShortcut("shift + tab", "to change mode"),
+    ];
+  }
+
+  const lines = rows.map(([left, right]) => renderFooterRow(left, right, mainW));
+  if (hasSidebar) {
+    const info = buildInfoBar(app, hasSidebar, mainW).trimEnd();
+    if (info.trim()) lines.push(info);
+  }
+  return lines;
 }

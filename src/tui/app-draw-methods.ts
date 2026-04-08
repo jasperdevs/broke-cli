@@ -11,7 +11,7 @@ import { fmtCost, fmtTokens, wordWrap } from "./render/formatting.js";
 import { APP_BG, ERR, MUTED, OK, P, SIDEBAR_BG, T, TXT, WARN } from "./app-shared.js";
 import { getQuestionCursor } from "./question-view.js";
 import { drawBudgetView } from "./fullscreen-views.js";
-import { appendBottomMenus, buildInfoBar, getPendingImagePromptLines, getPendingMessagePromptLines, getStatusPromptLines } from "./bottom-ui.js";
+import { appendBottomMenus, buildFooterLines, getPendingImagePromptLines, getPendingMessagePromptLines, getStatusPromptLines } from "./bottom-ui.js";
 import { getTreePickerEntries, getVisibleTreeRows } from "./tree-view.js";
 
 type AppState = any;
@@ -87,7 +87,7 @@ export function drawImmediate(app: AppState): void {
 
   appendBottomMenus(app, bottomLines, bottomMenuClicks, height, mainW, separatorColor);
   bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
-  bottomLines.push(buildInfoBar(app, hasSidebar, mainW));
+  bottomLines.push(...buildFooterLines(app, hasSidebar, mainW));
   const footerLines = hasSidebar ? app.renderSidebarFooter() : [];
   const sidebarColumnLines = hasSidebar ? buildSidebarColumnLines(app, height, footerLines) : [];
   const mainTopHeight = Math.max(0, height - bottomLines.length);

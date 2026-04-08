@@ -7,7 +7,7 @@ import { MUTED } from "./app-shared.js";
 import { wordWrap } from "./render/formatting.js";
 import type { MenuPromptKind, ModelOption, PickerItem, SettingEntry } from "./app-types.js";
 import { moveTreeSelection } from "./tree-view.js";
-import { getPendingImagePromptLines } from "./bottom-ui.js";
+import { buildFooterLines, getPendingImagePromptLines } from "./bottom-ui.js";
 import { getQuestionMenuLineCount, scrollQuestionMenu } from "./question-menu.js";
 import { getModelLanePickerEntries, openModelLanePicker, selectModelLaneEntry } from "./model-lane-picker.js";
 import {
@@ -52,8 +52,9 @@ export function getBottomLineCount(app: AppState, mainW: number, maxHeight: numb
   const inputLineCount = app.getWrappedInputLines(app.input.getText(), mainW).length;
   const pendingImageLineCount = getPendingImagePromptLines(app, mainW).length;
   const statusLineCount = app.statusMessage ? 2 : 0;
+  const footerLineCount = buildFooterLines(app, app.shouldShowSidebar(), mainW).length;
   const tailReserve = 2;
-  let count = 2 + pendingImageLineCount + inputLineCount + statusLineCount + btwBubbleLineCount;
+  let count = 1 + footerLineCount + pendingImageLineCount + inputLineCount + statusLineCount + btwBubbleLineCount;
   const baseCount = count;
 
   if (app.filePicker) {
