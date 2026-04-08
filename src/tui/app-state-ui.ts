@@ -19,6 +19,7 @@ export function openModelPicker(
   initialScope: "all" | "scoped" = "all",
   initialQuery = "",
 ): void {
+  app.clearPendingMessages?.();
   const cursorIdx = initialCursor ?? options.findIndex((o) => o.badges?.includes("now") || o.active);
   app.modelPicker = { options, cursor: cursorIdx >= 0 ? cursorIdx : 0, scope: initialScope };
   app.onModelSelect = onSelect;
@@ -31,6 +32,7 @@ export function openModelPicker(
 }
 
 export function openSettings(app: AppState, entries: SettingEntry[], onToggle: (key: string) => void): void {
+  app.clearPendingMessages?.();
   app.settingsPicker = { entries, cursor: 0 };
   app.onSettingToggle = onToggle;
   app.openMenuPrompt("settings");
@@ -86,6 +88,7 @@ export function openItemPicker(
     kind?: MenuPromptKind;
   },
 ): void {
+  app.clearPendingMessages?.();
   const cursor = app.clampMenuCursor(options?.initialCursor ?? 0, items.length);
   app.itemPicker = {
     title,
@@ -121,6 +124,7 @@ export function closeBudgetView(app: AppState): void {
 }
 
 export function openTreeView(app: AppState, title: string, session: Session, onSelect: (entryId: string) => void | Promise<void>): void {
+  app.clearPendingMessages?.();
   app.treeView = {
     title,
     session,

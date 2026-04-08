@@ -329,6 +329,16 @@ describe("input editing", () => {
     expect(app.pendingMessages).toEqual([]);
   });
 
+  it("clears queued messages when opening settings", () => {
+    const app = new App() as any;
+    app.addPendingMessage("/", [], "steering");
+    app.addPendingMessage("/", [], "followup");
+    app.openSettings([
+      { key: "showTokens", label: "Show tokens", value: "true", description: "Show token counts" },
+    ], () => {});
+    expect(app.pendingMessages).toEqual([]);
+  });
+
   it("renders selected file context as a chip above the composer instead of raw @path text", () => {
     const app = new App() as any;
     let rendered: string[] = [];
