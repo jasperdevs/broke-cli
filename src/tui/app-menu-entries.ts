@@ -179,7 +179,7 @@ export function getCommandSuggestionEntries(app: AppState): MenuEntry[] {
   return matches.map((entry: any, i: number) => {
     const arrow = i === cursor ? `${T()}> ${RESET}` : "  ";
     const nameColor = i === cursor ? `${TXT()}${BOLD}` : T();
-    const detail = entry.hotkey ? `${entry.desc} (${entry.hotkey})` : entry.desc;
+    const detail = entry.hotkey ? `${entry.hotkey} · ${entry.desc}` : entry.desc;
     return {
       lines: buildSelectableEntry(` ${arrow}${nameColor}`, entry.name, detail, width),
       selectIndex: i,

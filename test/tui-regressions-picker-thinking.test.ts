@@ -301,6 +301,29 @@ describe("thinking preview", () => {
     app.addMessage("user", "next");
     expect(app.renderMessages(80).map((line: string) => stripAnsi(line)).join("\n")).not.toContain("thought");
   });
+
+  it("does not append churn notes into the transcript when a stream ends", () => {
+    const app = new App() as any;
+    app.setStreaming(true);
+    app.setStreamTokens(11);
+    app.appendToLastMessage("done");
+    app.setStreaming(false);
+    const transcript = app.messages.map((msg: any) => stripAnsi(msg.content)).join("\n");
+    expect(transcript).toContain("done");
+    expect(transcript).not.toContain("Churned for");
+  });
+
+  it("rolls back the newest assistant draft even if a system note was appended after it", () => {
+    const app = new App() as any;
+    app.addMessage("user", "make file");
+    app.addMessage("assistant", "draft reply");
+    app.addMessage("system", "note");
+    app.rollbackLastAssistantMessage();
+    expect(app.messages.map((msg: any) => `${msg.role}:${stripAnsi(msg.content)}`)).toEqual([
+      "user:make file",
+      "system:note",
+    ]);
+  });
 });
 
 describe("theme catalog", () => {

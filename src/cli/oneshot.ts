@@ -230,7 +230,7 @@ export async function runOneShotPrompt(options: {
     );
   }
 
-  session.addMessage("assistant", content || "[empty response]");
+  if (content) session.addMessage("assistant", content);
   session.addUsage(usage.inputTokens, usage.outputTokens, usage.cost);
   session.recordTurn({
     toolsExposed: canUseSdkTools(activeModel) ? policy.allowedTools.length : 0,

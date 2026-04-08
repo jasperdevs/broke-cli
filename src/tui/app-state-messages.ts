@@ -165,11 +165,13 @@ export function getLastAssistantContent(app: AppState): string {
 }
 
 export function rollbackLastAssistantMessage(app: AppState): void {
-  const last = app.messages[app.messages.length - 1];
-  if (last?.role !== "assistant") return;
-  app.messages.pop();
-  app.invalidateMsgCache();
-  app.draw();
+  for (let i = app.messages.length - 1; i >= 0; i--) {
+    if (app.messages[i]?.role !== "assistant") continue;
+    app.messages.splice(i, 1);
+    app.invalidateMsgCache();
+    app.draw();
+    return;
+  }
 }
 
 export function getFileContexts(app: AppState): Map<string, string> {

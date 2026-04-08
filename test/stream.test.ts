@@ -482,6 +482,7 @@ describe("stream tool steps", () => {
     });
 
     expect(session.addMessage).not.toHaveBeenCalledWith("assistant", "old answer");
-    expect(session.addMessage).toHaveBeenCalledWith("assistant", "[empty response]");
+    expect(session.addMessage).not.toHaveBeenCalledWith("assistant", "[empty response]");
+    expect(app.addMessage).toHaveBeenCalledWith("system", expect.stringContaining("No response from OpenAI/gpt-5.4-mini"));
   });
 });

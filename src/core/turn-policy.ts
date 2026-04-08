@@ -203,7 +203,8 @@ function extractExplicitPaths(userMessage: string): string[] {
 }
 
 function hasCreateIntent(userMessage: string): boolean {
-  return /\b(create|new file|new files|scaffold|generate|make\b.*\bfile|add\b.*\bfile)\b/i.test(userMessage);
+  return /\b(create|new file|new files|scaffold|generate|make\b.*\bfile|add\b.*\bfile)\b/i.test(userMessage)
+    || /\b(make|create|add|generate|scaffold)\b.*\b[A-Za-z0-9_./-]+\.[A-Za-z0-9]+\b/i.test(userMessage);
 }
 
 function needsShellCapability(userMessage: string): boolean {

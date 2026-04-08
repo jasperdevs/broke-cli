@@ -138,7 +138,7 @@ export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts:
       },
       onReasoning: () => {},
       onFinish: (usage: { inputTokens: number; outputTokens: number; cost: number }) => {
-        session.addMessage("assistant", assistantText || "[empty response]");
+        if (assistantText) session.addMessage("assistant", assistantText);
         session.addUsage(usage.inputTokens, usage.outputTokens, usage.cost);
         session.recordTurn({
           toolsExposed: canUseSdkTools(activeModel) ? policy.allowedTools.length : 0,

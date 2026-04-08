@@ -340,8 +340,7 @@ export async function executeTurn(options: {
         session.addMessage("assistant", "[raw tool payload hidden]");
         app.addMessage("system", "Model emitted raw tool syntax. Hidden from chat.");
       } else {
-        session.addMessage("assistant", "[empty response]");
-        app.addMessage("system", "No response from model. Try again or switch models with /model.");
+        app.addMessage("system", `No response from ${executionModel.provider.name}/${executionModelId}. Try again or switch models with /model.`);
       }
       if (getSettings().notifyOnResponse) sendResponseNotification();
       if (app.hasPendingMessages("steering")) app.flushPendingMessages("steering");

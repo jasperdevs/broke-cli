@@ -3,7 +3,7 @@ import { getSettings, type CavemanLevel, type Mode, type ThinkingLevel } from ".
 import { getEffectiveThinkingLevel } from "../ai/thinking.js";
 import { buildSidebarFooter } from "./render/sidebar-view.js";
 import { fmtCost, fmtTokens } from "./render/formatting.js";
-import { DIM, RESET, setWindowTitle } from "../utils/ansi.js";
+import { DIM, setWindowTitle } from "../utils/ansi.js";
 import { MUTED, OK, P, T, TXT } from "./app-shared.js";
 import type { BtwBubble, ChatMessage, ModelOption, UpdateNotice } from "./app-types.js";
 import type { ModelRuntime } from "../ai/providers.js";
@@ -294,16 +294,6 @@ export function setStreaming(app: CoreAppState, streaming: boolean): void {
     }
     if (app.toolCallGroups.length > 0) app.collapseToolCalls();
     if (app.streamStartTime > 0) {
-      const elapsed = Date.now() - app.streamStartTime;
-      const secs = Math.floor(elapsed / 1000);
-      const mins = Math.floor(secs / 60);
-      const timeStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
-      const extras: string[] = [];
-      if (app.streamTokens > 0) extras.push(`${fmtTokens(app.streamTokens)} tokens`);
-      if (app.thinkingDuration > 0) extras.push(`thought for ${app.thinkingDuration}s`);
-      const extraStr = extras.length > 0 ? ` · ${extras.join(" · ")}` : "";
-      app.messages.push({ role: "system", content: `${DIM}✦ Churned for ${timeStr}${extraStr}${RESET}` });
-      app.invalidateMsgCache();
       app.streamStartTime = 0;
     }
     app.animStreamTokens.reset();
