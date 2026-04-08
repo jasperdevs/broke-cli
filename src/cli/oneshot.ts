@@ -98,6 +98,7 @@ export async function runOneShotPrompt(options: {
   const policy = await resolveTurnPolicy(
     prompt,
     [],
+    undefined,
     activeModel.runtime === "sdk" && activeModel.model
       ? { model: activeModel.model, modelId, providerId }
       : null,

@@ -106,6 +106,7 @@ export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts:
     const policy = await resolveTurnPolicy(
       msg.content,
       [],
+      session.getRepoState(),
       activeModel.runtime === "sdk" && activeModel.model
         ? { model: activeModel.model, modelId: currentModelId, providerId: activeModel.provider.id }
         : null,

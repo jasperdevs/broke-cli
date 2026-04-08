@@ -18,6 +18,11 @@ import {
   shouldRetryOnMainModel,
   shouldRetryWithToolRequirement,
 } from "./turn-runner-stages.js";
+import {
+  captureNativeWorkspaceBaseline,
+  recordNativeWorkspaceDelta,
+  type NativeWorkspaceBaseline,
+} from "./native-workspace-observer.js";
 
 type PendingDelivery = "steering" | "followup";
 
@@ -73,13 +78,16 @@ export async function runModelTurn(options: {
   const getContextOptimizer = (): ReturnType<Session["getContextOptimizer"]> => session.getContextOptimizer();
   const settings = getSettings();
   const effectiveImages = settings.images.blockImages ? undefined : images;
+  const repoState = typeof (session as Session & { getRepoState?: () => ReturnType<Session["getRepoState"]> }).getRepoState === "function"
+    ? (session as Session & { getRepoState: () => ReturnType<Session["getRepoState"]> }).getRepoState()
+    : undefined;
   const budget = checkBudget(session.getTotalCost());
   if (!budget.allowed) {
     app.addMessage("system", budget.warning!);
     return { lastToolCalls, lastActivityTime: Date.now() };
   }
   if (budget.warning) app.setStatus(budget.warning);
-  const policy = await resolveTurnPolicy(text, lastToolCalls, activeModel.runtime === "sdk" && activeModel.model
+  const policy = await resolveTurnPolicy(text, lastToolCalls, repoState, activeModel.runtime === "sdk" && activeModel.model
     ? { model: activeModel.model, modelId: currentModelId, providerId: activeModel.provider.id }
     : null);
   if (policy.plannerUsage) {
@@ -119,7 +127,18 @@ export async function runModelTurn(options: {
 
   app.setStreaming(true);
   clearTodo();
-  let result = await executeTurn({
+  const runObservedTurn = async (turnOptions: Parameters<typeof executeTurn>[0]) => {
+    const baseline: NativeWorkspaceBaseline | null = activeModel.runtime === "native-cli"
+      ? captureNativeWorkspaceBaseline(process.cwd())
+      : null;
+    const outcome = await executeTurn(turnOptions);
+    if (activeModel.runtime === "native-cli" && outcome.completion === "success") {
+      recordNativeWorkspaceDelta(session, baseline);
+    }
+    return outcome;
+  };
+
+  let result = await runObservedTurn({
     app,
     session,
     text,
@@ -145,7 +164,7 @@ export async function runModelTurn(options: {
 
   if (shouldRetryWithToolRequirement(result, forceRoute)) {
     app.setStatus("model answered without acting - retrying with tool requirement");
-    result = await executeTurn({
+    result = await runObservedTurn({
       app,
       session,
       text,
@@ -178,7 +197,7 @@ export async function runModelTurn(options: {
     app.setStatus(result.completion === "error"
       ? `small model failed - retrying main`
       : "small model empty - retrying main");
-    result = await executeTurn({
+    result = await runObservedTurn({
       app,
       session,
       text,

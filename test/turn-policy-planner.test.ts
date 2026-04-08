@@ -41,8 +41,8 @@ describe("planned scaffolds", () => {
     const planner = { model: {} as any, modelId: "gpt-5.4-mini", providerId: "openai" };
     const request = "read src/app.ts and tell me what it does";
 
-    const first = await resolveTurnPolicy(request, [], planner);
-    const second = await resolveTurnPolicy(request, [], planner);
+    const first = await resolveTurnPolicy(request, [], undefined, planner);
+    const second = await resolveTurnPolicy(request, [], undefined, planner);
 
     expect(first.scaffoldSource).toBe("planned");
     expect(first.plannerCacheHit).toBe(false);
@@ -57,7 +57,7 @@ describe("planned scaffolds", () => {
     const planner = { model: {} as any, modelId: "gpt-5.4-mini", providerId: "openai" };
     const request = "review this file tree";
 
-    const first = await resolveTurnPolicy(request, [], planner);
+    const first = await resolveTurnPolicy(request, [], undefined, planner);
     expect(first.scaffoldSource).toBe("planned");
     expect(first.plannerCacheHit).toBe(false);
     expect(existsSync(cacheFile)).toBe(true);
@@ -65,7 +65,7 @@ describe("planned scaffolds", () => {
     resetPlannedScaffoldCacheForTests();
     generateTextMock.mockClear();
 
-    const second = await resolveTurnPolicy(request, [], planner);
+    const second = await resolveTurnPolicy(request, [], undefined, planner);
     expect(second.scaffoldSource).toBe("planned");
     expect(second.plannerCacheHit).toBe(true);
     expect(generateTextMock).not.toHaveBeenCalled();
@@ -78,7 +78,7 @@ describe("planned scaffolds", () => {
       usage: { inputTokens: 50, outputTokens: 2 },
     });
 
-    const policy = await resolveTurnPolicy("review this code", [], planner);
+    const policy = await resolveTurnPolicy("review this code", [], undefined, planner);
 
     expect(policy.scaffoldSource).toBe("builtin");
     expect(policy.plannerCacheHit).toBeUndefined();
@@ -88,8 +88,8 @@ describe("planned scaffolds", () => {
   it("keeps edits and bugfixes off the forced small-model lane", async () => {
     const planner = { model: {} as any, modelId: "gpt-5.4-mini", providerId: "openai" };
 
-    const question = await resolveTurnPolicy("what file handles the sidebar?", [], planner);
-    const bugfix = await resolveTurnPolicy("fix the broken sidebar footer wrap", [], planner);
+    const question = await resolveTurnPolicy("what file handles the sidebar?", [], undefined, planner);
+    const bugfix = await resolveTurnPolicy("fix the broken sidebar footer wrap", [], undefined, planner);
 
     expect(shouldPreferSmallExecutor(question, 1, false)).toBe(true);
     expect(shouldPreferSmallExecutor(bugfix, 3, false)).toBe(false);
@@ -100,7 +100,7 @@ describe("planned scaffolds", () => {
     generateTextMock.mockClear();
     const planner = { model: {} as any, modelId: "gpt-5.4-mini", providerId: "openai" };
 
-    const policy = await resolveTurnPolicy("read src/app.ts and tell me what it does", [], planner);
+    const policy = await resolveTurnPolicy("read src/app.ts and tell me what it does", [], undefined, planner);
 
     expect(policy.scaffoldSource).toBe("builtin");
     expect(generateTextMock).not.toHaveBeenCalled();

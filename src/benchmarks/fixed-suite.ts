@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "fs/promises";
+import { mkdtemp, mkdir, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { dirname, join, resolve } from "path";
 import { detectProviders, type DetectedProvider } from "../ai/detect.js";
@@ -19,6 +19,7 @@ import {
   type TaskCategory,
   type TaskVerification,
 } from "./fixed-suite-task-definitions.js";
+import { collectWorkspaceSnapshot } from "./workspace-snapshot.js";
 export { getExtendedBenchmarkTasks, getFixedBenchmarkTasks } from "./fixed-suite-task-definitions.js";
 const DEFAULT_MAX_TURNS = 3;
 const COMPARATOR_SOURCES = {
@@ -175,23 +176,6 @@ async function writeFixtureFiles(workspace: string, files: Record<string, string
       await writeFile(fullPath, content, "utf8");
     }),
   );
-}
-
-async function collectWorkspaceSnapshot(workspace: string): Promise<Map<string, string>> {
-  const snapshot = new Map<string, string>();
-  async function walk(currentDir: string): Promise<void> {
-    const entries = await readdir(currentDir, { withFileTypes: true });
-    for (const entry of entries) {
-      const fullPath = join(currentDir, entry.name);
-      if (entry.isDirectory()) {
-        await walk(fullPath);
-        continue;
-      }
-      snapshot.set(fullPath.replace(`${workspace}\\`, "").replace(/\\/g, "/"), await readFile(fullPath, "utf8"));
-    }
-  }
-  await walk(workspace);
-  return snapshot;
 }
 
 async function cleanupWorkspace(workspace: string): Promise<void> {
@@ -370,6 +354,7 @@ export async function runFixedBenchmarkSuite(options: FixedBenchmarkOptions = {}
             const policy = await resolveTurnPolicy(
               prompt,
               lastToolCalls,
+              session.getRepoState(),
               activeModel.runtime === "sdk" && activeModel.model
                 ? { model: activeModel.model, modelId, providerId }
                 : null,

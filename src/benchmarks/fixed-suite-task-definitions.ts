@@ -1,8 +1,9 @@
 import { execFile as execFileCb } from "child_process";
-import { readFile, readdir, stat } from "fs/promises";
-import { join, relative } from "path";
+import { readFile, stat } from "fs/promises";
+import { join } from "path";
 import { promisify } from "util";
 import { pathToFileURL } from "url";
+import { collectWorkspaceSnapshot } from "./workspace-snapshot.js";
 
 const execFile = promisify(execFileCb);
 
@@ -36,23 +37,6 @@ export type FixedBenchmarkTask = {
   verify?: (workspace: string, assistantText: string, initialSnapshot: Map<string, string>, stepSnapshot: Map<string, string>) => Promise<TaskVerification>;
   steps?: BenchmarkTaskStep[];
 };
-
-async function collectWorkspaceSnapshot(workspace: string): Promise<Map<string, string>> {
-  const snapshot = new Map<string, string>();
-  async function walk(currentDir: string): Promise<void> {
-    const entries = await readdir(currentDir, { withFileTypes: true });
-    for (const entry of entries) {
-      const fullPath = join(currentDir, entry.name);
-      if (entry.isDirectory()) {
-        await walk(fullPath);
-        continue;
-      }
-      snapshot.set(relative(workspace, fullPath).replace(/\\/g, "/"), await readFile(fullPath, "utf8"));
-    }
-  }
-  await walk(workspace);
-  return snapshot;
-}
 
 async function importFresh<T>(filePath: string): Promise<T> {
   return import(`${pathToFileURL(filePath).href}?t=${Date.now()}`) as Promise<T>;

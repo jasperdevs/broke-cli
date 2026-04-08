@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { getTurnPolicy } from "../src/core/turn-policy.js";
 import { Session } from "../src/core/session.js";
+import { createEmptySessionRepoState } from "../src/core/session-types.js";
 import { buildAggregateBudgetReport, buildBudgetReport, renderBudgetDashboard, summarizeBudgetMetrics } from "../src/core/budget-insights.js";
 import { getMinimalOutputPolicy } from "../src/cli/turn-runner-support.js";
 
@@ -57,6 +58,40 @@ describe("turn policy", () => {
       maxChars: 72,
       maxOutputTokens: 64,
     });
+  });
+
+  it("forces follow-up test requests onto a tight reuse lane when recent edits exist", () => {
+    const repoState = createEmptySessionRepoState();
+    repoState.recentEdits.push({ path: "src/flags.js", kind: "edit", turn: 1 });
+
+    const policy = getTurnPolicy("Write node:test coverage for the flags fix.", [], repoState);
+
+    expect(policy.allowedTools).toEqual(["readFile", "writeFile", "editFile"]);
+    expect(policy.maxToolSteps).toBe(2);
+    expect(policy.historyWindow).toBe(1);
+  });
+
+  it("forces explicit follow-up test file creation onto a direct write lane", () => {
+    const repoState = createEmptySessionRepoState();
+    repoState.recentEdits.push({ path: "src/flags.js", kind: "edit", turn: 1 });
+
+    const policy = getTurnPolicy("Add node:test coverage in temp-followup-bench.test.js for the flags fix.", [], repoState);
+
+    expect(policy.allowedTools).toEqual(["writeFile", "editFile"]);
+    expect(policy.maxToolSteps).toBe(2);
+    expect(policy.historyWindow).toBe(1);
+  });
+
+  it("forces follow-up import questions onto a single-search lane when recent edits exist", () => {
+    const repoState = createEmptySessionRepoState();
+    repoState.recentEdits.push({ path: "src/config.js", kind: "edit", turn: 1 });
+
+    const policy = getTurnPolicy("Without changing any files, which files import parseSettings?", [], repoState);
+
+    expect(policy.archetype).toBe("explore");
+    expect(policy.allowedTools).toEqual([]);
+    expect(policy.maxToolSteps).toBe(0);
+    expect(policy.historyWindow).toBe(1);
   });
 });
 

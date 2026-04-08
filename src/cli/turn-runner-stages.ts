@@ -8,6 +8,7 @@ import type { TurnPolicy } from "../core/turn-policy.js";
 import type { Session } from "../core/session.js";
 import { resolveExecutionTarget } from "./turn-runner-support.js";
 import type { SpecialistModelRole } from "./model-routing.js";
+import { buildNativeFollowupStateContext } from "./native-workspace-observer.js";
 import { applyTurnFrame } from "./turn-frame.js";
 import { estimateTextTokens } from "../ai/tokens.js";
 
@@ -54,6 +55,22 @@ function buildTransientFileContext(fileContexts?: Map<string, string>): { transc
   };
 }
 
+function buildFollowupRepoContext(session: Session, text: string): { transcriptNote: string; promptBlock: string } | null {
+  const getRepoState = (session as Session & { getRepoState?: () => ReturnType<Session["getRepoState"]> }).getRepoState;
+  if (typeof getRepoState !== "function") return null;
+  const repoState = getRepoState.call(session);
+  if (repoState.recentEdits.length === 0) return null;
+  const importOnlyFollowup = /\b(without changing|which files import|what imports|where .* imported)\b/i.test(text);
+  if (!/\b(test|tests|coverage|spec|without changing|which files import|what imports|where .* imported)\b/i.test(text)) {
+    return null;
+  }
+  return buildNativeFollowupStateContext(
+    process.cwd(),
+    repoState.recentEdits.map((entry) => entry.path),
+    importOnlyFollowup ? 3 : 2,
+  );
+}
+
 export function injectTransientUserContext(messages: TurnChatMessage[], transientUserContext?: string): TurnChatMessage[] {
   if (!transientUserContext?.trim()) return messages;
   const next = messages.map((message) => ({ ...message }));
@@ -82,29 +99,29 @@ export function selectMessagesForTurn(
   budget?: { maxTokens: number; modelId?: string },
 ): TurnChatMessage[] {
   const baseMessages = policy.promptProfile === "casual" ? messages : optimizeMessages(messages);
-  const windowed = policy.historyWindow && baseMessages.length > policy.historyWindow
-    ? baseMessages.slice(-policy.historyWindow)
-    : baseMessages;
-  if (!budget || budget.maxTokens <= 0) return windowed;
-
   const prefixMessages: TurnChatMessage[] = [];
   let prefixIndex = 0;
   while (
-    prefixIndex < windowed.length
-    && windowed[prefixIndex]?.role === "user"
+    prefixIndex < baseMessages.length
+    && baseMessages[prefixIndex]?.role === "user"
     && (
-      windowed[prefixIndex]!.content.startsWith(COMPACTION_SUMMARY_PREFIX)
-      || windowed[prefixIndex]!.content.startsWith(REPO_STATE_CONTEXT_PREFIX)
+      baseMessages[prefixIndex]!.content.startsWith(COMPACTION_SUMMARY_PREFIX)
+      || baseMessages[prefixIndex]!.content.startsWith(REPO_STATE_CONTEXT_PREFIX)
     )
   ) {
-    prefixMessages.push(windowed[prefixIndex]!);
+    prefixMessages.push(baseMessages[prefixIndex]!);
     prefixIndex += 1;
   }
-  const tail = windowed.slice(prefixIndex);
+  const tail = baseMessages.slice(prefixIndex);
+  const windowedTail = policy.historyWindow && tail.length > policy.historyWindow
+    ? tail.slice(-policy.historyWindow)
+    : tail;
+  if (!budget || budget.maxTokens <= 0) return [...prefixMessages, ...windowedTail];
+
   const selected: TurnChatMessage[] = [];
   let tokenCount = prefixMessages.reduce((sum, message) => sum + estimateTextTokens(message.content, budget.modelId), 0);
-  for (let i = tail.length - 1; i >= 0; i--) {
-    const message = tail[i]!;
+  for (let i = windowedTail.length - 1; i >= 0; i--) {
+    const message = windowedTail[i]!;
     const nextCost = estimateTextTokens(message.content, budget.modelId);
     if (selected.length > 0 && tokenCount + nextCost > budget.maxTokens) break;
     selected.unshift(message);
@@ -178,11 +195,14 @@ export function addUserTurnToSession(options: {
 }): { transientUserContext?: string } {
   const { app, session, text, effectiveImages, alreadyAddedUserMessage } = options;
   if (alreadyAddedUserMessage) return {};
-  const transientContext = buildTransientFileContext(app.getFileContexts?.());
-  const fullText = transientContext ? `${text}\n\n${transientContext.transcriptNote}` : text;
+  const fileContext = buildTransientFileContext(app.getFileContexts?.());
+  const repoContext = buildFollowupRepoContext(session, text);
+  const transcriptNotes = [fileContext?.transcriptNote, repoContext?.transcriptNote].filter(Boolean);
+  const promptBlocks = [fileContext?.promptBlock, repoContext?.promptBlock].filter(Boolean);
+  const fullText = transcriptNotes.length > 0 ? `${text}\n\n${transcriptNotes.join("\n")}` : text;
   app.addMessage("user", text, effectiveImages);
   session.addMessage("user", fullText, effectiveImages);
-  return { transientUserContext: transientContext?.promptBlock };
+  return { transientUserContext: promptBlocks.length > 0 ? promptBlocks.join("\n\n") : undefined };
 }
 
 export function prepareTurnContext(options: {

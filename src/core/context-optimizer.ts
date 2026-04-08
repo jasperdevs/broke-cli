@@ -63,6 +63,7 @@ export class ContextOptimizer {
   private readFiles = new Map<string, { turnIndex: number; lineCount: number }>();
   private toolMemo = new Map<string, { fingerprint: string; turnIndex: number; result: unknown }>();
   private currentTurn = 0;
+  private workspaceVersion = 0;
 
   nextTurn(): number {
     return ++this.currentTurn;
@@ -76,6 +77,7 @@ export class ContextOptimizer {
     this.readFiles.clear();
     this.toolMemo.clear();
     this.currentTurn = 0;
+    this.workspaceVersion = 0;
   }
 
   trackFileRead(path: string, lineCount: number): void {
@@ -103,6 +105,11 @@ export class ContextOptimizer {
 
   invalidateToolResults(): void {
     this.toolMemo.clear();
+    this.workspaceVersion += 1;
+  }
+
+  getWorkspaceVersion(): number {
+    return this.workspaceVersion;
   }
 
   optimizeMessages(

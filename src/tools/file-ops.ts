@@ -222,11 +222,12 @@ export function listFilesDirect({ path: dir = ".", maxDepth, include }: { path?:
   }
   const memoContext = getMemoContext();
   const memoKey = ["list", dir, maxDepth ?? 3, include ?? ""].join("|");
+  const workspaceFingerprint = `${memoKey}|v${memoContext?.getWorkspaceVersion() ?? 0}`;
   const memoized = memoContext?.getMemoizedToolResult<{
     files: string[];
     totalEntries: number;
     truncated: boolean;
-  }>(memoKey, memoKey, 1);
+  }>(memoKey, workspaceFingerprint, 3);
   if (memoized) {
     return {
       ...memoized,
@@ -272,7 +273,7 @@ export function listFilesDirect({ path: dir = ".", maxDepth, include }: { path?:
   };
   visit(dir, 0);
   const result = { files, totalEntries, truncated: capped };
-  memoContext?.rememberToolResult(memoKey, memoKey, result);
+  memoContext?.rememberToolResult(memoKey, workspaceFingerprint, result);
   return result;
 }
 
@@ -289,10 +290,11 @@ export function grepDirect({ pattern, path: dir = ".", include }: { pattern: str
   }
   const memoContext = getMemoContext();
   const memoKey = ["grep", dir, pattern, include ?? ""].join("|");
+  const workspaceFingerprint = `${memoKey}|v${memoContext?.getWorkspaceVersion() ?? 0}`;
   const memoized = memoContext?.getMemoizedToolResult<{
     summary: Array<{ file: string; count: number; examples: Array<{ line: number; text: string }> }>;
     totalMatches: number;
-  }>(memoKey, memoKey, 1);
+  }>(memoKey, workspaceFingerprint, 3);
   if (memoized) {
     return {
       matches: [],
@@ -338,7 +340,7 @@ export function grepDirect({ pattern, path: dir = ".", include }: { pattern: str
     totalMatches: matches.length,
     capped: matches.length >= MAX_GREP_MATCHES,
   };
-  memoContext?.rememberToolResult(memoKey, memoKey, {
+  memoContext?.rememberToolResult(memoKey, workspaceFingerprint, {
     summary: result.summary,
     totalMatches: result.totalMatches,
   });
@@ -369,11 +371,12 @@ export function semSearchDirect({
   const memoContext = getMemoContext();
   const normalizedQuery = query.trim().toLowerCase();
   const memoKey = ["sem", dir, normalizedQuery, include ?? "", limit ?? ""].join("|");
+  const workspaceFingerprint = `${memoKey}|v${memoContext?.getWorkspaceVersion() ?? 0}`;
   const memoized = memoContext?.getMemoizedToolResult<{
     results: Array<{ file: string; line: number; excerpt: string; score: number }>;
     totalResults: number;
     terms: string[];
-  }>(memoKey, memoKey, 1);
+  }>(memoKey, workspaceFingerprint, 3);
   if (memoized) {
     return {
       results: memoized.results,
@@ -423,7 +426,7 @@ export function semSearchDirect({
     query,
     terms: tokens,
   };
-  memoContext?.rememberToolResult(memoKey, memoKey, {
+  memoContext?.rememberToolResult(memoKey, workspaceFingerprint, {
     results: ranked,
     totalResults: ranked.length,
     terms: tokens,

@@ -5,6 +5,7 @@ import { generateText, type LanguageModel } from "ai";
 import { calculateCost, type TokenUsage } from "../ai/cost.js";
 import { estimateTextTokens } from "../ai/tokens.js";
 import { getSettings } from "./config.js";
+import type { SessionRepoState } from "./session-types.js";
 import type { ToolName } from "../tools/registry.js";
 
 export type TurnArchetype =
@@ -210,9 +211,53 @@ function needsShellCapability(userMessage: string): boolean {
     || /\b(run|rerun|execute|verify|check|pass(?:es|ing)?|build|lint|compile|command|npm|pnpm|yarn|bun|git|install|serve|start)\b/i.test(userMessage);
 }
 
-function refinePolicyForRequest(policy: TurnPolicy, userMessage: string): TurnPolicy {
+function refinePolicyForFollowup(policy: TurnPolicy, userMessage: string, repoState?: SessionRepoState | null): TurnPolicy {
+  if (!repoState || repoState.recentEdits.length === 0) return policy;
+  const msg = userMessage.toLowerCase();
+
+  if (/\b(without changing|which files import|what imports|where .* imported)\b/i.test(msg)) {
+    return {
+      ...policy,
+      archetype: "explore",
+      allowedTools: [],
+      maxToolSteps: 0,
+      scaffold: "lane cheap\nreuse recent edits\nno tools\nanswer only",
+      preferSmallExecutor: true,
+      promptProfile: "lean",
+      historyWindow: 1,
+    };
+  }
+
+  if (/\b(test|tests|coverage|spec)\b/i.test(msg)) {
+    return {
+      ...policy,
+      archetype: policy.archetype === "bugfix" ? "bugfix" : "edit",
+      allowedTools: ["readFile", "writeFile", "editFile"],
+      maxToolSteps: 2,
+      scaffold: "lane main\nreuse recent edits\nread changed file once if needed\nwrite test then stop",
+      preferSmallExecutor: false,
+      promptProfile: "edit",
+      historyWindow: 1,
+    };
+  }
+
+  if (policy.archetype === "edit" || policy.archetype === "bugfix") {
+    return {
+      ...policy,
+      allowedTools: policy.allowedTools.filter((tool) => tool !== "semSearch" && tool !== "listFiles"),
+      maxToolSteps: Math.min(policy.maxToolSteps, 3),
+      historyWindow: 1,
+    };
+  }
+
+  return policy;
+}
+
+function refinePolicyForRequest(policy: TurnPolicy, userMessage: string, repoState?: SessionRepoState | null): TurnPolicy {
   const explicitPaths = extractExplicitPaths(userMessage);
   const existingPaths = explicitPaths.filter((path) => existsSync(path));
+
+  policy = refinePolicyForFollowup(policy, userMessage, repoState);
 
   if ((policy.archetype === "explore" || policy.archetype === "question") && explicitPaths.length > 0) {
     return {
@@ -244,11 +289,26 @@ function refinePolicyForRequest(policy: TurnPolicy, userMessage: string): TurnPo
     };
   }
 
+  if (
+    repoState?.recentEdits.length
+    && /\b(test|tests|coverage|spec)\b/i.test(userMessage)
+    && explicitPaths.length > 0
+    && explicitPaths.some((path) => !existsSync(path))
+    && !needsShellCapability(userMessage)
+  ) {
+    return {
+      ...policy,
+      allowedTools: ["writeFile", "editFile"],
+      maxToolSteps: Math.min(policy.maxToolSteps, 2),
+      historyWindow: 1,
+    };
+  }
+
   return policy;
 }
 
-export function getTurnPolicy(userMessage: string, lastToolCalls: string[] = []): TurnPolicy {
-  return refinePolicyForRequest(getBuiltInPolicy(classifyTurnArchetype(userMessage, lastToolCalls)), userMessage);
+export function getTurnPolicy(userMessage: string, lastToolCalls: string[] = [], repoState?: SessionRepoState | null): TurnPolicy {
+  return refinePolicyForRequest(getBuiltInPolicy(classifyTurnArchetype(userMessage, lastToolCalls)), userMessage, repoState);
 }
 
 function getPlanCacheKey(policy: TurnPolicy, userMessage: string): string {
@@ -341,9 +401,10 @@ function normalizePlannerUsage(result: unknown, planner: PlannerContext, prompt:
 export async function resolveTurnPolicy(
   userMessage: string,
   lastToolCalls: string[] = [],
+  repoState?: SessionRepoState | null,
   planner?: PlannerContext | null,
 ): Promise<TurnPolicy> {
-  const basePolicy = getTurnPolicy(userMessage, lastToolCalls);
+  const basePolicy = getTurnPolicy(userMessage, lastToolCalls, repoState);
   if (getSettings().enablePlannedScaffolds === false) return basePolicy;
   if (!planner?.model || !PLANNABLE_ARCHETYPES.has(basePolicy.archetype)) return basePolicy;
 
