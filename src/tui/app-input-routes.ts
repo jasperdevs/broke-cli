@@ -348,6 +348,10 @@ export function handlePaste(app: AppState, text: string): void {
     return;
   }
   app.input.paste(text);
+  if (tryConsumeImageDraft(app)) {
+    app.draw();
+    return;
+  }
   app.draw();
 }
 

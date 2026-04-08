@@ -147,6 +147,20 @@ describe("image attachments", () => {
     expect(app.input.getText()).toBe("");
   });
 
+  it("auto-attaches an image path when it arrives through the generic text paste path", () => {
+    updateSetting("terminal", { ...getSettings().terminal, showImages: true });
+    const app = new App() as any;
+    const dir = mkdtempSync(join(tmpdir(), "brokecli-image-"));
+    tempDirs.push(dir);
+    const imagePath = join(dir, "generic.png");
+    writeFileSync(imagePath, "fakepng", "utf-8");
+
+    app.handlePaste(` ${imagePath} `);
+
+    expect(app.pendingImages).toHaveLength(1);
+    expect(app.input.getText()).toBe("");
+  });
+
   it("removes the last attachment chip with backspace when the draft is empty", () => {
     const app = new App() as any;
     app.pendingImages = [{ mimeType: "image/png", data: "abc" }];
