@@ -42,6 +42,7 @@ export interface TurnPolicy {
 const PLANNED_SCAFFOLD_CACHE = new Map<string, string>();
 const CACHE_DIR = join(homedir(), ".brokecli");
 const CACHE_FILE = join(CACHE_DIR, "turn-policy-cache.json");
+const MAX_PLANNED_SCAFFOLDS = 128;
 let cacheHydrated = false;
 
 const ALL_EDIT_TOOLS: ToolName[] = ["semSearch", "bash", "readFile", "writeFile", "editFile", "listFiles", "grep", "todoWrite"];
@@ -199,8 +200,13 @@ export function getTurnPolicy(userMessage: string, lastToolCalls: string[] = [])
   return getBuiltInPolicy(classifyTurnArchetype(userMessage, lastToolCalls));
 }
 
-function getPlanCacheKey(archetype: TurnArchetype): string {
-  return `v2:${archetype}`;
+function getPlanCacheKey(policy: TurnPolicy, userMessage: string): string {
+  const normalized = userMessage
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .slice(0, 240);
+  return `v3:${policy.archetype}:${policy.maxToolSteps}:${policy.allowedTools.join(",")}:${normalized}`;
 }
 
 function hydratePlannedScaffoldCache(): void {
@@ -221,6 +227,11 @@ function hydratePlannedScaffoldCache(): void {
 
 function persistPlannedScaffoldCache(): void {
   try {
+    while (PLANNED_SCAFFOLD_CACHE.size > MAX_PLANNED_SCAFFOLDS) {
+      const oldest = PLANNED_SCAFFOLD_CACHE.keys().next().value;
+      if (!oldest) break;
+      PLANNED_SCAFFOLD_CACHE.delete(oldest);
+    }
     mkdirSync(CACHE_DIR, { recursive: true });
     writeFileSync(CACHE_FILE, JSON.stringify(Object.fromEntries(PLANNED_SCAFFOLD_CACHE), null, 2), "utf-8");
   } catch {
@@ -285,7 +296,7 @@ export async function resolveTurnPolicy(
   if (!planner?.model || !PLANNABLE_ARCHETYPES.has(basePolicy.archetype)) return basePolicy;
 
   hydratePlannedScaffoldCache();
-  const cacheKey = getPlanCacheKey(basePolicy.archetype);
+  const cacheKey = getPlanCacheKey(basePolicy, userMessage);
   const cached = PLANNED_SCAFFOLD_CACHE.get(cacheKey);
   if (cached) {
     return {

@@ -99,7 +99,6 @@ export function toolDescription(tc: ToolCallRenderGroup): string {
     case "bash": return `Running \`${tc.preview}\``;
     case "webSearch": return `Searching web for "${a?.query ?? tc.preview}"`;
     case "webFetch": return `Fetching ${a?.url ?? tc.preview}`;
-    case "askUser": return `Asking: ${a?.question ?? tc.preview}`;
     case "todoWrite": return "Updating task list";
     default: return `${tc.name} ${tc.preview}`;
   }

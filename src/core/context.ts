@@ -5,6 +5,7 @@ import { execSync } from "child_process";
 import type { Mode, CavemanLevel } from "./config.js";
 import type { PromptProfile } from "./turn-policy.js";
 import { getCavemanPrompt } from "./caveman.js";
+import { describeAutonomyPolicy } from "./permissions.js";
 
 const CONVENTION_FILES = [
   "CONVENTIONS.md",
@@ -97,6 +98,12 @@ webSearch: For current docs, APIs, recent events. Not for things you already kno
 webFetch: For reading specific URLs — docs pages, API references. Content is stripped of HTML.
 todoWrite: Create or update a task checklist for multi-step work. Use at the start of complex tasks (3+ steps) to show your plan, then update status as you complete each step. Helps the user track progress.
 </tool-tips>`);
+  }
+
+  if (profile === "full") {
+    parts.push(`<autonomy>
+${describeAutonomyPolicy(cwd).join("\n")}
+</autonomy>`);
   }
 
   // Global context files (truncated)

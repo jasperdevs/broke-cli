@@ -3,6 +3,7 @@ import { calculateCost, type TokenUsage } from "./cost.js";
 import { estimateConversationTokens, estimateTextTokens } from "./tokens.js";
 import { resolveNativeCommand } from "./native-cli.js";
 import { resolveThinkingConfig } from "./thinking.js";
+import { getWorkspaceRoot, getAutonomySettings } from "../core/permissions.js";
 
 interface NativeMessage {
   role: "user" | "assistant";
@@ -139,6 +140,8 @@ function emitDelta(next: string, previous: string, emit: (delta: string) => void
 }
 
 function buildClaudeArgs(opts: NativeStreamOptions): string[] {
+  const workspaceRoot = getWorkspaceRoot(opts.cwd ?? process.cwd());
+  const autonomy = getAutonomySettings();
   const args = [
     "-p",
     "--output-format",
@@ -149,7 +152,18 @@ function buildClaudeArgs(opts: NativeStreamOptions): string[] {
     opts.modelId,
     "--system-prompt",
     opts.system,
+    "--permission-mode",
+    opts.denyToolUse ? "plan" : "acceptEdits",
+    "--add-dir",
+    workspaceRoot,
   ];
+
+  for (const root of autonomy.additionalReadRoots) {
+    args.push("--add-dir", root);
+  }
+  for (const root of autonomy.additionalWriteRoots) {
+    args.push("--add-dir", root);
+  }
 
   const thinking = resolveThinkingConfig({
     providerId: opts.providerId,
@@ -161,12 +175,12 @@ function buildClaudeArgs(opts: NativeStreamOptions): string[] {
     args.push("--effort", thinking.effort ?? "low");
   }
 
-  args.push("--dangerously-skip-permissions");
-
   return args;
 }
 
 function buildCodexArgs(opts: NativeStreamOptions): string[] {
+  const workspaceRoot = getWorkspaceRoot(opts.cwd ?? process.cwd());
+  const autonomy = getAutonomySettings();
   const args = [
     "exec",
     "--json",
@@ -175,9 +189,15 @@ function buildCodexArgs(opts: NativeStreamOptions): string[] {
     opts.modelId,
     "-C",
     opts.cwd ?? process.cwd(),
+    "--sandbox",
+    opts.denyToolUse ? "read-only" : "workspace-write",
+    "--add-dir",
+    workspaceRoot,
   ];
 
-  args.push("--full-auto");
+  for (const root of autonomy.additionalWriteRoots) {
+    args.push("--add-dir", root);
+  }
 
   return args;
 }

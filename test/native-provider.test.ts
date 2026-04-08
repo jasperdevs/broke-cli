@@ -13,6 +13,19 @@ vi.mock("../src/core/config.js", () => ({
   getApiKey: configMocks.getApiKey,
   getBaseUrl: configMocks.getBaseUrl,
   getProviderCredential: configMocks.getProviderCredential,
+  getSettings: () => ({
+    disabledTools: [],
+    disabledExtensions: [],
+    autonomy: {
+      allowNetwork: true,
+      allowReadOutsideWorkspace: false,
+      allowWriteOutsideWorkspace: false,
+      allowShellOutsideWorkspace: false,
+      allowDestructiveShell: false,
+      additionalReadRoots: [],
+      additionalWriteRoots: [],
+    },
+  }),
 }));
 
 vi.mock("child_process", async () => {
@@ -195,7 +208,7 @@ describe("native provider runtime selection", () => {
     expect(onFinish).not.toHaveBeenCalled();
   });
 
-  it("always launches Claude native runs with skip-permissions enabled", async () => {
+  it("launches Claude native runs with scoped workspace permissions", async () => {
     const handlers: Record<string, (code?: number) => void> = {};
     const kill = vi.fn();
     configMocks.spawn.mockReturnValue({
@@ -222,7 +235,7 @@ describe("native provider runtime selection", () => {
 
     expect(configMocks.spawn).toHaveBeenCalledWith(
       expect.any(String),
-      expect.arrayContaining(["--dangerously-skip-permissions"]),
+      expect.arrayContaining(["--permission-mode", "acceptEdits", "--add-dir", process.cwd()]),
       expect.any(Object),
     );
 
@@ -231,7 +244,7 @@ describe("native provider runtime selection", () => {
     expect(kill).toHaveBeenCalled();
   });
 
-  it("always launches Codex native runs in full-auto mode", async () => {
+  it("launches Codex native runs with workspace-write sandboxing", async () => {
     const kill = vi.fn();
     configMocks.spawn.mockReturnValue({
       stdout: { on: vi.fn() },
@@ -257,7 +270,7 @@ describe("native provider runtime selection", () => {
 
     expect(configMocks.spawn).toHaveBeenCalledWith(
       expect.any(String),
-      expect.arrayContaining(["--full-auto"]),
+      expect.arrayContaining(["--sandbox", "workspace-write", "--add-dir", process.cwd()]),
       expect.any(Object),
     );
 

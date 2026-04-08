@@ -17,13 +17,10 @@ function compressToolOutputs(content: string): string {
   const minLength = level === "ultra" ? 80 : level === "auto" ? 160 : 500;
   if (content.length < minLength) return content;
 
-  let compressed = content;
-  if (level === "ultra" || level === "auto") {
-    compressed = compressed
-      .replace(/\r/g, "")
-      .replace(/[ \t]{2,}/g, " ")
-      .replace(/\n{3,}/g, "\n\n");
-  }
+  let compressed = content
+    .replace(/\r/g, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{4,}/g, "\n\n\n");
   const lines = compressed.split("\n");
   const headCount = level === "ultra" ? 1 : level === "auto" ? 2 : 3;
   const tailCount = level === "ultra" ? 1 : level === "auto" ? 1 : 2;
@@ -38,29 +35,6 @@ function compressToolOutputs(content: string): string {
   const maxChars = level === "ultra" ? 180 : level === "auto" ? 420 : 1500;
   if (compressed.length > maxChars) {
     compressed = compressed.slice(0, maxChars) + "\n[compressed]";
-  }
-
-  if (level === "ultra" || level === "auto") {
-    compressed = compressed
-      .replace(/\b(directory|directories)\b/gi, "dir")
-      .replace(/\b(configuration|configurations)\b/gi, "cfg")
-      .replace(/\bimplementation\b/gi, "impl")
-      .replace(/\bapplication\b/gi, "app")
-      .replace(/\bproject\b/gi, "proj")
-      .replace(/\bprovider\b/gi, "prov")
-      .replace(/\bcontext\b/gi, "ctx")
-      .replace(/\bresponse\b/gi, "res")
-      .replace(/\brequest\b/gi, "req")
-      .replace(/\bfunction\b/gi, "fn")
-      .replace(/\bmessage\b/gi, "msg")
-      .replace(/\bincluding\b/gi, "incl")
-      .replace(/\bbecause\b/gi, "bc")
-      .replace(/\bwithout\b/gi, "w/o")
-      .replace(/\bbetween\b/gi, "btwn")
-      .replace(/\bresult\b/gi, "res")
-      .replace(/\bwarning\b/gi, "warn")
-      .replace(/\bfailed\b/gi, "fail")
-      .replace(/\bsuccessfully\b/gi, "ok");
   }
 
   return compressed;

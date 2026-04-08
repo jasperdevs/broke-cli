@@ -1,6 +1,8 @@
-import { readFileSync, writeFileSync, readdirSync, statSync } from "fs";
-import { basename, join, relative } from "path";
+import { readFileSync, writeFileSync, readdirSync, statSync, mkdirSync } from "fs";
+import { basename, dirname, join, relative } from "path";
 import { createCheckpoint } from "../core/git.js";
+import { checkFilesystemPathAccess, ensureNetworkAllowed } from "../core/permissions.js";
+import { fetchRemoteGitHubFile, listRemoteGitHubTree, tryParseRemoteGitHubTarget } from "./file-ops-remote.js";
 
 /** Max chars to return from file reads (~1500 tokens) */
 const MAX_READ_CHARS = 6000;
@@ -34,105 +36,8 @@ interface WalkFileOptions {
   onFile: (fullPath: string) => boolean | void;
 }
 
-interface RemoteGitHubTarget {
-  owner: string;
-  repo: string;
-  ref: string;
-  path: string;
-  kind: "file" | "tree";
-}
-
 function escapeRegex(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function tryParseRemoteGitHubTarget(input: string): RemoteGitHubTarget | null {
-  const trimmed = input.trim();
-  if (!/^https?:\/\//i.test(trimmed)) return null;
-  try {
-    const url = new URL(trimmed);
-    const parts = url.pathname.split("/").filter(Boolean);
-    if (url.hostname === "raw.githubusercontent.com" && parts.length >= 4) {
-      const [owner, repo, ref, ...rest] = parts;
-      return { owner, repo, ref, path: rest.join("/"), kind: "file" };
-    }
-    if (url.hostname !== "github.com" || parts.length < 2) return null;
-    const [owner, repo, section, ref, ...rest] = parts;
-    if (!owner || !repo) return null;
-    if (section === "blob" && ref && rest.length > 0) {
-      return { owner, repo, ref, path: rest.join("/"), kind: "file" };
-    }
-    if (section === "tree") {
-      return { owner, repo, ref: ref || "HEAD", path: rest.join("/"), kind: "tree" };
-    }
-    return { owner, repo, ref: "HEAD", path: "", kind: "tree" };
-  } catch {
-    return null;
-  }
-}
-
-async function fetchRemoteGitHubFile(target: RemoteGitHubTarget) {
-  const rawUrl = target.ref === "HEAD"
-    ? `https://raw.githubusercontent.com/${target.owner}/${target.repo}/main/${target.path}`
-    : `https://raw.githubusercontent.com/${target.owner}/${target.repo}/${target.ref}/${target.path}`;
-  const response = await fetch(rawUrl, {
-    headers: {
-      "user-agent": "terminal-agent",
-      accept: "text/plain,*/*",
-    },
-  });
-  if (!response.ok) {
-    return { success: false as const, error: `Remote read failed (${response.status})` };
-  }
-  const raw = await response.text();
-  let content = raw;
-  if (content.length > MAX_READ_CHARS) {
-    content = content.slice(0, MAX_READ_CHARS);
-    return {
-      success: true as const,
-      content,
-      totalLines: raw.split("\n").length,
-      truncated: true,
-      mode: "full" as const,
-      remote: true,
-      note: "Remote file truncated.",
-      path: `${target.owner}/${target.repo}/${target.path}`,
-    };
-  }
-  return {
-    success: true as const,
-    content,
-    totalLines: raw.split("\n").length,
-    mode: "full" as const,
-    remote: true,
-    path: `${target.owner}/${target.repo}/${target.path}`,
-  };
-}
-
-async function listRemoteGitHubTree(target: RemoteGitHubTarget) {
-  const apiPath = target.path ? `/${target.path}` : "";
-  const query = target.ref && target.ref !== "HEAD" ? `?ref=${encodeURIComponent(target.ref)}` : "";
-  const response = await fetch(`https://api.github.com/repos/${target.owner}/${target.repo}/contents${apiPath}${query}`, {
-    headers: {
-      "user-agent": "terminal-agent",
-      accept: "application/vnd.github+json",
-    },
-  });
-  if (!response.ok) {
-    return { success: false as const, error: `Remote list failed (${response.status})` };
-  }
-  const payload = await response.json();
-  const items = Array.isArray(payload) ? payload : [payload];
-  const files = items
-    .slice(0, MAX_LIST_FILES)
-    .map((entry: any) => entry.type === "dir" ? `${entry.name}/` : entry.name);
-  return {
-    files,
-    totalEntries: items.length,
-    truncated: items.length > MAX_LIST_FILES,
-    remote: true,
-    path: `${target.owner}/${target.repo}${target.path ? `/${target.path}` : ""}`,
-  };
 }
 
 function normalizeGlobPattern(include?: string): RegExp | null {
@@ -283,6 +188,10 @@ function scoreSemanticMatch(query: string, filePath: string, content: string, to
 }
 
 export function readFileDirect({ path, offset, limit, mode, tail }: ReadFileDirectOptions) {
+  const access = checkFilesystemPathAccess(path, "read");
+  if (!access.allowed) {
+    return { success: false as const, error: access.reason ?? "Read not permitted." };
+  }
   try {
     const raw = readFileSync(path, "utf-8");
     let content = raw;
@@ -319,6 +228,10 @@ export function readFileDirect({ path, offset, limit, mode, tail }: ReadFileDire
 }
 
 export function listFilesDirect({ path: dir = ".", maxDepth, include }: { path?: string; maxDepth?: number; include?: string }) {
+  const access = checkFilesystemPathAccess(dir, "read");
+  if (!access.allowed) {
+    return { files: [], totalEntries: 0, truncated: false, error: access.reason };
+  }
   const max = maxDepth ?? 3;
   const files: string[] = [];
   let totalEntries = 0;
@@ -360,6 +273,16 @@ export function listFilesDirect({ path: dir = ".", maxDepth, include }: { path?:
 }
 
 export function grepDirect({ pattern, path: dir = ".", include }: { pattern: string; path?: string; include?: string }) {
+  const access = checkFilesystemPathAccess(dir, "read");
+  if (!access.allowed) {
+    return {
+      matches: [],
+      summary: [],
+      totalMatches: 0,
+      capped: false,
+      error: access.reason,
+    };
+  }
   const regex = new RegExp(pattern, "i");
   const matches: Array<{ file: string; line: number; text: string }> = [];
 
@@ -407,6 +330,16 @@ export function semSearchDirect({
   include?: string;
   limit?: number;
 }) {
+  const access = checkFilesystemPathAccess(dir, "read");
+  if (!access.allowed) {
+    return {
+      results: [],
+      totalResults: 0,
+      query,
+      terms: [],
+      error: access.reason,
+    };
+  }
   const normalizedQuery = query.trim().toLowerCase();
   const tokens = tokenizeSearchQuery(query);
   const maxResults = Math.min(Math.max(limit ?? 6, 1), MAX_SEM_SEARCH_RESULTS);
@@ -451,19 +384,32 @@ export function semSearchDirect({
 
 export async function readFileMaybeRemote(options: ReadFileDirectOptions) {
   const remote = tryParseRemoteGitHubTarget(options.path);
-  if (remote?.kind === "file") return fetchRemoteGitHubFile(remote);
+  if (remote?.kind === "file") {
+    const network = ensureNetworkAllowed();
+    if (!network.allowed) return { success: false as const, error: network.reason };
+    return fetchRemoteGitHubFile(remote);
+  }
   return readFileDirect(options);
 }
 
 export async function listFilesMaybeRemote(options: { path?: string; maxDepth?: number; include?: string }) {
   const remote = tryParseRemoteGitHubTarget(options.path ?? ".");
-  if (remote) return listRemoteGitHubTree(remote);
+  if (remote) {
+    const network = ensureNetworkAllowed();
+    if (!network.allowed) return { files: [], totalEntries: 0, truncated: false, error: network.reason };
+    return listRemoteGitHubTree(remote);
+  }
   return listFilesDirect(options);
 }
 
 export function writeFileDirect({ path, content }: { path: string; content: string }) {
-  createCheckpoint();
+  const access = checkFilesystemPathAccess(path, "write");
+  if (!access.allowed) {
+    return { success: false as const, error: access.reason ?? "Write not permitted." };
+  }
   try {
+    mkdirSync(dirname(path), { recursive: true });
+    createCheckpoint();
     writeFileSync(path, content, "utf-8");
     return { success: true as const, bytesWritten: content.length };
   } catch (err: unknown) {
@@ -472,12 +418,20 @@ export function writeFileDirect({ path, content }: { path: string; content: stri
 }
 
 export function editFileDirect({ path, old_string, new_string }: { path: string; old_string: string; new_string: string }) {
-  createCheckpoint();
+  const access = checkFilesystemPathAccess(path, "write");
+  if (!access.allowed) {
+    return { success: false as const, error: access.reason ?? "Edit not permitted." };
+  }
   try {
     const content = readFileSync(path, "utf-8");
-    if (!content.includes(old_string)) {
+    const occurrences = content.split(old_string).length - 1;
+    if (occurrences === 0) {
       return { success: false as const, error: "old_string not found in file" };
     }
+    if (occurrences > 1) {
+      return { success: false as const, error: "old_string must match exactly once" };
+    }
+    createCheckpoint();
     const updated = content.replace(old_string, new_string);
     writeFileSync(path, updated, "utf-8");
     return { success: true as const };

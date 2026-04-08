@@ -46,6 +46,7 @@ function mergeSettings(base: Partial<Settings> | undefined, override: Partial<Se
     terminal: { ...(base?.terminal ?? {}), ...(override?.terminal ?? {}) },
     images: { ...(base?.images ?? {}), ...(override?.images ?? {}) },
     markdown: { ...(base?.markdown ?? {}), ...(override?.markdown ?? {}) },
+    autonomy: { ...(base?.autonomy ?? {}), ...(override?.autonomy ?? {}) },
   } as Partial<Settings>;
 }
 
@@ -120,6 +121,7 @@ export function getSettings(): Settings {
     terminal: { ...DEFAULT_SETTINGS.terminal, ...config.settings?.terminal, ...runtimeSettings.terminal },
     images: { ...DEFAULT_SETTINGS.images, ...config.settings?.images, ...runtimeSettings.images },
     markdown: { ...DEFAULT_SETTINGS.markdown, ...config.settings?.markdown, ...runtimeSettings.markdown },
+    autonomy: { ...DEFAULT_SETTINGS.autonomy, ...config.settings?.autonomy, ...runtimeSettings.autonomy },
     disabledTools: [...new Set([...(config.settings?.disabledTools ?? []), ...legacyDisabledTools, ...(runtimeSettings.disabledTools ?? [])])],
   };
   return merged as Settings;

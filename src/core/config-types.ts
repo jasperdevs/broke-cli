@@ -41,6 +41,16 @@ export interface MarkdownSettings {
   codeBlockIndent: string;
 }
 
+export interface AutonomySettings {
+  allowNetwork: boolean;
+  allowReadOutsideWorkspace: boolean;
+  allowWriteOutsideWorkspace: boolean;
+  allowShellOutsideWorkspace: boolean;
+  allowDestructiveShell: boolean;
+  additionalReadRoots: string[];
+  additionalWriteRoots: string[];
+}
+
 export interface Settings {
   autoCompact: boolean;
   maxSessionCost: number;
@@ -79,6 +89,7 @@ export interface Settings {
   npmCommand: string[];
   enabledModels: string[];
   markdown: MarkdownSettings;
+  autonomy: AutonomySettings;
   packages: PackageSource[];
   extensions: string[];
   skills: string[];

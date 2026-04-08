@@ -52,8 +52,8 @@ describe("caveman mode resolution", () => {
     const optimized = optimizer.optimizeMessages(messages);
 
     expect(optimized[0].content).toContain("compressed");
-    expect(optimized[0].content).toContain("dir");
-    expect(optimized[0].content).toContain("cfg");
+    expect(optimized[0].content).toContain("directory");
+    expect(optimized[0].content).toContain("configuration");
     expect(optimized[0].content.length).toBeLessThan(messages[0].content.length);
 
     updateSetting("cavemanLevel", "off");

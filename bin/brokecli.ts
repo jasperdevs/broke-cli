@@ -7,7 +7,6 @@ import { Session } from "../src/core/session.js";
 import { SessionManager } from "../src/core/session-manager.js";
 import { touchProject } from "../src/core/projects.js";
 import { getTools, TOOL_NAMES, type ToolName } from "../src/tools/registry.js";
-import { createAskUserTool } from "../src/tools/ask.js";
 import { setBashOutputCallback } from "../src/tools/bash.js";
 import { setTodoChangeCallback } from "../src/tools/todo.js";
 import { getApiKey, getSettings, updateSetting, type Mode } from "../src/core/config.js";
@@ -291,7 +290,6 @@ program.action(async (promptParts, opts) => {
     ...getTools({
       include: allowedTools,
     }),
-    askUser: createAskUserTool((request) => app.showQuestionnaire(request)),
   });
 
   setBashOutputCallback((chunk) => {

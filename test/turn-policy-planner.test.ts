@@ -36,9 +36,10 @@ describe("planned scaffolds", () => {
 
   it("plans once and then reuses the scaffold cache", async () => {
     const planner = { model: {} as any, modelId: "gpt-5.4-mini", providerId: "openai" };
+    const request = "read src/app.ts and tell me what it does";
 
-    const first = await resolveTurnPolicy("read src/app.ts and tell me what it does", [], planner);
-    const second = await resolveTurnPolicy("show me how the sidebar render works", [], planner);
+    const first = await resolveTurnPolicy(request, [], planner);
+    const second = await resolveTurnPolicy(request, [], planner);
 
     expect(first.scaffoldSource).toBe("planned");
     expect(first.plannerCacheHit).toBe(false);
@@ -51,8 +52,9 @@ describe("planned scaffolds", () => {
 
   it("reloads cached scaffolds after an in-process cache reset", async () => {
     const planner = { model: {} as any, modelId: "gpt-5.4-mini", providerId: "openai" };
+    const request = "review this file tree";
 
-    const first = await resolveTurnPolicy("review this file tree", [], planner);
+    const first = await resolveTurnPolicy(request, [], planner);
     expect(first.scaffoldSource).toBe("planned");
     expect(first.plannerCacheHit).toBe(false);
     expect(existsSync(cacheFile)).toBe(true);
@@ -60,7 +62,7 @@ describe("planned scaffolds", () => {
     resetPlannedScaffoldCacheForTests();
     generateTextMock.mockClear();
 
-    const second = await resolveTurnPolicy("review the render path", [], planner);
+    const second = await resolveTurnPolicy(request, [], planner);
     expect(second.scaffoldSource).toBe("planned");
     expect(second.plannerCacheHit).toBe(true);
     expect(generateTextMock).not.toHaveBeenCalled();

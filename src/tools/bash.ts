@@ -6,6 +6,7 @@ import { z } from "zod";
 import { tool } from "ai";
 import { filterCommandOutput, rewriteCommand } from "./command-filter.js";
 import { grepDirect, listFilesDirect, readFileDirect } from "./file-ops.js";
+import { checkShellCommandAccess } from "../core/permissions.js";
 
 /** Max chars sent back to LLM context (~1500 tokens) */
 const MAX_OUTPUT_CHARS = 6000;
@@ -138,6 +139,11 @@ export const bashTool = tool({
   execute: async ({ command, timeout }, options) => {
     const rerouted = rerouteSimpleShellCommand(command);
     if (rerouted) return rerouted;
+
+    const permission = checkShellCommandAccess(command);
+    if (!permission.allowed) {
+      return { success: false as const, output: "", error: permission.reason ?? "Shell command blocked by autonomy policy." };
+    }
 
     const timeoutMs = timeout ?? 30000;
 

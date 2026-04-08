@@ -61,6 +61,15 @@ export const DEFAULT_SETTINGS: Settings = {
   markdown: {
     codeBlockIndent: "  ",
   },
+  autonomy: {
+    allowNetwork: true,
+    allowReadOutsideWorkspace: false,
+    allowWriteOutsideWorkspace: false,
+    allowShellOutsideWorkspace: false,
+    allowDestructiveShell: false,
+    additionalReadRoots: [],
+    additionalWriteRoots: [],
+  },
   packages: [],
   extensions: [],
   skills: [],
