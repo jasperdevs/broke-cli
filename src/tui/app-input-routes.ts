@@ -40,6 +40,13 @@ function syncFilePickerFromComposer(app: AppState): boolean {
   return true;
 }
 
+function syncPlainFileContexts(app: AppState): void {
+  const text = app.input.getText();
+  for (const file of Array.from(app.fileContexts.keys())) {
+    if (!text.includes(file)) app.fileContexts.delete(file);
+  }
+}
+
 export function handleBudgetViewKey(app: AppState, key: Keypress): void {
   const page = Math.max(1, app.screen.height - 7);
   const report = app.budgetView.reports[app.budgetView.scope];
@@ -302,17 +309,21 @@ export function restoreQueuedMessage(app: AppState): void {
     app.pendingImages = [...queued.images, ...app.pendingImages];
   }
   app.input.setText(queued.text);
+  syncPlainFileContexts(app);
   syncInlineImageChipLabels(app);
   app.drawNow();
 }
 
 export function handlePaste(app: AppState, text: string): void {
   if (handleImagePaste(app, text)) {
+    syncPlainFileContexts(app);
     app.draw();
     return;
   }
   app.input.paste(text);
+  syncPlainFileContexts(app);
   if (tryConsumeImageDraft(app)) {
+    syncPlainFileContexts(app);
     app.draw();
     return;
   }

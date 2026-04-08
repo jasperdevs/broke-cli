@@ -339,24 +339,23 @@ describe("input editing", () => {
     expect(app.pendingMessages).toEqual([]);
   });
 
-  it("renders selected file context as a chip above the composer instead of raw @path text", () => {
+  it("renders selected file context as plain text in the composer", () => {
     const app = new App() as any;
     let rendered: string[] = [];
     app.fileContexts.set("src/index.ts", "export {}");
-    app.input.setText("check [index.ts] ", true, [
-      { id: "file:src/index.ts", kind: "file", label: "[index.ts]", start: 6, end: 16, meta: { file: "src/index.ts" } },
-    ]);
+    app.input.setText("check src/index.ts ");
     app.screen = { height: 18, width: 80, hasSidebar: false, mainWidth: 80, sidebarWidth: 0, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
     app.drawImmediate();
     const output = rendered.map((line) => stripAnsi(line)).join("\n");
-    expect(output).toContain("[index.ts]");
+    expect(output).toContain("src/index.ts");
     expect(output).not.toContain("@src/index.ts");
   });
 
-  it("removes the last selected file chip with backspace when the draft is empty", () => {
+  it("removes stale file context when the plain path text is gone", () => {
     const app = new App() as any;
     app.fileContexts.set("src/one.ts", "1");
     app.fileContexts.set("src/two.ts", "2");
+    app.input.setText("src/one.ts ");
     app.handleKey({ name: "backspace", char: "", ctrl: false, meta: false, shift: false });
     expect(Array.from(app.fileContexts.keys())).toEqual(["src/one.ts"]);
   });

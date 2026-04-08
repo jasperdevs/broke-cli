@@ -2,7 +2,7 @@ import { collectProjectFiles } from "./file-picker.js";
 import type { Keypress } from "./keypress.js";
 import { matchesBinding, loadKeybindings } from "../core/keybindings.js";
 import { getSettings } from "../core/config.js";
-import { ensureInlineChipElements, getFileChipLabel, getImageChipLabel, syncInlineImageChipLabels } from "./inline-chip-utils.js";
+import { ensureInlineChipElements, getImageChipLabel, syncInlineImageChipLabels } from "./inline-chip-utils.js";
 import { handleQuestionViewKey } from "./question-view.js";
 import {
   handleBudgetViewKey,
@@ -21,16 +21,11 @@ import {
 type AppState = any;
 
 function syncComposerAttachmentsFromInput(app: AppState): void {
-  const elements = app.input.getElements?.() ?? [];
-  const activeFiles = new Set(
-    elements
-      .filter((element: { kind: string; meta?: Record<string, unknown> }) => element.kind === "file")
-      .map((element: { meta?: Record<string, unknown> }) => String(element.meta?.file ?? "")),
-  );
   for (const file of Array.from(app.fileContexts.keys())) {
-    if (!activeFiles.has(file)) app.fileContexts.delete(file);
+    if (!app.input.getText().includes(file)) app.fileContexts.delete(file);
   }
 
+  const elements = app.input.getElements?.() ?? [];
   const activeImages = new Set(
     elements
       .filter((element: { kind: string; meta?: Record<string, unknown> }) => element.kind === "image")
@@ -44,17 +39,7 @@ function syncComposerAttachmentsFromInput(app: AppState): void {
 
 function tryDeleteVisiblePlaceholderFallback(app: AppState, key: Keypress, beforeText: string, beforeCursor: number): boolean {
   if (!((key.name === "backspace" || key.name === "delete") && !key.ctrl && !key.meta && !key.shift)) return false;
-  const placeholders: Array<{ kind: "file" | "image"; id: string; label: string; start: number; end: number }> = [];
-  for (const file of Array.from(app.fileContexts.keys()) as string[]) {
-    const label = getFileChipLabel(file);
-    let searchFrom = 0;
-    while (searchFrom < beforeText.length) {
-      const start = beforeText.indexOf(label, searchFrom);
-      if (start < 0) break;
-      placeholders.push({ kind: "file", id: file, label, start, end: start + label.length });
-      searchFrom = start + label.length;
-    }
-  }
+  const placeholders: Array<{ kind: "image"; id: string; label: string; start: number; end: number }> = [];
   for (let index = 0; index < (app.pendingImages?.length ?? 0); index++) {
     const image = app.pendingImages[index];
     const label = getImageChipLabel(index);
@@ -77,13 +62,9 @@ function tryDeleteVisiblePlaceholderFallback(app: AppState, key: Keypress, befor
   else if (deleteStart > 0 && beforeText[deleteStart - 1] === " ") deleteStart -= 1;
   app.input.setText(beforeText.slice(0, deleteStart) + beforeText.slice(deleteEnd), false);
   app.input.setCursor(deleteStart);
-  if (target.kind === "image") {
-    app.pendingImages = app.pendingImages.filter((image: { attachmentId?: string }, index: number) =>
-      (image.attachmentId ?? String(index)) !== target.id,
-    );
-  } else {
-    app.fileContexts.delete(target.id);
-  }
+  app.pendingImages = app.pendingImages.filter((image: { attachmentId?: string }, index: number) =>
+    (image.attachmentId ?? String(index)) !== target.id,
+  );
   ensureInlineChipElements(app);
   syncComposerAttachmentsFromInput(app);
   return true;

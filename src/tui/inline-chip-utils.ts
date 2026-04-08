@@ -17,33 +17,8 @@ function getComposerElements(app: AppState): InputElement[] {
 export function ensureInlineChipElements(app: AppState): void {
   const text = app.input.getText();
   const existing = getComposerElements(app);
-  const preserved = existing.filter((element) => element.kind !== "file" && element.kind !== "image");
+  const preserved = existing.filter((element) => element.kind !== "image");
   const rebuilt: InputElement[] = [...preserved];
-
-  for (const file of Array.from(app.fileContexts?.keys?.() ?? []) as string[]) {
-    const label = getFileChipLabel(file);
-    let searchFrom = 0;
-    let occurrence = 0;
-    while (searchFrom < text.length) {
-      const start = text.indexOf(label, searchFrom);
-      if (start < 0) break;
-      const existingElement = existing.find((element) =>
-        element.kind === "file"
-        && String((element.meta as { file?: string } | undefined)?.file ?? "") === file
-        && element.start === start,
-      );
-      rebuilt.push(existingElement ?? {
-        id: `rehydrated-file:${file}:${occurrence}`,
-        kind: "file",
-        label,
-        start,
-        end: start + label.length,
-        meta: { file },
-      });
-      occurrence++;
-      searchFrom = start + label.length;
-    }
-  }
 
   for (let index = 0; index < (app.pendingImages?.length ?? 0); index++) {
     const attachment = app.pendingImages[index];
@@ -82,24 +57,6 @@ export function hydrateInlineComposerElements(app: AppState): void {
   const cursor = app.input.getCursor();
   const elements: InputElement[] = [];
 
-  for (const file of Array.from(app.fileContexts?.keys?.() ?? []) as string[]) {
-    const label = getFileChipLabel(file);
-    let searchFrom = 0;
-    while (searchFrom < text.length) {
-      const start = text.indexOf(label, searchFrom);
-      if (start < 0) break;
-      elements.push({
-        id: `file:${file}:${start}`,
-        kind: "file",
-        label,
-        start,
-        end: start + label.length,
-        meta: { file },
-      });
-      searchFrom = start + label.length;
-    }
-  }
-
   for (let index = 0; index < (app.pendingImages?.length ?? 0); index++) {
     const attachment = app.pendingImages[index];
     const attachmentId = attachment?.attachmentId ?? `image:${index}`;
@@ -127,11 +84,17 @@ export function hydrateInlineComposerElements(app: AppState): void {
 }
 
 export function insertInlineFileChip(app: AppState, file: string, replaceStart?: number, replaceEnd?: number): void {
-  app.input.insertElement(getFileChipLabel(file), "file", {
-    meta: { file },
-    replaceStart,
-    replaceEnd,
-  });
+  const text = app.input.getText();
+  const cursor = app.input.getCursor();
+  const insertion = file;
+  const start = replaceStart ?? cursor;
+  const end = replaceEnd ?? cursor;
+  const beforeChar = start > 0 ? text[start - 1] : "";
+  const afterChar = text[end] ?? "";
+  const prefix = start > 0 && beforeChar !== " " && beforeChar !== "\n" ? " " : "";
+  const suffix = afterChar !== " " && afterChar !== "\n" ? " " : "";
+  app.input.setText(`${text.slice(0, start)}${prefix}${insertion}${suffix}${text.slice(end)}`, false);
+  app.input.setCursor(start + prefix.length + insertion.length + suffix.length);
 }
 
 export function insertInlineImageChip(app: AppState, attachmentId: string, replaceStart?: number, replaceEnd?: number): void {
@@ -166,5 +129,5 @@ export function removeInlineImageChip(app: AppState, attachmentId: string): void
 
 export function stripInlineChipLabels(app: AppState): string {
   ensureInlineChipElements(app);
-  return app.input.sanitizeText(["file", "image"]);
+  return app.input.sanitizeText(["image"]);
 }

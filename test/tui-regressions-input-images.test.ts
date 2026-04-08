@@ -294,30 +294,30 @@ describe("image attachments", () => {
     expect(app.input.getText()).toBe("hey ");
   });
 
-  it("inserts selected @ files inline instead of pinning them to the prompt prefix", () => {
+  it("inserts selected @ files as plain visible path text", () => {
     const app = new App() as any;
     app.filePicker = { files: ["AGENTS.md"], filtered: ["AGENTS.md"], query: "AG", cursor: 0 };
     app.input.setText("check @AG");
 
     app.selectFileEntry(0);
 
-    expect(app.input.getText()).toBe("check [AGENTS.md] ");
+    expect(app.input.getText()).toBe("check AGENTS.md ");
     expect(app.fileContexts.has("AGENTS.md")).toBe(true);
   });
 
-  it("strips inline @ chip labels before submit while keeping file context", () => {
+  it("keeps plain file reference text on submit while preserving file context", () => {
     const app = new App() as any;
     let submitted = "";
     app.onSubmit = (text: string) => { submitted = text; };
     app.fileContexts.set("AGENTS.md", "# Project Instructions");
-    app.input.setText("check [AGENTS.md] now");
+    app.input.setText("check AGENTS.md now");
 
     app.handleKey({ name: "return", char: "", ctrl: false, meta: false, shift: false });
 
-    expect(submitted).toBe("check now");
+    expect(submitted).toBe("check AGENTS.md now");
   });
 
-  it("keeps pasted image paths out of the middle of an inline file chip", () => {
+  it("treats plain file reference text like normal text when inserting an image", () => {
     updateSetting("terminal", { ...getSettings().terminal, showImages: true });
     const app = new App() as any;
     const dir = mkdtempSync(join(tmpdir(), "brokecli-image-"));
@@ -326,13 +326,14 @@ describe("image attachments", () => {
     writeFileSync(imagePath, "fakepng", "utf-8");
 
     app.fileContexts.set("exports.ts", "export {}");
-    app.input.setText("[exports.ts] ");
+    app.input.setText("exports.ts ");
     app.input.setCursor(4);
 
     app.handlePaste(imagePath);
 
     expect(app.pendingImages).toHaveLength(1);
-    expect(app.input.getText()).toBe("[exports.ts] [Image #1] ");
+    expect(app.input.getText()).toBe("expo [Image #1] rts.ts ");
+    expect(app.fileContexts.has("exports.ts")).toBe(false);
   });
 
   it("submits image-only prompts instead of dropping the attachment", () => {
