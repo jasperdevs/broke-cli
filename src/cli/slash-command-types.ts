@@ -91,3 +91,8 @@ export interface HandleSlashCommandOptions {
   hooks: ExtensionHooks;
   onProjectChange: (cwd: string) => void;
 }
+
+export interface ParsedSlashCommand extends HandleSlashCommandOptions {
+  cmd: string;
+  restText: string;
+}

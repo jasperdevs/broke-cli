@@ -2,7 +2,7 @@ import { execSync } from "child_process";
 import { writeFileSync } from "fs";
 import { buildSystemPrompt, reloadContext } from "../core/context.js";
 import { clearCredentials, hasStoredCredentials, listAuthenticated } from "../core/auth.js";
-import { getProviderCredential, getSettings, loadConfig, updateProviderConfig, updateSetting, type Mode, type Settings } from "../core/config.js";
+import { getProviderCredential, getSettings, loadConfig, updateProviderConfig, updateSetting, type AutonomySettings, type Mode, type Settings } from "../core/config.js";
 import { listProjects } from "../core/projects.js";
 import { listExtensions } from "../core/extensions.js";
 import { toggleExtensionEnabled } from "../core/permissions.js";
@@ -16,6 +16,19 @@ type AnyApp = any;
 type AnyHooks = any;
 
 type EmptyMenuKind = "extensions" | "resume" | "projects" | "logout" | "templates" | "skills" | "changelog";
+
+function describeRoots(roots: string[]): string {
+  if (roots.length === 0) return "none";
+  if (roots.length === 1) return roots[0]!;
+  return `${roots.length} roots`;
+}
+
+function parseRoots(value: string): string[] {
+  return value
+    .split(/[;\r\n]+/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
 
 export function openEmptyItemMenu(app: AnyApp, title: string, detail: string, kind: EmptyMenuKind): false {
   app.openItemPicker(title, [{ id: "__none__", label: "None", detail }], () => {}, {
@@ -82,6 +95,13 @@ export function openSettingsMenu(args: {
       { key: "autoLint", label: "Auto lint", value: String(s.autoLint), description: `Run ${s.lintCommand || "lint"} after model edits` },
       { key: "autoTest", label: "Auto test", value: String(s.autoTest), description: `Run ${s.testCommand || "tests"} after model edits` },
       { key: "autoFixValidation", label: "Auto-fix validation", value: String(s.autoFixValidation), description: "Send one automatic repair turn when lint/test fails" },
+      { key: "autonomy.allowNetwork", label: "Autonomy: network", value: String(s.autonomy.allowNetwork), description: "Allow tool-driven network access without prompting" },
+      { key: "autonomy.allowReadOutsideWorkspace", label: "Autonomy: read outside workspace", value: String(s.autonomy.allowReadOutsideWorkspace), description: "Allow reads outside the repo and trusted roots" },
+      { key: "autonomy.allowWriteOutsideWorkspace", label: "Autonomy: write outside workspace", value: String(s.autonomy.allowWriteOutsideWorkspace), description: "Allow edits outside the repo and trusted roots" },
+      { key: "autonomy.allowShellOutsideWorkspace", label: "Autonomy: shell outside workspace", value: String(s.autonomy.allowShellOutsideWorkspace), description: "Allow shell commands that target paths outside trusted roots" },
+      { key: "autonomy.allowDestructiveShell", label: "Autonomy: destructive shell", value: String(s.autonomy.allowDestructiveShell), description: "Allow destructive shell patterns without blocking them" },
+      { key: "autonomy.additionalReadRoots", label: "Autonomy: extra read roots", value: describeRoots(s.autonomy.additionalReadRoots), description: "Semicolon-separated trusted read-only paths" },
+      { key: "autonomy.additionalWriteRoots", label: "Autonomy: extra write roots", value: describeRoots(s.autonomy.additionalWriteRoots), description: "Semicolon-separated trusted read/write paths" },
     ];
   }
 
@@ -132,6 +152,18 @@ export function openSettingsMenu(args: {
       updateSetting("terminal", { ...s.terminal, showImages: !s.terminal.showImages });
     } else if (key === "images.blockImages") {
       updateSetting("images", { ...s.images, blockImages: !s.images.blockImages });
+    } else if (key.startsWith("autonomy.")) {
+      const autonomyKey = key.slice("autonomy.".length) as keyof AutonomySettings;
+      if (autonomyKey === "additionalReadRoots" || autonomyKey === "additionalWriteRoots") {
+        const currentRoots = s.autonomy[autonomyKey];
+        void app.showQuestion(`Trusted ${autonomyKey === "additionalReadRoots" ? "read" : "write"} roots (; separated)`, [currentRoots.join("; ")]).then((value: string) => {
+          const nextRoots = parseRoots(value);
+          updateSetting("autonomy", { ...getSettings().autonomy, [autonomyKey]: nextRoots });
+          app.updateSettings(buildEntries());
+        });
+        return;
+      }
+      updateSetting("autonomy", { ...s.autonomy, [autonomyKey]: !s.autonomy[autonomyKey] });
     }
     app.updateSettings(buildEntries());
   });

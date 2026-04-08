@@ -45,6 +45,46 @@ describe("slash command UI surfaces", () => {
     expect(result.handled).toBe(true);
     expect(settingsEntries.some((entry) => entry.key === "mode")).toBe(true);
     expect(settingsEntries.some((entry) => entry.key === "modeSwitching")).toBe(true);
+    expect(settingsEntries.some((entry) => entry.key === "autonomy.allowNetwork")).toBe(true);
+    expect(settingsEntries.some((entry) => entry.key === "autonomy.allowWriteOutsideWorkspace")).toBe(true);
+    expect(settingsEntries.some((entry) => entry.key === "autonomy.additionalReadRoots")).toBe(true);
+  });
+
+  it("toggles autonomy booleans from /settings", async () => {
+    const app = createAppStub();
+    let onToggle: ((key: string) => void) | undefined;
+    const originalAutonomy = { ...loadConfig().settings?.autonomy };
+    app.openSettings = (_entries: Array<{ key: string; label: string; value: string; description: string }>, nextOnToggle: (key: string) => void) => {
+      onToggle = nextOnToggle;
+    };
+
+    try {
+      updateSetting("autonomy", {
+        ...loadConfig().settings?.autonomy,
+        allowNetwork: true,
+      });
+
+      const result = await handleSlashCommand({
+        text: "/settings",
+        app,
+        session: new Session(`test-settings-autonomy-toggle-${Date.now()}`),
+        ...createSlashArgs(),
+      });
+
+      expect(result.handled).toBe(true);
+      onToggle?.("autonomy.allowNetwork");
+      expect(loadConfig().settings?.autonomy?.allowNetwork).toBe(false);
+    } finally {
+      updateSetting("autonomy", {
+        allowNetwork: originalAutonomy.allowNetwork ?? true,
+        allowReadOutsideWorkspace: originalAutonomy.allowReadOutsideWorkspace ?? false,
+        allowWriteOutsideWorkspace: originalAutonomy.allowWriteOutsideWorkspace ?? false,
+        allowShellOutsideWorkspace: originalAutonomy.allowShellOutsideWorkspace ?? false,
+        allowDestructiveShell: originalAutonomy.allowDestructiveShell ?? false,
+        additionalReadRoots: originalAutonomy.additionalReadRoots ?? [],
+        additionalWriteRoots: originalAutonomy.additionalWriteRoots ?? [],
+      });
+    }
   });
 
   it("opens a mode picker for /mode", async () => {

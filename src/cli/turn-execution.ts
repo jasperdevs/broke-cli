@@ -51,6 +51,117 @@ interface ExtensionHooks {
 
 const MAX_TOOL_RESULT_SERIALIZED_CHARS = 6000;
 
+function createStreamTokenTracker(
+  app: TurnExecutionApp,
+  executionModelId: string,
+  getText: () => string,
+): {
+  schedule: () => void;
+  flush: () => void;
+} {
+  let streamTokenFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  return {
+    schedule: () => {
+      if (streamTokenFlushTimer) return;
+      streamTokenFlushTimer = setTimeout(() => {
+        streamTokenFlushTimer = null;
+        app.setStreamTokens(estimateTextTokens(getText(), executionModelId));
+      }, 80);
+    },
+    flush: () => {
+      if (streamTokenFlushTimer) clearTimeout(streamTokenFlushTimer);
+      streamTokenFlushTimer = null;
+      app.setStreamTokens(estimateTextTokens(getText(), executionModelId));
+    },
+  };
+}
+
+function resolveTurnExecution(options: {
+  text: string;
+  policy: TurnPolicy;
+  currentMode: Mode;
+  session: Session;
+  lastToolCalls: string[];
+  forceRoute?: "main" | "small";
+  activeModel: ModelHandle;
+  currentModelId: string;
+  smallModel: ModelHandle | null;
+  smallModelId: string;
+  effectiveImages?: Array<{ mimeType: string; data: string }>;
+  contextLimit: number;
+  activeSystemPrompt: string;
+  optimizeMessages: (messages: Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }>) => Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }>;
+  app: Pick<TurnExecutionApp, "setContextUsage">;
+  resolveSpecialistModel?: (role: SpecialistModelRole) => { model: ModelHandle; modelId: string } | null;
+}): {
+  turnSystemPrompt: string;
+  optimizedMessages: Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }>;
+  resolvedRoute: "main" | "small";
+  executionModel: ModelHandle;
+  executionModelId: string;
+  thinkingRequested: boolean;
+} {
+  const {
+    text,
+    policy,
+    currentMode,
+    session,
+    lastToolCalls,
+    forceRoute,
+    activeModel,
+    currentModelId,
+    smallModel,
+    smallModelId,
+    effectiveImages,
+    contextLimit,
+    activeSystemPrompt,
+    optimizeMessages,
+    app,
+    resolveSpecialistModel,
+  } = options;
+  let turnSystemPrompt = activeSystemPrompt;
+  const {
+    resolvedRoute,
+    executionModel,
+    executionModelId,
+    thinkingRequested,
+  } = resolveExecutionTarget({
+    text,
+    policy,
+    currentMode,
+    sessionMessageCount: session.getChatMessages().length,
+    lastToolCalls,
+    forceRoute,
+    activeModel,
+    currentModelId,
+    smallModel,
+    smallModelId,
+    effectiveImages,
+    resolveSpecialistModel,
+  });
+  if (executionModel.provider.id !== activeModel.provider.id || executionModelId !== currentModelId) {
+    turnSystemPrompt = buildSystemPrompt(
+      process.cwd(),
+      executionModel.provider.id,
+      currentMode,
+      resolveCavemanLevel(getSettings().cavemanLevel ?? "auto", text),
+      policy.promptProfile,
+    );
+    turnSystemPrompt += `\n\nExecution scaffold (${policy.archetype}): ${policy.scaffold}`;
+  }
+  const optimizedMessages = optimizeMessages(session.getChatMessages());
+  const ctxTokens = getTotalContextTokens(optimizedMessages, turnSystemPrompt, executionModelId);
+  app.setContextUsage(ctxTokens, contextLimit);
+  return {
+    turnSystemPrompt,
+    optimizedMessages,
+    resolvedRoute,
+    executionModel,
+    executionModelId,
+    thinkingRequested,
+  };
+}
+
 function estimateToolResultTokens(result: unknown): number {
   try {
     const serialized = JSON.stringify(result);
@@ -73,7 +184,6 @@ export async function executeTurn(options: {
   smallModel: ModelHandle | null;
   smallModelId: string;
   currentMode: Mode;
-  selectedMessages: Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }>;
   policy: TurnPolicy;
   effectiveImages?: Array<{ mimeType: string; data: string }>;
   buildTools: (allowedTools: readonly ToolName[]) => Record<string, unknown>;
@@ -103,7 +213,6 @@ export async function executeTurn(options: {
     smallModel,
     smallModelId,
     currentMode,
-    selectedMessages,
     policy,
     effectiveImages,
     buildTools,
@@ -116,7 +225,6 @@ export async function executeTurn(options: {
     resolveSpecialistModel,
   } = options;
 
-  let turnSystemPrompt = activeSystemPrompt;
   let streamedText = "";
   let streamedReasoning = "";
   let sawToolActivity = false;
@@ -124,15 +232,17 @@ export async function executeTurn(options: {
 
   const settings = getSettings();
   const {
+    turnSystemPrompt: initialTurnSystemPrompt,
+    optimizedMessages,
     resolvedRoute,
     executionModel,
     executionModelId,
     thinkingRequested,
-  } = resolveExecutionTarget({
+  } = resolveTurnExecution({
     text,
     policy,
     currentMode,
-    sessionMessageCount: session.getChatMessages().length,
+    session,
     lastToolCalls,
     forceRoute,
     activeModel,
@@ -140,10 +250,14 @@ export async function executeTurn(options: {
     smallModel,
     smallModelId,
     effectiveImages,
+    contextLimit,
+    activeSystemPrompt,
+    optimizeMessages,
+    app,
     resolveSpecialistModel,
   });
+  let turnSystemPrompt = initialTurnSystemPrompt;
   const nextToolCalls: string[] = [];
-  let optimizedMessages = selectedMessages;
   let abortController: AbortController | null = new AbortController();
   let steeringInterruptRequested = false;
   const exposedToolCount = canUseSdkTools(executionModel) ? policy.allowedTools.length : 0;
@@ -157,38 +271,13 @@ export async function executeTurn(options: {
     abortController = null;
   });
 
-  if (executionModel.provider.id !== activeModel.provider.id || executionModelId !== currentModelId) {
-    turnSystemPrompt = buildSystemPrompt(
-      process.cwd(),
-      executionModel.provider.id,
-      currentMode,
-      effectiveCavemanLevel,
-      policy.promptProfile,
-    );
-    turnSystemPrompt += `\n\nExecution scaffold (${policy.archetype}): ${policy.scaffold}`;
-  }
-  optimizedMessages = optimizeMessages(session.getChatMessages());
-  const ctxTokens = getTotalContextTokens(optimizedMessages, turnSystemPrompt, executionModelId);
-  app.setContextUsage(ctxTokens, contextLimit);
   if (shouldRequestThinkTags(executionModel, thinkingRequested)) {
     turnSystemPrompt += "\n\nIf this model exposes reasoning in text, place that reasoning inside <think>...</think> before the final answer. Keep it plain text, concise, and specific to this request. If the model does not support that format, ignore this instruction and answer normally.";
   }
 
-  let streamTokenFlushTimer: ReturnType<typeof setTimeout> | null = null;
   let completion: "success" | "empty" | "error" | "insufficient" = "success";
   let errorMessage: string | undefined;
-  const scheduleStreamTokenUpdate = (): void => {
-    if (streamTokenFlushTimer) return;
-    streamTokenFlushTimer = setTimeout(() => {
-      streamTokenFlushTimer = null;
-      app.setStreamTokens(estimateTextTokens(streamedText + streamedReasoning, executionModelId));
-    }, 80);
-  };
-  const flushStreamTokenUpdate = (): void => {
-    if (streamTokenFlushTimer) clearTimeout(streamTokenFlushTimer);
-    streamTokenFlushTimer = null;
-    app.setStreamTokens(estimateTextTokens(streamedText + streamedReasoning, executionModelId));
-  };
+  const streamTokenTracker = createStreamTokenTracker(app, executionModelId, () => streamedText + streamedReasoning);
   let nextActivityTime = Date.now();
   app.setThinkingRequested(thinkingRequested);
   const streamCallbacks = {
@@ -200,15 +289,15 @@ export async function executeTurn(options: {
       }
       app.appendToLastMessage(delta);
       streamedText = nextText;
-      scheduleStreamTokenUpdate();
+      streamTokenTracker.schedule();
     },
     onReasoning: (delta: string) => {
       app.appendThinking(delta);
       streamedReasoning += delta;
-      scheduleStreamTokenUpdate();
+      streamTokenTracker.schedule();
     },
     onFinish: (usage: { inputTokens: number; outputTokens: number; cost: number }) => {
-      flushStreamTokenUpdate();
+      streamTokenTracker.flush();
       app.setThinkingRequested(false);
       let content = streamedText.trim();
       if (effectiveCavemanLevel !== "off" && content) {
@@ -267,7 +356,7 @@ export async function executeTurn(options: {
       completion = "empty";
     },
     onError: (err: Error) => {
-      flushStreamTokenUpdate();
+      streamTokenTracker.flush();
       app.setThinkingRequested(false);
       let msg = err.message;
       const data = (err as any).data;

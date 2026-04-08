@@ -5,49 +5,27 @@ import { createDefaultSessionName } from "../core/session.js";
 import { runConnectFlow } from "./connect-flow.js";
 import { runLoginFlow } from "./login-flow.js";
 import { openExtensionsMenu, openSettingsMenu } from "./slash-command-menus.js";
-import type { HandleSlashCommandOptions, SlashCommandResult } from "./slash-command-types.js";
+import { createSlashCommandRegistry } from "./slash-command-registry.js";
+import type { HandleSlashCommandOptions, ParsedSlashCommand, SlashCommandResult } from "./slash-command-types.js";
 import { handleUiSlashCommand } from "./slash-command-ui.js";
 import { getResolvedModelPreference } from "./model-routing.js";
 
-export async function handleSlashCommand(options: HandleSlashCommandOptions): Promise<SlashCommandResult> {
-  const {
-    text,
-    app,
-    session,
-    activeModel,
-    currentModelId,
-    currentMode,
-    systemPrompt,
-    providerRegistry,
-    buildVisibleModelOptions,
-    refreshProviderState,
-    isSkippedPromptAnswer,
-    isValidHttpBaseUrl,
-    getContextOptimizer,
-    onSessionReplace,
-    onModelChange,
-    onModeChange,
-    onModelRoutingChange,
-    onSystemPromptChange,
-    onBtw,
-    hooks,
-    onProjectChange,
-  } = options;
+interface CoreSlashCommandContext extends ParsedSlashCommand {
+  waitFor: (ms: number) => Promise<void>;
+}
 
-  const [cmd, ...restParts] = text.slice(1).split(" ");
-  const restText = restParts.join(" ").trim();
-  const waitFor = async (ms: number) => {
-    if (ms <= 0) return;
-    await new Promise((resolve) => setTimeout(resolve, ms));
-  };
-
-  switch (cmd) {
-    case "help":
+const coreSlashCommands = createSlashCommandRegistry<CoreSlashCommandContext, SlashCommandResult>([
+  {
+    names: ["help"],
+    run: ({ app }) => {
       app.setStatus?.("Type / to browse commands.");
       app.setDraft?.("/");
       return { handled: true };
-    case "new":
-    case "clear":
+    },
+  },
+  {
+    names: ["new", "clear"],
+    run: ({ session, app, getContextOptimizer }) => {
       session.clear();
       session.resetName?.();
       app.clearMessages();
@@ -55,7 +33,11 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
       app.setSessionName?.(session.getName?.() ?? createDefaultSessionName());
       getContextOptimizer().reset();
       return { handled: true };
-    case "connect":
+    },
+  },
+  {
+    names: ["connect"],
+    run: async ({ restText, app, providerRegistry, refreshProviderState, isSkippedPromptAnswer, isValidHttpBaseUrl }) => {
       await runConnectFlow({
         providerId: restText || undefined,
         app,
@@ -65,7 +47,11 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
         isValidHttpBaseUrl,
       });
       return { handled: true };
-    case "login":
+    },
+  },
+  {
+    names: ["login"],
+    run: async ({ restText, app, providerRegistry, refreshProviderState }) => {
       await runLoginFlow({
         providerId: restText || undefined,
         app,
@@ -73,7 +59,11 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
         refreshProviderState,
       });
       return { handled: true };
-    case "model": {
+    },
+  },
+  {
+    names: ["model"],
+    run: ({ restText, app, providerRegistry, buildVisibleModelOptions, activeModel, onModelChange, session, onModelRoutingChange }) => {
       const allOptions = buildVisibleModelOptions();
       if (allOptions.length === 0) {
         app.setStatus?.("No connected providers found. Run /connect.");
@@ -132,8 +122,11 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
         app.updateModelPickerOptions?.(buildVisibleModelOptions(), key);
       }, initialCursor >= 0 ? initialCursor : 0, "all", restText);
       return { handled: true };
-    }
-    case "btw": {
+    },
+  },
+  {
+    names: ["btw"],
+    run: ({ restText, app, onBtw }) => {
       if (!restText) {
         app.setDraft?.("/btw ");
         app.setStatus?.("Ask a side question after /btw.");
@@ -148,12 +141,18 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
         app.setStatus?.(`BTW failed: ${(err as Error).message}`);
       });
       return { handled: true };
-    }
-    case "settings": {
+    },
+  },
+  {
+    names: ["settings"],
+    run: ({ app, activeModel, currentMode, onModeChange, onSystemPromptChange }) => {
       openSettingsMenu({ app, activeModel, currentMode, onModeChange, onSystemPromptChange });
       return { handled: true };
-    }
-    case "mode": {
+    },
+  },
+  {
+    names: ["mode"],
+    run: ({ restText, app, activeModel, onModeChange, onSystemPromptChange }) => {
       const setMode = (nextMode: Mode) => {
         updateSetting("mode", nextMode);
         onModeChange(nextMode);
@@ -171,17 +170,23 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
         if (id === "build" || id === "plan") setMode(id);
       }, { kind: "mode" });
       return { handled: true };
-    }
-    case "extensions": {
+    },
+  },
+  {
+    names: ["extensions"],
+    run: ({ app, hooks }) => {
       openExtensionsMenu(app, hooks);
       return { handled: true };
-    }
-    case "compact": {
+    },
+  },
+  {
+    names: ["compact"],
+    run: async ({ activeModel, hooks, session, systemPrompt, currentModelId, app, restText, waitFor }) => {
       if (!activeModel) {
         app.setStatus?.("No model available for compaction.");
         return { handled: true };
       }
-      hooks.emit("on_message", { role: "user", content: text });
+      hooks.emit("on_message", { role: "user", content: "/compact" });
       try {
         const chatMsgs = session.getChatMessages();
         const ctxTokens = getTotalContextTokens(chatMsgs, systemPrompt, currentModelId);
@@ -206,15 +211,21 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
         app.setStatus?.(`Compact failed: ${(err as Error).message}`);
       }
       return { handled: true };
-    }
-    case "fork": {
+    },
+  },
+  {
+    names: ["fork"],
+    run: ({ session, activeModel, currentModelId, onSessionReplace, app }) => {
       const forked = session.fork();
       if (activeModel) forked.setProviderModel(activeModel.provider.name, currentModelId);
       onSessionReplace(forked);
       app.setStatus?.("Forked session.");
       return { handled: true };
-    }
-    case "caveman": {
+    },
+  },
+  {
+    names: ["caveman"],
+    run: ({ restText, app, activeModel, currentMode, onSystemPromptChange }) => {
       const requested = restText.toLowerCase();
       if (requested === "off" || requested === "lite" || requested === "auto" || requested === "ultra") {
         updateSetting("cavemanLevel", requested);
@@ -226,11 +237,18 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
       const level = getSettings().cavemanLevel ?? "auto";
       onSystemPromptChange(buildSystemPrompt(process.cwd(), activeModel?.provider?.id, currentMode, level));
       return { handled: true };
-    }
-    case "thinking":
+    },
+  },
+  {
+    names: ["thinking"],
+    run: ({ app }) => {
       app.cycleThinkingMode();
       return { handled: true };
-    case "name": {
+    },
+  },
+  {
+    names: ["name"],
+    run: ({ text, app, session }) => {
       const name = text.slice(6).trim();
       if (name) {
         session.setName(name);
@@ -259,24 +277,24 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
         });
       }, { kind: "name" });
       return { handled: true };
-    }
-    default: {
-      const uiResult = await handleUiSlashCommand({
-        cmd,
-        text,
-        restText,
-        app,
-        session,
-        activeModel,
-        currentModelId,
-        refreshProviderState,
-        onSessionReplace,
-        hooks,
-        onProjectChange,
-      });
-      if (uiResult) return uiResult;
-      app.setStatus?.(`Unknown: /${cmd}`);
-      return { handled: true };
-    }
+    },
+  },
+]);
+
+export async function handleSlashCommand(options: HandleSlashCommandOptions): Promise<SlashCommandResult> {
+  const { text } = options;
+  const [cmd, ...restParts] = text.slice(1).split(" ");
+  const restText = restParts.join(" ").trim();
+  const waitFor = async (ms: number) => {
+    if (ms <= 0) return;
+    await new Promise((resolve) => setTimeout(resolve, ms));
+  };
+  const command = coreSlashCommands.get(cmd);
+  if (command) {
+    return await command({ ...options, cmd, restText, waitFor });
   }
+  const uiResult = await handleUiSlashCommand({ ...options, cmd, restText });
+  if (uiResult) return uiResult;
+  options.app.setStatus?.(`Unknown: /${cmd}`);
+  return { handled: true };
 }

@@ -18,6 +18,7 @@ export type {
   TerminalSettings,
   ImageSettings,
   MarkdownSettings,
+  AutonomySettings,
   Settings,
   BrokeConfig,
   ProviderCredentialKind,

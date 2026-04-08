@@ -13,7 +13,8 @@ import { handleLogoutMenu, openEmptyItemMenu, openExportMenu, openProjectsMenu, 
 import { formatKeypressBinding, loadKeybindings, reloadKeybindings, updateKeybinding, type Keybindings } from "../core/keybindings.js";
 import { reloadContext } from "../core/context.js";
 import { undoLastCheckpoint } from "../core/git.js";
-import type { ExtensionHooks, SlashCommandApp, SlashCommandResult } from "./slash-command-types.js";
+import { createSlashCommandRegistry } from "./slash-command-registry.js";
+import type { ParsedSlashCommand, SlashCommandApp, SlashCommandResult } from "./slash-command-types.js";
 import type { ModelHandle } from "../ai/providers.js";
 import type { PickerItem } from "../tui/app-types.js";
 
@@ -71,30 +72,23 @@ function getHotkeyLabels(bindings: Keybindings): Array<{ id: keyof Keybindings; 
   ];
 }
 
-export async function handleUiSlashCommand(options: {
-  cmd: string;
-  text: string;
-  restText: string;
-  app: SlashCommandApp;
-  session: Session;
-  activeModel: ModelHandle | null;
-  currentModelId: string;
-  refreshProviderState: (force?: boolean) => Promise<unknown>;
-  onSessionReplace: (session: Session) => void;
-  hooks: ExtensionHooks;
-  onProjectChange: (cwd: string) => void;
-}): Promise<SlashCommandResult | null> {
-  const { cmd, text, restText, app, session, activeModel, currentModelId, refreshProviderState, onSessionReplace, hooks, onProjectChange } = options;
+interface UiSlashCommandContext extends ParsedSlashCommand {}
 
-  switch (cmd) {
-    case "budget":
+const uiSlashCommands = createSlashCommandRegistry<UiSlashCommandContext, SlashCommandResult>([
+  {
+    names: ["budget"],
+    run: async ({ app, session }) => {
       if (app.openBudgetView) app.openBudgetView("Budget Inspector", await loadBudgetReports(session), "all");
       else {
         const reports = await loadBudgetReports(session);
         app.addMessage("system", renderBudgetDashboard({ report: reports.all, scopeLabel: "all sessions", width: 100 }).join("\n"));
       }
       return { handled: true };
-    case "update": {
+    },
+  },
+  {
+    names: ["update"],
+    run: async ({ app }) => {
       const update = await checkForNewVersion(APP_VERSION);
       if (!update) {
         app.clearUpdateNotice?.();
@@ -115,8 +109,11 @@ export async function handleUiSlashCommand(options: {
       const instruction = update.command ? `Run /update to install ${update.latestVersion}.` : update.instruction;
       app.setStatus?.(`Update available: v${update.latestVersion}. ${instruction}`);
       return { handled: true };
-    }
-    case "tree":
+    },
+  },
+  {
+    names: ["tree"],
+    run: ({ app, session, activeModel }) => {
       app.openTreeView?.("Session Tree", session, async (entryId: string) => {
         const target = session.getTreeEntry(entryId);
         if (!target) return;
@@ -148,7 +145,11 @@ export async function handleUiSlashCommand(options: {
         reloadSessionIntoUi(app, session, result.editorText);
       });
       return { handled: true };
-    case "session": {
+    },
+  },
+  {
+    names: ["session"],
+    run: ({ app, session, activeModel, currentModelId }) => {
       const sessionDir = getSettings().sessionDir?.trim();
       const sessionFile = SessionManager.open(session.getId(), sessionDir || undefined, session.getCwd()).getSessionFile() ?? "in-memory";
       const items = [
@@ -170,8 +171,11 @@ export async function handleUiSlashCommand(options: {
       ];
       app.openItemPicker("Session", items, () => {}, { kind: "session" });
       return { handled: true };
-    }
-    case "hotkeys": {
+    },
+  },
+  {
+    names: ["hotkeys"],
+    run: ({ app }) => {
       let bindings = loadKeybindings();
       let rebinding: keyof Keybindings | null = null;
       const buildItems = () => [
@@ -244,14 +248,21 @@ export async function handleUiSlashCommand(options: {
         },
       });
       return { handled: true };
-    }
-    case "reload":
+    },
+  },
+  {
+    names: ["reload"],
+    run: async ({ hooks, refreshProviderState }) => {
       hooks.reload?.();
       reloadKeybindings();
       reloadContext();
       await refreshProviderState(true);
       return { handled: true };
-    case "changelog": {
+    },
+  },
+  {
+    names: ["changelog"],
+    run: ({ app }) => {
       try {
         const raw = execSync("git log -n 8 --pretty=format:%h%x09%s", { encoding: "utf-8", cwd: process.cwd() }).trim();
         const items = raw.split(/\r?\n/).filter(Boolean).map((line, index) => {
@@ -264,8 +275,11 @@ export async function handleUiSlashCommand(options: {
         app.setStatus?.(`Changelog failed: ${(err as Error).message}`);
       }
       return { handled: true };
-    }
-    case "copy": {
+    },
+  },
+  {
+    names: ["copy"],
+    run: ({ app }) => {
       const lastContent = app.getLastAssistantContent();
       if (!lastContent) {
         app.setStatus?.("No response to copy.");
@@ -280,21 +294,39 @@ export async function handleUiSlashCommand(options: {
         app.setStatus?.("Failed to copy to clipboard.");
       }
       return { handled: true };
-    }
-    case "export":
+    },
+  },
+  {
+    names: ["export"],
+    run: ({ app, session, activeModel, currentModelId, text }) => {
       openExportMenu({ app, session, activeModel, currentModelId, text });
       return { handled: true };
-    case "sessions":
-    case "resume":
+    },
+  },
+  {
+    names: ["sessions", "resume"],
+    run: ({ app, restText, onSessionReplace }) => {
       openResumeMenu({ app, restText, onSessionReplace });
       return { handled: true };
-    case "projects":
+    },
+  },
+  {
+    names: ["projects"],
+    run: ({ app, restText, onProjectChange }) => {
       openProjectsMenu(app, restText, onProjectChange);
       return { handled: true };
-    case "undo":
+    },
+  },
+  {
+    names: ["undo"],
+    run: ({ app }) => {
       app.setStatus?.(undoLastCheckpoint().message);
       return { handled: true };
-    case "templates": {
+    },
+  },
+  {
+    names: ["templates"],
+    run: ({ app }) => {
       const templates = listTemplates();
       if (templates.length === 0) {
         openEmptyItemMenu(app, "Templates", "add .md files to ~/.brokecli/prompts or .brokecli/prompts", "templates");
@@ -309,8 +341,11 @@ export async function handleUiSlashCommand(options: {
         app.setDraft?.(`/${id} `);
       }, { kind: "templates" });
       return { handled: true };
-    }
-    case "skills": {
+    },
+  },
+  {
+    names: ["skills"],
+    run: ({ app }) => {
       const skills = listSkills();
       if (skills.length === 0) {
         openEmptyItemMenu(app, "Skills", "no skills available", "skills");
@@ -325,15 +360,29 @@ export async function handleUiSlashCommand(options: {
         app.setDraft?.(`/skill:${id} `);
       }, { kind: "skills" });
       return { handled: true };
-    }
-    case "logout":
+    },
+  },
+  {
+    names: ["logout"],
+    run: async ({ app, restText, activeModel, refreshProviderState }) => {
       await handleLogoutMenu({ app, restText, activeModel, refreshProviderState });
       return { handled: true };
-    case "quit":
-    case "exit":
+    },
+  },
+  {
+    names: ["quit", "exit"],
+    run: ({ app }) => {
       app.stop();
       return { handled: true };
-    default: {
+    },
+  },
+]);
+
+export async function handleUiSlashCommand(options: UiSlashCommandContext): Promise<SlashCommandResult | null> {
+  const { cmd, text, app, session } = options;
+  const command = uiSlashCommands.get(cmd);
+  if (command) return await command(options);
+  {
       const skillName = cmd.startsWith("skill:") ? cmd.slice("skill:".length) : cmd;
       const template = loadTemplate(cmd);
       const skill = (cmd.startsWith("skill:") || getSettings().enableSkillCommands) ? loadSkillPrompt(skillName) : null;
@@ -351,6 +400,5 @@ export async function handleUiSlashCommand(options: {
       app.addMessage("user", `/${cmd}${rest ? ` ${rest}` : ""}`);
       session.addMessage("user", content);
       return { handled: false, templateLoaded: true };
-    }
   }
 }

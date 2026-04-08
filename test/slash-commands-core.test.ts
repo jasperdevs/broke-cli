@@ -330,4 +330,27 @@ describe("slash command handling", () => {
     expect(pickerCursor).toBe(1);
     expect(app.statusMessage).toBe('Showing 1 match for "haiku".');
   });
+
+  it("keeps declarative aliases working for /sessions", async () => {
+    updateSetting("autoSaveSessions", false);
+    const app = createAppStub();
+    let pickerItems: Array<{ id: string; label: string; detail?: string }> = [];
+    app.openItemPicker = (_title: string, items: Array<{ id: string; label: string; detail?: string }>) => {
+      pickerItems = items;
+    };
+
+    try {
+      const result = await handleSlashCommand({
+        text: "/sessions",
+        app,
+        session: new Session(`test-sessions-alias-${Date.now()}`),
+        ...createSlashArgs(),
+      });
+
+      expect(result.handled).toBe(true);
+      expect(pickerItems).toEqual([{ id: "__none__", label: "None", detail: "session history is off" }]);
+    } finally {
+      updateSetting("autoSaveSessions", true);
+    }
+  });
 });
