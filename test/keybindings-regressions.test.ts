@@ -4,7 +4,7 @@ import { homedir } from "os";
 import { join } from "path";
 import { App } from "../src/tui/app.js";
 import { applyKeybindingDefaults, reloadKeybindings } from "../src/core/keybindings.js";
-import { buildFooterLines } from "../src/tui/bottom-ui.js";
+import { buildLegacyFooterLines } from "../src/tui/bottom-ui.js";
 
 describe("keybinding regressions", () => {
   it("ignores legacy tree hotkeys even if a saved keybindings file still has alt+a", () => {
@@ -36,7 +36,7 @@ describe("keybinding regressions", () => {
     expect(bindings.newline).toBe("ctrl+j");
   });
 
-  it("renders the active newline binding in the composer footer", () => {
+  it("renders the active newline binding in the legacy footer helper", () => {
     const keybindingsPath = join(homedir(), ".brokecli", "keybindings.json");
     const previous = existsSync(keybindingsPath) ? readFileSync(keybindingsPath, "utf-8") : null;
     try {
@@ -45,7 +45,7 @@ describe("keybinding regressions", () => {
       reloadKeybindings();
 
       const app = new App() as any;
-      const footer = buildFooterLines(app, false, 80).join("\n");
+      const footer = buildLegacyFooterLines(app, false, 80).join("\n");
       expect(footer).toContain("ctrl + j");
       expect(footer).toContain("for newline");
     } finally {

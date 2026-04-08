@@ -101,6 +101,28 @@ describe("image attachments", () => {
     expect(output).not.toContain(imagePath);
   });
 
+  it("auto-attaches an image path typed into an empty draft", () => {
+    updateSetting("terminal", { ...getSettings().terminal, showImages: true });
+    const app = new App() as any;
+    const dir = mkdtempSync(join(tmpdir(), "brokecli-image-"));
+    tempDirs.push(dir);
+    const imagePath = join(dir, "drop.png");
+    writeFileSync(imagePath, "fakepng", "utf-8");
+
+    app.input.setText(imagePath);
+    app.handleKey({ name: "x", char: "", ctrl: false, meta: false, shift: false });
+
+    expect(app.pendingImages).toHaveLength(1);
+    expect(app.input.getText()).toBe("");
+  });
+
+  it("removes the last attachment chip with backspace when the draft is empty", () => {
+    const app = new App() as any;
+    app.pendingImages = [{ mimeType: "image/png", data: "abc" }];
+    app.handleKey({ name: "backspace", char: "", ctrl: false, meta: false, shift: false });
+    expect(app.pendingImages).toHaveLength(0);
+  });
+
   it("submits image-only prompts instead of dropping the attachment", () => {
     const app = new App() as any;
     let submitted: { text: string; images?: Array<{ mimeType: string; data: string }> } | null = null;

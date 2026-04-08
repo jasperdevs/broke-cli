@@ -234,8 +234,11 @@ export function formatTurnErrorMessage(options: {
 }
 
 export function buildToolPreview(name: string, args: unknown): string {
+  if (name === "Read" || name === "readFile") return (args as any)?.file_path ?? (args as any)?.path ?? "?";
+  if (name === "Glob" || name === "glob") return (args as any)?.pattern ?? (args as any)?.path ?? "?";
+  if (name === "LS" || name === "listFiles") return (args as any)?.path ?? "?";
   if (name === "writeFile" || name === "editFile") return (args as any)?.path ?? "?";
-  if (name === "readFile" || name === "listFiles" || name === "grep") return (args as any)?.path ?? (args as any)?.pattern ?? "?";
+  if (name === "grep") return (args as any)?.path ?? (args as any)?.pattern ?? "?";
   if (name === "semSearch") return (args as any)?.query ?? (args as any)?.path ?? "?";
   if (name === "bash") {
     const command = (args as any)?.command ?? "?";

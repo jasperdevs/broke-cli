@@ -13,7 +13,7 @@ describe("thinking and input regressions", () => {
     expect(app.input.getText()).toBe("hello brave ");
   });
 
-  it("shows the hidden thinking summary label instead of raw reasoning text", () => {
+  it("hides reasoning entirely when the hidden-thinking setting is on", () => {
     const app = new App() as any;
     const original = getSettings().hideThinkingBlock;
     try {
@@ -24,7 +24,6 @@ describe("thinking and input regressions", () => {
       app.appendThinking("private chain of thought");
       const output = app.renderMessages(60).map((line: string) => stripAnsi(line)).join("\n");
       expect(output).toContain("Thinking...");
-      expect(output).toContain("working through the request");
       expect(output).not.toContain("private chain of thought");
       expect(output).not.toContain("Reasoning");
     } finally {
@@ -32,25 +31,14 @@ describe("thinking and input regressions", () => {
     }
   });
 
-  it("shows a synthetic streaming activity summary even without model reasoning", () => {
+  it("does not show a synthetic streaming activity summary", () => {
     const app = new App() as any;
     app.messages = [{ role: "assistant", content: "working" }];
     app.setStreamingActivitySummary("planning changes to index.html");
     app.setStreaming(true);
     const output = app.renderMessages(60).map((line: string) => stripAnsi(line)).join("\n");
-    expect(output).toContain("Working: planning changes to index.html");
     expect(output).toContain("Composing...");
-    app.setStreaming(false);
-  });
-
-  it("stages the synthetic activity summary during long-running turns", () => {
-    const app = new App() as any;
-    app.messages = [{ role: "assistant", content: "working" }];
-    app.setStreamingActivitySummary("planning changes to index.html");
-    app.setStreaming(true);
-    app.streamStartTime = Date.now() - 9000;
-    const output = app.renderMessages(60).map((line: string) => stripAnsi(line)).join("\n");
-    expect(output).toContain("planning changes to index.html · checking details");
+    expect(output).not.toContain("Working:");
     app.setStreaming(false);
   });
 });

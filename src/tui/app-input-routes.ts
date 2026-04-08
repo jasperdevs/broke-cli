@@ -46,6 +46,14 @@ function tryLoadImageFromPath(app: AppState, rawText: string): boolean {
   }
 }
 
+export function tryConsumeImageDraft(app: AppState): boolean {
+  const text = app.input.getText().trim();
+  if (!text) return false;
+  if (!tryLoadImageFromPath(app, text)) return false;
+  app.input.clear();
+  return true;
+}
+
 export function handleBudgetViewKey(app: AppState, key: Keypress): void {
   const page = Math.max(1, app.screen.height - 7);
   const report = app.budgetView.reports[app.budgetView.scope];

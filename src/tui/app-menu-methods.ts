@@ -7,7 +7,7 @@ import { MUTED } from "./app-shared.js";
 import { wordWrap } from "./render/formatting.js";
 import type { MenuPromptKind, ModelOption, PickerItem, SettingEntry } from "./app-types.js";
 import { moveTreeSelection } from "./tree-view.js";
-import { buildFooterLines, getPendingImagePromptLines } from "./bottom-ui.js";
+import { buildFooterLines, getPendingFilePromptLines, getPendingImagePromptLines } from "./bottom-ui.js";
 import { getQuestionMenuLineCount, scrollQuestionMenu } from "./question-menu.js";
 import { getModelLanePickerEntries, openModelLanePicker, selectModelLaneEntry } from "./model-lane-picker.js";
 import {
@@ -50,11 +50,12 @@ export function getBottomLineCount(app: AppState, mainW: number, maxHeight: numb
   const maxVisibleRows = Math.max(1, getSettings().autocompleteMaxVisible);
   const btwBubbleLineCount = app.renderBtwBubble(mainW).length;
   const inputLineCount = app.getWrappedInputLines(app.input.getText(), mainW).length;
+  const pendingFileLineCount = getPendingFilePromptLines(app, mainW).length;
   const pendingImageLineCount = getPendingImagePromptLines(app, mainW).length;
   const statusLineCount = app.statusMessage ? 2 : 0;
   const footerLineCount = buildFooterLines(app, app.shouldShowSidebar(), mainW).length;
   const tailReserve = 2;
-  let count = 1 + footerLineCount + pendingImageLineCount + inputLineCount + statusLineCount + btwBubbleLineCount;
+  let count = 1 + footerLineCount + pendingFileLineCount + pendingImageLineCount + inputLineCount + statusLineCount + btwBubbleLineCount;
   const baseCount = count;
 
   if (app.filePicker) {
@@ -341,8 +342,7 @@ export function selectFileEntry(app: AppState, index: number): void {
   const text = app.input.getText();
   const atIdx = text.lastIndexOf("@");
   if (atIdx >= 0) {
-    app.input.clear();
-    app.input.paste(text.slice(0, atIdx) + `@${selected} `);
+    app.input.setText(text.slice(0, atIdx), true);
   }
   const content = readFileForContext(app.cwd, selected);
   app.fileContexts.set(selected, content);

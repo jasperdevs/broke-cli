@@ -328,4 +328,23 @@ describe("input editing", () => {
     app.handleKey({ name: "escape", char: "", ctrl: false, meta: false, shift: false });
     expect(app.pendingMessages).toEqual([]);
   });
+
+  it("renders selected file context as a chip above the composer instead of raw @path text", () => {
+    const app = new App() as any;
+    let rendered: string[] = [];
+    app.fileContexts.set("src/index.ts", "export {}");
+    app.screen = { height: 18, width: 80, hasSidebar: false, mainWidth: 80, sidebarWidth: 0, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
+    app.drawImmediate();
+    const output = rendered.map((line) => stripAnsi(line)).join("\n");
+    expect(output).toContain("[index.ts]");
+    expect(output).not.toContain("@src/index.ts");
+  });
+
+  it("removes the last selected file chip with backspace when the draft is empty", () => {
+    const app = new App() as any;
+    app.fileContexts.set("src/one.ts", "1");
+    app.fileContexts.set("src/two.ts", "2");
+    app.handleKey({ name: "backspace", char: "", ctrl: false, meta: false, shift: false });
+    expect(Array.from(app.fileContexts.keys())).toEqual(["src/one.ts"]);
+  });
 });

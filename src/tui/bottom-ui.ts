@@ -43,6 +43,26 @@ export function getPendingImagePromptLines(app: AppState, mainW: number): string
   return lines;
 }
 
+export function getPendingFilePromptLines(app: AppState, mainW: number): string[] {
+  const files = Array.from(app.fileContexts?.keys?.() ?? []) as string[];
+  if (files.length === 0) return [];
+  const lines: string[] = [];
+  let current = "";
+  for (const file of files) {
+    const label = file.split(/[\\/]/).pop() || file;
+    const tag = `${currentTheme().imageTagBg}${BOLD}${TXT()}[${label}]${RESET}`;
+    const candidate = current ? `${current} ${tag}` : ` ${tag}`;
+    if (current && visibleWidth(candidate) > mainW) {
+      lines.push(current);
+      current = ` ${tag}`;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
 export function getStatusPromptLines(app: AppState): string[] {
   if (!app.statusMessage) return [];
   return [` ${app.statusMessage}`];
@@ -203,6 +223,13 @@ function renderFooterRow(
 }
 
 export function buildFooterLines(app: AppState, hasSidebar: boolean, mainW: number): string[] {
+  void app;
+  void hasSidebar;
+  void mainW;
+  return [];
+}
+
+export function buildLegacyFooterLines(app: AppState, hasSidebar: boolean, mainW: number): string[] {
   const newlineBinding = formatFooterBinding(getKeybinding("newline"));
   const rows: Array<[{ text: string; plain: string }, { text: string; plain: string } | null]> = [
     [

@@ -60,52 +60,9 @@ export function renderPendingMessagesBlock(options: {
   return lines;
 }
 
-function stripHiddenThinkingNoise(text: string): string {
-  return text
-    .replace(/<[^>]+>/g, " ")
-    .replace(/[`*_>#-]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function summarizeHiddenThinking(thinkingBuffer: string, isStreaming: boolean): string {
-  const normalized = stripHiddenThinkingNoise(thinkingBuffer).toLowerCase();
-  let summary = "working through the request";
-  if (/\b(read|scan|inspect|grep|search|context|repo|file|files|directory|codebase)\b/.test(normalized)) {
-    summary = "scanning the repo";
-  } else if (/\b(plan|approach|decide|tradeoff|compare|option|evaluate)\b/.test(normalized)) {
-    summary = "weighing the approach";
-  } else if (/\b(write|edit|patch|change|refactor|update|implement)\b/.test(normalized)) {
-    summary = "planning the changes";
-  } else if (/\b(test|verify|check|validate|regression|assert)\b/.test(normalized)) {
-    summary = "checking the result";
-  } else if (/\b(error|bug|fail|issue|broken|fix|debug)\b/.test(normalized)) {
-    summary = "checking the failure";
-  } else if (/\b(answer|respond|explain|summary|final)\b/.test(normalized)) {
-    summary = "shaping the response";
-  }
-  return isStreaming ? `Thinking... ${summary}` : `Reasoned through ${summary}`;
-}
-
-function formatStreamingActivitySummary(summary: string, elapsedSeconds: number): string {
-  if (elapsedSeconds >= 18) return `${summary} · still running`;
-  if (elapsedSeconds >= 8) return `${summary} · checking details`;
-  return summary;
-}
-
 function compactPreview(text: string, maxLength = 88): string {
   const normalized = text.replace(/\s+/g, " ").trim();
   return normalized.length <= maxLength ? normalized : `${normalized.slice(0, maxLength - 3)}...`;
-}
-
-function compactArgs(args: unknown, maxLength = 72): string {
-  if (args == null) return "";
-  try {
-    const serialized = JSON.stringify(args);
-    return serialized && serialized !== "{}" ? compactPreview(serialized, maxLength) : "";
-  } catch {
-    return "";
-  }
 }
 
 function ensureOverlayGap(lines: string[]): void {
@@ -144,13 +101,16 @@ function renderPrefixedWrappedLines(prefix: string, text: string, width: number)
 }
 
 export function toolDescription(tc: ToolCallRenderGroup): string {
-  const a = tc.args as Record<string, string> | undefined;
-  const argsPreview = compactArgs(tc.args);
   switch (tc.name) {
     case "bash":
       return `Ran ${tc.preview}`;
+    case "Read":
+    case "Glob":
+    case "LS":
+    case "grep":
+      return `${tc.name} ${tc.preview}`.trim();
     default:
-      return argsPreview ? `Called ${tc.name}(${argsPreview})` : `Called ${tc.name}`;
+      return tc.preview && tc.preview !== "..." ? `${tc.name} ${tc.preview}` : tc.name;
   }
 }
 
@@ -174,7 +134,7 @@ export function renderToolCallBlock(options: {
   const done = !!tc.result;
   const running = !done;
   const branch = "\u2514";
-  lines.push(`  ${done ? colors.muted : colors.text}• ${toolDescription(tc)}${running ? "" : ""}${reset}`);
+  lines.push(`  ${done ? colors.muted : colors.text}• ${toolDescription(tc)}${reset}`);
 
   const a = tc.args as Record<string, string> | undefined;
 
@@ -310,26 +270,15 @@ export function renderMessageOverlays(options: {
 
   const lines = [...staticLines];
 
-  if (thinkingBuffer) {
+  if (thinkingBuffer && !hideThinkingBlock) {
     ensureOverlayGap(lines);
-    if (hideThinkingBlock) {
-      lines.push(`  ${colors.dim}${summarizeHiddenThinking(thinkingBuffer, isStreaming)}${colors.reset}`);
-    } else {
-      const thinkLines = thinkingBuffer.split("\n").slice(-8);
-      lines.push(`  ${colors.dim}${isStreaming ? "Reasoning" : "Reasoned"}${colors.reset}`);
-      for (const line of thinkLines) {
-        for (const wrappedLine of wrapVisibleText(line, Math.max(8, maxWidth - 4))) {
-          lines.push(`  ${colors.dim}${wrappedLine}${colors.reset}`);
-        }
+    const thinkLines = thinkingBuffer.split("\n").slice(-8);
+    lines.push(`  ${colors.dim}${isStreaming ? "Reasoning" : "Reasoned"}${colors.reset}`);
+    for (const line of thinkLines) {
+      for (const wrappedLine of wrapVisibleText(line, Math.max(8, maxWidth - 4))) {
+        lines.push(`  ${colors.dim}${wrappedLine}${colors.reset}`);
       }
     }
-    lines.push("");
-  }
-
-  if (isStreaming && !thinkingBuffer && streamingActivitySummary) {
-    ensureOverlayGap(lines);
-    const elapsedSeconds = Math.max(0, Math.floor((Date.now() - streamStartTime) / 1000));
-    lines.push(`  ${colors.dim}Working: ${formatStreamingActivitySummary(streamingActivitySummary, elapsedSeconds)}${colors.reset}`);
     lines.push("");
   }
 
@@ -386,10 +335,9 @@ export function renderMessageOverlays(options: {
     if (thinkingBuffer && thinkingDuration > 0 && !thinkingStartTime) {
       statParts.push(`reasoned ${thinkingDuration}s`);
     }
-    const waitingForFirstOutput = streamTokens === 0 && !thinkingBuffer && todoItems.length === 0;
     const label = thinkingRequested
-      ? (waitingForFirstOutput && secs >= 8 ? "Thinking... waiting for first visible event..." : "Thinking...")
-      : (waitingForFirstOutput && secs >= 8 ? "Still waiting for first token..." : "Composing...");
+      ? "Thinking..."
+      : "Composing...";
     lines.push(`  ${sparkleSpinner(spinnerFrame)} ${shimmerText(label, spinnerFrame)} ${colors.accent}(${statParts.join(" · ")})${colors.reset}`);
     lines.push("");
   }

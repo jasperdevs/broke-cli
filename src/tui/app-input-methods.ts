@@ -12,6 +12,7 @@ import {
   queueCurrentInput,
   restoreQueuedMessage,
   submitInput,
+  tryConsumeImageDraft,
 } from "./app-input-routes.js";
 
 type AppState = any;
@@ -222,6 +223,20 @@ export function handleKey(app: AppState, key: Keypress): void {
 
   if (handleEscapeAndBindings(app, key)) return;
 
+  if (key.name === "backspace" && !key.ctrl && !key.meta && !key.shift && app.input.getText().length === 0) {
+    const fileKeys = Array.from(app.fileContexts.keys());
+    if (fileKeys.length > 0) {
+      app.fileContexts.delete(fileKeys[fileKeys.length - 1]!);
+      app.draw();
+      return;
+    }
+    if (app.pendingImages.length > 0) {
+      app.pendingImages.pop();
+      app.draw();
+      return;
+    }
+  }
+
   if (key.ctrl && key.name === "o") {
     app.allToolsExpanded = !app.allToolsExpanded;
     app.toolOutputCollapsed = !app.allToolsExpanded;
@@ -281,6 +296,10 @@ export function handleKey(app: AppState, key: Keypress): void {
   }
 
   const action = app.input.handleKey(key);
+  if (action === "none" && tryConsumeImageDraft(app)) {
+    app.draw();
+    return;
+  }
   if (action === "submit") {
     submitInput(app);
   }
