@@ -360,4 +360,33 @@ describe("input editing", () => {
     app.handleKey({ name: "backspace", char: "", ctrl: false, meta: false, shift: false });
     expect(Array.from(app.fileContexts.keys())).toEqual(["src/one.ts"]);
   });
+
+  it("closes the file picker once the @ mention token is deleted", () => {
+    const app = new App() as any;
+    app.projectFiles = ["AGENTS.md", "README.md"];
+    app.filePicker = { files: app.projectFiles, filtered: app.projectFiles, query: "AG", cursor: 0 };
+    app.input.setText("hey @AG");
+    app.input.setCursor("hey @AG".length);
+
+    app.handleKey({ name: "backspace", char: "", ctrl: false, meta: false, shift: false });
+    app.handleKey({ name: "backspace", char: "", ctrl: false, meta: false, shift: false });
+    app.handleKey({ name: "backspace", char: "", ctrl: false, meta: false, shift: false });
+
+    expect(app.filePicker).toBeNull();
+    expect(app.input.getText()).toBe("hey ");
+  });
+
+  it("does not trap left/right navigation while the file picker is open", () => {
+    const app = new App() as any;
+    app.projectFiles = ["AGENTS.md", "README.md"];
+    app.filePicker = { files: app.projectFiles, filtered: app.projectFiles, query: "AG", cursor: 0 };
+    app.input.setText("hey @AG");
+    app.input.setCursor("hey @AG".length);
+
+    app.handleKey({ name: "left", char: "", ctrl: false, meta: false, shift: false });
+    app.handleKey({ name: "left", char: "", ctrl: false, meta: false, shift: false });
+
+    expect(app.input.getCursor()).toBe("hey @".length);
+    expect(app.filePicker?.query).toBe("");
+  });
 });

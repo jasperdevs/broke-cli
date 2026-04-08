@@ -16,6 +16,30 @@ function isPlainBackspace(key: Keypress): boolean {
   return key.name === "backspace" && !key.ctrl && !key.meta && !key.shift;
 }
 
+function getActiveFileMention(app: AppState): { query: string } | null {
+  if (!app.filePicker) return null;
+  const text = app.input.getText();
+  const cursor = app.input.getCursor();
+  const atIdx = text.lastIndexOf("@", Math.max(0, cursor - 1));
+  if (atIdx < 0) return null;
+  const query = text.slice(atIdx + 1, cursor);
+  if (/[\s\[\]]/u.test(query)) return null;
+  return { query };
+}
+
+function syncFilePickerFromComposer(app: AppState): boolean {
+  if (!app.filePicker) return false;
+  const mention = getActiveFileMention(app);
+  if (!mention) {
+    app.filePicker = null;
+    return false;
+  }
+  app.filePicker.query = mention.query;
+  app.filePicker.filtered = filterFiles(app.filePicker.files, app.filePicker.query);
+  app.filePicker.cursor = app.clampMenuCursor(app.filePicker.cursor, app.filePicker.filtered.length);
+  return true;
+}
+
 export function handleBudgetViewKey(app: AppState, key: Keypress): void {
   const page = Math.max(1, app.screen.height - 7);
   const report = app.budgetView.reports[app.budgetView.scope];
@@ -219,6 +243,10 @@ export function handlePickerKey(app: AppState, key: Keypress): void {
 }
 
 export function handleFilePickerKey(app: AppState, key: Keypress): void {
+  if (!syncFilePickerFromComposer(app)) {
+    app.handleKey(key);
+    return;
+  }
   if (key.name === "up") app.filePicker.cursor = app.clampMenuCursor(app.filePicker.cursor - 1, app.filePicker.filtered.length);
   else if (key.name === "down") app.filePicker.cursor = app.clampMenuCursor(app.filePicker.cursor + 1, app.filePicker.filtered.length);
   else if (key.name === "home") app.filePicker.cursor = 0;
@@ -230,24 +258,22 @@ export function handleFilePickerKey(app: AppState, key: Keypress): void {
     app.filePicker = null;
     app.drawNow();
     return;
-  } else if (key.name === "backspace") {
-    if (app.filePicker.query.length > 0) {
-      app.filePicker.query = app.filePicker.query.slice(0, -1);
-      app.filePicker.filtered = filterFiles(app.filePicker.files, app.filePicker.query);
-      app.filePicker.cursor = 0;
-      app.input.handleKey(key);
-      app.draw();
+  } else if (
+    key.name === "backspace"
+    || key.name === "delete"
+    || key.name === "left"
+    || key.name === "right"
+    || key.name === "home"
+    || key.name === "end"
+    || (key.ctrl && (key.name === "a" || key.name === "e" || key.name === "u" || key.name === "w" || key.name === "h"))
+    || (!!key.char && !key.ctrl && !key.meta)
+  ) {
+    app.input.handleKey(key);
+    if (!syncFilePickerFromComposer(app)) {
+      app.drawNow();
       return;
     }
-    app.filePicker = null;
-    app.input.handleKey(key);
-    app.drawNow();
-    return;
-  } else if (key.char && !key.ctrl && !key.meta) {
-    app.filePicker.query += key.char;
-    app.filePicker.filtered = filterFiles(app.filePicker.files, app.filePicker.query);
     app.filePicker.cursor = 0;
-    app.input.handleKey(key);
     app.draw();
     return;
   }
