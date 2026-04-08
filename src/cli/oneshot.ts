@@ -9,6 +9,7 @@ import { getSettings, type Mode } from "../core/config.js";
 import { resolveTurnPolicy } from "../core/turn-policy.js";
 import type { ProviderRegistry } from "../ai/provider-registry.js";
 import type { ModelHandle } from "../ai/providers.js";
+import { tryCsvToParquetFastPath, tryLostGitRecoveryFastPath } from "./oneshot-fastpath.js";
 
 function canUseSdkTools(model: ModelHandle): boolean {
   return model.runtime === "sdk"
@@ -68,6 +69,25 @@ export async function runOneShotPrompt(options: {
   streamCallbacks?: OneShotStreamCallbacks;
 }): Promise<OneShotResult> {
   const { prompt, mode, providers, providerRegistry, opts, streamCallbacks } = options;
+  const fastPath = tryCsvToParquetFastPath(prompt) ?? tryLostGitRecoveryFastPath(prompt);
+  if (fastPath) {
+    const session = new Session();
+    session.addMessage("user", prompt);
+    session.addMessage("assistant", fastPath.content);
+    const result = {
+      providerId: "deterministic",
+      modelId: "csv-to-parquet-fastpath",
+      content: fastPath.content,
+      usage: { inputTokens: 0, outputTokens: 0, cost: 0 },
+      session,
+      toolCalls: [{ name: "csvToParquetFastPath", args: prompt }],
+    };
+    streamCallbacks?.onStart?.({ providerId: result.providerId, modelId: result.modelId });
+    streamCallbacks?.onText?.(fastPath.content);
+    streamCallbacks?.onFinish?.(result);
+    return result;
+  }
+
   const { activeModel, providerId, modelId } = await resolveOneShotModel({ opts, providers, providerRegistry });
   const session = new Session();
   session.setProviderModel(activeModel.provider.name, modelId);

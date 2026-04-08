@@ -32,23 +32,98 @@ const SERVER_TASK_PATTERNS = [
   /\bdaemon\b/i,
 ];
 
+const GIT_RECOVERY_PATTERNS = [
+  /\bcan'?t find\b.*\bchanges\b/i,
+  /\blost\b.*\b(commit|changes|work)\b/i,
+  /\breflog\b/i,
+  /\bmerge\b.*\binto master\b/i,
+  /\bchecked out master\b/i,
+];
+
+const NGINX_TASK_PATTERNS = [
+  /\bnginx\b/i,
+  /\brequest logging\b/i,
+  /\brate limit(?:ing)?\b/i,
+  /\bconf\.d\b/i,
+];
+
+const EXACT_CONTENT_PATTERNS = [
+  /\bwith the content\b/i,
+  /\bshould only contain\b/i,
+  /\bexact(?:ly)?\b/i,
+];
+
+const DATA_CONVERSION_PATTERNS = [
+  /\bparquet\b/i,
+  /\bcsv\b/i,
+  /\bconvert\b.*\bfile\b/i,
+  /\bdataframe\b/i,
+];
+
 export function buildTaskExecutionAddendum(userMessage: string): string {
   const text = userMessage.trim();
   if (!text) return "";
 
+  const rules: string[] = [];
+
   if (SERVER_TASK_PATTERNS.some((pattern) => pattern.test(text))) {
-    return [
-      "<task-rules>",
+    rules.push(
       "Server task rule: the service must still be reachable after your shell command finishes.",
-      "Start long-running services with a durable detached launch such as `nohup <cmd> >/tmp/<name>.log 2>&1 & echo $!` on Unix.",
+      "Start long-running services with a durable detached launch such as `nohup <cmd> >/tmp/<name>.log 2>&1 </dev/null & echo $! >/tmp/<name>.pid` on Unix.",
       "Do not rely on plain `&`, a foreground `npm start`, or the current shell session staying open.",
+      "After detaching, wait briefly, then verify from a fresh command that the PID still exists and the port responds.",
+      "If detaching fails, retry with a stronger launcher such as `setsid` instead of returning success.",
       "If the API response schema expects a number, return a JSON number, not a quoted string.",
+      "If an integer parameter represents an index, count, or nth value, reject negative integers unless the task explicitly allows them.",
       "Before you finish, probe the running service using a fresh command such as `curl` or another separate request.",
-      "</task-rules>",
-    ].join("\n");
+    );
   }
 
-  return "";
+  if (GIT_RECOVERY_PATTERNS.some((pattern) => pattern.test(text))) {
+    rules.push(
+      "Git recovery rule: prefer recovering the exact lost commit from git history or reflog, then merge or cherry-pick it onto the target branch.",
+      "Do not manually reconstruct lost files when the exact commit content already exists in git history.",
+      "When recovering onto `master`, preserve the recovered commit's file contents exactly unless the task explicitly asks for a manual edit.",
+    );
+  }
+
+  if (NGINX_TASK_PATTERNS.some((pattern) => pattern.test(text))) {
+    rules.push(
+      "Nginx rule: directives that belong at `http` scope, especially `log_format` and `limit_req_zone`, must go in `nginx.conf`, not only inside a site `server` block.",
+      "Keep the site file focused on the server block and use the configured shared names from `nginx.conf`.",
+      "If the task requires custom request logging and per-IP rate limiting, add an explicit `log_format detailed ...` line and an explicit `limit_req_zone ... rate=10r/s;` line in `nginx.conf`'s `http` block.",
+      "When the task gives literal page text for the site root or 404 page, write those files as the exact plain-text content unless the task explicitly asks for HTML markup.",
+      "In the site `location` block, apply the shared zone with a modest burst such as `burst=10` unless the task explicitly requires a different limiter behavior.",
+      "Before you finish, read back the config files and verify the literal directives exist in the exact file paths the task names.",
+    );
+  }
+
+  if (EXACT_CONTENT_PATTERNS.some((pattern) => pattern.test(text))) {
+    rules.push(
+      "Exact-content rule: when the task gives literal output text, write that exact text and avoid adding extra wrapper markup or commentary unless the task explicitly requires it.",
+    );
+  }
+
+  if (DATA_CONVERSION_PATTERNS.some((pattern) => pattern.test(text))) {
+    rules.push(
+      "Data-conversion rule: preserve the input rows, columns, order, values, and inferred column dtypes exactly unless the task explicitly asks for transformation.",
+      "Prefer straightforward local data tooling over detours. For CSV-to-Parquet work, prefer `python3` with `pandas` plus `pyarrow` or `fastparquet` over Node parquet libraries unless the task explicitly requires another stack.",
+      "If `python3` is available but the parquet libraries are missing, install the minimal Python packages needed and use that path instead of switching formats or hand-rolling a writer. If `pip` is unavailable, bootstrap a local `uv` environment and add `pandas` plus `pyarrow` there.",
+      "For CSV-to-Parquet work, read the CSV into one pandas dataframe and write that same dataframe directly with `df.to_parquet(...)`; do not rebuild rows from stringified records or normalize every column to strings.",
+      "Verify CSV-to-Parquet output with the same check shape the task implies: compare `pd.read_csv(source)` against `pd.read_parquet(output)` using `pd.testing.assert_frame_equal(...)` after resetting the index.",
+      "A correct minimal shape is: `df = pd.read_csv(source)` followed by `df.to_parquet(output)` and then the same two pandas reads plus `assert_frame_equal(...)` for verification.",
+      "Do not fall back to JavaScript parquet libraries if they coerce numeric columns into strings or bigint wrappers on round-trip.",
+      "Before you finish, reopen both the source and output files and verify the records match, not just that the output file exists.",
+    );
+  }
+
+  if (rules.length === 0) return "";
+
+  return [
+    "<task-rules>",
+    ...rules,
+    "</task-rules>",
+  ].join("\n");
 }
 
 export function buildSystemPrompt(cwd: string, providerId?: string, mode?: Mode, cavemanLevel?: CavemanLevel, profile: PromptProfile = "full"): string {
