@@ -2,7 +2,7 @@ import { collectProjectFiles } from "./file-picker.js";
 import type { Keypress } from "./keypress.js";
 import { matchesBinding, loadKeybindings } from "../core/keybindings.js";
 import { getSettings } from "../core/config.js";
-import { hydrateInlineComposerElements, syncInlineImageChipLabels } from "./inline-chip-utils.js";
+import { ensureInlineChipElements, syncInlineImageChipLabels } from "./inline-chip-utils.js";
 import { handleQuestionViewKey } from "./question-view.js";
 import {
   handleBudgetViewKey,
@@ -198,7 +198,7 @@ function handleEscapeAndBindings(app: AppState, key: Keypress): boolean {
 }
 
 export function handleKey(app: AppState, key: Keypress): void {
-  hydrateInlineComposerElements(app);
+  ensureInlineChipElements(app);
 
   if (app.filePicker && !shouldKeepFilePickerOpen(app)) {
     app.filePicker = null;
