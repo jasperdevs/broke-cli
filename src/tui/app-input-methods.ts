@@ -9,6 +9,7 @@ import {
   handlePaste,
   handlePickerKey,
   handleTreeViewKey,
+  scheduleDeferredImageDraftConsume,
   queueCurrentInput,
   restoreQueuedMessage,
   submitInput,
@@ -300,6 +301,7 @@ export function handleKey(app: AppState, key: Keypress): void {
     app.draw();
     return;
   }
+  if (action === "none") scheduleDeferredImageDraftConsume(app);
   if (action === "submit") {
     submitInput(app);
   }

@@ -1,9 +1,11 @@
 import stripAnsi from "strip-ansi";
 import { getSettings } from "../core/config.js";
+import { currentTheme } from "../core/themes.js";
 import { filterFiles, readFileForContext } from "./file-picker.js";
 import type { Keypress } from "./keypress.js";
+import { BOLD, RESET } from "../utils/ansi.js";
 import { DIM } from "../utils/ansi.js";
-import { MUTED } from "./app-shared.js";
+import { MUTED, TXT } from "./app-shared.js";
 import { wordWrap } from "./render/formatting.js";
 import type { MenuPromptKind, ModelOption, PickerItem, SettingEntry } from "./app-types.js";
 import { moveTreeSelection } from "./tree-view.js";
@@ -21,6 +23,44 @@ import {
   registerMenuClickTarget,
 } from "./app-menu-entries.js";
 type AppState = any;
+
+function getComposerAttachmentTokens(app: AppState): string[] {
+  const fileContextKeys = Array.from(app.fileContexts.keys()) as string[];
+  return [
+    ...fileContextKeys.map((file) => `[${file.split(/[\\/]/).pop() || file}]`),
+    ...((getSettings().terminal.showImages && app.pendingImages)
+      ? app.pendingImages.map((_: unknown, index: number) => `[Image #${index + 1}]`)
+      : []),
+  ];
+}
+
+function renderAttachmentChip(token: string): string {
+  return `${currentTheme().imageTagBg}${BOLD}${TXT()}${token}${RESET}`;
+}
+
+function styleComposerLine(app: AppState, line: string): string {
+  const tokens = getComposerAttachmentTokens(app);
+  if (tokens.length === 0) return line;
+  let remaining = line;
+  let leading = "";
+  while (remaining.startsWith(" ")) {
+    leading += " ";
+    remaining = remaining.slice(1);
+  }
+  let built = leading;
+  let matchedAny = false;
+  for (const token of tokens) {
+    if (!remaining.startsWith(token)) break;
+    built += renderAttachmentChip(token);
+    remaining = remaining.slice(token.length);
+    matchedAny = true;
+    if (remaining.startsWith(" ")) {
+      built += " ";
+      remaining = remaining.slice(1);
+    }
+  }
+  return matchedAny ? `${built}${remaining}` : line;
+}
 function getMenuVisibleRows(maxHeight: number, baseCount: number, tailReserve: number, chromeLines: number): number {
   return Math.max(1, maxHeight - baseCount - tailReserve - 1 - chromeLines);
 }
@@ -94,32 +134,20 @@ export function getBottomLineCount(app: AppState, mainW: number, maxHeight: numb
 export function getWrappedInputLines(app: AppState, text: string, width: number): string[] {
   const padX = Math.max(0, getSettings().editorPaddingX | 0);
   const usableWidth = Math.max(1, width - 2 - (padX * 2));
-  const fileContextKeys = Array.from(app.fileContexts.keys()) as string[];
-  const attachmentTokens = [
-    ...fileContextKeys.map((file) => `[${file.split(/[\\/]/).pop() || file}]`),
-    ...((getSettings().terminal.showImages && app.pendingImages)
-      ? app.pendingImages.map((_: unknown, index: number) => `[Image #${index + 1}]`)
-      : []),
-  ];
+  const attachmentTokens = getComposerAttachmentTokens(app);
   const prefix = attachmentTokens.length > 0 ? `${attachmentTokens.join(" ")}${text ? " " : ""}` : "";
   const sourceLines = `${prefix}${text || ""}`.split("\n");
   const wrapped: string[] = [];
   for (const line of sourceLines) {
     const lineParts = line.length === 0 ? [""] : wordWrap(line, usableWidth);
-    wrapped.push(...lineParts.map((part) => `${" ".repeat(padX)}${part}`));
+    wrapped.push(...lineParts.map((part) => styleComposerLine(app, `${" ".repeat(padX)}${part}`)));
   }
   return wrapped.length > 0 ? wrapped : [" ".repeat(padX)];
 }
 
 export function getInputCursorLayout(app: AppState, text: string, cursor: number, width: number): { lines: string[]; row: number; col: number } {
   const lines = app.getWrappedInputLines(text, width);
-  const fileContextKeys = Array.from(app.fileContexts.keys()) as string[];
-  const attachmentTokens = [
-    ...fileContextKeys.map((file) => `[${file.split(/[\\/]/).pop() || file}]`),
-    ...((getSettings().terminal.showImages && app.pendingImages)
-      ? app.pendingImages.map((_: unknown, index: number) => `[Image #${index + 1}]`)
-      : []),
-  ];
+  const attachmentTokens = getComposerAttachmentTokens(app);
   const prefix = attachmentTokens.length > 0 ? `${attachmentTokens.join(" ")}${text ? " " : ""}` : "";
   const beforeCursor = `${prefix}${text.slice(0, cursor)}`;
   const cursorLines = app.getWrappedInputLines(beforeCursor, width);

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -156,6 +156,22 @@ describe("image attachments", () => {
     writeFileSync(imagePath, "fakepng", "utf-8");
 
     app.handlePaste(` ${imagePath} `);
+
+    expect(app.pendingImages).toHaveLength(1);
+    expect(app.input.getText()).toBe("");
+  });
+
+  it("resolves transient Yoink image paths to the newest saved image", () => {
+    updateSetting("terminal", { ...getSettings().terminal, showImages: true });
+    const app = new App() as any;
+    const dir = mkdtempSync(join(tmpdir(), "brokecli-image-"));
+    tempDirs.push(dir);
+    const yoinkDir = join(dir, "Yoink");
+    mkdirSync(yoinkDir);
+    const actualImagePath = join(yoinkDir, "yoink_2026-04-08_16-58-56_950c.png");
+    writeFileSync(actualImagePath, "fakepng", "utf-8");
+
+    app.handlePaste(join(yoinkDir, "yoink_--_--_b.png"));
 
     expect(app.pendingImages).toHaveLength(1);
     expect(app.input.getText()).toBe("");

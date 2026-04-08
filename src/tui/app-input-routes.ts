@@ -1,4 +1,5 @@
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "fs";
+import { basename, dirname, extname, join } from "path";
 import { fileURLToPath } from "url";
 import { renderBudgetDashboard } from "../core/budget-insights.js";
 import { filterFiles } from "./file-picker.js";
@@ -24,18 +25,52 @@ function normalizePastedPath(text: string): string {
   return normalized;
 }
 
+function getImageExtension(normalizedPath: string): string | null {
+  const ext = extname(normalizedPath).toLowerCase();
+  return [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"].includes(ext) ? ext : null;
+}
+
+function resolveImagePath(rawText: string): string | null {
+  const normalizedPath = normalizePastedPath(rawText);
+  const imageExt = getImageExtension(normalizedPath);
+  if (!imageExt) return null;
+  if (existsSync(normalizedPath)) return normalizedPath;
+
+  const parentDir = dirname(normalizedPath);
+  if (!parentDir || !existsSync(parentDir)) return null;
+
+  // Yoink on Windows can paste a transient filename before the actual saved file name settles.
+  const parentName = basename(parentDir).toLowerCase();
+  if (parentName !== "yoink") return null;
+
+  const now = Date.now();
+  const fallback = readdirSync(parentDir)
+    .filter((entry) => extname(entry).toLowerCase() === imageExt)
+    .map((entry) => {
+      const fullPath = join(parentDir, entry);
+      try {
+        return { path: fullPath, mtimeMs: statSync(fullPath).mtimeMs };
+      } catch {
+        return null;
+      }
+    })
+    .filter((entry): entry is { path: string; mtimeMs: number } => !!entry)
+    .filter((entry) => now - entry.mtimeMs < 10_000)
+    .sort((a, b) => b.mtimeMs - a.mtimeMs)[0];
+
+  return fallback?.path ?? null;
+}
+
 function isPlainBackspace(key: Keypress): boolean {
   return key.name === "backspace" && !key.ctrl && !key.meta && !key.shift;
 }
 
 function tryLoadImageFromPath(app: AppState, rawText: string): boolean {
-  const normalizedPath = normalizePastedPath(rawText);
-  const imageExtensions = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"];
-  const isImagePath = imageExtensions.some((ext) => normalizedPath.toLowerCase().endsWith(ext));
-  if (!isImagePath || !existsSync(normalizedPath)) return false;
+  const resolvedPath = resolveImagePath(rawText);
+  if (!resolvedPath) return false;
   try {
-    const data = readFileSync(normalizedPath);
-    const ext = normalizedPath.split(".").pop()?.toLowerCase() || "png";
+    const data = readFileSync(resolvedPath);
+    const ext = resolvedPath.split(".").pop()?.toLowerCase() || "png";
     const mimeType = `image/${ext === "jpg" ? "jpeg" : ext}`;
     const base64 = data.toString("base64");
     app.pendingImages.push({ mimeType, data: base64 });
@@ -59,12 +94,28 @@ function stripMirroredImagePathFromDraft(app: AppState, rawText: string): void {
   }
 }
 
+function looksLikeImageDraft(text: string): boolean {
+  return !!getImageExtension(normalizePastedPath(text.trim()));
+}
+
 export function tryConsumeImageDraft(app: AppState): boolean {
   const text = app.input.getText().trim();
   if (!text) return false;
   if (!tryLoadImageFromPath(app, text)) return false;
   app.input.clear();
   return true;
+}
+
+export function scheduleDeferredImageDraftConsume(app: AppState): void {
+  const draft = app.input.getText().trim();
+  if (!draft || !looksLikeImageDraft(draft)) return;
+  for (const delayMs of [40, 140]) {
+    setTimeout(() => {
+      if (app.input.getText().trim() !== draft) return;
+      if (!tryConsumeImageDraft(app)) return;
+      app.draw?.();
+    }, delayMs);
+  }
 }
 
 export function handleBudgetViewKey(app: AppState, key: Keypress): void {
@@ -352,6 +403,7 @@ export function handlePaste(app: AppState, text: string): void {
     app.draw();
     return;
   }
+  scheduleDeferredImageDraftConsume(app);
   app.draw();
 }
 
