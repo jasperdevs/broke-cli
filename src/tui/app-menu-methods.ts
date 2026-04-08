@@ -69,8 +69,8 @@ export function scrollToBottom(app: AppState): void {
   app.scrollOffset = Math.max(0, messageLines.length - chatHeight);
 }
 export function getChatHeight(app: AppState): number {
-  const headerLines = app.screen.hasSidebar ? 0 : 1;
   const hasSidebar = app.shouldShowSidebar();
+  const headerLines = !hasSidebar && app.messages.length > 0 && app.modelName !== "none" ? 1 : 0;
   const mainW = hasSidebar ? app.screen.mainWidth : app.screen.width;
   const bottomBase = app.getBottomLineCount(mainW, app.screen.height);
   return Math.max(1, app.screen.height - bottomBase - headerLines);

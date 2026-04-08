@@ -33,7 +33,8 @@ describe("startup home view", () => {
     expect(output).toContain("Welcome");
     expect(output).toContain("GPT-5.4 mini");
     expect(output).toContain("~\\Downloads\\broke-cli");
-    expect(output).toContain("Tip");
+    expect(output).toContain("Status");
+    expect(output).toContain("/resume");
     expect(output).not.toContain("Files");
     expect(output).not.toContain("Recent Sessions");
   });
@@ -74,33 +75,35 @@ describe("startup home view", () => {
       app.messages = [{ role: "user", content: "hello" }];
       app.drawImmediate();
       const output = rendered.map((line) => stripAnsi(line)).join("\n");
-      expect(output).toContain("BTW");
-      expect(output).toContain("Design/UI");
-      expect(output).toContain("v more");
+      expect(output).toContain("Chat model");
+      expect(output).toContain("Mode");
+      expect(output).toContain("Workspace");
     } finally {
       updateSetting("hideSidebar", originalHideSidebar);
     }
   });
 
-  it("drops the startup card entirely on very narrow widths", () => {
+  it("falls back to a compact startup card on very narrow widths", () => {
     const app = new App() as any;
     let rendered: string[] = [];
     app.screen = { height: 18, width: 20, hasSidebar: false, mainWidth: 20, sidebarWidth: 0, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
     app.drawImmediate();
     const output = rendered.map((line) => stripAnsi(line)).join("\n");
-    expect(output).not.toContain("Welcome");
+    expect(output).toContain("Welcome");
+    expect(output).toContain("Model");
     expect(output).not.toContain("▀");
     expect(output).not.toContain("█");
   });
 
-  it("hides the startup card entirely in cramped panes so it does not leak into the input area", () => {
+  it("keeps a compact startup card in cramped panes without leaking into the input area", () => {
     const app = new App() as any;
     let rendered: string[] = [];
     app.screen = { height: 8, width: 20, hasSidebar: false, mainWidth: 20, sidebarWidth: 0, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
     app.input.paste("hey");
     app.drawImmediate();
     const output = rendered.map((line) => stripAnsi(line)).join("\n");
-    expect(output).not.toContain("Welcome");
+    expect(output).toContain("Welcome");
+    expect(output).toContain("hey");
     expect(output).not.toContain("▀");
     expect(output).not.toContain("█");
     expect(output).toContain("hey");

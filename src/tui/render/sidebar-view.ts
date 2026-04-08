@@ -73,7 +73,8 @@ export function buildSidebarLines(options: {
   width: number;
   sessionName: string;
   appVersion: string;
-  modelSlots: Array<{ label: string; value: string }>;
+  sessionDetails: Array<{ label: string; value: string }>;
+  roleModels: Array<{ label: string; value: string }>;
   mcpConnections: string[];
   shortCwd: string;
   gitBranch: string;
@@ -91,7 +92,8 @@ export function buildSidebarLines(options: {
     width,
     sessionName,
     appVersion,
-    modelSlots,
+    sessionDetails,
+    roleModels,
     mcpConnections,
     shortCwd,
     gitBranch,
@@ -107,10 +109,20 @@ export function buildSidebarLines(options: {
   lines.push("");
   lines.push(`${colors.text}${colors.bold}${sessionDisplay}${colors.reset} ${colors.muted}${versionText}${colors.reset}`);
   lines.push("");
-  for (const slot of modelSlots) {
-    lines.push(`${colors.text}${slot.label}${colors.reset}`);
-    for (const part of wrapSidebarValue(slot.value, bodyWidth, width < 24 ? 1 : 2)) {
+  for (const detail of sessionDetails) {
+    lines.push(`${colors.text}${detail.label}${colors.reset}`);
+    for (const part of wrapSidebarValue(detail.value, bodyWidth, width < 24 ? 1 : 2)) {
       lines.push(`  ${colors.accent}${part}${colors.reset}`);
+    }
+  }
+  if (roleModels.length > 0) {
+    lines.push("");
+    lines.push(`${colors.text}Role models${colors.reset}`);
+    for (const slot of roleModels) {
+      const slotLabel = `${slot.label}: ${slot.value}`;
+      for (const [index, part] of wrapSidebarValue(slotLabel, bodyWidth, width < 24 ? 1 : 2).entries()) {
+        lines.push(`  ${index === 0 ? colors.accent : colors.muted}${part}${colors.reset}`);
+      }
     }
   }
   if (mcpConnections.length > 0) {
@@ -125,7 +137,7 @@ export function buildSidebarLines(options: {
   }
 
   lines.push("");
-  lines.push(`${colors.text}Directory${colors.reset}`);
+  lines.push(`${colors.text}Workspace${colors.reset}`);
   for (const part of wrapSidebarPath(shortCwd, bodyWidth, 2)) {
     lines.push(`  ${colors.muted}${part}${colors.reset}`);
   }

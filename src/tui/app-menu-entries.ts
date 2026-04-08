@@ -1,7 +1,6 @@
 import { currentTheme } from "../core/themes.js";
 import { BOLD, DIM, RESET } from "../utils/ansi.js";
 import { truncateVisible, visibleWidth } from "../utils/terminal-width.js";
-import stripAnsi from "strip-ansi";
 import { ERR, MUTED, T, TXT } from "./app-shared.js";
 import { wordWrap } from "./render/formatting.js";
 import type { MenuEntry, ModelOption, PickerItem, SettingEntry } from "./app-types.js";
@@ -19,7 +18,6 @@ function getMenuBodyWidth(app: AppState): number {
 function buildSelectableEntry(prefix: string, primary: string, detail: string | undefined, width: number, detailColor = DIM): string[] {
   void detail;
   void detailColor;
-  const plainPrimary = stripAnsi(primary);
   if (visibleWidth(`${prefix}${primary}`) <= width + visibleWidth(prefix)) return [`${prefix}${primary}${RESET}`];
   const truncated = truncateVisible(primary, Math.max(10, width - visibleWidth(prefix)));
   return [`${prefix}${truncated}${RESET}`];
@@ -175,11 +173,12 @@ export function getModelPickerEntries(app: AppState): MenuEntry[] {
       const badges = opt.badges && opt.badges.length > 0
         ? opt.badges.map((badge) => badgeLabels[badge] ?? badge).join(" · ")
         : undefined;
+      const detail = [showProviderHeaders ? undefined : opt.providerName, badges].filter(Boolean).join(" · ") || undefined;
       entries.push({
         lines: buildSelectableEntry(
           `  ${arrow}${nameCol}`,
           `${opt.displayName ?? opt.modelId}${pin}`,
-          badges,
+          detail,
           width,
         ),
         selectIndex: currentIdx,
@@ -200,7 +199,7 @@ export function getCommandSuggestionEntries(app: AppState): MenuEntry[] {
     const nameColor = i === cursor ? `${TXT()}${BOLD}` : T();
     const detail = entry.hotkey ? `${entry.hotkey} · ${entry.desc}` : entry.desc;
     return {
-      lines: buildSelectableEntry(` ${arrow}${nameColor}`, entry.name, detail, width),
+      lines: buildSelectableEntry(` ${arrow}${nameColor}`, `/${entry.name}`, detail, width),
       selectIndex: i,
     };
   });

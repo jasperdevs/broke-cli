@@ -272,18 +272,30 @@ export function renderHomeView(app: AppState, mainW: number, topHeight: number):
   const promptTemplates = listTemplates().length;
   const skillCount = listSkills().length;
   const packageCount = listInstalledPackages().length;
-  const inventoryDetails = settings.quietStartup ? [] : [
-    { label: "Providers", value: app.detectedProviders.length > 0 ? app.detectedProviders.join(", ") : "none" },
-    { label: "Resources", value: `${existsSync(join(process.cwd(), "AGENTS.md")) ? "AGENTS" : "no AGENTS"} · ${enabledExtensions} ext · ${skillCount} skills · ${promptTemplates} prompts · ${packageCount} pkg` },
+  const modelLabel = app.modelName === "none" ? "No model selected" : getPrettyModelName(app.modelName, app.modelProviderId);
+  const modelStatus = app.modelName === "none"
+    ? "Pick one with /model, then start chatting."
+    : `Ready in ${app.mode} mode with ${app.modelRuntime}.`;
+  const workspaceLabel = app.formatShortCwd(Math.max(10, mainW - 8));
+  const summaryDetails = settings.quietStartup ? [] : [
+    { label: "Providers", value: app.detectedProviders.length > 0 ? app.detectedProviders.join(", ") : "No providers detected yet" },
+    { label: "Workspace", value: `${existsSync(join(process.cwd(), "AGENTS.md")) ? "AGENTS loaded" : "No AGENTS.md"} · ${enabledExtensions} ext · ${skillCount} skills · ${promptTemplates} prompts · ${packageCount} pkg` },
+  ];
+  const quickActions = [
+    { label: "Start", value: app.modelName === "none" ? "/model to choose a model" : "Type a prompt and press enter" },
+    { label: "Resume", value: "/resume to reopen an older session" },
+    { label: "Tune", value: "/settings to adjust the TUI and workflow" },
   ];
   return buildRenderHomeView({
     mainW,
     topHeight,
     fullMascot: app.renderMascotInline(),
-    modelLabel: app.modelName === "none" ? "Pick one with /model" : getPrettyModelName(app.modelName, app.modelProviderId),
+    modelLabel,
+    modelStatus,
     appVersion: app.appVersion,
-    homeTip: settings.quietStartup ? "" : app.homeTip,
-    inventoryDetails,
+    workspaceLabel,
+    summaryDetails,
+    quickActions: settings.quietStartup ? quickActions.slice(0, 1) : quickActions,
     formatShortCwd: (maxWidth) => app.formatShortCwd(maxWidth),
     wrapHomeDetail: (label, value, width) => app.wrapHomeDetail(label, value, width),
     renderHomeBox: (width, title, body) => app.renderHomeBox(width, title, body),
@@ -316,28 +328,33 @@ export function renderUpdateBanner(app: AppState, width: number): string[] {
 }
 
 export function buildSidebarLines(app: AppState): string[] {
+  const chatModelLabel = getPrettyModelName(app.modelName, app.modelProviderId);
   const resolveSlotLabel = (slot: "default" | "small" | "btw" | "review" | "planning" | "ui" | "architecture"): string => {
     const configured = getConfiguredModelPreference(slot);
-    if (!configured) return getPrettyModelName(app.modelName, app.modelProviderId);
+    if (!configured) return chatModelLabel;
     const slashIndex = configured.indexOf("/");
     const providerId = slashIndex > 0 ? configured.slice(0, slashIndex) : app.modelProviderId;
     const modelId = slashIndex > 0 ? configured.slice(slashIndex + 1) : configured;
     if (!supportsProviderModel(providerId, modelId)) return "unset";
     return getPrettyModelName(modelId, providerId);
   };
+  const roleModels = [
+    { label: "Fast", value: resolveSlotLabel("small") },
+    { label: "BTW", value: resolveSlotLabel("btw") },
+    { label: "Review", value: resolveSlotLabel("review") },
+    { label: "Planning", value: resolveSlotLabel("planning") },
+    { label: "Design/UI", value: resolveSlotLabel("ui") },
+    { label: "Architecture", value: resolveSlotLabel("architecture") },
+  ].filter((slot) => slot.value !== "unset" && slot.value !== chatModelLabel);
   return composeSidebarLines({
     width: app.screen.sidebarWidth,
     sessionName: app.sessionName,
     appVersion: app.appVersion,
-    modelSlots: [
-      { label: "Chat", value: getPrettyModelName(app.modelName, app.modelProviderId) },
-      { label: "Fast", value: resolveSlotLabel("small") },
-      { label: "BTW", value: resolveSlotLabel("btw") },
-      { label: "Review", value: resolveSlotLabel("review") },
-      { label: "Planning", value: resolveSlotLabel("planning") },
-      { label: "Design/UI", value: resolveSlotLabel("ui") },
-      { label: "Architecture", value: resolveSlotLabel("architecture") },
+    sessionDetails: [
+      { label: "Chat model", value: chatModelLabel },
+      { label: "Mode", value: `${app.mode} · ${app.modelRuntime}` },
     ],
+    roleModels,
     mcpConnections: app.mcpConnections,
     shortCwd: app.formatShortCwd(Math.max(4, app.screen.sidebarWidth - 2)),
     gitBranch: app.gitBranch,

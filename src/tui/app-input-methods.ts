@@ -252,7 +252,11 @@ export function handleKey(app: AppState, key: Keypress): void {
     return;
   }
 
-  if (app.filePicker && !shouldKeepFilePickerOpen(app)) {
+  const shouldPreserveFilePickerForPointerEvent =
+    key.name === "scrollup"
+    || key.name === "scrolldown"
+    || key.name === "click";
+  if (app.filePicker && !shouldPreserveFilePickerForPointerEvent && !shouldKeepFilePickerOpen(app)) {
     app.filePicker = null;
   }
 

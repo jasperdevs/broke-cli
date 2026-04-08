@@ -26,9 +26,11 @@ export function renderHomeView(options: {
   topHeight: number;
   fullMascot: string[];
   modelLabel: string;
+  modelStatus: string;
   appVersion: string;
-  homeTip: string;
-  inventoryDetails: Array<{ label: string; value: string }>;
+  workspaceLabel: string;
+  summaryDetails: Array<{ label: string; value: string }>;
+  quickActions: Array<{ label: string; value: string }>;
   formatShortCwd: (maxWidth: number) => string;
   wrapHomeDetail: (label: string, value: string, width: number) => string[];
   renderHomeBox: (width: number, title: string, body: string[]) => string[];
@@ -37,9 +39,38 @@ export function renderHomeView(options: {
   bold: string;
   reset: string;
 }): string[] {
-  const { mainW, topHeight, fullMascot, modelLabel, appVersion, homeTip, inventoryDetails, formatShortCwd, wrapHomeDetail, renderHomeBox: buildHomeBox, titleColor, textColor, bold, reset } = options;
+  const {
+    mainW,
+    topHeight,
+    fullMascot,
+    modelLabel,
+    modelStatus,
+    appVersion,
+    workspaceLabel,
+    summaryDetails,
+    quickActions,
+    formatShortCwd,
+    wrapHomeDetail,
+    renderHomeBox: buildHomeBox,
+    titleColor,
+    textColor,
+    bold,
+    reset,
+  } = options;
+  if (topHeight <= 0 || mainW < 16) {
+    return [];
+  }
   if (topHeight < 8 || mainW < 24) {
-    return Array.from({ length: Math.max(0, topHeight) }, () => "");
+    const compactWidth = Math.max(12, mainW);
+    const compactBody = [
+      `  ${titleColor}${bold}Welcome${reset} ${textColor}v${appVersion}${reset}`,
+      ...wrapHomeDetail("Model", modelLabel, Math.max(10, compactWidth - 6)),
+      ...wrapHomeDetail("Status", modelStatus, Math.max(10, compactWidth - 6)),
+      ...wrapHomeDetail("Dir", workspaceLabel, Math.max(10, compactWidth - 6)),
+      ...quickActions.slice(0, 1).flatMap((detail) => wrapHomeDetail(detail.label, detail.value, Math.max(10, compactWidth - 6))),
+    ].slice(0, Math.max(2, topHeight - 2));
+    const compact = buildHomeBox(compactWidth, "", compactBody);
+    return compact.slice(0, topHeight);
   }
   const versionText = `v${appVersion}`;
   const boxWidth = Math.max(12, mainW);
@@ -57,13 +88,15 @@ export function renderHomeView(options: {
   const titleWithVersion = `${headerText}  ${versionText}`;
   const titleText = titleWithVersion.length <= rightWidth ? titleWithVersion : headerText;
   const locationText = titleWithVersion.length <= rightWidth ? locationBase : `${locationBase}  ${versionText}`;
+  const quickActionDetails = quickActions.flatMap((detail) => wrapHomeDetail(detail.label, detail.value, rightWidth));
   const heroText = [
     `${titleColor}${bold}${titleText}${reset}`,
     `${textColor}${locationText}${reset}`,
     "",
     ...wrapHomeDetail("Model", modelLabel, rightWidth),
-    ...inventoryDetails.flatMap((detail) => wrapHomeDetail(detail.label, detail.value, rightWidth)),
-    ...wrapHomeDetail("Tip", homeTip, rightWidth),
+    ...wrapHomeDetail("Status", modelStatus, rightWidth),
+    ...summaryDetails.flatMap((detail) => wrapHomeDetail(detail.label, detail.value, rightWidth)),
+    ...(quickActionDetails.length > 0 ? ["", ...quickActionDetails] : []),
   ];
   const heroHeight = Math.max(mascotInline.length, heroText.length);
   const heroLines = Array.from({ length: heroHeight }, (_, index) => {

@@ -341,6 +341,9 @@ export function renderMessageOverlays(options: {
       ? "Thinking..."
       : "Composing...";
     lines.push(`  ${sparkleSpinner(spinnerFrame)} ${shimmerText(label, spinnerFrame)} ${colors.accent}(${statParts.join(" · ")})${colors.reset}`);
+    if (thinkingRequested && !thinkingBuffer && elapsed >= 8000) {
+      lines.push(`  ${colors.dim}${streamingActivitySummary?.trim() || "waiting for first visible event"}${colors.reset}`);
+    }
     lines.push("");
   }
 

@@ -227,9 +227,9 @@ describe("sidebar scrolling", () => {
       app.drawImmediate();
       const output = rendered.map((line) => stripAnsi(line)).join("\n");
       expect(output).toContain("Commands");
-      expect(output).toContain("BTW");
-      expect(output).toContain("Design/UI");
-      expect(output).toContain("v more");
+      expect(output).toContain("Chat model");
+      expect(output).toContain("Mode");
+      expect(output).toContain("Workspace");
       expect(output).not.toContain("same as chat");
       expect(output).not.toContain("Files");
     } finally {
