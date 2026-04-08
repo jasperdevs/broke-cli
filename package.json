@@ -20,6 +20,7 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "test": "vitest run",
+    "test:efficiency": "vitest run test/efficiency-benchmarks.test.ts",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit && node scripts/quality-check.mjs",

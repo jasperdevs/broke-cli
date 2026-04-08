@@ -11,9 +11,8 @@ import type { Keypress } from "../tui/keypress.js";
 import { buildHtmlExport, buildMarkdownExport, formatRelativeMinutes } from "./exports.js";
 import { SessionManager } from "../core/session-manager.js";
 import { getAvailableThinkingLevels, getEffectiveThinkingLevel } from "../ai/thinking.js";
-
-type AnyApp = any;
-type AnyHooks = any;
+import type { ModelHandle } from "../ai/providers.js";
+import type { ExtensionHooks, SlashCommandApp } from "./slash-command-types.js";
 
 type EmptyMenuKind = "extensions" | "resume" | "projects" | "logout" | "templates" | "skills" | "changelog";
 
@@ -30,7 +29,7 @@ function parseRoots(value: string): string[] {
     .filter(Boolean);
 }
 
-export function openEmptyItemMenu(app: AnyApp, title: string, detail: string, kind: EmptyMenuKind): false {
+export function openEmptyItemMenu(app: SlashCommandApp, title: string, detail: string, kind: EmptyMenuKind): false {
   app.openItemPicker(title, [{ id: "__none__", label: "None", detail }], () => {}, {
     closeOnSelect: false,
     kind,
@@ -46,8 +45,8 @@ function listLogoutTargets(): string[] {
 }
 
 export function openSettingsMenu(args: {
-  app: AnyApp;
-  activeModel: any;
+  app: SlashCommandApp;
+  activeModel: ModelHandle | null;
   currentMode: Mode;
   onModeChange: (mode: Mode) => void;
   onSystemPromptChange: (systemPrompt: string) => void;
@@ -169,7 +168,7 @@ export function openSettingsMenu(args: {
   });
 }
 
-export function openExtensionsMenu(app: AnyApp, hooks: AnyHooks): boolean {
+export function openExtensionsMenu(app: SlashCommandApp, hooks: ExtensionHooks): boolean {
   const extensions = listExtensions();
   if (extensions.length === 0) {
     return openEmptyItemMenu(app, "Extensions", "~/.brokecli/extensions is empty", "extensions");
@@ -183,7 +182,7 @@ export function openExtensionsMenu(app: AnyApp, hooks: AnyHooks): boolean {
   return true;
 }
 
-export function openExportMenu(args: { app: AnyApp; session: Session; activeModel: any; currentModelId: string; text: string; }): void {
+export function openExportMenu(args: { app: SlashCommandApp; session: Session; activeModel: ModelHandle | null; currentModelId: string; text: string; }): void {
   const { app, session, activeModel, currentModelId, text } = args;
   const items = [
     { id: "markdown", label: "Markdown", detail: ".md file format" },
@@ -214,7 +213,7 @@ export function openExportMenu(args: { app: AnyApp; session: Session; activeMode
   }, { kind: "export" });
 }
 
-export function openResumeMenu(args: { app: AnyApp; restText: string; onSessionReplace: (session: Session) => void; }): boolean {
+export function openResumeMenu(args: { app: SlashCommandApp; restText: string; onSessionReplace: (session: Session) => void; }): boolean {
   const { app, restText, onSessionReplace } = args;
   if (!getSettings().autoSaveSessions) {
     return openEmptyItemMenu(app, "Resume Session", "session history is off", "resume");
@@ -239,7 +238,7 @@ export function openResumeMenu(args: { app: AnyApp; restText: string; onSessionR
   return true;
 }
 
-export function openProjectsMenu(app: AnyApp, restText: string, onProjectChange: (cwd: string) => void): boolean {
+export function openProjectsMenu(app: SlashCommandApp, restText: string, onProjectChange: (cwd: string) => void): boolean {
   const projects = listProjects(20, restText);
   if (projects.length === 0) {
     return openEmptyItemMenu(app, "Projects", "no saved projects yet", "projects");
@@ -253,7 +252,7 @@ export function openProjectsMenu(app: AnyApp, restText: string, onProjectChange:
   return true;
 }
 
-export async function handleLogoutMenu(args: { app: AnyApp; restText: string; activeModel: any; refreshProviderState: (force?: boolean) => Promise<any>; }): Promise<void> {
+export async function handleLogoutMenu(args: { app: SlashCommandApp; restText: string; activeModel: ModelHandle | null; refreshProviderState: (force?: boolean) => Promise<any>; }): Promise<void> {
   const { app, restText, activeModel, refreshProviderState } = args;
   const executeLogout = async (requestedTarget: string) => {
     const normalized = requestedTarget.trim().toLowerCase();

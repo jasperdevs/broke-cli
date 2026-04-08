@@ -5,25 +5,90 @@ import { buildSidebarFooter } from "./render/sidebar-view.js";
 import { fmtCost, fmtTokens } from "./render/formatting.js";
 import { DIM, RESET, setWindowTitle } from "../utils/ansi.js";
 import { MUTED, OK, P, T, TXT } from "./app-shared.js";
-import type { ModelOption, UpdateNotice } from "./app-types.js";
+import type { BtwBubble, ChatMessage, ModelOption, UpdateNotice } from "./app-types.js";
 import type { ModelRuntime } from "../ai/providers.js";
 
-type AppState = any;
+interface AnimatedValueLike {
+  tick(): void;
+  set(value: number): void;
+  sync(): void;
+  reset(): void;
+  get(): number;
+  getInt(): number;
+}
+
+interface CoreAppState {
+  constructor: { ANIMATION_INTERVAL_MS: number };
+  sessionName?: string;
+  isStreaming: boolean;
+  isCompacting: boolean;
+  btwBubble?: BtwBubble | null;
+  spinnerFrame: number;
+  spinnerTimer: ReturnType<typeof setInterval> | null;
+  animTokens: AnimatedValueLike;
+  animCost: AnimatedValueLike;
+  animStreamTokens: AnimatedValueLike;
+  animContext: AnimatedValueLike;
+  animInputTokens: AnimatedValueLike;
+  animOutputTokens: AnimatedValueLike;
+  draw(): void;
+  drawNow(): void;
+  providerName: string;
+  modelProviderId?: string;
+  modelRuntime?: ModelRuntime;
+  modelName: string;
+  sessionCost: number;
+  sessionInputTokens: number;
+  sessionOutputTokens: number;
+  sessionTokens: number;
+  contextUsed: number;
+  contextTokenCount: number;
+  contextLimitTokens: number;
+  mode: Mode;
+  screen: { sidebarWidth: number };
+  ctrlCCount: number;
+  escPrimed: boolean;
+  escAction: "stop" | "tree" | null;
+  ctrlCTimeout: ReturnType<typeof setTimeout> | null;
+  escTimeout: ReturnType<typeof setTimeout> | null;
+  streamStartTime: number;
+  streamTokens: number;
+  thinkingRequested: boolean;
+  thinkingStartTime: number;
+  thinkingDuration: number;
+  thinkingBuffer: string;
+  toolCallGroups: unknown[];
+  messages: ChatMessage[];
+  msgCacheLines: string[] | null;
+  detectedProviders: string[];
+  appVersion: string;
+  mcpConnections: string[];
+  updateNotice: UpdateNotice | null;
+  invalidateMsgCache(): void;
+  collapseToolCalls(): void;
+  ensureUiSpinner(): void;
+  releaseUiSpinnerIfIdle(): void;
+  getLiveInputTokens(): number;
+  getLiveOutputTokens(): number;
+  getLiveTotalTokens(): number;
+  renderTokenSummaryParts(): string[];
+  getModeAccent(): string;
+}
 
 const WINDOW_TITLE_SPINNER = ["·", "✧", "✦", "✧"];
 
-function formatWindowTitle(app: AppState): string {
+function formatWindowTitle(app: CoreAppState): string {
   const baseName = (app.sessionName?.trim?.() || "broke-cli").replace(/\s+/g, " ").trim();
   if (!app.isStreaming && !app.isCompacting && !app.btwBubble?.pending) return baseName;
   const spinner = WINDOW_TITLE_SPINNER[app.spinnerFrame % WINDOW_TITLE_SPINNER.length] ?? WINDOW_TITLE_SPINNER[0];
   return `${spinner} ${baseName}`;
 }
 
-export function refreshWindowTitle(app: AppState): void {
+export function refreshWindowTitle(app: CoreAppState): void {
   setWindowTitle(formatWindowTitle(app));
 }
 
-export function ensureUiSpinner(app: AppState): void {
+export function ensureUiSpinner(app: CoreAppState): void {
   if (app.spinnerTimer) return;
   app.spinnerTimer = setInterval(() => {
     app.spinnerFrame++;
@@ -36,18 +101,18 @@ export function ensureUiSpinner(app: AppState): void {
   }, app.constructor.ANIMATION_INTERVAL_MS);
 }
 
-export function releaseUiSpinnerIfIdle(app: AppState): void {
+export function releaseUiSpinnerIfIdle(app: CoreAppState): void {
   if (app.isStreaming || app.isCompacting || app.btwBubble?.pending) return;
   if (!app.spinnerTimer) return;
   clearInterval(app.spinnerTimer);
   app.spinnerTimer = null;
 }
 
-export function invalidateMsgCache(app: AppState): void {
+export function invalidateMsgCache(app: CoreAppState): void {
   app.msgCacheLines = null;
 }
 
-export function setModel(app: AppState, provider: string, model: string, meta?: { providerId?: string; runtime?: ModelRuntime }): void {
+export function setModel(app: CoreAppState, provider: string, model: string, meta?: { providerId?: string; runtime?: ModelRuntime }): void {
   app.providerName = provider;
   if (meta?.providerId) app.modelProviderId = meta.providerId;
   if (meta?.runtime) app.modelRuntime = meta.runtime;
@@ -58,7 +123,7 @@ export function setModel(app: AppState, provider: string, model: string, meta?: 
   app.draw();
 }
 
-export function updateUsage(app: AppState, cost: number, inputTokens: number, outputTokens: number): void {
+export function updateUsage(app: CoreAppState, cost: number, inputTokens: number, outputTokens: number): void {
   app.sessionCost = cost;
   app.sessionInputTokens = inputTokens;
   app.sessionOutputTokens = outputTokens;
@@ -76,7 +141,7 @@ export function updateUsage(app: AppState, cost: number, inputTokens: number, ou
   app.draw();
 }
 
-export function resetCost(app: AppState): void {
+export function resetCost(app: CoreAppState): void {
   app.sessionCost = 0;
   app.sessionInputTokens = 0;
   app.sessionOutputTokens = 0;
@@ -93,19 +158,19 @@ export function resetCost(app: AppState): void {
   app.draw();
 }
 
-export function getLiveInputTokens(app: AppState): number {
+export function getLiveInputTokens(app: CoreAppState): number {
   return app.animInputTokens.getInt();
 }
 
-export function getLiveOutputTokens(app: AppState): number {
+export function getLiveOutputTokens(app: CoreAppState): number {
   return app.animOutputTokens.getInt() + (app.isStreaming ? app.animStreamTokens.getInt() : 0);
 }
 
-export function getLiveTotalTokens(app: AppState): number {
+export function getLiveTotalTokens(app: CoreAppState): number {
   return app.getLiveInputTokens() + app.getLiveOutputTokens();
 }
 
-export function renderTokenSummaryParts(app: AppState): string[] {
+export function renderTokenSummaryParts(app: CoreAppState): string[] {
   const total = app.getLiveTotalTokens();
   const parts: string[] = [];
   if (getSettings().showCost) {
@@ -117,16 +182,16 @@ export function renderTokenSummaryParts(app: AppState): string[] {
   return parts;
 }
 
-export function getModeAccent(app: AppState): string {
+export function getModeAccent(app: CoreAppState): string {
   return app.mode === "plan" ? P() : T();
 }
 
-function shouldHideSidebarFooter(app: AppState): boolean {
+function shouldHideSidebarFooter(app: CoreAppState): boolean {
   void app;
   return false;
 }
 
-export function renderSidebarFooter(app: AppState): string[] {
+export function renderSidebarFooter(app: CoreAppState): string[] {
   const settings = getSettings();
   if (shouldHideSidebarFooter(app)) return [];
   const width = app.screen.sidebarWidth;
@@ -163,7 +228,7 @@ export function renderSidebarFooter(app: AppState): string[] {
   });
 }
 
-export function clearInterruptPrompt(app: AppState): void {
+export function clearInterruptPrompt(app: CoreAppState): void {
   app.ctrlCCount = 0;
   app.escPrimed = false;
   app.escAction = null;
@@ -173,7 +238,7 @@ export function clearInterruptPrompt(app: AppState): void {
   app.escTimeout = null;
 }
 
-export function primeCtrlCExit(app: AppState): void {
+export function primeCtrlCExit(app: CoreAppState): void {
   app.escPrimed = false;
   app.escAction = null;
   app.ctrlCCount = 1;
@@ -186,7 +251,7 @@ export function primeCtrlCExit(app: AppState): void {
   app.draw();
 }
 
-function primeEscapeAction(app: AppState, action: "stop" | "tree"): void {
+function primeEscapeAction(app: CoreAppState, action: "stop" | "tree"): void {
   app.ctrlCCount = 0;
   app.escPrimed = true;
   app.escAction = action;
@@ -200,15 +265,15 @@ function primeEscapeAction(app: AppState, action: "stop" | "tree"): void {
   app.drawNow?.();
 }
 
-export function primeEscapeAbort(app: AppState): void {
+export function primeEscapeAbort(app: CoreAppState): void {
   primeEscapeAction(app, "stop");
 }
 
-export function primeEscapeTree(app: AppState): void {
+export function primeEscapeTree(app: CoreAppState): void {
   primeEscapeAction(app, "tree");
 }
 
-export function setContextUsage(app: AppState, tokens: number, limit: number): void {
+export function setContextUsage(app: CoreAppState, tokens: number, limit: number): void {
   app.contextTokenCount = tokens;
   app.contextLimitTokens = limit;
   app.contextUsed = limit > 0 && tokens >= 0 ? Math.min(100, (tokens / limit) * 100) : 0;
@@ -217,7 +282,7 @@ export function setContextUsage(app: AppState, tokens: number, limit: number): v
   app.draw();
 }
 
-export function setStreaming(app: AppState, streaming: boolean): void {
+export function setStreaming(app: CoreAppState, streaming: boolean): void {
   app.isStreaming = streaming;
   if (!streaming) {
     app.thinkingRequested = false;
@@ -262,25 +327,25 @@ export function setStreaming(app: AppState, streaming: boolean): void {
   else app.draw();
 }
 
-export function setThinkingRequested(app: AppState, requested: boolean): void {
+export function setThinkingRequested(app: CoreAppState, requested: boolean): void {
   app.thinkingRequested = requested;
   if (requested && app.isStreaming && app.thinkingStartTime <= 0) app.thinkingStartTime = Date.now();
   if (!requested && !app.thinkingBuffer) app.thinkingStartTime = 0;
   app.draw();
 }
 
-export function setDetectedProviders(app: AppState, providers: string[]): void { app.detectedProviders = providers; }
-export function setSessionName(app: AppState, name: string): void {
+export function setDetectedProviders(app: CoreAppState, providers: string[]): void { app.detectedProviders = providers; }
+export function setSessionName(app: CoreAppState, name: string): void {
   app.sessionName = name;
   refreshWindowTitle(app);
 }
-export function setVersion(app: AppState, v: string): void { app.appVersion = v; }
-export function setMcpConnections(app: AppState, conns: string[]): void { app.mcpConnections = conns; }
-export function setUpdateNotice(app: AppState, notice: UpdateNotice | null): void {
+export function setVersion(app: CoreAppState, v: string): void { app.appVersion = v; }
+export function setMcpConnections(app: CoreAppState, conns: string[]): void { app.mcpConnections = conns; }
+export function setUpdateNotice(app: CoreAppState, notice: UpdateNotice | null): void {
   app.updateNotice = notice;
   app.draw();
 }
-export function clearUpdateNotice(app: AppState): void {
+export function clearUpdateNotice(app: CoreAppState): void {
   app.updateNotice = null;
   app.draw();
 }
@@ -315,30 +380,30 @@ export interface AppStateCoreMethods {
 }
 
 export const appStateCoreMethods: AppStateCoreMethods = {
-  invalidateMsgCache(this: AppState) { return invalidateMsgCache(this); },
-  setModel(this: AppState, provider: string, model: string, meta?: { providerId?: string; runtime?: ModelRuntime }) { return setModel(this, provider, model, meta); },
-  updateUsage(this: AppState, cost: number, inputTokens: number, outputTokens: number) { return updateUsage(this, cost, inputTokens, outputTokens); },
-  resetCost(this: AppState) { return resetCost(this); },
-  getLiveInputTokens(this: AppState) { return getLiveInputTokens(this); },
-  getLiveOutputTokens(this: AppState) { return getLiveOutputTokens(this); },
-  getLiveTotalTokens(this: AppState) { return getLiveTotalTokens(this); },
-  renderTokenSummaryParts(this: AppState) { return renderTokenSummaryParts(this); },
-  getModeAccent(this: AppState) { return getModeAccent(this); },
-  renderSidebarFooter(this: AppState) { return renderSidebarFooter(this); },
-  clearInterruptPrompt(this: AppState) { return clearInterruptPrompt(this); },
-  primeCtrlCExit(this: AppState) { return primeCtrlCExit(this); },
-  primeEscapeAbort(this: AppState) { return primeEscapeAbort(this); },
-  primeEscapeTree(this: AppState) { return primeEscapeTree(this); },
-  setContextUsage(this: AppState, tokens: number, limit: number) { return setContextUsage(this, tokens, limit); },
-  setStreaming(this: AppState, streaming: boolean) { return setStreaming(this, streaming); },
-  setThinkingRequested(this: AppState, requested: boolean) { return setThinkingRequested(this, requested); },
-  refreshWindowTitle(this: AppState) { return refreshWindowTitle(this); },
-  ensureUiSpinner(this: AppState) { return ensureUiSpinner(this); },
-  releaseUiSpinnerIfIdle(this: AppState) { return releaseUiSpinnerIfIdle(this); },
-  setDetectedProviders(this: AppState, providers: string[]) { return setDetectedProviders(this, providers); },
-  setSessionName(this: AppState, name: string) { return setSessionName(this, name); },
-  setVersion(this: AppState, v: string) { return setVersion(this, v); },
-  setMcpConnections(this: AppState, conns: string[]) { return setMcpConnections(this, conns); },
-  setUpdateNotice(this: AppState, notice: UpdateNotice | null) { return setUpdateNotice(this, notice); },
-  clearUpdateNotice(this: AppState) { return clearUpdateNotice(this); },
+  invalidateMsgCache(this: CoreAppState) { return invalidateMsgCache(this); },
+  setModel(this: CoreAppState, provider: string, model: string, meta?: { providerId?: string; runtime?: ModelRuntime }) { return setModel(this, provider, model, meta); },
+  updateUsage(this: CoreAppState, cost: number, inputTokens: number, outputTokens: number) { return updateUsage(this, cost, inputTokens, outputTokens); },
+  resetCost(this: CoreAppState) { return resetCost(this); },
+  getLiveInputTokens(this: CoreAppState) { return getLiveInputTokens(this); },
+  getLiveOutputTokens(this: CoreAppState) { return getLiveOutputTokens(this); },
+  getLiveTotalTokens(this: CoreAppState) { return getLiveTotalTokens(this); },
+  renderTokenSummaryParts(this: CoreAppState) { return renderTokenSummaryParts(this); },
+  getModeAccent(this: CoreAppState) { return getModeAccent(this); },
+  renderSidebarFooter(this: CoreAppState) { return renderSidebarFooter(this); },
+  clearInterruptPrompt(this: CoreAppState) { return clearInterruptPrompt(this); },
+  primeCtrlCExit(this: CoreAppState) { return primeCtrlCExit(this); },
+  primeEscapeAbort(this: CoreAppState) { return primeEscapeAbort(this); },
+  primeEscapeTree(this: CoreAppState) { return primeEscapeTree(this); },
+  setContextUsage(this: CoreAppState, tokens: number, limit: number) { return setContextUsage(this, tokens, limit); },
+  setStreaming(this: CoreAppState, streaming: boolean) { return setStreaming(this, streaming); },
+  setThinkingRequested(this: CoreAppState, requested: boolean) { return setThinkingRequested(this, requested); },
+  refreshWindowTitle(this: CoreAppState) { return refreshWindowTitle(this); },
+  ensureUiSpinner(this: CoreAppState) { return ensureUiSpinner(this); },
+  releaseUiSpinnerIfIdle(this: CoreAppState) { return releaseUiSpinnerIfIdle(this); },
+  setDetectedProviders(this: CoreAppState, providers: string[]) { return setDetectedProviders(this, providers); },
+  setSessionName(this: CoreAppState, name: string) { return setSessionName(this, name); },
+  setVersion(this: CoreAppState, v: string) { return setVersion(this, v); },
+  setMcpConnections(this: CoreAppState, conns: string[]) { return setMcpConnections(this, conns); },
+  setUpdateNotice(this: CoreAppState, notice: UpdateNotice | null) { return setUpdateNotice(this, notice); },
+  clearUpdateNotice(this: CoreAppState) { return clearUpdateNotice(this); },
 };
