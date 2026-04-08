@@ -10,6 +10,15 @@ import { getSelectedTreeItem, getVisibleTreeRows, moveTreeSelection, pageTreeSel
 
 type AppState = any;
 
+function stripInlineFileChipLabels(app: AppState, text: string): string {
+  let sanitized = text;
+  for (const file of Array.from(app.fileContexts?.keys?.() ?? []) as string[]) {
+    const label = `[${file.split(/[\\/]/).pop() || file}]`;
+    sanitized = sanitized.split(label).join("");
+  }
+  return sanitized.replace(/[ \t]+\n/g, "\n").replace(/[ \t]{2,}/g, " ").trim();
+}
+
 function normalizePastedPath(text: string): string {
   let normalized = text.trim();
   if ((normalized.startsWith('"') && normalized.endsWith('"')) || (normalized.startsWith("'") && normalized.endsWith("'"))) {
@@ -407,7 +416,8 @@ export function handlePaste(app: AppState, text: string): void {
 }
 
 function submitQueuedInput(app: AppState, delivery: "steering" | "followup"): void {
-  const text = app.input.submit();
+  const rawText = app.input.submit();
+  const text = stripInlineFileChipLabels(app, rawText);
   if (!app.pendingImages.length && tryLoadImageFromPath(app, text.trim())) {
     app.draw();
     return;

@@ -214,6 +214,29 @@ describe("image attachments", () => {
     expect(app.pendingImages).toHaveLength(0);
   });
 
+  it("inserts selected @ files inline instead of pinning them to the prompt prefix", () => {
+    const app = new App() as any;
+    app.filePicker = { files: ["AGENTS.md"], filtered: ["AGENTS.md"], query: "AG", cursor: 0 };
+    app.input.setText("check @AG");
+
+    app.selectFileEntry(0);
+
+    expect(app.input.getText()).toBe("check [AGENTS.md] ");
+    expect(app.fileContexts.has("AGENTS.md")).toBe(true);
+  });
+
+  it("strips inline @ chip labels before submit while keeping file context", () => {
+    const app = new App() as any;
+    let submitted = "";
+    app.onSubmit = (text: string) => { submitted = text; };
+    app.fileContexts.set("AGENTS.md", "# Project Instructions");
+    app.input.setText("check [AGENTS.md] now");
+
+    app.handleKey({ name: "return", char: "", ctrl: false, meta: false, shift: false });
+
+    expect(submitted).toBe("check now");
+  });
+
   it("submits image-only prompts instead of dropping the attachment", () => {
     const app = new App() as any;
     let submitted: { text: string; images?: Array<{ mimeType: string; data: string }> } | null = null;

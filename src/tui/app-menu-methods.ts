@@ -3,7 +3,7 @@ import { getSettings } from "../core/config.js";
 import { currentTheme } from "../core/themes.js";
 import { filterFiles, readFileForContext } from "./file-picker.js";
 import type { Keypress } from "./keypress.js";
-import { BOLD, RESET } from "../utils/ansi.js";
+import { BOLD, RESET, bg, fg } from "../utils/ansi.js";
 import { DIM } from "../utils/ansi.js";
 import { visibleWidth } from "../utils/terminal-width.js";
 import { MUTED, TXT } from "./app-shared.js";
@@ -25,10 +25,12 @@ import {
 } from "./app-menu-entries.js";
 type AppState = any;
 
+function getFileChipLabel(file: string): string {
+  return `[${file.split(/[\\/]/).pop() || file}]`;
+}
+
 function getComposerAttachmentTokens(app: AppState): string[] {
-  const fileContextKeys = Array.from(app.fileContexts.keys()) as string[];
   return [
-    ...fileContextKeys.map((file) => `[${file.split(/[\\/]/).pop() || file}]`),
     ...((getSettings().terminal.showImages && app.pendingImages)
       ? app.pendingImages.map((_: unknown, index: number) => `[Image #${index + 1}]`)
       : []),
@@ -39,9 +41,22 @@ function renderAttachmentChip(token: string): string {
   return `${currentTheme().imageTagBg}${BOLD}${TXT()}${token}${RESET}`;
 }
 
+function renderFileChip(token: string): string {
+  return `${bg(245, 245, 245)}${fg(16, 16, 16)}${BOLD}${token}${RESET}`;
+}
+
+function styleInlineFileChips(app: AppState, line: string): string {
+  let output = line;
+  for (const file of Array.from(app.fileContexts.keys()) as string[]) {
+    const label = getFileChipLabel(file);
+    output = output.split(label).join(renderFileChip(label));
+  }
+  return output;
+}
+
 function styleComposerLine(app: AppState, line: string): string {
   const tokens = getComposerAttachmentTokens(app);
-  if (tokens.length === 0) return line;
+  if (tokens.length === 0) return styleInlineFileChips(app, line);
   let remaining = line;
   let leading = "";
   while (remaining.startsWith(" ")) {
@@ -60,7 +75,7 @@ function styleComposerLine(app: AppState, line: string): string {
       remaining = remaining.slice(1);
     }
   }
-  return matchedAny ? `${built}${remaining}` : line;
+  return styleInlineFileChips(app, matchedAny ? `${built}${remaining}` : line);
 }
 
 function getComposerSourceLines(app: AppState, text: string): string[] {
@@ -392,8 +407,11 @@ export function selectFileEntry(app: AppState, index: number): void {
   app.filePicker.cursor = index;
   const text = app.input.getText();
   const atIdx = text.lastIndexOf("@");
+  const label = `${getFileChipLabel(selected)} `;
   if (atIdx >= 0) {
-    app.input.setText(text.slice(0, atIdx), true);
+    app.input.setText(`${text.slice(0, atIdx)}${label}`, true);
+  } else {
+    app.input.setText(`${text}${label}`, true);
   }
   const content = readFileForContext(app.cwd, selected);
   app.fileContexts.set(selected, content);
