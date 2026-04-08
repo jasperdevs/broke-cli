@@ -42,4 +42,15 @@ describe("thinking and input regressions", () => {
     expect(output).toContain("Composing...");
     app.setStreaming(false);
   });
+
+  it("stages the synthetic activity summary during long-running turns", () => {
+    const app = new App() as any;
+    app.messages = [{ role: "assistant", content: "working" }];
+    app.setStreamingActivitySummary("planning changes to index.html");
+    app.setStreaming(true);
+    app.streamStartTime = Date.now() - 9000;
+    const output = app.renderMessages(60).map((line: string) => stripAnsi(line)).join("\n");
+    expect(output).toContain("planning changes to index.html · checking details");
+    app.setStreaming(false);
+  });
 });

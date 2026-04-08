@@ -79,6 +79,13 @@ function deriveStreamingActivitySummary(text: string, archetype: string): string
   }
 }
 
+export function buildTouchedFilesEvidence(touched: string[]): string | null {
+  const files = touched.filter(Boolean).slice(0, 4);
+  if (files.length === 0) return null;
+  const suffix = touched.length > files.length ? ` (+${touched.length - files.length} more)` : "";
+  return `Changed files: ${files.join(", ")}${suffix}`;
+}
+
 export async function runModelTurn(options: {
   app: TurnRunnerApp;
   session: Session;
@@ -184,7 +191,9 @@ export async function runModelTurn(options: {
       : null;
     const outcome = await executeTurn(turnOptions);
     if (activeModel.runtime === "native-cli" && outcome.completion === "success") {
-      recordNativeWorkspaceDelta(session, baseline);
+      const touched = recordNativeWorkspaceDelta(session, baseline);
+      const evidence = !outcome.toolActivity ? buildTouchedFilesEvidence(touched) : null;
+      if (evidence) app.addMessage("system", evidence);
     }
     return outcome;
   };

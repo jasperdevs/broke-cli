@@ -78,6 +78,12 @@ function summarizeHiddenThinking(thinkingBuffer: string, isStreaming: boolean): 
   return isStreaming ? `Thinking... ${summary}` : `Reasoned through ${summary}`;
 }
 
+function formatStreamingActivitySummary(summary: string, elapsedSeconds: number): string {
+  if (elapsedSeconds >= 18) return `${summary} · still running`;
+  if (elapsedSeconds >= 8) return `${summary} · checking details`;
+  return summary;
+}
+
 function compactPreview(text: string, maxLength = 88): string {
   const normalized = text.replace(/\s+/g, " ").trim();
   return normalized.length <= maxLength ? normalized : `${normalized.slice(0, maxLength - 3)}...`;
@@ -311,7 +317,8 @@ export function renderMessageOverlays(options: {
 
   if (isStreaming && !thinkingBuffer && streamingActivitySummary) {
     ensureOverlayGap(lines);
-    lines.push(`  ${colors.dim}Working: ${streamingActivitySummary}${colors.reset}`);
+    const elapsedSeconds = Math.max(0, Math.floor((Date.now() - streamStartTime) / 1000));
+    lines.push(`  ${colors.dim}Working: ${formatStreamingActivitySummary(streamingActivitySummary, elapsedSeconds)}${colors.reset}`);
     lines.push("");
   }
 
