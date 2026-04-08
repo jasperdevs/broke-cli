@@ -59,8 +59,8 @@ describe("caveman mode resolution", () => {
     updateSetting("cavemanLevel", "off");
   });
 
-  it("defaults caveman to auto", () => {
-    expect(DEFAULT_SETTINGS.cavemanLevel).toBe("auto");
+  it("defaults caveman to ultra", () => {
+    expect(DEFAULT_SETTINGS.cavemanLevel).toBe("ultra");
   });
 
   it("rewrites verbose assistant prose into obvious caveman output", () => {

@@ -104,6 +104,48 @@ describe("system prompt", () => {
     expect(addendum).toContain("verify the records match");
   });
 
+  it("adds direct-edit rules for explicit single-file patches", () => {
+    const addendum = buildTaskExecutionAddendum(
+      'Update src/app.js so greeting() returns exactly "Hello there!" and do not touch any other files.',
+    );
+
+    expect(addendum).toContain("Direct-edit rule");
+    expect(addendum).toContain("read only the named file");
+    expect(addendum).toContain("Do not inspect unrelated files");
+    expect(addendum).toContain("Do not inspect unrelated files, run tests, or use shell");
+  });
+
+  it("adds rename rules for repo-wide symbol renames", () => {
+    const addendum = buildTaskExecutionAddendum(
+      "Rename sumNumbers to addNumbers across this repo and keep behavior unchanged everywhere.",
+    );
+
+    expect(addendum).toContain("Rename rule");
+    expect(addendum).toContain("do one search for the old symbol");
+    expect(addendum).toContain("patch only the matches");
+    expect(addendum).toContain("Do not run shell");
+  });
+
+  it("adds test-writing rules that avoid unnecessary test runs", () => {
+    const addendum = buildTaskExecutionAddendum(
+      "Write node:test coverage in test/flags.test.js for src/flags.js.",
+    );
+
+    expect(addendum).toContain("Test-writing rule");
+    expect(addendum).toContain("read the source file once");
+    expect(addendum).toContain("Do not run tests or shell");
+  });
+
+  it("adds read-only answer rules for exploration prompts", () => {
+    const addendum = buildTaskExecutionAddendum(
+      "Without changing any files, tell me which file defines parseConfig and which file imports it. Answer in one sentence.",
+    );
+
+    expect(addendum).toContain("Read-only answer rule");
+    expect(addendum).toContain("smallest lookup");
+    expect(addendum).toContain("Do not edit files");
+  });
+
   it("does not add server rules for ordinary file edits", () => {
     expect(buildTaskExecutionAddendum("Rename this setting and update the docs")).toBe("");
   });

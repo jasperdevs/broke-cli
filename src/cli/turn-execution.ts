@@ -11,8 +11,10 @@ import type { ToolName } from "../tools/registry.js";
 import { setActiveToolContext } from "../tools/runtime-context.js";
 import {
   buildToolPreview,
+  buildMinimalOutputInstruction,
   canUseSdkTools,
   formatTurnErrorMessage,
+  getMinimalOutputPolicy,
   looksLikeRawToolPayload,
   resolveExecutionTarget,
   shouldEnforceToolFirstTurn,
@@ -24,6 +26,7 @@ import { sendResponseNotification } from "./notify.js";
 import type { SpecialistModelRole } from "./model-routing.js";
 import { applyTurnFrame } from "./turn-frame.js";
 import { injectTransientUserContext } from "./turn-runner-stages.js";
+import { createStreamTokenTracker } from "./stream-token-tracker.js";
 type PendingDelivery = "steering" | "followup";
 
 interface TurnExecutionApp {
@@ -49,31 +52,6 @@ interface TurnExecutionApp {
 
 interface ExtensionHooks { emit(event: string, payload: Record<string, unknown>): void; }
 const MAX_TOOL_RESULT_SERIALIZED_CHARS = 6000;
-
-function createStreamTokenTracker(
-  app: TurnExecutionApp,
-  executionModelId: string,
-  getText: () => string,
-): {
-  schedule: () => void;
-  flush: () => void;
-} {
-  let streamTokenFlushTimer: ReturnType<typeof setTimeout> | null = null;
-  return {
-    schedule: () => {
-      if (streamTokenFlushTimer) return;
-      streamTokenFlushTimer = setTimeout(() => {
-        streamTokenFlushTimer = null;
-        app.setStreamTokens(estimateTextTokens(getText(), executionModelId));
-      }, 80);
-    },
-    flush: () => {
-      if (streamTokenFlushTimer) clearTimeout(streamTokenFlushTimer);
-      streamTokenFlushTimer = null;
-      app.setStreamTokens(estimateTextTokens(getText(), executionModelId));
-    },
-  };
-}
 function resolveTurnExecution(options: {
   text: string;
   policy: TurnPolicy;
@@ -261,6 +239,14 @@ export async function executeTurn(options: {
   let steeringInterruptRequested = false;
   const exposedToolCount = canUseSdkTools(executionModel) ? policy.allowedTools.length : 0;
   const effectiveCavemanLevel = resolveCavemanLevel(settings.cavemanLevel ?? "auto", text);
+  const minimalOutputPolicy = getMinimalOutputPolicy({ text, policy });
+
+  if (minimalOutputPolicy) {
+    turnSystemPrompt += `\n\n${buildMinimalOutputInstruction({
+      archetype: policy.archetype,
+      maxChars: minimalOutputPolicy.maxChars,
+    })}`;
+  }
 
   app.onAbortRequest(() => {
     abortController?.abort();
@@ -276,7 +262,7 @@ export async function executeTurn(options: {
 
   let completion: "success" | "empty" | "error" | "insufficient" = "success";
   let errorMessage: string | undefined;
-  const streamTokenTracker = createStreamTokenTracker(app, executionModelId, () => streamedText + streamedReasoning);
+  const streamTokenTracker = createStreamTokenTracker(app.setStreamTokens.bind(app), executionModelId, () => streamedText + streamedReasoning);
   let nextActivityTime = Date.now();
   app.setThinkingRequested(thinkingRequested);
   setActiveToolContext({
@@ -401,6 +387,9 @@ export async function executeTurn(options: {
         enableThinking: resolvedRoute === "main" ? getSettings().enableThinking : false,
         thinkingLevel: getSettings().thinkingLevel || "low",
         cwd: process.cwd(),
+        structuredFinalResponse: executionModel.provider.id === "codex" && minimalOutputPolicy
+          ? { maxChars: minimalOutputPolicy.maxChars }
+          : null,
       }, streamCallbacks);
     } else {
       await startStream({
@@ -416,6 +405,7 @@ export async function executeTurn(options: {
         enableThinking: thinkingRequested,
         thinkingLevel: getSettings().thinkingLevel || "low",
         maxToolSteps: policy.maxToolSteps,
+        maxOutputTokens: minimalOutputPolicy?.maxOutputTokens,
       }, {
         ...streamCallbacks,
         onToolCallStart: (name) => {

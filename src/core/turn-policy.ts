@@ -64,8 +64,8 @@ const STATIC_SCAFFOLDS: Record<TurnArchetype, string> = {
   question: "lane direct\nanswer first\nuse tools only if clearly needed\nfinal one short answer",
   explore: "lane cheap\nsearch first\nread only what matches\nanswer only what was asked",
   shell: "lane cheap\nprefer native read/search tools\nuse shell only for real commands\nfinal one short answer",
-  edit: "lane main\nread targets first\nmake the smallest correct edit\nverify once\nfinal two short lines",
-  bugfix: "lane main\nfind root cause from evidence\npatch once\nverify narrowly\nfinal two short lines",
+  edit: "lane main\nread only needed targets\npatch once\nno shell unless req needs it\nfinal one short line",
+  bugfix: "lane main\nread target\npatch once\nno shell unless req needs it\nfinal one short line",
   review: "lane cheap\nstay read-only\nreport concrete issues ordered by severity\nno recap",
   research: "lane cheap\nprefer docs plus local evidence\nreturn verified facts only\nkeep it short",
   planning: "lane cheap\nproduce bounded steps risks and checks\nno long prose",
@@ -206,7 +206,8 @@ function hasCreateIntent(userMessage: string): boolean {
 }
 
 function needsShellCapability(userMessage: string): boolean {
-  return /\b(test|tests|build|lint|compile|run|execute|command|npm|pnpm|yarn|bun|git|install|serve|start)\b/i.test(userMessage);
+  return /\b(failing|broken|red)\s+tests?\b/i.test(userMessage)
+    || /\b(run|rerun|execute|verify|check|pass(?:es|ing)?|build|lint|compile|command|npm|pnpm|yarn|bun|git|install|serve|start)\b/i.test(userMessage);
 }
 
 function refinePolicyForRequest(policy: TurnPolicy, userMessage: string): TurnPolicy {

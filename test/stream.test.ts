@@ -36,7 +36,7 @@ vi.mock("../src/core/config.js", () => ({
     notifyOnResponse: false,
     enableThinking: false,
     thinkingLevel: "off",
-    cavemanLevel: "auto",
+    cavemanLevel: "ultra",
     memoizeToolResults: true,
     modelGeneratedSessionNames: false,
     autoFixValidation: false,
@@ -123,6 +123,25 @@ describe("stream tool steps", () => {
 
     expect(stepCountIsMock).toHaveBeenCalledWith(2);
     expect(streamTextMock).toHaveBeenCalled();
+  });
+
+  it("passes a hard max output budget when requested", async () => {
+    await startStream({
+      model: {} as any,
+      modelId: "test",
+      system: "sys",
+      messages: [{ role: "user", content: "hi" }],
+      maxOutputTokens: 64,
+    }, {
+      onText: () => {},
+      onReasoning: () => {},
+      onFinish: () => {},
+      onError: () => {},
+    });
+
+    expect(streamTextMock).toHaveBeenCalledWith(expect.objectContaining({
+      maxOutputTokens: 64,
+    }));
   });
 
   it("suppresses plain planning narration before edit-tool work starts", async () => {

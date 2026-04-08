@@ -61,6 +61,27 @@ const DATA_CONVERSION_PATTERNS = [
   /\bdataframe\b/i,
 ];
 
+const SINGLE_FILE_PATCH_PATTERNS = [
+  /\b(update|edit|change|fix)\b/i,
+  /\bdo not touch any other files\b/i,
+];
+
+const SYMBOL_RENAME_PATTERNS = [
+  /\brename\b/i,
+  /\beverywhere\b/i,
+];
+
+const TEST_WRITING_PATTERNS = [
+  /\bwrite\b.*\btest/i,
+  /\bnode:test\b/i,
+  /\btest\/[A-Za-z0-9_.-]+\b/i,
+];
+
+const READ_ONLY_ANSWER_PATTERNS = [
+  /\bwithout changing any files\b/i,
+  /\banswer in one sentence\b/i,
+];
+
 export function buildTaskExecutionAddendum(userMessage: string): string {
   const text = userMessage.trim();
   if (!text) return "";
@@ -115,6 +136,34 @@ export function buildTaskExecutionAddendum(userMessage: string): string {
       "A correct minimal shape is: `df = pd.read_csv(source)` followed by `df.to_parquet(output)` and then the same two pandas reads plus `assert_frame_equal(...)` for verification.",
       "Do not fall back to JavaScript parquet libraries if they coerce numeric columns into strings or bigint wrappers on round-trip.",
       "Before you finish, reopen both the source and output files and verify the records match, not just that the output file exists.",
+    );
+  }
+
+  if (SINGLE_FILE_PATCH_PATTERNS.every((pattern) => pattern.test(text)) && /\b[A-Za-z0-9_./-]+\.[A-Za-z0-9]+\b/.test(text)) {
+    rules.push(
+      "Direct-edit rule: read only the named file, apply the exact requested patch, and stop.",
+      "Do not inspect unrelated files, run tests, or use shell unless the request explicitly requires it or the file content is ambiguous.",
+    );
+  }
+
+  if (SYMBOL_RENAME_PATTERNS.every((pattern) => pattern.test(text))) {
+    rules.push(
+      "Rename rule: do one search for the old symbol, patch only the matches, and stop when no references remain.",
+      "Prefer exact targeted edits over rewrites. Do not run shell unless the request explicitly asks for verification.",
+    );
+  }
+
+  if (TEST_WRITING_PATTERNS.some((pattern) => pattern.test(text))) {
+    rules.push(
+      "Test-writing rule: read the source file once, write the requested test file, and stop.",
+      "Do not run tests or shell unless the user explicitly asks, or the source behavior is unclear from direct inspection.",
+    );
+  }
+
+  if (READ_ONLY_ANSWER_PATTERNS.some((pattern) => pattern.test(text))) {
+    rules.push(
+      "Read-only answer rule: use the smallest lookup that answers the question, then reply with the answer only.",
+      "Do not edit files. Do not add extra explanation beyond the requested answer shape.",
     );
   }
 

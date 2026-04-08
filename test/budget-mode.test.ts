@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { getTurnPolicy } from "../src/core/turn-policy.js";
 import { Session } from "../src/core/session.js";
 import { buildAggregateBudgetReport, buildBudgetReport, renderBudgetDashboard, summarizeBudgetMetrics } from "../src/core/budget-insights.js";
+import { getMinimalOutputPolicy } from "../src/cli/turn-runner-support.js";
 
 describe("turn policy", () => {
   it("routes casual greetings onto a no-tool lightweight policy", () => {
@@ -33,10 +34,29 @@ describe("turn policy", () => {
     expect(policy.promptProfile).toBe("edit");
   });
 
+  it("does not expose bash just because a test framework name appears", () => {
+    const policy = getTurnPolicy("Write node:test coverage in test/flags.test.js for src/flags.js.");
+    expect(policy.allowedTools).not.toContain("bash");
+  });
+
   it("drops writeFile for existing-file edit requests to enforce patch-first behavior", () => {
     const policy = getTurnPolicy("update README.md to explain the new budget report");
     expect(policy.allowedTools).toContain("editFile");
     expect(policy.allowedTools).not.toContain("writeFile");
+  });
+
+  it("uses tighter minimal-output caps for normal edit and explore turns", () => {
+    const editPolicy = getTurnPolicy("fix src/range.js so the bounds are inclusive");
+    const explorePolicy = getTurnPolicy("Without changing any files, tell me which file defines parseConfig.");
+
+    expect(getMinimalOutputPolicy({ text: "fix src/range.js so the bounds are inclusive", policy: editPolicy })).toEqual({
+      maxChars: 80,
+      maxOutputTokens: 96,
+    });
+    expect(getMinimalOutputPolicy({ text: "Without changing any files, tell me which file defines parseConfig.", policy: explorePolicy })).toEqual({
+      maxChars: 72,
+      maxOutputTokens: 64,
+    });
   });
 });
 

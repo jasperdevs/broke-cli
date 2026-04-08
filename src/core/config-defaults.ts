@@ -20,7 +20,7 @@ export const DEFAULT_SETTINGS: Settings = {
   lastModel: "",
   mode: "build",
   modeSwitching: "auto",
-  cavemanLevel: "auto",
+  cavemanLevel: "ultra",
   autoLint: false,
   autoTest: false,
   autoFixValidation: false,

@@ -11,6 +11,7 @@ import type { ProviderRegistry } from "../ai/provider-registry.js";
 import type { ModelHandle } from "../ai/providers.js";
 import { tryCsvToParquetFastPath, tryLostGitRecoveryFastPath } from "./oneshot-fastpath.js";
 import { applyTurnFrame } from "./turn-frame.js";
+import { buildMinimalOutputInstruction, getMinimalOutputPolicy } from "./turn-runner-support.js";
 
 function canUseSdkTools(model: ModelHandle): boolean {
   return model.runtime === "sdk"
@@ -116,11 +117,18 @@ export async function runOneShotPrompt(options: {
     resolveCavemanLevel(getSettings().cavemanLevel ?? "auto", prompt),
     policy.promptProfile,
   );
-  const systemPrompt = opts.systemPrompt
+  let systemPrompt = opts.systemPrompt
     ? opts.systemPrompt
     : opts.appendSystemPrompt
       ? `${baseSystemPrompt}\n\n${opts.appendSystemPrompt}`
       : baseSystemPrompt;
+  const minimalOutputPolicy = getMinimalOutputPolicy({ text: prompt, policy });
+  if (minimalOutputPolicy) {
+    systemPrompt += `\n\n${buildMinimalOutputInstruction({
+      archetype: policy.archetype,
+      maxChars: minimalOutputPolicy.maxChars,
+    })}`;
+  }
   const baseMessages = policy.historyWindow && session.getChatMessages().length > policy.historyWindow
     ? session.getChatMessages().slice(-policy.historyWindow)
     : session.getChatMessages();
@@ -169,6 +177,9 @@ export async function runOneShotPrompt(options: {
         enableThinking: getSettings().enableThinking,
         thinkingLevel: getSettings().thinkingLevel || "low",
         cwd: process.cwd(),
+        structuredFinalResponse: activeModel.provider.id === "codex" && minimalOutputPolicy
+          ? { maxChars: minimalOutputPolicy.maxChars }
+          : null,
       },
       callbacks,
     );
@@ -181,6 +192,7 @@ export async function runOneShotPrompt(options: {
         messages: turnMessages,
         tools: canUseSdkTools(activeModel) ? tools : undefined,
         maxToolSteps: policy.maxToolSteps,
+        maxOutputTokens: minimalOutputPolicy?.maxOutputTokens,
       },
       callbacks,
     );

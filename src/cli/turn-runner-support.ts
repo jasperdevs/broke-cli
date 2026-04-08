@@ -10,6 +10,16 @@ const SDK_TOOL_PROVIDER_IDS = new Set([
   "openrouter", "ollama", "lmstudio", "llamacpp", "jan", "vllm",
 ]);
 
+const VERBOSE_OUTPUT_PATTERNS = [
+  /\b(explain|why|how\b|walk me through|step by step|detailed|verbose|deep dive|teach me|compare|analy[sz]e|summary|summari[sz]e)\b/i,
+  /\bcode review\b/i,
+];
+
+export interface MinimalOutputPolicy {
+  maxChars: number;
+  maxOutputTokens: number;
+}
+
 export function supportsThinking(model: ModelHandle): boolean {
   return modelSupportsReasoning(model.modelId, model.provider.id);
 }
@@ -146,6 +156,48 @@ export function shouldSuppressPlanningNarration(nextText: string, policy: { arch
     || normalized.startsWith("before editing")
     || normalized.startsWith("before recreating")
     || normalized.startsWith("i need to");
+}
+
+export function shouldForceMinimalResponse(options: {
+  text: string;
+  policy: { archetype: string };
+}): boolean {
+  const { text, policy } = options;
+  if (VERBOSE_OUTPUT_PATTERNS.some((pattern) => pattern.test(text))) return false;
+  if (policy.archetype === "review" || policy.archetype === "planning" || policy.archetype === "research") return false;
+  return true;
+}
+
+export function getMinimalOutputPolicy(options: {
+  text: string;
+  policy: { archetype: string; allowedTools: readonly string[] };
+}): MinimalOutputPolicy | null {
+  const { text, policy } = options;
+  if (!shouldForceMinimalResponse({ text, policy })) return null;
+
+  switch (policy.archetype) {
+    case "casual":
+      return { maxChars: 32, maxOutputTokens: 24 };
+    case "question":
+    case "explore":
+      return { maxChars: 72, maxOutputTokens: policy.allowedTools.length > 0 ? 64 : 40 };
+    case "shell":
+      return { maxChars: 80, maxOutputTokens: 72 };
+    case "edit":
+    case "bugfix":
+      return { maxChars: 80, maxOutputTokens: 96 };
+    default:
+      return { maxChars: 80, maxOutputTokens: 72 };
+  }
+}
+
+export function buildMinimalOutputInstruction(options: {
+  archetype: string;
+  maxChars: number;
+}): string {
+  return options.archetype === "edit" || options.archetype === "bugfix"
+    ? `Final response: plain text only, max ${options.maxChars} chars, no bullets. Format: changed; verify or blocker. No explanation.`
+    : `Final response: plain text only, max ${options.maxChars} chars. Answer only what was asked. No explanation.`;
 }
 
 export function formatTurnErrorMessage(options: {

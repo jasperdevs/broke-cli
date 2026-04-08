@@ -1,6 +1,7 @@
 import { spawn, type SpawnOptionsWithoutStdio } from "child_process";
 import { existsSync } from "fs";
 import { calculateCost, type TokenUsage } from "./cost.js";
+import { getCodexOutputSchemaPath, parseStructuredFinalText } from "./native-output.js";
 import { estimateConversationTokens, estimateTextTokens } from "./tokens.js";
 import { resolveNativeCommand } from "./native-cli.js";
 import { resolveThinkingConfig } from "./thinking.js";
@@ -30,6 +31,7 @@ export interface NativeStreamOptions {
   thinkingLevel?: string;
   cwd?: string;
   denyToolUse?: boolean;
+  structuredFinalResponse?: { maxChars: number } | null;
 }
 
 function formatNativePrompt(system: string, messages: NativeMessage[]): string {
@@ -222,6 +224,10 @@ function buildCodexArgs(opts: NativeStreamOptions): string[] {
     args.push("--add-dir", root);
   }
 
+  if (opts.structuredFinalResponse?.maxChars) {
+    args.push("--output-schema", getCodexOutputSchemaPath(opts.structuredFinalResponse.maxChars));
+  }
+
   return args;
 }
 
@@ -299,6 +305,7 @@ export async function startNativeStream(
     let stdoutBuffer = "";
     let stderrBuffer = "";
     let emittedText = "";
+    let visibleText = "";
     let emittedReasoning = "";
     let finished = false;
     let aborted = false;
@@ -352,7 +359,10 @@ export async function startNativeStream(
         }
         const text = extractCodexItemText(item);
         if ((itemType === "agent_message" || itemType === "message") && text) {
-          emittedText = emitDelta(text, emittedText, callbacks.onText);
+          emittedText = text;
+          if (!opts.structuredFinalResponse) {
+            visibleText = emitDelta(text, visibleText, callbacks.onText);
+          }
         }
         if (itemType.includes("reason") && text) {
           emittedReasoning = emitDelta(text, emittedReasoning, callbacks.onReasoning);
@@ -361,6 +371,11 @@ export async function startNativeStream(
       }
 
       if (type === "turn.completed") {
+        if (opts.structuredFinalResponse) {
+          const parsed = parseStructuredFinalText(emittedText);
+          visibleText = emitDelta(parsed, visibleText, callbacks.onText);
+          emittedText = parsed;
+        }
         finishWithUsage(event.usage);
         return;
       }

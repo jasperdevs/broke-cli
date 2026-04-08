@@ -279,6 +279,42 @@ describe("native provider runtime selection", () => {
     expect(kill).toHaveBeenCalled();
   });
 
+  it("passes an output schema to Codex when minimal final output is enforced", async () => {
+    const kill = vi.fn();
+    configMocks.spawn.mockReturnValue({
+      stdout: { on: vi.fn() },
+      stderr: { on: vi.fn() },
+      stdin: { end: vi.fn() },
+      on: vi.fn(),
+      kill,
+    });
+
+    const controller = new AbortController();
+    const pending = startNativeStream({
+      providerId: "codex",
+      modelId: "gpt-5.4-mini",
+      system: "system",
+      messages: [{ role: "user", content: "fix it" }],
+      abortSignal: controller.signal,
+      structuredFinalResponse: { maxChars: 120 },
+    }, {
+      onText: vi.fn(),
+      onReasoning: vi.fn(),
+      onFinish: vi.fn(),
+      onError: vi.fn(),
+    });
+
+    expect(configMocks.spawn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.arrayContaining(["--output-schema", expect.stringContaining("codex-final-120.schema.json")]),
+      expect.any(Object),
+    );
+
+    controller.abort();
+    await pending;
+    expect(kill).toHaveBeenCalled();
+  });
+
   it("detects isolated Linux container runtimes from standard marker files", () => {
     const platform = Object.getOwnPropertyDescriptor(process, "platform");
     Object.defineProperty(process, "platform", { value: "linux" });
