@@ -28,6 +28,8 @@ export const PASTE_MODE_ON = `${CSI}?2004h`;
 export const PASTE_MODE_OFF = `${CSI}?2004l`;
 export const MODIFY_OTHER_KEYS_ON = `${CSI}>4;2m`;
 export const MODIFY_OTHER_KEYS_OFF = `${CSI}>4;0m`;
+export const KITTY_KEYBOARD_ON = `${CSI}>1u`;
+export const KITTY_KEYBOARD_OFF = `${CSI}<u`;
 
 // Mouse tracking is disabled so terminals keep native text selection behavior.
 // Keyboard scrolling/navigation remains available in the TUI.

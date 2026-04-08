@@ -4,6 +4,8 @@ import {
   PASTE_MODE_OFF,
   MODIFY_OTHER_KEYS_ON,
   MODIFY_OTHER_KEYS_OFF,
+  KITTY_KEYBOARD_ON,
+  KITTY_KEYBOARD_OFF,
   MENU_MOUSE_ON,
   MENU_MOUSE_OFF,
   write,
@@ -95,6 +97,7 @@ export class KeypressHandler {
     // Enable bracketed paste and mouse tracking.
     write(PASTE_MODE_ON);
     write(MODIFY_OTHER_KEYS_ON);
+    write(KITTY_KEYBOARD_ON);
     // Track SGR and legacy X10 mouse sequences.
     const mouseSeqRe = /\x1b\[<(\d+);(\d+);(\d+)([Mm])/g;
     const legacyMouseSeqRe = /\x1b\[M([\x00-\xff])([\x00-\xff])([\x00-\xff])/g;
@@ -223,6 +226,7 @@ export class KeypressHandler {
     if (!this.started) return;
     this.started = false;
     this.setMouseTracking(false);
+    write(KITTY_KEYBOARD_OFF);
     write(MODIFY_OTHER_KEYS_OFF);
     write(PASTE_MODE_OFF);
     if (this.keypressListener) {

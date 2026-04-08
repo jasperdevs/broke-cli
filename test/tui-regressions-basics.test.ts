@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createDefaultSessionName, Session } from "../src/core/session.js";
 import { App } from "../src/tui/app.js";
 import { MOUSE_OFF, MOUSE_ON, sanitizeWindowTitle } from "../src/utils/ansi.js";
-import { ALT_SCREEN_OFF, ALT_SCREEN_ON, CURSOR_HIDE, MENU_MOUSE_OFF, MENU_MOUSE_ON, SYNC_START } from "../src/utils/ansi.js";
+import { ALT_SCREEN_OFF, ALT_SCREEN_ON, CURSOR_HIDE, KITTY_KEYBOARD_OFF, KITTY_KEYBOARD_ON, MENU_MOUSE_OFF, MENU_MOUSE_ON, SYNC_START } from "../src/utils/ansi.js";
 import { visibleWidth } from "../src/utils/terminal-width.js";
 import { getSettings, updateSetting } from "../src/core/config.js";
 import { currentTheme } from "../src/core/themes.js";
@@ -38,6 +38,11 @@ describe("mouse reporting mode", () => {
   it("uses button-event mouse tracking for interactive panes so wheel scrolling can reach the TUI", () => {
     expect(MENU_MOUSE_ON).toContain("?1002h");
     expect(MENU_MOUSE_OFF).toContain("?1002l");
+  });
+
+  it("enables kitty keyboard protocol so modified enter keys stay distinguishable", () => {
+    expect(KITTY_KEYBOARD_ON).toBe("\x1b[>1u");
+    expect(KITTY_KEYBOARD_OFF).toBe("\x1b[<u");
   });
 });
 
