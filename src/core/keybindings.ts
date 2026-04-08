@@ -16,12 +16,50 @@ export interface Keybindings {
   toggleMode: string;
 }
 
+export function detectEnhancedEnterSupport(
+  env: NodeJS.ProcessEnv = process.env,
+  platform = process.platform,
+): boolean {
+  const termProgram = (env.TERM_PROGRAM || "").toLowerCase();
+  const term = (env.TERM || "").toLowerCase();
+  if (termProgram.includes("wezterm") || termProgram.includes("ghostty") || termProgram.includes("vscode")) return true;
+  if (platform === "darwin" && termProgram.includes("iterm")) return true;
+  if (term.includes("kitty") || term.includes("wezterm") || term.includes("alacritty") || term.includes("xterm-kitty")) return true;
+  return platform !== "win32";
+}
+
+export function getDefaultNewlineBinding(
+  env: NodeJS.ProcessEnv = process.env,
+  platform = process.platform,
+): string {
+  return detectEnhancedEnterSupport(env, platform) ? "shift+return" : "ctrl+j";
+}
+
+export function applyKeybindingDefaults(
+  raw: Partial<Keybindings> | null | undefined,
+  env: NodeJS.ProcessEnv = process.env,
+  platform = process.platform,
+): Keybindings {
+  const defaultNewline = getDefaultNewlineBinding(env, platform);
+  const savedNewline = raw?.newline?.trim().toLowerCase();
+  const migratedNewline = savedNewline === "shift+return" && defaultNewline !== "shift+return"
+    ? defaultNewline
+    : raw?.newline;
+  return {
+    ...DEFAULT_KEYBINDINGS,
+    ...raw,
+    newline: migratedNewline ?? defaultNewline,
+    // The tree hotkey is intentionally retired; keep /tree as the only entry point.
+    treeView: DEFAULT_KEYBINDINGS.treeView,
+  };
+}
+
 export const DEFAULT_KEYBINDINGS: Keybindings = {
   modelPicker: "ctrl+l",
   treeView: "",
   abort: "ctrl+c",
   submit: "return",
-  newline: "shift+return",
+  newline: getDefaultNewlineBinding(),
   deleteWord: "ctrl+w",
   deleteNextWord: "ctrl+d",
   toggleThinking: "ctrl+t",
@@ -41,17 +79,12 @@ export function loadKeybindings(): Keybindings {
   if (existsSync(file)) {
     try {
       const raw = JSON.parse(readFileSync(file, "utf-8"));
-      cached = {
-        ...DEFAULT_KEYBINDINGS,
-        ...raw,
-        // The tree hotkey is intentionally retired; keep /tree as the only entry point.
-        treeView: DEFAULT_KEYBINDINGS.treeView,
-      };
+      cached = applyKeybindingDefaults(raw);
     } catch {
-      cached = { ...DEFAULT_KEYBINDINGS };
+      cached = applyKeybindingDefaults(undefined);
     }
   } else {
-    cached = { ...DEFAULT_KEYBINDINGS };
+    cached = applyKeybindingDefaults(undefined);
   }
   return cached!;
 }

@@ -64,17 +64,22 @@ export function renderStaticMessages(options: {
     } else if (msg.role === "assistant") {
       const rendered = currentTheme().dark ? renderMarkdown(msg.content) : stripAnsi(renderMarkdown(msg.content));
       const wrapW = maxWidth - 4;
+      let firstAssistantLine = true;
       for (const cl of rendered.split("\n")) {
         const plain = stripAnsi(cl);
         const themedPrefix = `${colors.text}`;
         const themedLine = cl.includes(reset) ? cl.replaceAll(reset, `${reset}${colors.text}`) : cl;
         if (plain.length <= wrapW) {
-          lines.push(`  ${themedPrefix}${themedLine}${reset}`);
+          const lead = firstAssistantLine ? "• " : "  ";
+          lines.push(`${lead}${themedPrefix}${themedLine}${reset}`);
+          firstAssistantLine = false;
           continue;
         }
         const prefix = extractAnsiPrefix(cl);
         for (const wrappedLine of wordWrap(plain, wrapW)) {
-          lines.push(`  ${themedPrefix}${prefix}${wrappedLine}${reset}`);
+          const lead = firstAssistantLine ? "• " : "  ";
+          lines.push(`${lead}${themedPrefix}${prefix}${wrappedLine}${reset}`);
+          firstAssistantLine = false;
         }
       }
       if (idx + 1 < messages.length && messages[idx + 1].role === "user") {

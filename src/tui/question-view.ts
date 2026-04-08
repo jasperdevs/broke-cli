@@ -1,6 +1,7 @@
 import type { Keypress } from "./keypress.js";
 import { InputWidget } from "./input.js";
 import type { MenuEntry, QuestionAnswer, QuestionField, QuestionOption, QuestionRequest, QuestionResult, QuestionView } from "./app-types.js";
+import { getKeybinding } from "../core/keybindings.js";
 import { BOLD, DIM, RESET } from "../utils/ansi.js";
 import { T, TXT, MUTED, OK } from "./app-shared.js";
 import { wordWrap } from "./render/formatting.js";
@@ -167,12 +168,13 @@ function appWrap(text: string, width: number): string[] {
 }
 
 function buildFooter(view: QuestionView): string {
+  const newlineHint = getKeybinding("newline").replace("return", "enter");
   if (isQuestionSubmitTab(view)) return `${DIM}enter submit · esc cancel${RESET}`;
   const field = currentQuestionField(view);
   if (!field) return `${DIM}esc cancel${RESET}`;
-  if (field.kind === "text") return `${DIM}shift+enter newline · enter next · tab switch · esc cancel${RESET}`;
+  if (field.kind === "text") return `${DIM}${newlineHint} newline · enter next · tab switch · esc cancel${RESET}`;
   if (view.inputMode) {
-    return `${DIM}shift+enter newline · enter save · tab switch · esc back${RESET}`;
+    return `${DIM}${newlineHint} newline · enter save · tab switch · esc back${RESET}`;
   }
   if (field.kind === "multi") return `${DIM}↑↓ move · space toggle · enter next · tab switch · esc cancel${RESET}`;
   return `${DIM}↑↓ move · enter select · tab switch · esc cancel${RESET}`;

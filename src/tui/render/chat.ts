@@ -236,6 +236,8 @@ export function renderToolCallBlock(options: {
         }
         if (outLines.length > 3) lines.push(`${colors.muted}  ${branch} ... +${outLines.length - 3} lines (ctrl+o to expand)${reset}`);
       }
+    } else if (tc.name === "bash") {
+      lines.push(`${colors.muted}  ${branch} (no output)${reset}`);
     } else if (tc.resultDetail) {
       for (const wrappedLine of renderPrefixedWrappedLines(`  ${branch} `, tc.resultDetail, maxWidth)) {
         lines.push(`${colors.muted}${wrappedLine}${reset}`);

@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 import { App } from "../src/tui/app.js";
-import { reloadKeybindings } from "../src/core/keybindings.js";
+import { applyKeybindingDefaults, reloadKeybindings } from "../src/core/keybindings.js";
 
 describe("keybinding regressions", () => {
   it("ignores legacy tree hotkeys even if a saved keybindings file still has alt+a", () => {
@@ -24,5 +24,14 @@ describe("keybinding regressions", () => {
       else writeFileSync(keybindingsPath, previous, "utf-8");
       reloadKeybindings();
     }
+  });
+
+  it("migrates stale shift-enter newline bindings to ctrl+j when enhanced enter is unavailable", () => {
+    const bindings = applyKeybindingDefaults(
+      { newline: "shift+return" },
+      { TERM: "xterm-256color", TERM_PROGRAM: "" } as NodeJS.ProcessEnv,
+      "win32",
+    );
+    expect(bindings.newline).toBe("ctrl+j");
   });
 });
