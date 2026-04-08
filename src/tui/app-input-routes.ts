@@ -4,43 +4,12 @@ import { fileURLToPath } from "url";
 import { renderBudgetDashboard } from "../core/budget-insights.js";
 import { filterFiles } from "./file-picker.js";
 import type { Keypress } from "./keypress.js";
+import { ensureInlineImageChips, getImageChipLabel, insertInlineImageChip, snapCursorOutsideInlineChip, stripInlineChipLabels } from "./inline-chip-utils.js";
 import { DIM, RESET } from "../utils/ansi.js";
 import { T } from "./app-shared.js";
 import { getSelectedTreeItem, getVisibleTreeRows, moveTreeSelection, pageTreeSelection, toggleTreeFilter, toggleTreeFold, toggleTreeLabel, toggleTreeTimestampMode } from "./tree-view.js";
 
 type AppState = any;
-
-function getFileChipLabel(file: string): string {
-  return `[${file.split(/[\\/]/).pop() || file}]`;
-}
-
-function snapCursorOutsideInlineFileChip(app: AppState): void {
-  const text = app.input.getText();
-  const cursor = app.input.getCursor();
-  for (const file of Array.from(app.fileContexts?.keys?.() ?? []) as string[]) {
-    const label = getFileChipLabel(file);
-    let searchFrom = 0;
-    while (searchFrom < text.length) {
-      const index = text.indexOf(label, searchFrom);
-      if (index < 0) break;
-      const end = index + label.length;
-      if (cursor > index && cursor < end) {
-        app.input.setCursor(end);
-        return;
-      }
-      searchFrom = end;
-    }
-  }
-}
-
-function stripInlineFileChipLabels(app: AppState, text: string): string {
-  let sanitized = text;
-  for (const file of Array.from(app.fileContexts?.keys?.() ?? []) as string[]) {
-    const label = getFileChipLabel(file);
-    sanitized = sanitized.split(label).join("");
-  }
-  return sanitized.replace(/[ \t]+\n/g, "\n").replace(/[ \t]{2,}/g, " ").trim();
-}
 
 function normalizePastedPath(text: string): string {
   let normalized = text.trim();
@@ -97,7 +66,7 @@ function isPlainBackspace(key: Keypress): boolean {
   return key.name === "backspace" && !key.ctrl && !key.meta && !key.shift;
 }
 
-function tryLoadImageFromPath(app: AppState, rawText: string): boolean {
+function tryLoadImageFromPath(app: AppState, rawText: string, insertChip = false): boolean {
   const resolvedPath = resolveImagePath(rawText);
   if (!resolvedPath) return false;
   try {
@@ -106,6 +75,7 @@ function tryLoadImageFromPath(app: AppState, rawText: string): boolean {
     const mimeType = `image/${ext === "jpg" ? "jpeg" : ext}`;
     const base64 = data.toString("base64");
     app.pendingImages.push({ mimeType, data: base64 });
+    if (insertChip) insertInlineImageChip(app);
     return true;
   } catch {
     return false;
@@ -118,10 +88,12 @@ function stripMirroredImagePathFromDraft(app: AppState, rawText: string): void {
   const trimmedCurrent = currentText.trim();
   if (trimmedCurrent === normalizedPath) {
     app.input.clear();
+    ensureInlineImageChips(app);
     return;
   }
   if (currentText.endsWith(normalizedPath)) {
     app.input.setText(currentText.slice(0, currentText.length - normalizedPath.length).trimEnd(), true);
+    ensureInlineImageChips(app);
   }
 }
 
@@ -135,6 +107,7 @@ function scheduleDeferredPastedImageLoad(app: AppState, rawText: string): void {
     setTimeout(() => {
       if (!tryLoadImageFromPath(app, rawText)) return;
       stripMirroredImagePathFromDraft(app, rawText);
+      ensureInlineImageChips(app);
       queueMicrotask(() => stripMirroredImagePathFromDraft(app, rawText));
       app.draw?.();
     }, delayMs);
@@ -142,11 +115,12 @@ function scheduleDeferredPastedImageLoad(app: AppState, rawText: string): void {
 }
 
 export function tryConsumeImageDraft(app: AppState): boolean {
-  snapCursorOutsideInlineFileChip(app);
+  snapCursorOutsideInlineChip(app);
   const text = app.input.getText().trim();
   if (!text) return false;
   if (!tryLoadImageFromPath(app, text)) return false;
   app.input.clear();
+  insertInlineImageChip(app);
   return true;
 }
 
@@ -423,13 +397,14 @@ export function restoreQueuedMessage(app: AppState): void {
 }
 
 export function handlePaste(app: AppState, text: string): void {
-  snapCursorOutsideInlineFileChip(app);
+  snapCursorOutsideInlineChip(app);
   if (text.startsWith("data:image/")) {
     const match = text.match(/^data:image\/(\w+);base64,(.+)$/);
     if (match) {
       const mimeType = `image/${match[1]}`;
       const data = match[2];
       app.pendingImages.push({ mimeType, data });
+      insertInlineImageChip(app);
       app.setStatus?.(`${T()}✓ Image attached (${mimeType})${RESET}`);
       app.draw();
       return;
@@ -438,6 +413,7 @@ export function handlePaste(app: AppState, text: string): void {
 
   if (tryLoadImageFromPath(app, text)) {
     stripMirroredImagePathFromDraft(app, text);
+    ensureInlineImageChips(app);
     queueMicrotask(() => stripMirroredImagePathFromDraft(app, text));
     setTimeout(() => stripMirroredImagePathFromDraft(app, text), 0);
     app.draw();
@@ -455,7 +431,7 @@ export function handlePaste(app: AppState, text: string): void {
 
 function submitQueuedInput(app: AppState, delivery: "steering" | "followup"): void {
   const rawText = app.input.submit();
-  const text = stripInlineFileChipLabels(app, rawText);
+  const text = stripInlineChipLabels(app, rawText);
   if (!app.pendingImages.length && tryLoadImageFromPath(app, text.trim())) {
     app.draw();
     return;

@@ -2,6 +2,7 @@ import stripAnsi from "strip-ansi";
 import { getSettings } from "../core/config.js";
 import { currentTheme } from "../core/themes.js";
 import { filterFiles, readFileForContext } from "./file-picker.js";
+import { getFileChipLabel, getImageChipLabel } from "./inline-chip-utils.js";
 import type { Keypress } from "./keypress.js";
 import { BOLD, RESET, bg, fg } from "../utils/ansi.js";
 import { DIM } from "../utils/ansi.js";
@@ -25,16 +26,9 @@ import {
 } from "./app-menu-entries.js";
 type AppState = any;
 
-function getFileChipLabel(file: string): string {
-  return `[${file.split(/[\\/]/).pop() || file}]`;
-}
-
 function getComposerAttachmentTokens(app: AppState): string[] {
-  return [
-    ...((getSettings().terminal.showImages && app.pendingImages)
-      ? app.pendingImages.map((_: unknown, index: number) => `[Image #${index + 1}]`)
-      : []),
-  ];
+  void app;
+  return [];
 }
 
 function renderAttachmentChip(token: string): string {
@@ -50,6 +44,12 @@ function styleInlineFileChips(app: AppState, line: string): string {
   for (const file of Array.from(app.fileContexts.keys()) as string[]) {
     const label = getFileChipLabel(file);
     output = output.split(label).join(renderFileChip(label));
+  }
+  if (getSettings().terminal.showImages && app.pendingImages) {
+    for (let index = 0; index < app.pendingImages.length; index++) {
+      const label = getImageChipLabel(index);
+      output = output.split(label).join(renderAttachmentChip(label));
+    }
   }
   return output;
 }

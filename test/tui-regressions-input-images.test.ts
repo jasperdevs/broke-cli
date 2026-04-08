@@ -90,15 +90,29 @@ describe("image attachments", () => {
       forceRedraw: () => {},
     };
 
+    app.input.setText("look at this ");
     app.handlePaste(imagePath);
-    app.input.setText("look at this");
     app.drawImmediate();
 
     const output = rendered.map((line) => stripAnsi(line)).join("\n");
     expect(app.pendingImages).toHaveLength(1);
-    expect(app.input.getText()).toBe("look at this");
+    expect(app.input.getText()).toBe("look at this [Image #1] ");
     expect(output).toContain("[Image #1]");
     expect(output).not.toContain(imagePath);
+  });
+
+  it("inserts image chips inline at the current cursor position", () => {
+    updateSetting("terminal", { ...getSettings().terminal, showImages: true });
+    const app = new App() as any;
+    const dir = mkdtempSync(join(tmpdir(), "brokecli-image-"));
+    tempDirs.push(dir);
+    const imagePath = join(dir, "inline.png");
+    writeFileSync(imagePath, "fakepng", "utf-8");
+
+    app.input.setText("hey ");
+    app.handlePaste(imagePath);
+
+    expect(app.input.getText()).toBe("hey [Image #1] ");
   });
 
   it("keeps the cursor directly after the image chip instead of counting ANSI bytes", () => {
@@ -142,7 +156,7 @@ describe("image attachments", () => {
     app.handlePaste(imagePath);
 
     expect(app.pendingImages).toHaveLength(1);
-    expect(app.input.getText()).toBe("");
+    expect(app.input.getText()).toBe("[Image #1] ");
     expect(app.statusMessage).toBeUndefined();
   });
 
@@ -159,7 +173,7 @@ describe("image attachments", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(app.pendingImages).toHaveLength(1);
-    expect(app.input.getText()).toBe("");
+    expect(app.input.getText()).toBe("[Image #1] ");
   });
 
   it("auto-attaches an image path typed into an empty draft", () => {
@@ -174,7 +188,7 @@ describe("image attachments", () => {
     app.handleKey({ name: "x", char: "", ctrl: false, meta: false, shift: false });
 
     expect(app.pendingImages).toHaveLength(1);
-    expect(app.input.getText()).toBe("");
+    expect(app.input.getText()).toBe("[Image #1] ");
   });
 
   it("auto-attaches an image path when it arrives through the generic text paste path", () => {
@@ -188,7 +202,7 @@ describe("image attachments", () => {
     app.handlePaste(` ${imagePath} `);
 
     expect(app.pendingImages).toHaveLength(1);
-    expect(app.input.getText()).toBe("");
+    expect(app.input.getText()).toBe("[Image #1] ");
   });
 
   it("resolves transient Yoink image paths to the newest saved image", () => {
@@ -204,7 +218,7 @@ describe("image attachments", () => {
     app.handlePaste(join(yoinkDir, "yoink_--_--_b.png"));
 
     expect(app.pendingImages).toHaveLength(1);
-    expect(app.input.getText()).toBe("");
+    expect(app.input.getText()).toBe("[Image #1] ");
   });
 
   it("resolves a transient Yoink image path even when pasted after other draft text", async () => {
@@ -223,7 +237,7 @@ describe("image attachments", () => {
     await new Promise((resolve) => setTimeout(resolve, 160));
 
     expect(app.pendingImages).toHaveLength(1);
-    expect(app.input.getText()).toBe("hey ");
+    expect(app.input.getText()).toBe("hey [Image #1] ");
   });
 
   it("removes the last attachment chip with backspace when the draft is empty", () => {
@@ -231,6 +245,19 @@ describe("image attachments", () => {
     app.pendingImages = [{ mimeType: "image/png", data: "abc" }];
     app.handleKey({ name: "backspace", char: "", ctrl: false, meta: false, shift: false });
     expect(app.pendingImages).toHaveLength(0);
+  });
+
+  it("treats inline image chips as atomic on backspace", () => {
+    updateSetting("terminal", { ...getSettings().terminal, showImages: true });
+    const app = new App() as any;
+    app.pendingImages = [{ mimeType: "image/png", data: "abc" }];
+    app.input.setText("hey [Image #1] ");
+    app.input.setCursor("hey [Image #1] ".length);
+
+    app.handleKey({ name: "backspace", char: "", ctrl: false, meta: false, shift: false });
+
+    expect(app.pendingImages).toHaveLength(0);
+    expect(app.input.getText()).toBe("hey ");
   });
 
   it("inserts selected @ files inline instead of pinning them to the prompt prefix", () => {
@@ -271,7 +298,7 @@ describe("image attachments", () => {
     app.handlePaste(imagePath);
 
     expect(app.pendingImages).toHaveLength(1);
-    expect(app.input.getText()).toBe("[exports.ts] ");
+    expect(app.input.getText()).toBe("[exports.ts][Image #1] ");
   });
 
   it("submits image-only prompts instead of dropping the attachment", () => {

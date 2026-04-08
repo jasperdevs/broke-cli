@@ -2,6 +2,7 @@ import { collectProjectFiles } from "./file-picker.js";
 import type { Keypress } from "./keypress.js";
 import { matchesBinding, loadKeybindings } from "../core/keybindings.js";
 import { getSettings } from "../core/config.js";
+import { getFileChipLabel, getImageChipLabel } from "./inline-chip-utils.js";
 import { handleQuestionViewKey } from "./question-view.js";
 import {
   handleBudgetViewKey,
@@ -19,16 +20,32 @@ import {
 type AppState = any;
 
 function getFileChipRanges(app: AppState): Array<{ file: string; start: number; end: number }> {
-  const text = app.input.getText();
-  const ranges: Array<{ file: string; start: number; end: number }> = [];
+    const text = app.input.getText();
+    const ranges: Array<{ file: string; start: number; end: number }> = [];
   for (const file of Array.from(app.fileContexts.keys()) as string[]) {
-    const label = `[${file.split(/[\\/]/).pop() || file}]`;
+    const label = getFileChipLabel(file);
     let searchFrom = 0;
     while (searchFrom < text.length) {
       const index = text.indexOf(label, searchFrom);
       if (index < 0) break;
       ranges.push({ file, start: index, end: index + label.length });
       searchFrom = index + label.length;
+    }
+  }
+  return ranges.sort((a, b) => a.start - b.start);
+}
+
+function getImageChipRanges(app: AppState): Array<{ index: number; start: number; end: number }> {
+  const text = app.input.getText();
+  const ranges: Array<{ index: number; start: number; end: number }> = [];
+  for (let index = 0; index < (app.pendingImages?.length ?? 0); index++) {
+    const label = getImageChipLabel(index);
+    let searchFrom = 0;
+    while (searchFrom < text.length) {
+      const chipIndex = text.indexOf(label, searchFrom);
+      if (chipIndex < 0) break;
+      ranges.push({ index, start: chipIndex, end: chipIndex + label.length });
+      searchFrom = chipIndex + label.length;
     }
   }
   return ranges.sort((a, b) => a.start - b.start);
@@ -51,12 +68,32 @@ function getAdjacentFileChip(app: AppState, cursor: number, direction: "left" | 
 
 function removeFileChip(app: AppState, range: { file: string; start: number; end: number }): void {
   const text = app.input.getText();
-  let nextText = `${text.slice(0, range.start)}${text.slice(range.end)}`;
+  const deleteEnd = text[range.end] === " " ? range.end + 1 : range.end;
+  let nextText = `${text.slice(0, range.start)}${text.slice(deleteEnd)}`;
   if (nextText.startsWith(" ")) nextText = nextText.slice(1);
   nextText = nextText.replace(/ {2,}/g, " ");
   app.input.setText(nextText, false);
   app.input.setCursor(range.start);
   app.fileContexts.delete(range.file);
+}
+
+function removeImageChip(app: AppState, range: { index: number; start: number; end: number }): void {
+  const text = app.input.getText();
+  const deleteEnd = text[range.end] === " " ? range.end + 1 : range.end;
+  let nextText = `${text.slice(0, range.start)}${text.slice(deleteEnd)}`;
+  if (nextText.startsWith(" ")) nextText = nextText.slice(1);
+  nextText = nextText.replace(/ {2,}/g, " ");
+  app.input.setText(nextText, false);
+  app.input.setCursor(range.start);
+  app.pendingImages.splice(range.index, 1);
+  // Renumber remaining visible image labels to match their new array positions.
+  let normalized = app.input.getText();
+  const matches = normalized.match(/\[Image #\d+\]/g) ?? [];
+  for (let index = 0; index < matches.length; index++) {
+    normalized = normalized.replace(matches[index]!, getImageChipLabel(index));
+  }
+  app.input.setText(normalized, false);
+  app.input.setCursor(Math.min(range.start, normalized.length));
 }
 
 function handleAtomicFileChipKey(app: AppState, key: Keypress): boolean {
@@ -80,6 +117,26 @@ function handleAtomicFileChipKey(app: AppState, key: Keypress): boolean {
     }
   }
 
+  for (const range of getImageChipRanges(app)) {
+    if (cursor > range.start && cursor < range.end) {
+      if (key.name === "left") {
+        app.input.setCursor(range.start);
+        app.draw();
+        return true;
+      }
+      if (key.name === "right") {
+        app.input.setCursor(range.end);
+        app.draw();
+        return true;
+      }
+      if (key.name === "backspace" || key.name === "delete" || (!!key.char && !key.ctrl && !key.meta)) {
+        removeImageChip(app, range);
+        app.draw();
+        return true;
+      }
+    }
+  }
+
   if (key.name === "left" || key.name === "backspace") {
     const adjacent = getAdjacentFileChip(app, cursor, key.name === "left" ? "left" : "backspace");
     if (adjacent) {
@@ -89,11 +146,39 @@ function handleAtomicFileChipKey(app: AppState, key: Keypress): boolean {
       return true;
     }
   }
+  if (key.name === "backspace") {
+    for (const range of getFileChipRanges(app)) {
+      if (cursor === range.end + 1 && app.input.getText()[range.end] === " ") {
+        removeFileChip(app, range);
+        app.draw();
+        return true;
+      }
+    }
+  }
   if (key.name === "right" || key.name === "delete") {
     const adjacent = getAdjacentFileChip(app, cursor, key.name === "right" ? "right" : "delete");
     if (adjacent) {
       if (key.name === "right") app.input.setCursor(adjacent.end);
       else removeFileChip(app, adjacent);
+      app.draw();
+      return true;
+    }
+  }
+  for (const range of getImageChipRanges(app)) {
+    if ((key.name === "left" || key.name === "backspace") && cursor === range.end) {
+      if (key.name === "left") app.input.setCursor(range.start);
+      else removeImageChip(app, range);
+      app.draw();
+      return true;
+    }
+    if (key.name === "backspace" && cursor === range.end + 1 && app.input.getText()[range.end] === " ") {
+      removeImageChip(app, range);
+      app.draw();
+      return true;
+    }
+    if ((key.name === "right" || key.name === "delete") && cursor === range.start) {
+      if (key.name === "right") app.input.setCursor(range.end);
+      else removeImageChip(app, range);
       app.draw();
       return true;
     }
