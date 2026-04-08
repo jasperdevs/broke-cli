@@ -36,6 +36,12 @@ describe("turn policy", () => {
     expect(policy.promptProfile).toBe("edit");
   });
 
+  it("keeps explicit create-file requests on the create-capable lane even when a matching file path is named", () => {
+    const policy = getTurnPolicy("make an index.html file thats fun");
+    expect(policy.allowedTools).toContain("writeFile");
+    expect(policy.allowedTools).toContain("editFile");
+  });
+
   it("does not expose bash just because a test framework name appears", () => {
     const policy = getTurnPolicy("Write node:test coverage in test/flags.test.js for src/flags.js.");
     expect(policy.allowedTools).not.toContain("bash");

@@ -2,7 +2,6 @@ import { currentTheme } from "../core/themes.js";
 import { getSettings } from "../core/config.js";
 import { getEffectiveThinkingLevel } from "../ai/thinking.js";
 import { BOLD, DIM, RESET } from "../utils/ansi.js";
-import { fmtCost } from "./render/formatting.js";
 import { ERR, P, T, TXT, WARN } from "./app-shared.js";
 import { visibleWidth } from "../utils/terminal-width.js";
 import { currentQuestionField, getQuestionBodyLines, getQuestionHeader, getQuestionOptionEntries, isQuestionSubmitTab } from "./question-view.js";
@@ -131,12 +130,11 @@ export function buildInfoBar(app: AppState, hasSidebar: boolean, mainW: number):
   const caveLevel = settings.cavemanLevel ?? "auto";
   if (caveLevel !== "off") parts.push({ text: `🪨 ${WARN()}${caveLevel}${RESET}`, plain: `rock ${caveLevel}` });
   const liveTokens = app.getLiveTotalTokens();
-  if ((settings.showCost && app.sessionCost > 0) || (settings.showTokens && !hasSidebar && liveTokens > 0)) {
-    const costPart = settings.showCost && app.sessionCost > 0 ? fmtCost(app.animCost.get()) : "";
-    const tokenPart = settings.showTokens && !hasSidebar && liveTokens > 0
-      ? app.renderTokenSummaryParts().filter((part: string) => !(settings.showCost && (part.startsWith("$") || part === "local/unpriced"))).join(" ")
-      : "";
-    const statStr = [costPart, tokenPart].filter(Boolean).join(" · ");
+  if (settings.showTokens && !hasSidebar && liveTokens > 0) {
+    const tokenPart = app.renderTokenSummaryParts()
+      .filter((part: string) => !(part.startsWith("$") || part === "local/unpriced"))
+      .join(" ")
+    const statStr = tokenPart;
     parts.push({ text: `${DIM}${statStr}${RESET}`, plain: statStr });
   }
 

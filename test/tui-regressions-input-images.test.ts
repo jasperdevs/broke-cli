@@ -4,6 +4,7 @@ import { join } from "path";
 import { afterEach, describe, expect, it } from "vitest";
 import stripAnsi from "strip-ansi";
 import { App } from "../src/tui/app.js";
+import { getSettings, updateSetting } from "../src/core/config.js";
 import { renderStaticMessages } from "../src/tui/render/messages.js";
 import { wordWrap } from "../src/tui/render/formatting.js";
 
@@ -66,9 +67,11 @@ describe("image attachments", () => {
 
   afterEach(() => {
     for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+    updateSetting("terminal", { ...getSettings().terminal, showImages: true });
   });
 
   it("attaches pasted image paths without writing the raw path into the input", () => {
+    updateSetting("terminal", { ...getSettings().terminal, showImages: true });
     const app = new App() as any;
     const dir = mkdtempSync(join(tmpdir(), "brokecli-image-"));
     tempDirs.push(dir);
@@ -112,6 +115,7 @@ describe("image attachments", () => {
   });
 
   it("renders chat image tags with the same label format as prompt attachments", () => {
+    updateSetting("terminal", { ...getSettings().terminal, showImages: true });
     const lines = renderStaticMessages({
       messages: [{ role: "user", content: "look", images: [{ mimeType: "image/png", data: "abc" }] }],
       maxWidth: 48,

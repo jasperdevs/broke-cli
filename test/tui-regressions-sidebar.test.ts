@@ -116,7 +116,6 @@ describe("sidebar scrolling", () => {
     expect(footerText).toContain("120k/128k ctx");
     expect(footerText).toContain("94%");
     expect(footerText).toContain("▰");
-    expect(footerText).toContain("plan");
     updateSetting("showTokens", originalShowTokens);
   });
 
@@ -286,6 +285,36 @@ describe("sidebar scrolling", () => {
       if (app.spinnerTimer) clearInterval(app.spinnerTimer);
     } finally {
       updateSetting("showTokens", originalShowTokens);
+    }
+  });
+
+  it("keeps mode/thinking/caveman state off the sidebar footer", () => {
+    const app = new App() as any;
+    const original = {
+      showTokens: getSettings().showTokens,
+      showCost: getSettings().showCost,
+      thinkingLevel: getSettings().thinkingLevel,
+      cavemanLevel: getSettings().cavemanLevel,
+    };
+    try {
+      updateSetting("showTokens", true);
+      updateSetting("showCost", true);
+      updateSetting("thinkingLevel", "low");
+      updateSetting("cavemanLevel", "ultra");
+      app.setContextUsage(120_000, 128_000);
+      app.updateUsage(0.0021, 8_200, 621);
+      const footer = app.renderSidebarFooter().map((line: string) => stripAnsi(line)).join("\n");
+      expect(footer).toContain("8.8k total");
+      expect(footer).not.toContain("build");
+      expect(footer).not.toContain("plan");
+      expect(footer).not.toContain("ultra");
+      expect(footer).not.toContain("🪨");
+      expect(footer).not.toContain("low");
+    } finally {
+      updateSetting("showTokens", original.showTokens);
+      updateSetting("showCost", original.showCost);
+      updateSetting("thinkingLevel", original.thinkingLevel);
+      updateSetting("cavemanLevel", original.cavemanLevel ?? "off");
     }
   });
 });

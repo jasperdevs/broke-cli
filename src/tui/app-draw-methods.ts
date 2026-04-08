@@ -64,8 +64,8 @@ export function drawImmediate(app: AppState): void {
   const statusLines = getStatusPromptLines(app);
   const btwBubbleLines = app.renderBtwBubble(mainW);
 
-  bottomLines.push("");
-  bottomLines.push("");
+  const inputTopPadding = pendingImageLines.length > 0 ? 1 : 2;
+  for (let i = 0; i < inputTopPadding; i++) bottomLines.push("");
   if (btwBubbleLines.length > 0) {
     bottomLines.push(...btwBubbleLines);
     bottomLines.push("");

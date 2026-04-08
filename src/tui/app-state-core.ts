@@ -1,6 +1,5 @@
 import { currentTheme } from "../core/themes.js";
 import { getSettings, type CavemanLevel, type Mode, type ThinkingLevel } from "../core/config.js";
-import { getEffectiveThinkingLevel } from "../ai/thinking.js";
 import { buildSidebarFooter } from "./render/sidebar-view.js";
 import { fmtCost, fmtTokens } from "./render/formatting.js";
 import { DIM, setWindowTitle } from "../utils/ansi.js";
@@ -195,23 +194,10 @@ export function renderSidebarFooter(app: CoreAppState): string[] {
   const settings = getSettings();
   if (shouldHideSidebarFooter(app)) return [];
   const width = app.screen.sidebarWidth;
-  const statusParts: string[] = [];
-  const modeLabel = app.mode === "plan" ? "plan" : "build";
-  statusParts.push(modeLabel);
-  const thinkLevel = getEffectiveThinkingLevel({
-    providerId: app.modelProviderId,
-    modelId: app.modelName === "none" ? undefined : app.modelName,
-    runtime: app.modelRuntime,
-    level: settings.thinkingLevel,
-    enabled: settings.enableThinking,
-  });
-  if (thinkLevel !== "off") statusParts.push(thinkLevel);
-  const caveLevel = settings.cavemanLevel ?? "auto";
-  if (caveLevel !== "off") statusParts.push(`🪨 ${caveLevel}`);
   return buildSidebarFooter({
     width,
     showTokens: settings.showTokens,
-    statusParts,
+    statusParts: [],
     tokenParts: app.renderTokenSummaryParts(),
     contextUsed: app.contextLimitTokens > 0 && app.contextTokenCount >= 0 ? app.contextUsed : undefined,
     contextTokens: app.contextLimitTokens > 0
