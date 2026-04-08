@@ -70,6 +70,22 @@ function tryDeleteVisiblePlaceholderFallback(app: AppState, key: Keypress, befor
   return true;
 }
 
+function tryRawDeleteFallback(app: AppState, key: Keypress, beforeText: string, beforeCursor: number): boolean {
+  if (!((key.name === "backspace" || key.name === "delete") && !key.ctrl && !key.meta && !key.shift)) return false;
+  if (key.name === "backspace") {
+    if (beforeCursor <= 0) return false;
+    app.input.setText(beforeText.slice(0, beforeCursor - 1) + beforeText.slice(beforeCursor), false);
+    app.input.setCursor(beforeCursor - 1);
+  } else {
+    if (beforeCursor >= beforeText.length) return false;
+    app.input.setText(beforeText.slice(0, beforeCursor) + beforeText.slice(beforeCursor + 1), false);
+    app.input.setCursor(beforeCursor);
+  }
+  ensureInlineChipElements(app);
+  syncComposerAttachmentsFromInput(app);
+  return true;
+}
+
 export { handlePaste } from "./app-input-routes.js";
 
 function getPointerPosition(key: Keypress): { col: number; row: number } | null {
@@ -366,6 +382,10 @@ export function handleKey(app: AppState, key: Keypress): void {
   const action = app.input.handleKey(key);
   if (action === "none") syncComposerAttachmentsFromInput(app);
   if (action === "none" && app.input.getText() === beforeText && app.input.getCursor() === beforeCursor && tryDeleteVisiblePlaceholderFallback(app, key, beforeText, beforeCursor)) {
+    app.draw();
+    return;
+  }
+  if (action === "none" && app.input.getText() === beforeText && app.input.getCursor() === beforeCursor && tryRawDeleteFallback(app, key, beforeText, beforeCursor)) {
     app.draw();
     return;
   }

@@ -294,6 +294,18 @@ describe("image attachments", () => {
     expect(app.input.getText()).toBe("hey ");
   });
 
+  it("falls back to raw backspace deletion if a plain backspace key does nothing", () => {
+    const app = new App() as any;
+    app.pendingImages = [{ attachmentId: "i1", mimeType: "image/png", data: "abc" }];
+    app.input.setText("hey [Image #1] x");
+    app.input.setCursor("hey [Image #1] x".length);
+    app.input.handleKey = () => "none";
+
+    app.handleKey({ name: "backspace", char: "", ctrl: false, meta: false, shift: false });
+
+    expect(app.input.getText()).toBe("hey [Image #1] ");
+  });
+
   it("inserts selected @ files as plain visible path text", () => {
     const app = new App() as any;
     app.filePicker = { files: ["AGENTS.md"], filtered: ["AGENTS.md"], query: "AG", cursor: 0 };
