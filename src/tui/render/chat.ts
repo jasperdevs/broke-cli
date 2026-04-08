@@ -241,6 +241,7 @@ export function renderMessageOverlays(options: {
   maxWidth: number;
   thinkingBuffer: string;
   thinkingRequested: boolean;
+  streamingActivitySummary?: string;
   hideThinkingBlock?: boolean;
   isStreaming: boolean;
   todoItems: TodoRenderItem[];
@@ -271,6 +272,7 @@ export function renderMessageOverlays(options: {
     maxWidth,
     thinkingBuffer,
     thinkingRequested,
+    streamingActivitySummary,
     hideThinkingBlock,
     isStreaming,
     todoItems,
@@ -304,6 +306,12 @@ export function renderMessageOverlays(options: {
         }
       }
     }
+    lines.push("");
+  }
+
+  if (isStreaming && !thinkingBuffer && streamingActivitySummary) {
+    ensureOverlayGap(lines);
+    lines.push(`  ${colors.dim}Working: ${streamingActivitySummary}${colors.reset}`);
     lines.push("");
   }
 

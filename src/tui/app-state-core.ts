@@ -56,6 +56,7 @@ interface CoreAppState {
   thinkingStartTime: number;
   thinkingDuration: number;
   thinkingBuffer: string;
+  streamingActivitySummary: string;
   toolCallGroups: unknown[];
   messages: ChatMessage[];
   msgCacheLines: string[] | null;
@@ -283,6 +284,7 @@ export function setStreaming(app: CoreAppState, streaming: boolean): void {
       app.streamStartTime = 0;
     }
     app.animStreamTokens.reset();
+    app.streamingActivitySummary = "";
   }
   if (streaming) {
     app.thinkingBuffer = "";
@@ -308,6 +310,11 @@ export function setThinkingRequested(app: CoreAppState, requested: boolean): voi
   if (requested && app.isStreaming && app.thinkingStartTime <= 0) app.thinkingStartTime = Date.now();
   if (!requested && !app.thinkingBuffer) app.thinkingStartTime = 0;
   app.draw();
+}
+
+export function setStreamingActivitySummary(app: CoreAppState, summary: string): void {
+  app.streamingActivitySummary = summary.trim();
+  if (app.isStreaming) app.draw();
 }
 
 export function setDetectedProviders(app: CoreAppState, providers: string[]): void { app.detectedProviders = providers; }
@@ -344,6 +351,7 @@ export interface AppStateCoreMethods {
   setContextUsage(tokens: number, limit: number): void;
   setStreaming(streaming: boolean): void;
   setThinkingRequested(requested: boolean): void;
+  setStreamingActivitySummary(summary: string): void;
   refreshWindowTitle(): void;
   ensureUiSpinner(): void;
   releaseUiSpinnerIfIdle(): void;
@@ -373,6 +381,7 @@ export const appStateCoreMethods: AppStateCoreMethods = {
   setContextUsage(this: CoreAppState, tokens: number, limit: number) { return setContextUsage(this, tokens, limit); },
   setStreaming(this: CoreAppState, streaming: boolean) { return setStreaming(this, streaming); },
   setThinkingRequested(this: CoreAppState, requested: boolean) { return setThinkingRequested(this, requested); },
+  setStreamingActivitySummary(this: CoreAppState, summary: string) { return setStreamingActivitySummary(this, summary); },
   refreshWindowTitle(this: CoreAppState) { return refreshWindowTitle(this); },
   ensureUiSpinner(this: CoreAppState) { return ensureUiSpinner(this); },
   releaseUiSpinnerIfIdle(this: CoreAppState) { return releaseUiSpinnerIfIdle(this); },

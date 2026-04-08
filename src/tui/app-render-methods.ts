@@ -76,6 +76,7 @@ export function renderMessages(app: AppState, maxWidth: number): string[] {
     maxWidth,
     thinkingBuffer: app.thinkingBuffer,
     thinkingRequested: app.thinkingRequested,
+    streamingActivitySummary: app.streamingActivitySummary,
     hideThinkingBlock: settings.hideThinkingBlock,
     isStreaming: app.isStreaming,
     todoItems: app.todoItems,

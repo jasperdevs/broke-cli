@@ -33,6 +33,7 @@ interface TurnRunnerApp {
   replaceLastAssistantMessage?(content: string): void;
   appendThinking(delta: string): void;
   setThinkingRequested(requested: boolean): void;
+  setStreamingActivitySummary?(summary: string): void;
   getLastAssistantContent(): string;
   setStreaming(streaming: boolean): void;
   setStreamTokens(tokens: number): void;
@@ -53,6 +54,29 @@ interface TurnRunnerApp {
 
 interface ExtensionHooks {
   emit(event: string, payload: Record<string, unknown>): void;
+}
+
+function deriveStreamingActivitySummary(text: string, archetype: string): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  const fileMatch = normalized.match(/\b[A-Za-z0-9_./-]+\.[A-Za-z0-9]+\b/);
+  const target = fileMatch?.[0];
+  switch (archetype) {
+    case "edit":
+    case "bugfix":
+      return target ? `planning changes to ${target}` : "planning the code changes";
+    case "explore":
+      return target ? `checking ${target}` : "scanning the repo";
+    case "shell":
+      return "preparing the command result";
+    case "review":
+      return "reviewing the code";
+    case "planning":
+      return "working through the plan";
+    case "research":
+      return "gathering the answer";
+    default:
+      return "working through the request";
+  }
 }
 
 export async function runModelTurn(options: {
@@ -151,6 +175,7 @@ export async function runModelTurn(options: {
     optimizeMessages: (messages) => selectMessagesForTurn(messages, policy, (msgs) => getContextOptimizer().optimizeMessages(msgs)),
   });
 
+  app.setStreamingActivitySummary?.(deriveStreamingActivitySummary(text, policy.archetype));
   app.setStreaming(true);
   clearTodo();
   const runObservedTurn = async (turnOptions: Parameters<typeof executeTurn>[0]) => {

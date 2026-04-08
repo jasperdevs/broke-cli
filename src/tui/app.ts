@@ -47,6 +47,7 @@ export class App {
   private thinkingRequested = false;
   private thinkingStartTime = 0;
   private thinkingDuration = 0;
+  private streamingActivitySummary = "";
   private todoItems: TodoItem[] = [];
   private sessionCost = 0;
   private sessionInputTokens = 0;

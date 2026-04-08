@@ -31,4 +31,15 @@ describe("thinking and input regressions", () => {
       updateSetting("hideThinkingBlock", original);
     }
   });
+
+  it("shows a synthetic streaming activity summary even without model reasoning", () => {
+    const app = new App() as any;
+    app.messages = [{ role: "assistant", content: "working" }];
+    app.setStreamingActivitySummary("planning changes to index.html");
+    app.setStreaming(true);
+    const output = app.renderMessages(60).map((line: string) => stripAnsi(line)).join("\n");
+    expect(output).toContain("Working: planning changes to index.html");
+    expect(output).toContain("Composing...");
+    app.setStreaming(false);
+  });
 });
