@@ -77,6 +77,43 @@ describe("turn runner stages", () => {
     expect(result.transientUserContext).not.toContain("--- @recent-edit:");
   });
 
+  it("injects deterministic target-file context for explicit bugfixes", () => {
+    const session = new Session(`turn-stage-target-${Date.now()}`);
+    const app = {
+      addMessage: vi.fn(),
+      getFileContexts: () => new Map<string, string>(),
+    };
+
+    const result = addUserTurnToSession({
+      app,
+      session,
+      text: "Fix src/core/context.ts so buildCorePrompt stays brief.",
+      effectiveImages: undefined,
+      alreadyAddedUserMessage: false,
+    });
+
+    expect(result.transientUserContext).toContain("--- @target:src/core/context.ts ---");
+    expect(result.transientUserContext).toContain("Known target files for this task");
+  });
+
+  it("does not load semantic target context from paths outside the workspace", () => {
+    const session = new Session(`turn-stage-outside-${Date.now()}`);
+    const app = {
+      addMessage: vi.fn(),
+      getFileContexts: () => new Map<string, string>(),
+    };
+
+    const result = addUserTurnToSession({
+      app,
+      session,
+      text: "Fix ../secrets.txt so it is valid.",
+      effectiveImages: undefined,
+      alreadyAddedUserMessage: false,
+    });
+
+    expect(result.transientUserContext).toBeUndefined();
+  });
+
   it("recognizes the tool-requirement retry condition", () => {
     expect(shouldRetryWithToolRequirement({
       completion: "insufficient",

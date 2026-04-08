@@ -84,6 +84,7 @@ export class Session {
     this.save();
   }
   getCwd(): string { return this.cwd; }
+  setCwd(cwd: string): void { this.cwd = cwd; }
   getProvider(): string { return this.provider; }
   getModel(): string { return this.model; }
   getCreatedAt(): number { return this.createdAt; }

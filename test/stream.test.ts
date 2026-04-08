@@ -174,6 +174,7 @@ describe("stream tool steps", () => {
       replaceConversation: vi.fn(),
       recordCompaction: vi.fn(),
       getContextOptimizer: () => ({ optimizeMessages: (messages: any[]) => messages, nextTurn: vi.fn() }),
+      getCwd: () => process.cwd(),
       getTotalInputTokens: () => 0,
       getTotalOutputTokens: () => 0,
     } as any;
@@ -234,6 +235,7 @@ describe("stream tool steps", () => {
       replaceConversation: vi.fn(),
       recordCompaction: vi.fn(),
       getContextOptimizer: () => ({ optimizeMessages: (messages: any[]) => messages, nextTurn: vi.fn() }),
+      getCwd: () => process.cwd(),
       getTotalInputTokens: () => 0,
       getTotalOutputTokens: () => 0,
     } as any;
@@ -301,6 +303,7 @@ describe("stream tool steps", () => {
       replaceConversation: vi.fn(),
       recordCompaction: vi.fn(),
       getContextOptimizer: () => ({ optimizeMessages: (messages: any[]) => messages, nextTurn: vi.fn() }),
+      getCwd: () => process.cwd(),
       getTotalInputTokens: () => 0,
       getTotalOutputTokens: () => 0,
     } as any;
@@ -373,6 +376,7 @@ describe("stream tool steps", () => {
       replaceConversation: vi.fn(),
       recordCompaction: vi.fn(),
       getContextOptimizer: () => ({ optimizeMessages: (messages: any[]) => messages, nextTurn: vi.fn(), trackFileRead: vi.fn() }),
+      getCwd: () => process.cwd(),
       getTotalInputTokens: () => 0,
       getTotalOutputTokens: () => 0,
       getName: () => "Existing Session",
@@ -450,6 +454,7 @@ describe("stream tool steps", () => {
       replaceConversation: vi.fn(),
       recordCompaction: vi.fn(),
       getContextOptimizer: () => ({ optimizeMessages: (messages: any[]) => messages, nextTurn: vi.fn() }),
+      getCwd: () => process.cwd(),
       getTotalInputTokens: () => 0,
       getTotalOutputTokens: () => 0,
       getName: () => "Existing Session",

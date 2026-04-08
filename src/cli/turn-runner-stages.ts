@@ -9,6 +9,7 @@ import type { Session } from "../core/session.js";
 import { resolveExecutionTarget } from "./turn-runner-support.js";
 import type { SpecialistModelRole } from "./model-routing.js";
 import { buildNativeFollowupStateContext } from "./native-workspace-observer.js";
+import { buildSemanticTaskContext } from "./semantic-task-context.js";
 import { applyTurnFrame } from "./turn-frame.js";
 import { estimateTextTokens } from "../ai/tokens.js";
 
@@ -65,7 +66,7 @@ function buildFollowupRepoContext(session: Session, text: string): { transcriptN
     return null;
   }
   return buildNativeFollowupStateContext(
-    process.cwd(),
+    session.getCwd(),
     repoState.recentEdits.map((entry) => entry.path),
     importOnlyFollowup ? 3 : 2,
     "summary",
@@ -198,8 +199,13 @@ export function addUserTurnToSession(options: {
   if (alreadyAddedUserMessage) return {};
   const fileContext = buildTransientFileContext(app.getFileContexts?.());
   const repoContext = buildFollowupRepoContext(session, text);
-  const transcriptNotes = [fileContext?.transcriptNote, repoContext?.transcriptNote].filter(Boolean);
-  const promptBlocks = [fileContext?.promptBlock, repoContext?.promptBlock].filter(Boolean);
+  const semanticContext = buildSemanticTaskContext({
+    cwd: session.getCwd(),
+    userMessage: text,
+    repoState: typeof session.getRepoState === "function" ? session.getRepoState() : undefined,
+  });
+  const transcriptNotes = [fileContext?.transcriptNote, repoContext?.transcriptNote, semanticContext?.transcriptNote].filter(Boolean);
+  const promptBlocks = [fileContext?.promptBlock, repoContext?.promptBlock, semanticContext?.promptBlock].filter(Boolean);
   const fullText = transcriptNotes.length > 0 ? `${text}\n\n${transcriptNotes.join("\n")}` : text;
   app.addMessage("user", text, effectiveImages);
   session.addMessage("user", fullText, effectiveImages);

@@ -14,7 +14,25 @@ export const REPO_STATE_CONTEXT_SUFFIX = `
 const MAX_REPO_STATE_ITEMS = 6;
 
 function normalizeRepoPath(path: string): string {
-  return path.replace(/\\/g, "/").replace(/^\.\//, "");
+  const normalized = path.replace(/\\/g, "/").replace(/^\.\//, "");
+  if (!normalized || normalized.startsWith("/") || /^[A-Za-z]:\//.test(normalized)) return "";
+  const collapsed = normalizeRepoSegments(normalized);
+  if (!collapsed || collapsed === ".." || collapsed.startsWith("../")) return "";
+  return collapsed;
+}
+
+function normalizeRepoSegments(path: string): string {
+  const segments: string[] = [];
+  for (const segment of path.split("/")) {
+    if (!segment || segment === ".") continue;
+    if (segment === "..") {
+      if (segments.length === 0) return "";
+      segments.pop();
+      continue;
+    }
+    segments.push(segment);
+  }
+  return segments.join("/");
 }
 
 function pushRecentUnique<T>(

@@ -281,6 +281,13 @@ function refinePolicyForRequest(policy: TurnPolicy, userMessage: string, repoSta
       ...policy,
       allowedTools: policy.allowedTools.filter((tool) => tool !== "writeFile"),
     };
+    if (existingPaths.length === 1 && !needsShellCapability(userMessage)) {
+      policy = {
+        ...policy,
+        allowedTools: ["editFile"],
+        maxToolSteps: Math.min(policy.maxToolSteps, 1),
+      };
+    }
   }
 
   if ((policy.archetype === "edit" || policy.archetype === "bugfix") && !needsShellCapability(userMessage)) {
@@ -293,8 +300,7 @@ function refinePolicyForRequest(policy: TurnPolicy, userMessage: string, repoSta
   if (
     repoState?.recentEdits.length
     && /\b(test|tests|coverage|spec)\b/i.test(userMessage)
-    && explicitPaths.length > 0
-    && explicitPaths.some((path) => !existsSync(path))
+    && (explicitPaths.length === 0 || explicitPaths.some((path) => !existsSync(path)))
     && !needsShellCapability(userMessage)
   ) {
     return {

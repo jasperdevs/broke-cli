@@ -4,6 +4,7 @@ import { Session } from "../src/core/session.js";
 import { createEmptySessionRepoState } from "../src/core/session-types.js";
 import { buildAggregateBudgetReport, buildBudgetReport, renderBudgetDashboard, summarizeBudgetMetrics } from "../src/core/budget-insights.js";
 import { getMinimalOutputPolicy } from "../src/cli/turn-runner-support.js";
+import { recordRepoEdit } from "../src/core/repo-state.js";
 
 describe("turn policy", () => {
   it("routes casual greetings onto a no-tool lightweight policy", () => {
@@ -46,6 +47,12 @@ describe("turn policy", () => {
     expect(policy.allowedTools).not.toContain("writeFile");
   });
 
+  it("collapses single-file bugfixes onto a direct edit lane", () => {
+    const policy = getTurnPolicy("fix src/core/context.ts so buildCorePrompt stays brief");
+    expect(policy.allowedTools).toEqual(["editFile"]);
+    expect(policy.maxToolSteps).toBe(1);
+  });
+
   it("uses tighter minimal-output caps for normal edit and explore turns", () => {
     const editPolicy = getTurnPolicy("fix src/range.js so the bounds are inclusive");
     const explorePolicy = getTurnPolicy("Without changing any files, tell me which file defines parseConfig.");
@@ -66,7 +73,7 @@ describe("turn policy", () => {
 
     const policy = getTurnPolicy("Write node:test coverage for the flags fix.", [], repoState);
 
-    expect(policy.allowedTools).toEqual(["readFile", "writeFile", "editFile"]);
+    expect(policy.allowedTools).toEqual(["writeFile", "editFile"]);
     expect(policy.maxToolSteps).toBe(2);
     expect(policy.promptProfile).toBe("followup");
     expect(policy.historyWindow).toBe(1);
@@ -99,6 +106,18 @@ describe("turn policy", () => {
 });
 
 describe("session budget metrics", () => {
+  it("drops repo-state edits that point outside the workspace shape", () => {
+    const state = createEmptySessionRepoState();
+    const next = recordRepoEdit(state, "../secrets.txt", "edit", 1);
+    expect(next.recentEdits).toEqual([]);
+  });
+
+  it("normalizes internal dot segments in repo-state edits", () => {
+    const state = createEmptySessionRepoState();
+    const next = recordRepoEdit(state, "src/../src/app.ts", "edit", 1);
+    expect(next.recentEdits[0]?.path).toBe("src/app.ts");
+  });
+
   it("preserves lifetime usage when replacing conversation during compaction", () => {
     const session = new Session(`test-replace-${Date.now()}`);
     session.addMessage("user", "first");

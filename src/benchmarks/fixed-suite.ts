@@ -333,6 +333,7 @@ export async function runFixedBenchmarkSuite(options: FixedBenchmarkOptions = {}
       const sessionModule = await import("../core/session.js");
       const { Session } = sessionModule;
       const session = new Session(`benchmark-${task.id}-${Date.now()}`);
+      session.setCwd(workspace);
       session.setProviderModel(activeModel.provider.name, modelId);
       const app = new BenchmarkTurnApp();
       const turns: BenchmarkTurnResult[] = [];
