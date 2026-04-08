@@ -137,7 +137,12 @@ export function looksLikeRawToolPayload(nextText: string): boolean {
     || /^(writeFile|editFile|readFile|listFiles|grep|bash)\s*\(/i.test(normalized);
 }
 
-export function shouldSuppressPlanningNarration(nextText: string, policy: { archetype: string }): boolean {
+export function shouldSuppressPlanningNarration(
+  nextText: string,
+  policy: { archetype: string },
+  modelRuntime?: ModelHandle["runtime"],
+): boolean {
+  if (modelRuntime === "native-cli") return false;
   if (policy.archetype !== "edit" && policy.archetype !== "bugfix") return false;
   const normalized = nextText.trimStart().toLowerCase();
   return normalized.startsWith("using ")
@@ -172,9 +177,11 @@ export function shouldForceMinimalResponse(options: {
 export function getMinimalOutputPolicy(options: {
   text: string;
   policy: { archetype: string; allowedTools: readonly string[] };
+  modelRuntime?: ModelHandle["runtime"];
 }): MinimalOutputPolicy | null {
-  const { text, policy } = options;
+  const { text, policy, modelRuntime } = options;
   if (!shouldForceMinimalResponse({ text, policy })) return null;
+  if (modelRuntime === "native-cli" && (policy.archetype === "edit" || policy.archetype === "bugfix")) return null;
 
   switch (policy.archetype) {
     case "casual":

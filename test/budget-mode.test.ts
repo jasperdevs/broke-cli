@@ -73,6 +73,15 @@ describe("turn policy", () => {
     });
   });
 
+  it("does not force terse native-cli edit summaries", () => {
+    const editPolicy = getTurnPolicy("make index.html more fun");
+    expect(getMinimalOutputPolicy({
+      text: "make index.html more fun",
+      policy: editPolicy,
+      modelRuntime: "native-cli",
+    })).toBeNull();
+  });
+
   it("forces follow-up test requests onto a tight reuse lane when recent edits exist", () => {
     const repoState = createEmptySessionRepoState();
     repoState.recentEdits.push({ path: "src/flags.js", kind: "edit", turn: 1 });

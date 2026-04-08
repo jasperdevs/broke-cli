@@ -293,6 +293,16 @@ describe("thinking preview", () => {
     app.setStreaming(false);
   });
 
+  it("explains long silent thinking as waiting for a visible event", () => {
+    const app = new App() as any;
+    app.setStreaming(true);
+    app.setThinkingRequested(true);
+    app.streamStartTime = Date.now() - 9000;
+    const output = app.renderMessages(80).map((line: string) => stripAnsi(line)).join("\n");
+    expect(output).toContain("waiting for first visible event");
+    app.setStreaming(false);
+  });
+
   it("persists the last thought block until the next user turn", () => {
     const app = new App() as any;
     app.setStreaming(true);

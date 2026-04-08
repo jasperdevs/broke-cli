@@ -235,7 +235,7 @@ export async function executeTurn(options: {
   let steeringInterruptRequested = false;
   const exposedToolCount = canUseSdkTools(executionModel) ? policy.allowedTools.length : 0;
   const effectiveCavemanLevel = resolveCavemanLevel(settings.cavemanLevel ?? "auto", text);
-  const minimalOutputPolicy = getMinimalOutputPolicy({ text, policy });
+  const minimalOutputPolicy = getMinimalOutputPolicy({ text, policy, modelRuntime: executionModel.runtime });
 
   if (minimalOutputPolicy) {
     turnSystemPrompt += `\n\n${buildMinimalOutputInstruction({
@@ -271,7 +271,7 @@ export async function executeTurn(options: {
   const streamCallbacks = {
     onText: (delta: string) => {
       const nextText = streamedText + delta;
-      if (looksLikeRawToolPayload(nextText) || shouldSuppressPlanningNarration(nextText, policy)) {
+      if (looksLikeRawToolPayload(nextText) || shouldSuppressPlanningNarration(nextText, policy, executionModel.runtime)) {
         streamedText = nextText;
         return;
       }

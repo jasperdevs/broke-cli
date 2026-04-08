@@ -362,7 +362,7 @@ export function renderMessageOverlays(options: {
     }
     const waitingForFirstOutput = streamTokens === 0 && !thinkingBuffer && todoItems.length === 0;
     const label = thinkingRequested
-      ? "Thinking..."
+      ? (waitingForFirstOutput && secs >= 8 ? "Thinking... waiting for first visible event..." : "Thinking...")
       : (waitingForFirstOutput && secs >= 8 ? "Still waiting for first token..." : "Composing...");
     lines.push(`  ${sparkleSpinner(spinnerFrame)} ${shimmerText(label, spinnerFrame)} ${colors.accent}(${statParts.join(" · ")})${colors.reset}`);
     lines.push("");
