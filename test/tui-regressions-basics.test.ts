@@ -202,7 +202,15 @@ describe("sidebar token summary", () => {
     app.setContextUsage(132, 344_000);
     app.updateUsage(0.0016, 150, 60);
     const footer = app.renderSidebarFooter().map((line: string) => stripAnsi(line)).join("\n");
-    expect(footer).toBe("");
+    expect(footer).not.toContain("Session");
+    expect(footer).not.toContain("Next request");
+    expect(footer).toContain("210 total");
+    expect(footer).toContain("$0.0016");
+    expect(footer).toContain("150 in");
+    expect(footer).toContain("60 out");
+    expect(footer).toContain("132/344k ctx");
+    expect(footer).toContain("<1%");
+    expect(footer).toContain("▰");
     updateSetting("showTokens", originalShowTokens);
   });
 
@@ -215,7 +223,14 @@ describe("sidebar token summary", () => {
     app.setContextUsage(132_000, 344_000);
     app.updateUsage(0.0016, 150, 60);
     const footer = app.renderSidebarFooter().map((line: string) => stripAnsi(line));
-    expect(footer).toEqual([]);
+    expect(footer.some((line: string) => line.trim() === "210 total")).toBe(true);
+    expect(footer.some((line: string) => line.trim() === "$0.0016")).toBe(true);
+    expect(footer.some((line: string) => line.trim() === "150 in")).toBe(true);
+    expect(footer.some((line: string) => line.trim() === "60 out")).toBe(true);
+    expect(footer.some((line: string) => line.trim() === "132k/344k ctx")).toBe(true);
+    expect(footer.some((line: string) => line.includes("38%"))).toBe(true);
+    expect(footer.some((line: string) => line.includes("▰") || line.includes("▱"))).toBe(true);
+    expect(footer.filter((line: string) => line.trim() === "").length).toBeGreaterThan(1);
     updateSetting("cavemanLevel", "off");
     updateSetting("showTokens", originalShowTokens);
   });
@@ -227,7 +242,9 @@ describe("sidebar token summary", () => {
     app.setContextUsage(822, 400_000);
     app.updateUsage(0.0016, 150, 60);
     const footer = app.renderSidebarFooter().map((line: string) => stripAnsi(line)).join("\n");
-    expect(footer).toBe("");
+    expect(footer).toContain("822/400k ctx");
+    expect(footer).toContain("<1%");
+    expect(footer).toContain("▰");
     updateSetting("showTokens", originalShowTokens);
   });
 
