@@ -226,12 +226,12 @@ export function listFilesDirect({ path: dir = ".", maxDepth, include }: { path?:
     files: string[];
     totalEntries: number;
     truncated: boolean;
-  }>(memoKey, memoKey, 0);
+  }>(memoKey, memoKey, 1);
   if (memoized) {
     return {
       ...memoized,
       memoized: true as const,
-      note: "Reused unchanged file listing from earlier in this turn.",
+      note: "Reused unchanged file listing from an earlier turn.",
     };
   }
   const max = maxDepth ?? 3;
@@ -292,7 +292,7 @@ export function grepDirect({ pattern, path: dir = ".", include }: { pattern: str
   const memoized = memoContext?.getMemoizedToolResult<{
     summary: Array<{ file: string; count: number; examples: Array<{ line: number; text: string }> }>;
     totalMatches: number;
-  }>(memoKey, memoKey, 0);
+  }>(memoKey, memoKey, 1);
   if (memoized) {
     return {
       matches: [],
@@ -300,7 +300,7 @@ export function grepDirect({ pattern, path: dir = ".", include }: { pattern: str
       totalMatches: memoized.totalMatches,
       capped: false,
       memoized: true as const,
-      note: "Reused unchanged grep results from earlier in this turn.",
+      note: "Reused unchanged grep results from an earlier turn.",
     };
   }
 
@@ -373,7 +373,7 @@ export function semSearchDirect({
     results: Array<{ file: string; line: number; excerpt: string; score: number }>;
     totalResults: number;
     terms: string[];
-  }>(memoKey, memoKey, 0);
+  }>(memoKey, memoKey, 1);
   if (memoized) {
     return {
       results: memoized.results,
@@ -381,7 +381,7 @@ export function semSearchDirect({
       query,
       terms: memoized.terms,
       memoized: true as const,
-      note: "Reused unchanged semantic search results from earlier in this turn.",
+      note: "Reused unchanged semantic search results from an earlier turn.",
     };
   }
   const tokens = tokenizeSearchQuery(query);

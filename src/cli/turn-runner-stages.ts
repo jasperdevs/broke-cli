@@ -38,6 +38,26 @@ export interface TurnExecutionResultLike {
   toolActivity: boolean;
 }
 
+function buildTransientFileContext(fileContexts?: Map<string, string>): { transcriptNote: string; promptBlock: string } | null {
+  if (!fileContexts || fileContexts.size === 0) return null;
+  const entries = [...fileContexts.entries()];
+  return {
+    transcriptNote: `[attached file context available only for this turn] ${entries.map(([path, content]) => `${path} (${content.split("\n").length} lines)`).join(", ")}`,
+    promptBlock: entries.map(([path, content]) => `--- @${path} ---\n${content}`).join("\n\n"),
+  };
+}
+
+export function injectTransientUserContext(messages: TurnChatMessage[], transientUserContext?: string): TurnChatMessage[] {
+  if (!transientUserContext?.trim()) return messages;
+  const next = messages.map((message) => ({ ...message }));
+  for (let i = next.length - 1; i >= 0; i--) {
+    if (next[i]?.role !== "user") continue;
+    next[i] = { ...next[i]!, content: `${next[i]!.content}\n\n${transientUserContext}` };
+    break;
+  }
+  return next;
+}
+
 export async function compactForModel(
   messages: Array<{ role: "user" | "assistant"; content: string }>,
   model: ModelHandle,
@@ -112,19 +132,14 @@ export function addUserTurnToSession(options: {
   text: string;
   effectiveImages?: Array<{ mimeType: string; data: string }>;
   alreadyAddedUserMessage?: boolean;
-}): void {
+}): { transientUserContext?: string } {
   const { app, session, text, effectiveImages, alreadyAddedUserMessage } = options;
-  if (alreadyAddedUserMessage) return;
-  let fullText = text;
-  const fileContexts = app.getFileContexts?.();
-  if (fileContexts && fileContexts.size > 0) {
-    const contextBlock = [...fileContexts.entries()]
-      .map(([path, content]) => `--- @${path} ---\n${content}`)
-      .join("\n\n");
-    fullText = `${text}\n\n${contextBlock}`;
-  }
+  if (alreadyAddedUserMessage) return {};
+  const transientContext = buildTransientFileContext(app.getFileContexts?.());
+  const fullText = transientContext ? `${text}\n\n${transientContext.transcriptNote}` : text;
   app.addMessage("user", text, effectiveImages);
   session.addMessage("user", fullText, effectiveImages);
+  return { transientUserContext: transientContext?.promptBlock };
 }
 
 export function prepareTurnContext(options: {
@@ -140,6 +155,7 @@ export function prepareTurnContext(options: {
   effectiveImages?: Array<{ mimeType: string; data: string }>;
   lastToolCalls: string[];
   forceRoute?: "main" | "small";
+  transientUserContext?: string;
   resolveSpecialistModel?: (role: SpecialistModelRole) => { model: ModelHandle; modelId: string } | null;
   optimizeMessages: (messages: TurnChatMessage[]) => TurnChatMessage[];
 }): PreparedTurnContext {
@@ -156,6 +172,7 @@ export function prepareTurnContext(options: {
     effectiveImages,
     lastToolCalls,
     forceRoute,
+    transientUserContext,
     resolveSpecialistModel,
     optimizeMessages,
   } = options;
@@ -192,10 +209,10 @@ export function prepareTurnContext(options: {
     policy.promptProfile,
   );
   const selectedMessages = applyTurnFrame(
-    selectMessagesForTurn(session.getChatMessages(), policy, optimizeMessages, {
+    injectTransientUserContext(selectMessagesForTurn(session.getChatMessages(), policy, optimizeMessages, {
       maxTokens: contextBudget,
       modelId: previewTarget.executionModelId,
-    }),
+    }), transientUserContext),
     text,
     `Execution scaffold (${policy.archetype}): ${policy.scaffold}`,
     policy.allowedTools,
@@ -213,9 +230,10 @@ export async function maybeAutoCompactTurnContext(options: {
   currentModelId: string;
   policy: TurnPolicy;
   prepared: PreparedTurnContext;
+  transientUserContext?: string;
   optimizeMessages: (messages: TurnChatMessage[]) => TurnChatMessage[];
 }): Promise<PreparedTurnContext> {
-  const { app, session, activeModel, currentModelId, policy, prepared, optimizeMessages } = options;
+  const { app, session, activeModel, currentModelId, policy, prepared, transientUserContext, optimizeMessages } = options;
   const settings = getSettings();
   let nextPrepared = prepared;
   const chatMsgs = session.getChatMessages();
@@ -232,7 +250,7 @@ export async function maybeAutoCompactTurnContext(options: {
     app.setCompacting(false);
     app.setStatus(`Auto-compacted older context. Kept ${session.getMessages().length} visible messages.`);
     const selectedMessages = applyTurnFrame(
-      selectMessagesForTurn(session.getChatMessages(), policy, optimizeMessages, {
+      injectTransientUserContext(selectMessagesForTurn(session.getChatMessages(), policy, optimizeMessages, {
         maxTokens: Math.max(
           4000,
           Math.min(
@@ -241,7 +259,7 @@ export async function maybeAutoCompactTurnContext(options: {
           ),
         ),
         modelId: currentModelId,
-      }),
+      }), transientUserContext),
       "",
       `Execution scaffold (${policy.archetype}): ${policy.scaffold}`,
       policy.allowedTools,

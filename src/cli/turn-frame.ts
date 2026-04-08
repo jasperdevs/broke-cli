@@ -5,12 +5,8 @@ const TURN_FRAME_START = "<turn-frame>";
 const TURN_FRAME_END = "</turn-frame>";
 const TOOL_GUIDANCE: Partial<Record<ToolName, string>> = {
   bash: "bash: only for real commands/tests/builds. Avoid shell reads/searches when native tools can do it cheaper.",
-  semSearch: "semSearch: use for conceptual discovery before broader exact search.",
-  readFile: "readFile: prefer targeted reads with offset/limit on large files.",
   editFile: "editFile: default patch path for existing files. old_string must be exact and unique.",
   writeFile: "writeFile: only for new files or deliberate full rewrites.",
-  listFiles: "listFiles: use for cheap tree discovery; keep depth narrow.",
-  grep: "grep: use for exact strings/usages; narrow with include when possible.",
   webSearch: "webSearch: only for current external facts.",
   webFetch: "webFetch: fetch a specific URL once you know the target.",
   todoWrite: "todoWrite: use only for genuinely multi-step work.",

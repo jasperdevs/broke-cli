@@ -37,17 +37,19 @@ describe("turn runner stages", () => {
     expect(selected.map((entry) => entry.content)).toEqual([summary, "c".repeat(1500)]);
   });
 
-  it("adds file context blocks only once when capturing the user turn", () => {
+  it("keeps file context ephemeral when capturing the user turn", () => {
     const session = new Session(`turn-stage-${Date.now()}`);
     const app = {
       addMessage: vi.fn(),
       getFileContexts: () => new Map([["src/app.ts", "const x = 1;"]]),
     };
 
-    addUserTurnToSession({ app, session, text: "inspect this", effectiveImages: undefined, alreadyAddedUserMessage: false });
+    const first = addUserTurnToSession({ app, session, text: "inspect this", effectiveImages: undefined, alreadyAddedUserMessage: false });
 
     expect(app.addMessage).toHaveBeenCalledWith("user", "inspect this", undefined);
-    expect(session.getMessages()[0]?.content).toContain("--- @src/app.ts ---");
+    expect(session.getMessages()[0]?.content).toContain("[attached file context available only for this turn]");
+    expect(session.getMessages()[0]?.content).not.toContain("--- @src/app.ts ---");
+    expect(first.transientUserContext).toContain("--- @src/app.ts ---");
 
     addUserTurnToSession({ app, session, text: "inspect this", effectiveImages: undefined, alreadyAddedUserMessage: true });
     expect(session.getMessages()).toHaveLength(1);

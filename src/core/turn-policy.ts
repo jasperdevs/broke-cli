@@ -205,6 +205,10 @@ function hasCreateIntent(userMessage: string): boolean {
   return /\b(create|new file|new files|scaffold|generate|make\b.*\bfile|add\b.*\bfile)\b/i.test(userMessage);
 }
 
+function needsShellCapability(userMessage: string): boolean {
+  return /\b(test|tests|build|lint|compile|run|execute|command|npm|pnpm|yarn|bun|git|install|serve|start)\b/i.test(userMessage);
+}
+
 function refinePolicyForRequest(policy: TurnPolicy, userMessage: string): TurnPolicy {
   const explicitPaths = extractExplicitPaths(userMessage);
   const existingPaths = explicitPaths.filter((path) => existsSync(path));
@@ -226,9 +230,16 @@ function refinePolicyForRequest(policy: TurnPolicy, userMessage: string): TurnPo
   }
 
   if ((policy.archetype === "edit" || policy.archetype === "bugfix") && existingPaths.length > 0 && !hasCreateIntent(userMessage)) {
-    return {
+    policy = {
       ...policy,
       allowedTools: policy.allowedTools.filter((tool) => tool !== "writeFile"),
+    };
+  }
+
+  if ((policy.archetype === "edit" || policy.archetype === "bugfix") && !needsShellCapability(userMessage)) {
+    policy = {
+      ...policy,
+      allowedTools: policy.allowedTools.filter((tool) => tool !== "bash"),
     };
   }
 

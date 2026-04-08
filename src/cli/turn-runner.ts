@@ -88,7 +88,7 @@ export async function runModelTurn(options: {
   }
   await maybeRefreshIdleContext({ app, session, systemPrompt, currentModelId, activeModel, lastActivityTime });
   let nextActivityTime = Date.now();
-  addUserTurnToSession({ app, session, text, effectiveImages, alreadyAddedUserMessage });
+  const { transientUserContext } = addUserTurnToSession({ app, session, text, effectiveImages, alreadyAddedUserMessage });
   let prepared = prepareTurnContext({
     app,
     session,
@@ -102,6 +102,7 @@ export async function runModelTurn(options: {
     effectiveImages,
     lastToolCalls,
     forceRoute,
+    transientUserContext,
     resolveSpecialistModel,
     optimizeMessages: (messages) => selectMessagesForTurn(messages, policy, (msgs) => getContextOptimizer().optimizeMessages(msgs)),
   });
@@ -112,6 +113,7 @@ export async function runModelTurn(options: {
     currentModelId,
     policy,
     prepared,
+    transientUserContext,
     optimizeMessages: (messages) => selectMessagesForTurn(messages, policy, (msgs) => getContextOptimizer().optimizeMessages(msgs)),
   });
 
@@ -135,6 +137,7 @@ export async function runModelTurn(options: {
     activeSystemPrompt: prepared.turnSystemPrompt,
     optimizeMessages: (messages) => selectMessagesForTurn(messages, policy, (msgs) => getContextOptimizer().optimizeMessages(msgs)),
     forceRoute,
+    transientUserContext,
     resolveSpecialistModel,
   });
   nextActivityTime = result.lastActivityTime;
@@ -159,6 +162,7 @@ export async function runModelTurn(options: {
       activeSystemPrompt: `${prepared.turnSystemPrompt}\n\nIMPORTANT: This request requires real repo actions. Use the available tools to inspect or modify files before any completion text. Do not claim a file was added, changed, fixed, committed, or pushed unless a tool in this turn actually did it.`,
       optimizeMessages: (messages) => selectMessagesForTurn(messages, policy, (msgs) => getContextOptimizer().optimizeMessages(msgs)),
       forceRoute: "main",
+      transientUserContext,
       resolveSpecialistModel,
     });
     nextActivityTime = result.lastActivityTime;
@@ -190,6 +194,7 @@ export async function runModelTurn(options: {
       activeSystemPrompt: prepared.turnSystemPrompt,
       optimizeMessages: (messages) => selectMessagesForTurn(messages, policy, (msgs) => getContextOptimizer().optimizeMessages(msgs)),
       forceRoute: "main",
+      transientUserContext,
     });
     nextActivityTime = result.lastActivityTime;
   }

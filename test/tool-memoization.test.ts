@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
 import { afterEach, describe, expect, it } from "vitest";
 import { ContextOptimizer } from "../src/core/context-optimizer.js";
-import { grepDirect, readFileDirect, writeFileDirect } from "../src/tools/file-ops.js";
+import { grepDirect, readFileDirect, semSearchDirect, writeFileDirect } from "../src/tools/file-ops.js";
 import { setActiveToolContext } from "../src/tools/runtime-context.js";
 
 describe("tool memoization", () => {
@@ -39,7 +39,7 @@ describe("tool memoization", () => {
     expect((refreshed as any).content).toContain("export const value");
   });
 
-  it("limits grep memoization to the current turn so later turns get a fresh scan", () => {
+  it("reuses unchanged grep results across adjacent turns", () => {
     const dir = mkdtempSync(join(process.cwd(), ".tmp", "brokecli-memo-grep-"));
     tempDirs.push(dir);
     writeFileSync(join(dir, "auth.ts"), "export function refreshAuthToken() {\n  return 'ok';\n}\n", "utf-8");
@@ -57,8 +57,31 @@ describe("tool memoization", () => {
 
       optimizer.nextTurn();
       const second = grepDirect({ pattern: "refreshAuthToken", path: "." });
-      expect((second as any).memoized).toBeUndefined();
+      expect((second as any).memoized).toBe(true);
       expect(second.totalMatches).toBeGreaterThan(0);
+    } finally {
+      process.chdir(previous);
+    }
+  });
+
+  it("reuses unchanged semantic search results across adjacent turns", () => {
+    const dir = mkdtempSync(join(process.cwd(), ".tmp", "brokecli-memo-sem-"));
+    tempDirs.push(dir);
+    writeFileSync(join(dir, "auth.ts"), "export function refreshAuthToken() {\n  return 'ok';\n}\n", "utf-8");
+
+    const previous = process.cwd();
+    process.chdir(dir);
+    try {
+      const optimizer = new ContextOptimizer();
+      setActiveToolContext({ contextOptimizer: optimizer, memoizedToolResults: true });
+
+      optimizer.nextTurn();
+      const first = semSearchDirect({ query: "where is auth token refresh handled", path: ".", limit: 3 });
+      expect((first as any).memoized).toBeUndefined();
+
+      optimizer.nextTurn();
+      const second = semSearchDirect({ query: "where is auth token refresh handled", path: ".", limit: 3 });
+      expect((second as any).memoized).toBe(true);
     } finally {
       process.chdir(previous);
     }

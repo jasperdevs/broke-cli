@@ -40,6 +40,25 @@ function compressToolOutputs(content: string): string {
   return compressed;
 }
 
+function summarizeAttachedFileContexts(content: string): string | null {
+  if (!content.includes("--- @")) return null;
+  const sections = content.split(/\n{2,}(?=--- @)/);
+  if (sections.length < 2) return null;
+  const lead = sections[0]?.trim() ?? "";
+  const attachments = sections.slice(1)
+    .map((section) => {
+      const match = section.match(/^--- @([^\n]+) ---\n?/);
+      if (!match) return null;
+      const body = section.slice(match[0].length);
+      const lineCount = body ? body.split("\n").length : 0;
+      return `${match[1]} (${lineCount} lines)`;
+    })
+    .filter((entry): entry is string => !!entry);
+  if (attachments.length === 0) return null;
+  const summary = `[attached file context omitted from replay] ${attachments.join(", ")}`;
+  return lead ? `${lead}\n\n${summary}` : summary;
+}
+
 export class ContextOptimizer {
   private readFiles = new Map<string, { turnIndex: number; lineCount: number }>();
   private toolMemo = new Map<string, { fingerprint: string; turnIndex: number; result: unknown }>();
@@ -98,7 +117,8 @@ export class ContextOptimizer {
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i];
       if (i < recentStart) {
-        result.push({ role: msg.role, content: compressToolOutputs(msg.content) });
+        const summarizedContext = msg.role === "user" ? summarizeAttachedFileContexts(msg.content) : null;
+        result.push({ role: msg.role, content: compressToolOutputs(summarizedContext ?? msg.content) });
       } else {
         result.push(msg);
       }

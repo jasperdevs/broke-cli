@@ -23,6 +23,7 @@ import type { Session } from "../core/session.js";
 import { sendResponseNotification } from "./notify.js";
 import type { SpecialistModelRole } from "./model-routing.js";
 import { applyTurnFrame } from "./turn-frame.js";
+import { injectTransientUserContext } from "./turn-runner-stages.js";
 type PendingDelivery = "steering" | "followup";
 
 interface TurnExecutionApp {
@@ -48,6 +49,7 @@ interface TurnExecutionApp {
 
 interface ExtensionHooks { emit(event: string, payload: Record<string, unknown>): void; }
 const MAX_TOOL_RESULT_SERIALIZED_CHARS = 6000;
+
 function createStreamTokenTracker(
   app: TurnExecutionApp,
   executionModelId: string,
@@ -72,7 +74,6 @@ function createStreamTokenTracker(
     },
   };
 }
-
 function resolveTurnExecution(options: {
   text: string;
   policy: TurnPolicy;
@@ -88,6 +89,7 @@ function resolveTurnExecution(options: {
   contextLimit: number;
   activeSystemPrompt: string;
   optimizeMessages: (messages: Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }>) => Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }>;
+  transientUserContext?: string;
   app: Pick<TurnExecutionApp, "setContextUsage">;
   resolveSpecialistModel?: (role: SpecialistModelRole) => { model: ModelHandle; modelId: string } | null;
 }): {
@@ -113,16 +115,12 @@ function resolveTurnExecution(options: {
     contextLimit,
     activeSystemPrompt,
     optimizeMessages,
+    transientUserContext,
     app,
     resolveSpecialistModel,
   } = options;
   let turnSystemPrompt = activeSystemPrompt;
-  const {
-    resolvedRoute,
-    executionModel,
-    executionModelId,
-    thinkingRequested,
-  } = resolveExecutionTarget({
+  const { resolvedRoute, executionModel, executionModelId, thinkingRequested } = resolveExecutionTarget({
     text,
     policy,
     currentMode,
@@ -146,7 +144,7 @@ function resolveTurnExecution(options: {
     );
   }
   const optimizedMessages = applyTurnFrame(
-    optimizeMessages(session.getChatMessages()),
+    injectTransientUserContext(optimizeMessages(session.getChatMessages()), transientUserContext),
     text,
     `Execution scaffold (${policy.archetype}): ${policy.scaffold}`,
     policy.allowedTools,
@@ -162,7 +160,6 @@ function resolveTurnExecution(options: {
     thinkingRequested,
   };
 }
-
 function estimateToolResultTokens(result: unknown): number {
   try {
     const serialized = JSON.stringify(result);
@@ -175,7 +172,6 @@ function estimateToolResultTokens(result: unknown): number {
     return 0;
   }
 }
-
 export async function executeTurn(options: {
   app: TurnExecutionApp;
   session: Session;
@@ -194,6 +190,7 @@ export async function executeTurn(options: {
   activeSystemPrompt: string;
   optimizeMessages: (messages: Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }>) => Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }>;
   forceRoute?: "main" | "small";
+  transientUserContext?: string;
   resolveSpecialistModel?: (role: SpecialistModelRole) => { model: ModelHandle; modelId: string } | null;
 }): Promise<{
   nextToolCalls: string[];
@@ -223,9 +220,9 @@ export async function executeTurn(options: {
     activeSystemPrompt,
     optimizeMessages,
     forceRoute,
+    transientUserContext,
     resolveSpecialistModel,
   } = options;
-
   let streamedText = "";
   let streamedReasoning = "";
   let sawToolActivity = false;
@@ -254,6 +251,7 @@ export async function executeTurn(options: {
     contextLimit,
     activeSystemPrompt,
     optimizeMessages,
+    transientUserContext,
     app,
     resolveSpecialistModel,
   });
@@ -484,7 +482,6 @@ export async function executeTurn(options: {
   } finally {
     setActiveToolContext(null);
   }
-
   return {
     nextToolCalls,
     lastActivityTime: steeringInterruptRequested ? Date.now() : nextActivityTime,
