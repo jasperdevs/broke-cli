@@ -8,7 +8,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autoSaveSessions: true,
   enableThinking: false,
   thinkingLevel: "off" as ThinkingLevel,
-  gitCheckpoints: true,
+  gitCheckpoints: false,
   notifyOnResponse: false,
   hideSidebar: false,
   autoRoute: true,

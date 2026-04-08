@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { DEFAULT_SETTINGS } from "../src/core/config-defaults.js";
 
 const { execSyncMock, settings } = vi.hoisted(() => ({
   execSyncMock: vi.fn(),
@@ -19,6 +20,10 @@ describe("git checkpoints", () => {
   beforeEach(() => {
     settings.gitCheckpoints = true;
     execSyncMock.mockReset();
+  });
+
+  it("defaults git checkpoints off", () => {
+    expect(DEFAULT_SETTINGS.gitCheckpoints).toBe(false);
   });
 
   it("skips checkpoint commands when git checkpoints are disabled", () => {
