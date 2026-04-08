@@ -17,12 +17,13 @@ export const readFileTool = tool({
     limit: z.number().optional().describe("Max lines to return"),
     mode: z.enum(["full", "minimal", "aggressive"]).optional().describe("Read mode (default: full)"),
     tail: z.number().optional().describe("Return only the last N lines"),
+    refresh: z.boolean().optional().describe("Force a fresh read instead of reusing a recent unchanged result"),
   }),
-  execute: async ({ path, offset, limit, mode, tail }) => readFileMaybeRemote({ path, offset, limit, mode, tail }),
+  execute: async ({ path, offset, limit, mode, tail, refresh }) => readFileMaybeRemote({ path, offset, limit, mode, tail, refresh }),
 });
 
 export const writeFileTool = tool({
-  description: "Create a new file or completely overwrite an existing one. For targeted changes to existing files, use editFile instead. Always readFile first if the file already exists.",
+  description: "Create a new file or completely overwrite an existing one. Use this for genuinely new files or deliberate full rewrites. For existing files, prefer editFile/apply-patch style changes after reading the target first.",
   inputSchema: z.object({
     path: z.string().describe("File path to write"),
     content: z.string().describe("Complete file content"),
@@ -31,7 +32,7 @@ export const writeFileTool = tool({
 });
 
 export const editFileTool = tool({
-  description: "Replace an exact string in a file with new content. The old_string must match EXACTLY (including whitespace/indentation). Include enough surrounding lines to make old_string unique. Preferred over writeFile for changes to existing files.",
+  description: "Replace an exact string in a file with new content. The old_string must match EXACTLY (including whitespace/indentation). Include enough surrounding lines to make old_string unique. Preferred over writeFile for changes to existing files and the default patch-first editing path.",
   inputSchema: z.object({
     path: z.string().describe("File path to edit"),
     old_string: z.string().describe("Exact existing text to find (must be unique in the file)"),

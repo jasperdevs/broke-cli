@@ -3,6 +3,15 @@ import { basename, dirname, join, relative } from "path";
 import { createCheckpoint } from "../core/git.js";
 import { checkFilesystemPathAccess, ensureNetworkAllowed } from "../core/permissions.js";
 import { fetchRemoteGitHubFile, listRemoteGitHubTree, tryParseRemoteGitHubTarget } from "./file-ops-remote.js";
+import {
+  buildMemoizedReadSummary,
+  buildReadMemoKey,
+  findFirstMatchLine,
+  getMemoContext,
+  scoreSemanticMatch,
+  tokenizeSearchQuery,
+  type ReadMode,
+} from "./file-ops-support.js";
 
 /** Max chars to return from file reads (~1500 tokens) */
 const MAX_READ_CHARS = 6000;
@@ -13,13 +22,6 @@ const MAX_LIST_FILES = 120;
 /** Max semantic search results */
 const MAX_SEM_SEARCH_RESULTS = 8;
 const SKIP_DIRS = new Set([".git", "node_modules", "dist", "coverage", ".omx", ".tmp"]);
-const STOP_WORDS = new Set([
-  "a", "an", "the", "to", "for", "in", "on", "of", "and", "or", "with", "from", "at", "by",
-  "me", "show", "find", "read", "list", "look", "need", "tell", "what", "where", "how", "why",
-  "that", "this", "these", "those", "all", "file", "files", "code", "does", "work",
-]);
-
-type ReadMode = "full" | "minimal" | "aggressive";
 
 interface ReadFileDirectOptions {
   path: string;
@@ -27,6 +29,7 @@ interface ReadFileDirectOptions {
   limit?: number;
   mode?: ReadMode;
   tail?: number;
+  refresh?: boolean;
 }
 
 interface WalkFileOptions {
@@ -143,59 +146,35 @@ function buildGrepSummary(matches: Array<{ file: string; line: number; text: str
   }));
 }
 
-function tokenizeSearchQuery(query: string): string[] {
-  return [...new Set(
-    query
-      .toLowerCase()
-      .split(/[^a-z0-9_.:/-]+/)
-      .map((token) => token.trim())
-      .filter((token) => token.length >= 2 && !STOP_WORDS.has(token)),
-  )];
-}
-
-function findFirstMatchLine(content: string, tokens: string[]): { line: number; text: string } | null {
-  const lines = content.split("\n");
-  for (let i = 0; i < lines.length; i++) {
-    const lower = lines[i].toLowerCase();
-    if (tokens.some((token) => lower.includes(token))) {
-      return { line: i + 1, text: lines[i].trim().slice(0, 180) };
-    }
-  }
-  return null;
-}
-
-function scoreSemanticMatch(query: string, filePath: string, content: string, tokens: string[]): number {
-  const lowerPath = filePath.toLowerCase();
-  const lowerBase = basename(filePath).toLowerCase();
-  const lowerContent = content.toLowerCase();
-  let score = 0;
-
-  if (lowerPath.includes(query)) score += 24;
-  if (lowerBase.includes(query)) score += 28;
-
-  for (const token of tokens) {
-    if (lowerBase.includes(token)) score += 12;
-    if (lowerPath.includes(token)) score += 8;
-    const contentHits = lowerContent.split(token).length - 1;
-    if (contentHits > 0) score += Math.min(18, contentHits * 3);
-  }
-
-  if (/(readme|guide|doc|config|route|render|sidebar|session|budget|tool)/i.test(query) && /(readme|guide|doc|config|route|render|sidebar|session|budget|tool)/i.test(lowerPath)) {
-    score += 8;
-  }
-
-  return score;
-}
-
-export function readFileDirect({ path, offset, limit, mode, tail }: ReadFileDirectOptions) {
+export function readFileDirect({ path, offset, limit, mode, tail, refresh }: ReadFileDirectOptions) {
   const access = checkFilesystemPathAccess(path, "read");
   if (!access.allowed) {
     return { success: false as const, error: access.reason ?? "Read not permitted." };
   }
   try {
+    const fileStat = statSync(path);
+    const readMode = mode ?? "full";
+    const memoContext = getMemoContext();
+    const memoKey = buildReadMemoKey({ path, offset, limit, mode: readMode, tail });
+    const fingerprint = `${fileStat.mtimeMs}:${fileStat.size}`;
+    if (!refresh) {
+      const memoized = memoContext?.getMemoizedToolResult<{ totalLines: number; mode: ReadMode; firstSeenTurn: number }>(
+        memoKey,
+        fingerprint,
+      );
+      if (memoized) {
+        return {
+          success: true as const,
+          content: buildMemoizedReadSummary(path, memoized),
+          totalLines: memoized.totalLines,
+          mode: memoized.mode,
+          memoized: true as const,
+        };
+      }
+    }
+
     const raw = readFileSync(path, "utf-8");
     let content = raw;
-    const readMode = mode ?? "full";
     const lines = raw.split("\n");
 
     if (tail !== undefined && tail > 0) {
@@ -221,6 +200,12 @@ export function readFileDirect({ path, offset, limit, mode, tail }: ReadFileDire
       };
     }
 
+    memoContext?.rememberToolResult(memoKey, fingerprint, {
+      totalLines,
+      mode: readMode,
+      firstSeenTurn: memoContext.getCurrentTurn(),
+    });
+
     return { success: true as const, content, totalLines, mode: readMode };
   } catch (err: unknown) {
     return { success: false as const, error: (err as Error).message };
@@ -231,6 +216,20 @@ export function listFilesDirect({ path: dir = ".", maxDepth, include }: { path?:
   const access = checkFilesystemPathAccess(dir, "read");
   if (!access.allowed) {
     return { files: [], totalEntries: 0, truncated: false, error: access.reason };
+  }
+  const memoContext = getMemoContext();
+  const memoKey = ["list", dir, maxDepth ?? 3, include ?? ""].join("|");
+  const memoized = memoContext?.getMemoizedToolResult<{
+    files: string[];
+    totalEntries: number;
+    truncated: boolean;
+  }>(memoKey, memoKey, 1);
+  if (memoized) {
+    return {
+      ...memoized,
+      memoized: true as const,
+      note: "Reused unchanged file listing from the previous turn.",
+    };
   }
   const max = maxDepth ?? 3;
   const files: string[] = [];
@@ -269,7 +268,9 @@ export function listFilesDirect({ path: dir = ".", maxDepth, include }: { path?:
     return false;
   };
   visit(dir, 0);
-  return { files, totalEntries, truncated: capped };
+  const result = { files, totalEntries, truncated: capped };
+  memoContext?.rememberToolResult(memoKey, memoKey, result);
+  return result;
 }
 
 export function grepDirect({ pattern, path: dir = ".", include }: { pattern: string; path?: string; include?: string }) {
@@ -283,6 +284,23 @@ export function grepDirect({ pattern, path: dir = ".", include }: { pattern: str
       error: access.reason,
     };
   }
+  const memoContext = getMemoContext();
+  const memoKey = ["grep", dir, pattern, include ?? ""].join("|");
+  const memoized = memoContext?.getMemoizedToolResult<{
+    summary: Array<{ file: string; count: number; examples: Array<{ line: number; text: string }> }>;
+    totalMatches: number;
+  }>(memoKey, memoKey, 1);
+  if (memoized) {
+    return {
+      matches: [],
+      summary: memoized.summary,
+      totalMatches: memoized.totalMatches,
+      capped: false,
+      memoized: true as const,
+      note: "Reused unchanged grep results from the previous turn.",
+    };
+  }
+
   const regex = new RegExp(pattern, "i");
   const matches: Array<{ file: string; line: number; text: string }> = [];
 
@@ -311,12 +329,17 @@ export function grepDirect({ pattern, path: dir = ".", include }: { pattern: str
     },
   });
 
-  return {
+  const result = {
     matches,
     summary: buildGrepSummary(matches),
     totalMatches: matches.length,
     capped: matches.length >= MAX_GREP_MATCHES,
   };
+  memoContext?.rememberToolResult(memoKey, memoKey, {
+    summary: result.summary,
+    totalMatches: result.totalMatches,
+  });
+  return result;
 }
 
 export function semSearchDirect({
@@ -340,7 +363,24 @@ export function semSearchDirect({
       error: access.reason,
     };
   }
+  const memoContext = getMemoContext();
   const normalizedQuery = query.trim().toLowerCase();
+  const memoKey = ["sem", dir, normalizedQuery, include ?? "", limit ?? ""].join("|");
+  const memoized = memoContext?.getMemoizedToolResult<{
+    results: Array<{ file: string; line: number; excerpt: string; score: number }>;
+    totalResults: number;
+    terms: string[];
+  }>(memoKey, memoKey, 1);
+  if (memoized) {
+    return {
+      results: memoized.results,
+      totalResults: memoized.totalResults,
+      query,
+      terms: memoized.terms,
+      memoized: true as const,
+      note: "Reused unchanged semantic search results from the previous turn.",
+    };
+  }
   const tokens = tokenizeSearchQuery(query);
   const maxResults = Math.min(Math.max(limit ?? 6, 1), MAX_SEM_SEARCH_RESULTS);
   const results: Array<{ file: string; line: number; excerpt: string; score: number }> = [];
@@ -374,12 +414,18 @@ export function semSearchDirect({
     .sort((a, b) => b.score - a.score || a.file.localeCompare(b.file))
     .slice(0, maxResults);
 
-  return {
+  const result = {
     results: ranked,
     totalResults: ranked.length,
     query,
     terms: tokens,
   };
+  memoContext?.rememberToolResult(memoKey, memoKey, {
+    results: ranked,
+    totalResults: ranked.length,
+    terms: tokens,
+  });
+  return result;
 }
 
 export async function readFileMaybeRemote(options: ReadFileDirectOptions) {
@@ -411,6 +457,7 @@ export function writeFileDirect({ path, content }: { path: string; content: stri
     mkdirSync(dirname(path), { recursive: true });
     createCheckpoint();
     writeFileSync(path, content, "utf-8");
+    getMemoContext()?.invalidateToolResults();
     return { success: true as const, bytesWritten: content.length };
   } catch (err: unknown) {
     return { success: false as const, error: (err as Error).message };
@@ -434,6 +481,7 @@ export function editFileDirect({ path, old_string, new_string }: { path: string;
     createCheckpoint();
     const updated = content.replace(old_string, new_string);
     writeFileSync(path, updated, "utf-8");
+    getMemoContext()?.invalidateToolResults();
     return { success: true as const };
   } catch (err: unknown) {
     return { success: false as const, error: (err as Error).message };

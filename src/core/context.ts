@@ -2,6 +2,7 @@ import { readFileSync, existsSync } from "fs";
 import { join, dirname } from "path";
 import { homedir } from "os";
 import { execSync } from "child_process";
+import { createHash } from "crypto";
 import type { Mode, CavemanLevel } from "./config.js";
 import type { PromptProfile } from "./turn-policy.js";
 import { getCavemanPrompt } from "./caveman.js";
@@ -268,6 +269,25 @@ ${describeAutonomyPolicy(cwd).join("\n")}
   const prompt = parts.join("\n");
   cachedPrompts.set(cacheKey, prompt);
   return prompt;
+}
+
+export function buildPromptCacheKey(options: {
+  cwd: string;
+  providerId?: string;
+  modelId?: string;
+  mode?: Mode;
+  cavemanLevel?: CavemanLevel;
+  profile?: PromptProfile;
+}): string {
+  const key = [
+    options.cwd,
+    options.providerId ?? "default",
+    options.modelId ?? "default",
+    options.mode ?? "build",
+    options.cavemanLevel ?? "off",
+    options.profile ?? "full",
+  ].join("|");
+  return `brokecli:${createHash("sha1").update(key).digest("hex").slice(0, 16)}`;
 }
 
 export function reloadContext(): void {

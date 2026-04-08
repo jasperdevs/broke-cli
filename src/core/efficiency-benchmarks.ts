@@ -68,10 +68,10 @@ export const EFFICIENCY_BENCHMARK_CASES: EfficiencyBenchmarkCase[] = [
     routing: { messageCount: 4, expected: "small" },
     policy: {
       archetype: "explore",
-      maxToolSteps: 2,
+      maxToolSteps: 1,
       preferSmallExecutor: true,
-      requiredTools: ["readFile", "listFiles", "grep"],
-      forbiddenTools: ["writeFile", "editFile", "webSearch"],
+      requiredTools: ["readFile"],
+      forbiddenTools: ["listFiles", "grep", "writeFile", "editFile", "webSearch"],
     },
   },
   {

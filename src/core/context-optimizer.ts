@@ -42,6 +42,7 @@ function compressToolOutputs(content: string): string {
 
 export class ContextOptimizer {
   private readFiles = new Map<string, { turnIndex: number; lineCount: number }>();
+  private toolMemo = new Map<string, { fingerprint: string; turnIndex: number; result: unknown }>();
   private currentTurn = 0;
 
   nextTurn(): number {
@@ -54,6 +55,7 @@ export class ContextOptimizer {
 
   reset(): void {
     this.readFiles.clear();
+    this.toolMemo.clear();
     this.currentTurn = 0;
   }
 
@@ -67,6 +69,21 @@ export class ContextOptimizer {
 
   getFileReadInfo(path: string): { turnIndex: number; lineCount: number } | undefined {
     return this.readFiles.get(normalizePath(path));
+  }
+
+  rememberToolResult(key: string, fingerprint: string, result: unknown): void {
+    this.toolMemo.set(key, { fingerprint, turnIndex: this.currentTurn, result });
+  }
+
+  getMemoizedToolResult<T>(key: string, fingerprint: string, maxAgeTurns = 2): T | undefined {
+    const cached = this.toolMemo.get(key);
+    if (!cached || cached.fingerprint !== fingerprint) return undefined;
+    if (this.currentTurn - cached.turnIndex > maxAgeTurns) return undefined;
+    return cached.result as T;
+  }
+
+  invalidateToolResults(): void {
+    this.toolMemo.clear();
   }
 
   optimizeMessages(

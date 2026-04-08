@@ -15,9 +15,8 @@ describe("turn policy", () => {
 
   it("keeps exploration turns on a read-only tool subset with a low step cap", () => {
     const policy = getTurnPolicy("read src/app.ts and tell me what it does");
-    expect(policy.archetype).toBe("explore");
-    expect(policy.allowedTools).toContain("semSearch");
     expect(policy.allowedTools).toContain("readFile");
+    expect(policy.allowedTools).toHaveLength(1);
     expect(policy.allowedTools).not.toContain("writeFile");
     expect(policy.allowedTools).not.toContain("agent");
     expect(policy.allowedTools).not.toContain("todoWrite");
@@ -30,6 +29,12 @@ describe("turn policy", () => {
     expect(policy.allowedTools).toContain("editFile");
     expect(policy.allowedTools).toContain("writeFile");
     expect(policy.maxToolSteps).toBeGreaterThanOrEqual(6);
+  });
+
+  it("drops writeFile for existing-file edit requests to enforce patch-first behavior", () => {
+    const policy = getTurnPolicy("update README.md to explain the new budget report");
+    expect(policy.allowedTools).toContain("editFile");
+    expect(policy.allowedTools).not.toContain("writeFile");
   });
 });
 

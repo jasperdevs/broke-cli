@@ -196,8 +196,46 @@ function getBuiltInPolicy(archetype: TurnArchetype): TurnPolicy {
   }
 }
 
+function extractExplicitPaths(userMessage: string): string[] {
+  return [...new Set(userMessage.match(/[A-Za-z0-9_./-]+\.[A-Za-z0-9]+/g) ?? [])];
+}
+
+function hasCreateIntent(userMessage: string): boolean {
+  return /\b(create|new file|new files|scaffold|generate|make\b.*\bfile|add\b.*\bfile)\b/i.test(userMessage);
+}
+
+function refinePolicyForRequest(policy: TurnPolicy, userMessage: string): TurnPolicy {
+  const explicitPaths = extractExplicitPaths(userMessage);
+  const existingPaths = explicitPaths.filter((path) => existsSync(path));
+
+  if ((policy.archetype === "explore" || policy.archetype === "question") && explicitPaths.length > 0) {
+    return {
+      ...policy,
+      allowedTools: ["readFile"],
+      maxToolSteps: 1,
+    };
+  }
+
+  if (policy.archetype === "research" && /https?:\/\//i.test(userMessage)) {
+    return {
+      ...policy,
+      allowedTools: ["webFetch"],
+      maxToolSteps: 1,
+    };
+  }
+
+  if ((policy.archetype === "edit" || policy.archetype === "bugfix") && existingPaths.length > 0 && !hasCreateIntent(userMessage)) {
+    return {
+      ...policy,
+      allowedTools: policy.allowedTools.filter((tool) => tool !== "writeFile"),
+    };
+  }
+
+  return policy;
+}
+
 export function getTurnPolicy(userMessage: string, lastToolCalls: string[] = []): TurnPolicy {
-  return getBuiltInPolicy(classifyTurnArchetype(userMessage, lastToolCalls));
+  return refinePolicyForRequest(getBuiltInPolicy(classifyTurnArchetype(userMessage, lastToolCalls)), userMessage);
 }
 
 function getPlanCacheKey(policy: TurnPolicy, userMessage: string): string {

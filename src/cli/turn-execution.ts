@@ -3,11 +3,12 @@ import { startStream } from "../ai/stream.js";
 import { estimateTextTokens } from "../ai/tokens.js";
 import type { ModelHandle } from "../ai/providers.js";
 import { rewriteAssistantForCaveman } from "../core/caveman.js";
-import { buildSystemPrompt, buildTaskExecutionAddendum, resolveCavemanLevel } from "../core/context.js";
+import { buildSystemPrompt, resolveCavemanLevel } from "../core/context.js";
 import { getTotalContextTokens } from "../core/compact.js";
 import { getSettings, type Mode } from "../core/config.js";
 import type { TurnPolicy } from "../core/turn-policy.js";
 import type { ToolName } from "../tools/registry.js";
+import { setActiveToolContext } from "../tools/runtime-context.js";
 import {
   buildToolPreview,
   canUseSdkTools,
@@ -21,6 +22,7 @@ import {
 import type { Session } from "../core/session.js";
 import { sendResponseNotification } from "./notify.js";
 import type { SpecialistModelRole } from "./model-routing.js";
+import { applyTurnFrame } from "./turn-frame.js";
 
 type PendingDelivery = "steering" | "followup";
 
@@ -147,9 +149,12 @@ function resolveTurnExecution(options: {
       resolveCavemanLevel(getSettings().cavemanLevel ?? "auto", text),
       policy.promptProfile,
     );
-    turnSystemPrompt += `\n\nExecution scaffold (${policy.archetype}): ${policy.scaffold}`;
   }
-  const optimizedMessages = optimizeMessages(session.getChatMessages());
+  const optimizedMessages = applyTurnFrame(
+    optimizeMessages(session.getChatMessages()),
+    text,
+    `Execution scaffold (${policy.archetype}): ${policy.scaffold}`,
+  );
   const ctxTokens = getTotalContextTokens(optimizedMessages, turnSystemPrompt, executionModelId);
   app.setContextUsage(ctxTokens, contextLimit);
   return {
@@ -257,10 +262,6 @@ export async function executeTurn(options: {
     resolveSpecialistModel,
   });
   let turnSystemPrompt = initialTurnSystemPrompt;
-  const taskExecutionAddendum = buildTaskExecutionAddendum(text);
-  if (taskExecutionAddendum) {
-    turnSystemPrompt += `\n\n${taskExecutionAddendum}`;
-  }
   const nextToolCalls: string[] = [];
   let abortController: AbortController | null = new AbortController();
   let steeringInterruptRequested = false;
@@ -284,6 +285,10 @@ export async function executeTurn(options: {
   const streamTokenTracker = createStreamTokenTracker(app, executionModelId, () => streamedText + streamedReasoning);
   let nextActivityTime = Date.now();
   app.setThinkingRequested(thinkingRequested);
+  setActiveToolContext({
+    contextOptimizer: session.getContextOptimizer(),
+    memoizedToolResults: getSettings().memoizeToolResults !== false,
+  });
   const streamCallbacks = {
     onText: (delta: string) => {
       const nextText = streamedText + delta;
@@ -390,90 +395,94 @@ export async function executeTurn(options: {
     onAfterResponse: () => {},
   };
 
-  if (executionModel.runtime === "native-cli") {
-    await startNativeStream({
-      providerId: executionModel.provider.id as "anthropic" | "codex",
-      modelId: executionModelId,
-      system: turnSystemPrompt,
-      messages: optimizedMessages,
-      abortSignal: abortController.signal,
-      enableThinking: resolvedRoute === "main" ? getSettings().enableThinking : false,
-      thinkingLevel: getSettings().thinkingLevel || "low",
-      cwd: process.cwd(),
-    }, streamCallbacks);
-  } else {
-    await startStream({
-      model: executionModel.model!,
-      modelId: executionModelId,
-      providerId: executionModel.provider.id,
-      system: turnSystemPrompt,
-      messages: optimizedMessages,
-      tools: canUseSdkTools(executionModel) && policy.allowedTools.length > 0
-        ? buildTools(policy.allowedTools) as any
-        : undefined,
-      abortSignal: abortController.signal,
-      enableThinking: thinkingRequested,
-      thinkingLevel: getSettings().thinkingLevel || "low",
-      maxToolSteps: policy.maxToolSteps,
-    }, {
-      ...streamCallbacks,
-      onToolCallStart: (name) => {
-        sawToolActivity = true;
-        if (name !== "todoWrite") app.addToolCall(name, "...");
-      },
-      onToolCall: (name, args) => {
-        sawToolActivity = true;
-        hooks.emit("on_tool_call", { name, args });
-        nextToolCalls.push(name);
-        if (name === "todoWrite") return;
-        app.updateToolCallArgs(name, buildToolPreview(name, args), args);
-      },
-      onToolResult: (_name, result) => {
-        hooks.emit("on_tool_result", { name: _name, result });
-        if (_name === "todoWrite") return;
-        session.recordToolResult(_name, estimateToolResultTokens(result));
-        const r = result as { success?: boolean; output?: string; error?: string; content?: string; matches?: unknown[]; files?: string[] };
-        let detail: string | undefined;
-        if (_name === "bash") {
-          const reroutedTo = (result as any)?.reroutedTo as string | undefined;
-          if ((result as any)?.rerouted) session.recordShellRecovery();
-          if (reroutedTo === "readFile") {
-            const totalLines = (result as any)?.totalLines;
-            detail = totalLines ? `via readFile · ${totalLines} lines` : "via readFile";
-          } else if (reroutedTo === "listFiles") {
-            const fileCount = (result as any)?.fileCount;
-            detail = fileCount ? `via listFiles · ${fileCount} files` : "via listFiles";
-          } else if (reroutedTo === "grep") {
-            const matchCount = (result as any)?.matchCount;
-            detail = matchCount !== undefined ? `via grep · ${matchCount} matches` : "via grep";
-          } else if (r.output) {
-            detail = r.output.slice(0, 200);
+  try {
+    if (executionModel.runtime === "native-cli") {
+      await startNativeStream({
+        providerId: executionModel.provider.id as "anthropic" | "codex",
+        modelId: executionModelId,
+        system: turnSystemPrompt,
+        messages: optimizedMessages,
+        abortSignal: abortController.signal,
+        enableThinking: resolvedRoute === "main" ? getSettings().enableThinking : false,
+        thinkingLevel: getSettings().thinkingLevel || "low",
+        cwd: process.cwd(),
+      }, streamCallbacks);
+    } else {
+      await startStream({
+        model: executionModel.model!,
+        modelId: executionModelId,
+        providerId: executionModel.provider.id,
+        system: turnSystemPrompt,
+        messages: optimizedMessages,
+        tools: canUseSdkTools(executionModel) && policy.allowedTools.length > 0
+          ? buildTools(policy.allowedTools) as any
+          : undefined,
+        abortSignal: abortController.signal,
+        enableThinking: thinkingRequested,
+        thinkingLevel: getSettings().thinkingLevel || "low",
+        maxToolSteps: policy.maxToolSteps,
+      }, {
+        ...streamCallbacks,
+        onToolCallStart: (name) => {
+          sawToolActivity = true;
+          if (name !== "todoWrite") app.addToolCall(name, "...");
+        },
+        onToolCall: (name, args) => {
+          sawToolActivity = true;
+          hooks.emit("on_tool_call", { name, args });
+          nextToolCalls.push(name);
+          if (name === "todoWrite") return;
+          app.updateToolCallArgs(name, buildToolPreview(name, args), args);
+        },
+        onToolResult: (_name, result) => {
+          hooks.emit("on_tool_result", { name: _name, result });
+          if (_name === "todoWrite") return;
+          session.recordToolResult(_name, estimateToolResultTokens(result));
+          const r = result as { success?: boolean; output?: string; error?: string; content?: string; matches?: unknown[]; files?: string[] };
+          let detail: string | undefined;
+          if (_name === "bash") {
+            const reroutedTo = (result as any)?.reroutedTo as string | undefined;
+            if ((result as any)?.rerouted) session.recordShellRecovery();
+            if (reroutedTo === "readFile") {
+              const totalLines = (result as any)?.totalLines;
+              detail = totalLines ? `via readFile · ${totalLines} lines` : "via readFile";
+            } else if (reroutedTo === "listFiles") {
+              const fileCount = (result as any)?.fileCount;
+              detail = fileCount ? `via listFiles · ${fileCount} files` : "via listFiles";
+            } else if (reroutedTo === "grep") {
+              const matchCount = (result as any)?.matchCount;
+              detail = matchCount !== undefined ? `via grep · ${matchCount} matches` : "via grep";
+            } else if (r.output) {
+              detail = r.output.slice(0, 200);
+            }
           }
-        }
-        else if (_name === "readFile" && r.content) {
-          const lineCount = r.content.split("\n").length;
-          detail = `${lineCount} lines`;
-          const readPath = (result as any)?.path ?? "";
-          if (readPath) session.getContextOptimizer().trackFileRead(readPath, lineCount);
-        } else if (_name === "grep" && r.matches) {
-          const capped = (result as any)?.capped;
-          detail = `${(r.matches as unknown[]).length} matches${capped ? " capped" : ""}`;
-        } else if (_name === "listFiles" && r.files) {
-          const totalEntries = (result as any)?.totalEntries;
-          const shown = (r.files as string[]).length;
-          detail = totalEntries && totalEntries > shown ? `${shown}/${totalEntries} entries` : `${shown} entries`;
-        }
-        else if (_name === "semSearch") detail = `${((result as any)?.results as unknown[] | undefined)?.length ?? 0} ranked hits`;
-        if (r.success === false && r.error) app.addToolResult(_name, r.error.slice(0, 80), true);
-        else app.addToolResult(_name, "ok", false, detail);
-      },
-      onAfterToolCall: () => {
-        if (!app.hasPendingMessages("steering")) return;
-        if (!abortController) return;
-        steeringInterruptRequested = true;
-        abortController.abort();
-      },
-    });
+          else if (_name === "readFile" && r.content) {
+            const lineCount = r.content.split("\n").length;
+            detail = `${lineCount} lines`;
+            const readPath = (result as any)?.path ?? "";
+            if (readPath) session.getContextOptimizer().trackFileRead(readPath, lineCount);
+          } else if (_name === "grep" && r.matches) {
+            const capped = (result as any)?.capped;
+            detail = `${(r.matches as unknown[]).length} matches${capped ? " capped" : ""}`;
+          } else if (_name === "listFiles" && r.files) {
+            const totalEntries = (result as any)?.totalEntries;
+            const shown = (r.files as string[]).length;
+            detail = totalEntries && totalEntries > shown ? `${shown}/${totalEntries} entries` : `${shown} entries`;
+          }
+          else if (_name === "semSearch") detail = `${((result as any)?.results as unknown[] | undefined)?.length ?? 0} ranked hits`;
+          if (r.success === false && r.error) app.addToolResult(_name, r.error.slice(0, 80), true);
+          else app.addToolResult(_name, "ok", false, detail);
+        },
+        onAfterToolCall: () => {
+          if (!app.hasPendingMessages("steering")) return;
+          if (!abortController) return;
+          steeringInterruptRequested = true;
+          abortController.abort();
+        },
+      });
+    }
+  } finally {
+    setActiveToolContext(null);
   }
 
   return {

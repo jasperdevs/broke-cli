@@ -1,5 +1,6 @@
 import { generateText } from "ai";
 import type { ModelHandle } from "../ai/providers.js";
+import { getSettings } from "../core/config.js";
 import type { Session } from "../core/session.js";
 import { isDefaultSessionName } from "../core/session.js";
 
@@ -85,6 +86,14 @@ export async function maybeAutoNameSession(options: {
   } = options;
   if (typeof session.getName === "function" && !isDefaultSessionName(session.getName())) return;
   if (!userText.trim() || !assistantText.trim()) return;
+
+  if (getSettings().modelGeneratedSessionNames === false) {
+    const fallbackTitle = sanitizeTitle(deriveFallbackTitle(userText, assistantText));
+    if (!fallbackTitle || isDefaultSessionName(fallbackTitle)) return;
+    session.setName?.(fallbackTitle);
+    app.setSessionName?.(fallbackTitle);
+    return;
+  }
 
   let nextTitle: string | null = null;
   try {

@@ -7,6 +7,7 @@ import type { TurnPolicy } from "../core/turn-policy.js";
 import type { Session } from "../core/session.js";
 import { resolveExecutionTarget } from "./turn-runner-support.js";
 import type { SpecialistModelRole } from "./model-routing.js";
+import { applyTurnFrame } from "./turn-frame.js";
 
 export type TurnChatMessage = {
   role: "user" | "assistant";
@@ -166,8 +167,11 @@ export function prepareTurnContext(options: {
     effectiveCavemanLevel,
     policy.promptProfile,
   );
-  turnSystemPrompt += `\n\nExecution scaffold (${policy.archetype}): ${policy.scaffold}`;
-  const selectedMessages = selectMessagesForTurn(session.getChatMessages(), policy, optimizeMessages);
+  const selectedMessages = applyTurnFrame(
+    selectMessagesForTurn(session.getChatMessages(), policy, optimizeMessages),
+    text,
+    `Execution scaffold (${policy.archetype}): ${policy.scaffold}`,
+  );
   const contextTokens = getTotalContextTokens(selectedMessages, turnSystemPrompt, currentModelId);
   const contextPct = contextLimit > 0 ? Math.min(100, Math.round((contextTokens / contextLimit) * 100)) : 0;
   app.setContextUsage(contextTokens, contextLimit);
@@ -199,7 +203,11 @@ export async function maybeAutoCompactTurnContext(options: {
     session.recordCompaction();
     app.setCompacting(false);
     app.setStatus(`Auto-compacted older context. Kept ${session.getMessages().length} visible messages.`);
-    const selectedMessages = selectMessagesForTurn(session.getChatMessages(), policy, optimizeMessages);
+    const selectedMessages = applyTurnFrame(
+      selectMessagesForTurn(session.getChatMessages(), policy, optimizeMessages),
+      "",
+      `Execution scaffold (${policy.archetype}): ${policy.scaffold}`,
+    );
     const contextTokens = getTotalContextTokens(selectedMessages, prepared.turnSystemPrompt, currentModelId);
     const contextPct = prepared.contextLimit > 0 ? Math.min(100, Math.round((contextTokens / prepared.contextLimit) * 100)) : 0;
     app.setContextUsage(contextTokens, prepared.contextLimit);

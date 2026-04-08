@@ -1,8 +1,11 @@
 import { streamText, stepCountIs, type ToolSet } from "ai";
 import type { LanguageModel } from "ai";
+import { createHash } from "crypto";
 import { calculateCost, type TokenUsage } from "./cost.js";
 import { estimateConversationTokens, estimateTextTokens } from "./tokens.js";
 import { resolveThinkingConfig } from "./thinking.js";
+import { getSettings } from "../core/config.js";
+import { buildPromptCacheKey } from "../core/context.js";
 
 export interface StreamCallbacks {
   onText: (delta: string) => void;
@@ -38,7 +41,11 @@ export async function startStream(
 
   try {
     // Convert messages to AI SDK format with images
-    const messages = opts.messages.map((m) => {
+    const messages = opts.messages.map((m, index) => {
+      const anthropicCacheable = opts.providerId === "anthropic" && index < Math.min(2, Math.max(0, opts.messages.length - 1));
+      const messageProviderOptions = anthropicCacheable
+        ? { anthropic: { cacheControl: { type: "ephemeral" } } }
+        : undefined;
       if (m.images && m.images.length > 0 && m.role === "user") {
         // Create content array with text and images
         const content: Array<{ type: "text"; text: string } | { type: "image"; image: string }> = [
@@ -47,13 +54,13 @@ export async function startStream(
         for (const img of m.images) {
           content.push({ type: "image", image: `data:${img.mimeType};base64,${img.data}` });
         }
-        return { role: m.role as "user", content };
+        return { role: m.role as "user", content, ...(messageProviderOptions ? { providerOptions: messageProviderOptions } : {}) };
       }
-      return { role: m.role, content: m.content };
+      return { role: m.role, content: m.content, ...(messageProviderOptions ? { providerOptions: messageProviderOptions } : {}) };
     });
 
     // Build provider options (thinking/reasoning for supported providers)
-    const providerOptions: Record<string, Record<string, Record<string, string | number>>> = {};
+    const providerOptions: Record<string, Record<string, any>> = {};
     const estimatedInputTokens = estimateConversationTokens(opts.system, messages as Array<{ role: "user" | "assistant"; content: string | Array<{ type: "text"; text: string } | { type: "image"; image: string }> }>, opts.modelId);
     const thinking = resolveThinkingConfig({
       providerId: opts.providerId,
@@ -68,6 +75,23 @@ export async function startStream(
         providerOptions.openai = { reasoningEffort: { value: thinking.effort ?? "low" } };
       } else if (opts.providerId === "google") {
         providerOptions.google = { thinkingConfig: { thinkingBudget: thinking.budgetTokens ?? 4096 } };
+      }
+    }
+    if (getSettings().enablePromptCaching !== false) {
+      if (opts.providerId === "anthropic") {
+        providerOptions.anthropic = {
+          ...(providerOptions.anthropic ?? {}),
+          cacheControl: { type: "ephemeral" },
+        };
+      } else if (opts.providerId === "openai" || opts.providerId === "codex") {
+        providerOptions.openai = {
+          ...(providerOptions.openai ?? {}),
+          promptCacheKey: `${buildPromptCacheKey({
+            cwd: process.cwd(),
+            providerId: opts.providerId,
+            modelId: opts.modelId,
+          })}:${createHash("sha1").update(opts.system).digest("hex").slice(0, 12)}`,
+        };
       }
     }
 

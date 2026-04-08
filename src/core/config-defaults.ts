@@ -2,6 +2,9 @@ import type { Settings, ThinkingLevel } from "./config-types.js";
 
 export const DEFAULT_SETTINGS: Settings = {
   autoCompact: true,
+  enablePromptCaching: true,
+  memoizeToolResults: true,
+  modelGeneratedSessionNames: false,
   maxSessionCost: 0,
   showTokens: true,
   showCost: true,

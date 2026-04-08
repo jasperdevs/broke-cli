@@ -30,11 +30,14 @@ vi.mock("../src/core/config.js", () => ({
     thinkingBudgets: {},
     images: { blockImages: false },
     autoCompact: false,
+    enablePromptCaching: true,
     autoRoute: true,
     notifyOnResponse: false,
     enableThinking: false,
     thinkingLevel: "off",
     cavemanLevel: "auto",
+    memoizeToolResults: true,
+    modelGeneratedSessionNames: false,
     autoFixValidation: false,
   }),
 }));
@@ -67,6 +70,7 @@ vi.mock("../src/core/compact.js", () => ({
 vi.mock("../src/core/context.js", () => ({
   buildSystemPrompt: () => "system",
   buildTaskExecutionAddendum: () => "",
+  buildPromptCacheKey: () => "brokecli:test",
   resolveCavemanLevel: () => "auto",
 }));
 
@@ -117,6 +121,41 @@ describe("stream tool steps", () => {
 
     expect(stepCountIsMock).toHaveBeenCalledWith(2);
     expect(streamTextMock).toHaveBeenCalled();
+  });
+
+  it("passes provider-native cache hints for anthropic and openai models", async () => {
+    await startStream({
+      model: {} as any,
+      modelId: "claude-sonnet",
+      providerId: "anthropic",
+      system: "sys",
+      messages: [{ role: "user", content: "hi" }, { role: "assistant", content: "hello" }],
+    }, {
+      onText: () => {},
+      onReasoning: () => {},
+      onFinish: () => {},
+      onError: () => {},
+    });
+
+    const anthropicCall = streamTextMock.mock.calls.at(-1)?.[0];
+    expect(anthropicCall.providerOptions.anthropic.cacheControl).toEqual({ type: "ephemeral" });
+    expect(anthropicCall.messages[0].providerOptions.anthropic.cacheControl).toEqual({ type: "ephemeral" });
+
+    await startStream({
+      model: {} as any,
+      modelId: "gpt-5.4-mini",
+      providerId: "openai",
+      system: "sys",
+      messages: [{ role: "user", content: "hi" }],
+    }, {
+      onText: () => {},
+      onReasoning: () => {},
+      onFinish: () => {},
+      onError: () => {},
+    });
+
+    const openaiCall = streamTextMock.mock.calls.at(-1)?.[0];
+    expect(openaiCall.providerOptions.openai.promptCacheKey).toContain("brokecli:");
   });
 
   it("suppresses plain planning narration before edit-tool work starts", async () => {
