@@ -306,6 +306,18 @@ describe("image attachments", () => {
     expect(app.input.getText()).toBe("hey [Image #1] ");
   });
 
+  it("backspace still works if the cursor drifts beyond the real text end", () => {
+    const app = new App() as any;
+    app.pendingImages = [{ attachmentId: "i1", mimeType: "image/png", data: "abc" }];
+    app.input.setText("hey [Image #1] ");
+    app.input.cursor = 999;
+
+    app.handleKey({ name: "backspace", char: "", ctrl: false, meta: false, shift: false });
+
+    expect(app.input.getText()).toBe("hey ");
+    expect(app.pendingImages).toHaveLength(0);
+  });
+
   it("inserts selected @ files as plain visible path text", () => {
     const app = new App() as any;
     app.filePicker = { files: ["AGENTS.md"], filtered: ["AGENTS.md"], query: "AG", cursor: 0 };

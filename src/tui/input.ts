@@ -39,6 +39,10 @@ export class InputWidget {
     return this.elements.map((element) => ({ ...element }));
   }
 
+  private clampCursor(): void {
+    this.cursor = Math.max(0, Math.min(this.cursor, this.text.length));
+  }
+
   onChange(listener: (text: string) => void): void {
     this.changeListeners.push(listener);
   }
@@ -49,12 +53,14 @@ export class InputWidget {
       .filter((element) => element.start >= 0 && element.end <= text.length && element.start < element.end)
       .sort((a, b) => a.start - b.start);
     this.cursor = placeCursorAtEnd ? this.text.length : Math.min(this.cursor, this.text.length);
+    this.clampCursor();
     this.snapCursorOutsideElement();
     this.emitChange();
   }
 
   setCursor(cursor: number): void {
     this.cursor = Math.max(0, Math.min(cursor, this.text.length));
+    this.clampCursor();
     this.snapCursorOutsideElement();
   }
 
@@ -79,6 +85,7 @@ export class InputWidget {
 
   insertText(text: string): void {
     if (!text) return;
+    this.clampCursor();
     this.snapCursorOutsideElement();
     this.text = this.text.slice(0, this.cursor) + text + this.text.slice(this.cursor);
     this.shiftElements(this.cursor, text.length);
@@ -90,6 +97,7 @@ export class InputWidget {
     const replaceStart = options.replaceStart ?? this.cursor;
     const replaceEnd = options.replaceEnd ?? this.cursor;
     this.cursor = Math.max(0, Math.min(replaceStart, this.text.length));
+    this.clampCursor();
     if (replaceEnd > replaceStart) {
       this.text = this.text.slice(0, replaceStart) + this.text.slice(replaceEnd);
       const delta = replaceEnd - replaceStart;
@@ -160,6 +168,7 @@ export class InputWidget {
 
   replaceElements(elements: InputElement[]): void {
     this.elements = elements.map((element) => ({ ...element })).sort((a, b) => a.start - b.start);
+    this.clampCursor();
     this.snapCursorOutsideElement();
     this.emitChange();
   }
@@ -182,6 +191,7 @@ export class InputWidget {
       else if (this.cursor > element.start) this.cursor = element.end;
     }
     this.elements.sort((a, b) => a.start - b.start);
+    this.clampCursor();
     this.snapCursorOutsideElement();
     this.emitChange();
   }
@@ -202,6 +212,7 @@ export class InputWidget {
   }
 
   handleKey(key: Keypress): "submit" | "interrupt" | "none" {
+    this.clampCursor();
     if (key.ctrl && key.name === "c") return "interrupt";
 
     if (key.name === "linefeed"
@@ -240,8 +251,10 @@ export class InputWidget {
   }
 
   private snapCursorOutsideElement(): void {
+    this.clampCursor();
     const containing = this.findElementContaining();
-    if (containing) this.cursor = containing.end;
+    if (containing) this.cursor = Math.min(containing.end, this.text.length);
+    this.clampCursor();
   }
 
   private removeElementRange(element: InputElement): void {
@@ -262,6 +275,7 @@ export class InputWidget {
           : candidate
       ));
     this.cursor = Math.min(deleteStart, this.text.length);
+    this.clampCursor();
     this.emitChange();
   }
 
