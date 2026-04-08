@@ -328,6 +328,14 @@ export function handlePaste(app: AppState, text: string): void {
   }
 
   if (tryLoadImageFromPath(app, text)) {
+    const normalizedPath = normalizePastedPath(text);
+    const currentText = app.input.getText();
+    const trimmedCurrent = currentText.trim();
+    if (trimmedCurrent === normalizedPath) {
+      app.input.clear();
+    } else if (currentText.endsWith(normalizedPath)) {
+      app.input.setText(currentText.slice(0, currentText.length - normalizedPath.length).trimEnd(), true);
+    }
     app.draw();
     return;
   }

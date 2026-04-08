@@ -101,6 +101,21 @@ describe("image attachments", () => {
     expect(output).not.toContain(imagePath);
   });
 
+  it("clears a raw pasted image path from the draft when the attachment loads", () => {
+    updateSetting("terminal", { ...getSettings().terminal, showImages: true });
+    const app = new App() as any;
+    const dir = mkdtempSync(join(tmpdir(), "brokecli-image-"));
+    tempDirs.push(dir);
+    const imagePath = join(dir, "stuck.png");
+    writeFileSync(imagePath, "fakepng", "utf-8");
+
+    app.input.setText(imagePath);
+    app.handlePaste(imagePath);
+
+    expect(app.pendingImages).toHaveLength(1);
+    expect(app.input.getText()).toBe("");
+  });
+
   it("auto-attaches an image path typed into an empty draft", () => {
     updateSetting("terminal", { ...getSettings().terminal, showImages: true });
     const app = new App() as any;
