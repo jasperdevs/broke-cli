@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from "fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { dirname, join, resolve } from "path";
 import { detectProviders, type DetectedProvider } from "../ai/detect.js";
@@ -12,8 +12,14 @@ import { runModelTurn } from "../cli/turn-runner.js";
 import { resolveOneShotModel } from "../cli/oneshot.js";
 import { rebuildSmallModelState } from "../cli/runtime-models.js";
 import { resolveTurnPolicy } from "../core/turn-policy.js";
-import { getFixedBenchmarkTasks, type FixedBenchmarkTask, type TaskCategory, type TaskVerification } from "./fixed-suite-task-definitions.js";
-export { getFixedBenchmarkTasks } from "./fixed-suite-task-definitions.js";
+import {
+  getExtendedBenchmarkTasks,
+  getFixedBenchmarkTasks,
+  type FixedBenchmarkTask,
+  type TaskCategory,
+  type TaskVerification,
+} from "./fixed-suite-task-definitions.js";
+export { getExtendedBenchmarkTasks, getFixedBenchmarkTasks } from "./fixed-suite-task-definitions.js";
 const DEFAULT_MAX_TURNS = 3;
 const COMPARATOR_SOURCES = {
   pi: ["https://pi.dev/", "https://github.com/badlogic/pi-mono"],
@@ -33,6 +39,7 @@ type BenchmarkRunUsage = {
 
 type BenchmarkTurnResult = {
   turn: number;
+  step: number;
   prompt: string;
   latencyMs: number;
   inputTokens: number;
@@ -47,6 +54,12 @@ type BenchmarkSpendBreakdown = {
   plannerOutputTokens: number;
   executorInputTokens: number;
   executorOutputTokens: number;
+  systemPromptTokens: number;
+  replayInputTokens: number;
+  stateCarrierTokens: number;
+  transientContextTokens: number;
+  visibleOutputTokens: number;
+  hiddenOutputTokens: number;
   toolOutputTokens: number;
   topToolOutputs: Array<{ tool: string; tokens: number }>;
 };
@@ -89,6 +102,7 @@ export type BenchmarkSuiteSummary = {
 };
 
 export type BenchmarkSuiteResult = {
+  suiteName: "fixed" | "extended";
   providerId: string;
   modelId: string;
   startedAt: string;
@@ -98,6 +112,7 @@ export type BenchmarkSuiteResult = {
 };
 
 type FixedBenchmarkOptions = {
+  suiteName?: "fixed" | "extended";
   provider?: string;
   model?: string;
   mode?: Mode;
@@ -162,6 +177,23 @@ async function writeFixtureFiles(workspace: string, files: Record<string, string
   );
 }
 
+async function collectWorkspaceSnapshot(workspace: string): Promise<Map<string, string>> {
+  const snapshot = new Map<string, string>();
+  async function walk(currentDir: string): Promise<void> {
+    const entries = await readdir(currentDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = join(currentDir, entry.name);
+      if (entry.isDirectory()) {
+        await walk(fullPath);
+        continue;
+      }
+      snapshot.set(fullPath.replace(`${workspace}\\`, "").replace(/\\/g, "/"), await readFile(fullPath, "utf8"));
+    }
+  }
+  await walk(workspace);
+  return snapshot;
+}
+
 async function cleanupWorkspace(workspace: string): Promise<void> {
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
@@ -185,6 +217,12 @@ function sumToolOutputTokens(metrics: SessionBudgetMetrics): BenchmarkSpendBreak
     plannerOutputTokens: metrics.plannerOutputTokens,
     executorInputTokens: metrics.executorInputTokens,
     executorOutputTokens: metrics.executorOutputTokens,
+    systemPromptTokens: metrics.systemPromptTokens,
+    replayInputTokens: metrics.replayInputTokens,
+    stateCarrierTokens: metrics.stateCarrierTokens,
+    transientContextTokens: metrics.transientContextTokens,
+    visibleOutputTokens: metrics.visibleOutputTokens,
+    hiddenOutputTokens: metrics.hiddenOutputTokens,
     toolOutputTokens: Object.values(metrics.toolOutputTokens).reduce((sum, tokens) => sum + tokens, 0),
     topToolOutputs,
   };
@@ -202,6 +240,9 @@ function buildComparatorEstimates(task: FixedBenchmarkTask, result: { totalInput
     bug_fix: [0.95, 1.02],
     test_writing: [0.95, 1.03],
     repo_exploration: [0.89, 0.96],
+    stateful_refactor_followup: [0.96, 1.05],
+    rename_then_answer: [0.93, 1.01],
+    bugfix_then_test: [0.96, 1.05],
   }[task.id];
   const opencodeInputRange = {
     read_modify: [0.92, 0.99],
@@ -209,6 +250,9 @@ function buildComparatorEstimates(task: FixedBenchmarkTask, result: { totalInput
     bug_fix: [0.9, 0.97],
     test_writing: [0.9, 0.98],
     repo_exploration: [0.92, 0.99],
+    stateful_refactor_followup: [0.86, 0.94],
+    rename_then_answer: [0.87, 0.95],
+    bugfix_then_test: [0.86, 0.94],
   }[task.id];
   return [
     {
@@ -217,6 +261,8 @@ function buildComparatorEstimates(task: FixedBenchmarkTask, result: { totalInput
       estimatedTotalTokens: toRange(totalTokens, piInputRange[0], piInputRange[1]),
       note: task.id === "repo_exploration"
         ? "Pi likely wins more on exploration because its docs emphasize a smaller base prompt and on-demand skills."
+        : task.id === "stateful_refactor_followup" || task.id === "rename_then_answer" || task.id === "bugfix_then_test"
+          ? "Pi may lose ground on multi-turn continuity if it relies more on compact prompts than explicit carried repo state."
         : "Pi likely lands near parity here; its prompt minimalism helps, but this repo now avoids replaying transient file context.",
       sources: [...COMPARATOR_SOURCES.pi],
     },
@@ -226,6 +272,8 @@ function buildComparatorEstimates(task: FixedBenchmarkTask, result: { totalInput
       estimatedTotalTokens: toRange(totalTokens, opencodeInputRange[0], opencodeInputRange[1]),
       note: task.id === "multi_file_refactor" || task.id === "bug_fix"
         ? "OpenCode likely still spends less on longer edit flows because its docs expose stronger pruning, cache-key, and small-model controls."
+        : task.id === "stateful_refactor_followup" || task.id === "rename_then_answer" || task.id === "bugfix_then_test"
+          ? "OpenCode likely still has an edge on stateful follow-ups because its pruning and agent/tool surfaces are more explicit on long flows."
         : "OpenCode likely keeps a modest edge from its explicit compaction/prune and small-model configuration surfaces.",
       sources: [...COMPARATOR_SOURCES.opencode],
     },
@@ -270,8 +318,18 @@ function snapshotUsage(session: Session): BenchmarkRunUsage {
   };
 }
 
+function getTaskSteps(task: FixedBenchmarkTask) {
+  if (task.steps && task.steps.length > 0) return task.steps;
+  if (task.prompt && task.retryPrompt && task.verify) {
+    return [{ prompt: task.prompt, retryPrompt: task.retryPrompt, verify: task.verify }];
+  }
+  throw new Error(`Benchmark task ${task.id} is missing prompt/verify steps.`);
+}
+
 export async function runFixedBenchmarkSuite(options: FixedBenchmarkOptions = {}): Promise<BenchmarkSuiteResult> {
-  const tasks = getFixedBenchmarkTasks().filter((task) => !options.taskIds || options.taskIds.includes(task.id));
+  const suiteName = options.suiteName ?? "fixed";
+  const taskSource = suiteName === "extended" ? getExtendedBenchmarkTasks() : getFixedBenchmarkTasks();
+  const tasks = taskSource.filter((task) => !options.taskIds || options.taskIds.includes(task.id));
   const { providerId, modelId, providerRegistry, activeModel } = await resolveBenchmarkModel(options.provider, options.model);
   const { smallModel, smallModelId } = rebuildSmallModelState(providerRegistry, activeModel, modelId);
   const mode = options.mode ?? "build";
@@ -295,57 +353,68 @@ export async function runFixedBenchmarkSuite(options: FixedBenchmarkOptions = {}
       let previousUsage = snapshotUsage(session);
       const suiteStarted = Date.now();
       let finalVerification: TaskVerification = { success: false, message: "not run" };
-      let prompt = task.prompt;
+      let turnNumber = 0;
+      const steps = getTaskSteps(task);
 
-      for (let turn = 1; turn <= maxTurns; turn++) {
-        const turnStarted = Date.now();
-        const previousCwd = process.cwd();
-        process.chdir(workspace);
-        try {
-          const policy = await resolveTurnPolicy(
+      for (let stepIndex = 0; stepIndex < steps.length; stepIndex++) {
+        const step = steps[stepIndex]!;
+        const stepSnapshot = await collectWorkspaceSnapshot(workspace);
+        let prompt = step.prompt;
+        let stepVerification: TaskVerification = { success: false, message: "not run" };
+        for (let attempt = 1; attempt <= maxTurns; attempt++) {
+          turnNumber += 1;
+          const turnStarted = Date.now();
+          const previousCwd = process.cwd();
+          process.chdir(workspace);
+          try {
+            const policy = await resolveTurnPolicy(
+              prompt,
+              lastToolCalls,
+              activeModel.runtime === "sdk" && activeModel.model
+                ? { model: activeModel.model, modelId, providerId }
+                : null,
+            );
+            const systemPrompt = buildSystemPrompt(resolve(workspace), providerId, mode, "auto", policy.promptProfile);
+            const outcome = await runModelTurn({
+              app,
+              session,
+              text: prompt,
+              activeModel,
+              currentModelId: modelId,
+              smallModel,
+              smallModelId,
+              currentMode: mode,
+              systemPrompt,
+              buildTools: buildToolFactory(),
+              hooks: { emit: () => {} },
+              lastToolCalls,
+              lastActivityTime,
+            });
+            lastToolCalls = outcome.lastToolCalls;
+            lastActivityTime = outcome.lastActivityTime;
+          } finally {
+            process.chdir(previousCwd);
+          }
+
+          stepVerification = await step.verify(workspace, app.getLastAssistantContent(), initialSnapshot, stepSnapshot);
+          finalVerification = stepVerification;
+          const currentUsage = snapshotUsage(session);
+          turns.push({
+            turn: turnNumber,
+            step: stepIndex + 1,
             prompt,
-            lastToolCalls,
-            activeModel.runtime === "sdk" && activeModel.model
-              ? { model: activeModel.model, modelId, providerId }
-              : null,
-          );
-          const systemPrompt = buildSystemPrompt(resolve(workspace), providerId, mode, "auto", policy.promptProfile);
-          const outcome = await runModelTurn({
-            app,
-            session,
-            text: prompt,
-            activeModel,
-            currentModelId: modelId,
-            smallModel,
-            smallModelId,
-            currentMode: mode,
-            systemPrompt,
-            buildTools: buildToolFactory(),
-            hooks: { emit: () => {} },
-            lastToolCalls,
-            lastActivityTime,
+            latencyMs: Date.now() - turnStarted,
+            inputTokens: currentUsage.inputTokens - previousUsage.inputTokens,
+            outputTokens: currentUsage.outputTokens - previousUsage.outputTokens,
+            cost: currentUsage.cost - previousUsage.cost,
+            success: stepVerification.success,
+            verification: stepVerification.message,
           });
-          lastToolCalls = outcome.lastToolCalls;
-          lastActivityTime = outcome.lastActivityTime;
-        } finally {
-          process.chdir(previousCwd);
+          previousUsage = currentUsage;
+          if (stepVerification.success) break;
+          prompt = `${step.retryPrompt}\n\nVerifier feedback: ${stepVerification.message}`;
         }
-
-        finalVerification = await task.verify(workspace, app.getLastAssistantContent(), initialSnapshot);
-        const currentUsage = snapshotUsage(session);
-        turns.push({
-          turn,
-          prompt,
-          latencyMs: Date.now() - turnStarted,
-          inputTokens: currentUsage.inputTokens - previousUsage.inputTokens,
-          outputTokens: currentUsage.outputTokens - previousUsage.outputTokens,
-          cost: currentUsage.cost - previousUsage.cost,
-          success: finalVerification.success,
-          verification: finalVerification.message,
-        });
-        previousUsage = currentUsage;
-        if (finalVerification.success) break;
-        prompt = `${task.retryPrompt}\n\nVerifier feedback: ${finalVerification.message}`;
+        if (!stepVerification.success) break;
       }
 
       const totalInputTokens = session.getTotalInputTokens();
@@ -353,7 +422,7 @@ export async function runFixedBenchmarkSuite(options: FixedBenchmarkOptions = {}
       taskResults.push({
         taskId: task.id,
         category: task.id,
-        prompt: task.prompt,
+        prompt: task.steps?.[0]?.prompt ?? task.prompt ?? task.description,
         providerId,
         modelId,
         success: finalVerification.success,
@@ -384,6 +453,7 @@ export async function runFixedBenchmarkSuite(options: FixedBenchmarkOptions = {}
   };
 
   return {
+    suiteName,
     providerId,
     modelId,
     startedAt,
@@ -400,19 +470,21 @@ function average(values: number[]): number {
 
 export function renderFixedBenchmarkReport(result: BenchmarkSuiteResult): string {
   const lines: string[] = [];
-  lines.push(`Fixed benchmark suite`);
+  lines.push(`${result.suiteName === "extended" ? "Extended" : "Fixed"} benchmark suite`);
   lines.push(`provider/model: ${result.providerId}/${result.modelId}`);
   lines.push(`tasks: ${result.summary.taskCount} · success ${result.summary.succeeded}/${result.summary.taskCount} · avg input ${result.summary.averageInputTokens} · avg output ${result.summary.averageOutputTokens} · avg total ${result.summary.averageTotalTokens} · avg latency ${result.summary.averageLatencyMs}ms · total cost ${result.summary.totalCost.toFixed(6)}`);
   for (const task of result.tasks) {
     lines.push("");
     lines.push(`${task.taskId}: ${task.success ? "success" : "failure"} · turns ${task.totalTurns} · input ${task.totalInputTokens} · output ${task.totalOutputTokens} · latency ${task.latencyMs}ms · cost ${task.totalCost.toFixed(6)}`);
     lines.push(`  spend: planner in/out ${task.spend.plannerInputTokens}/${task.spend.plannerOutputTokens} · executor in/out ${task.spend.executorInputTokens}/${task.spend.executorOutputTokens} · tool output ${task.spend.toolOutputTokens}`);
+    lines.push(`  input mix: system ${task.spend.systemPromptTokens} · replay ${task.spend.replayInputTokens} · state ${task.spend.stateCarrierTokens} · transient ${task.spend.transientContextTokens}`);
+    lines.push(`  output mix: visible ${task.spend.visibleOutputTokens} · hidden ${task.spend.hiddenOutputTokens}`);
     if (task.spend.topToolOutputs.length > 0) {
       lines.push(`  top tool output: ${task.spend.topToolOutputs.map((entry) => `${entry.tool} ${entry.tokens}`).join(", ")}`);
     }
     if (!task.success && task.failureReason) lines.push(`  failure: ${task.failureReason}`);
     for (const turn of task.turns) {
-      lines.push(`  turn ${turn.turn}: ${turn.success ? "ok" : "retry"} · input ${turn.inputTokens} · output ${turn.outputTokens} · latency ${turn.latencyMs}ms · ${turn.verification}`);
+      lines.push(`  step ${turn.step} turn ${turn.turn}: ${turn.success ? "ok" : "retry"} · input ${turn.inputTokens} · output ${turn.outputTokens} · latency ${turn.latencyMs}ms · ${turn.verification}`);
     }
     for (const estimate of task.comparatorEstimates) {
       lines.push(`  ${estimate.name} estimate: input ${estimate.estimatedInputTokens} · total ${estimate.estimatedTotalTokens} · ${estimate.note}`);

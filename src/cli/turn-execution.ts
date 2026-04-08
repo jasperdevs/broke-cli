@@ -2,6 +2,7 @@ import { startNativeStream } from "../ai/native-stream.js";
 import { startStream } from "../ai/stream.js";
 import { estimateTextTokens } from "../ai/tokens.js";
 import type { ModelHandle } from "../ai/providers.js";
+import { observeToolResult } from "./turn-tool-observer.js";
 import { rewriteAssistantForCaveman } from "../core/caveman.js";
 import { buildSystemPrompt, resolveCavemanLevel } from "../core/context.js";
 import { getTotalContextTokens } from "../core/compact.js";
@@ -51,7 +52,6 @@ interface TurnExecutionApp {
 }
 
 interface ExtensionHooks { emit(event: string, payload: Record<string, unknown>): void; }
-const MAX_TOOL_RESULT_SERIALIZED_CHARS = 6000;
 function resolveTurnExecution(options: {
   text: string;
   policy: TurnPolicy;
@@ -138,18 +138,6 @@ function resolveTurnExecution(options: {
     thinkingRequested,
   };
 }
-function estimateToolResultTokens(result: unknown): number {
-  try {
-    const serialized = JSON.stringify(result);
-    if (!serialized) return 0;
-    const capped = serialized.length > MAX_TOOL_RESULT_SERIALIZED_CHARS
-      ? `${serialized.slice(0, MAX_TOOL_RESULT_SERIALIZED_CHARS)}…`
-      : serialized;
-    return estimateTextTokens(capped);
-  } catch {
-    return 0;
-  }
-}
 export async function executeTurn(options: {
   app: TurnExecutionApp;
   session: Session;
@@ -169,6 +157,12 @@ export async function executeTurn(options: {
   optimizeMessages: (messages: Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }>) => Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }>;
   forceRoute?: "main" | "small";
   transientUserContext?: string;
+  preparedSpend?: {
+    systemPromptTokens: number;
+    replayInputTokens: number;
+    stateCarrierTokens: number;
+    transientContextTokens: number;
+  };
   resolveSpecialistModel?: (role: SpecialistModelRole) => { model: ModelHandle; modelId: string } | null;
 }): Promise<{
   nextToolCalls: string[];
@@ -199,6 +193,7 @@ export async function executeTurn(options: {
     optimizeMessages,
     forceRoute,
     transientUserContext,
+    preparedSpend,
     resolveSpecialistModel,
   } = options;
   let streamedText = "";
@@ -264,6 +259,7 @@ export async function executeTurn(options: {
   let errorMessage: string | undefined;
   const streamTokenTracker = createStreamTokenTracker(app.setStreamTokens.bind(app), executionModelId, () => streamedText + streamedReasoning);
   let nextActivityTime = Date.now();
+  const lastToolArgsByName = new Map<string, unknown>();
   app.setThinkingRequested(thinkingRequested);
   setActiveToolContext({
     contextOptimizer: session.getContextOptimizer(),
@@ -307,6 +303,12 @@ export async function executeTurn(options: {
         plannerOutputTokens: policy.plannerUsage?.outputTokens,
         executorInputTokens: usage.inputTokens,
         executorOutputTokens: usage.outputTokens,
+        systemPromptTokens: preparedSpend?.systemPromptTokens,
+        replayInputTokens: preparedSpend?.replayInputTokens,
+        stateCarrierTokens: preparedSpend?.stateCarrierTokens,
+        transientContextTokens: preparedSpend?.transientContextTokens,
+        visibleOutputTokens: estimateTextTokens(content, executionModelId),
+        hiddenOutputTokens: Math.max(0, usage.outputTokens - estimateTextTokens(content, executionModelId)),
       });
       app.setStreaming(false);
       app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
@@ -363,6 +365,10 @@ export async function executeTurn(options: {
         plannerCacheHit: policy.plannerCacheHit,
         plannerInputTokens: policy.plannerUsage?.inputTokens,
         plannerOutputTokens: policy.plannerUsage?.outputTokens,
+        systemPromptTokens: preparedSpend?.systemPromptTokens,
+        replayInputTokens: preparedSpend?.replayInputTokens,
+        stateCarrierTokens: preparedSpend?.stateCarrierTokens,
+        transientContextTokens: preparedSpend?.transientContextTokens,
       });
       app.setStreaming(false);
       abortController = null;
@@ -416,48 +422,16 @@ export async function executeTurn(options: {
           sawToolActivity = true;
           hooks.emit("on_tool_call", { name, args });
           nextToolCalls.push(name);
+          lastToolArgsByName.set(name, args);
           if (name === "todoWrite") return;
           app.updateToolCallArgs(name, buildToolPreview(name, args), args);
         },
         onToolResult: (_name, result) => {
           hooks.emit("on_tool_result", { name: _name, result });
           if (_name === "todoWrite") return;
-          session.recordToolResult(_name, estimateToolResultTokens(result));
-          if (_name === "bash" && !(result as any)?.rerouted) {
-            session.getContextOptimizer().invalidateToolResults();
-          }
           const r = result as { success?: boolean; output?: string; error?: string; content?: string; matches?: unknown[]; files?: string[] };
-          let detail: string | undefined;
-          if (_name === "bash") {
-            const reroutedTo = (result as any)?.reroutedTo as string | undefined;
-            if ((result as any)?.rerouted) session.recordShellRecovery();
-            if (reroutedTo === "readFile") {
-              const totalLines = (result as any)?.totalLines;
-              detail = totalLines ? `via readFile · ${totalLines} lines` : "via readFile";
-            } else if (reroutedTo === "listFiles") {
-              const fileCount = (result as any)?.fileCount;
-              detail = fileCount ? `via listFiles · ${fileCount} files` : "via listFiles";
-            } else if (reroutedTo === "grep") {
-              const matchCount = (result as any)?.matchCount;
-              detail = matchCount !== undefined ? `via grep · ${matchCount} matches` : "via grep";
-            } else if (r.output) {
-              detail = r.output.slice(0, 200);
-            }
-          }
-          else if (_name === "readFile" && r.content) {
-            const lineCount = r.content.split("\n").length;
-            detail = `${lineCount} lines`;
-            const readPath = (result as any)?.path ?? "";
-            if (readPath) session.getContextOptimizer().trackFileRead(readPath, lineCount);
-          } else if (_name === "grep" && r.matches) {
-            const capped = (result as any)?.capped;
-            detail = `${(r.matches as unknown[]).length} matches${capped ? " capped" : ""}`;
-          } else if (_name === "listFiles" && r.files) {
-            const totalEntries = (result as any)?.totalEntries;
-            const shown = (r.files as string[]).length;
-            detail = totalEntries && totalEntries > shown ? `${shown}/${totalEntries} entries` : `${shown} entries`;
-          }
-          else if (_name === "semSearch") detail = `${((result as any)?.results as unknown[] | undefined)?.length ?? 0} ranked hits`;
+          const toolArgs = lastToolArgsByName.get(_name) as Record<string, unknown> | undefined;
+          const detail = observeToolResult({ session, toolName: _name, result: r, toolArgs });
           if (r.success === false && r.error) app.addToolResult(_name, r.error.slice(0, 80), true);
           else app.addToolResult(_name, "ok", false, detail);
         },

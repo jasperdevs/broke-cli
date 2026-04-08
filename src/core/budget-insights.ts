@@ -11,6 +11,12 @@ export interface BudgetReport {
   executorTokens: number;
   executorInputTokens: number;
   executorOutputTokens: number;
+  systemPromptTokens: number;
+  replayInputTokens: number;
+  stateCarrierTokens: number;
+  transientContextTokens: number;
+  visibleOutputTokens: number;
+  hiddenOutputTokens: number;
   totalTurns: number;
   avgTokensPerTurn: number;
   toolsExposed: number;
@@ -74,6 +80,12 @@ function emptyMetrics(): SessionBudgetMetrics {
     plannerOutputTokens: 0,
     executorInputTokens: 0,
     executorOutputTokens: 0,
+    systemPromptTokens: 0,
+    replayInputTokens: 0,
+    stateCarrierTokens: 0,
+    transientContextTokens: 0,
+    visibleOutputTokens: 0,
+    hiddenOutputTokens: 0,
   };
 }
 
@@ -100,6 +112,12 @@ function mergeBudgetMetrics(metricsList: SessionBudgetMetrics[]): SessionBudgetM
     merged.plannerOutputTokens += metrics.plannerOutputTokens;
     merged.executorInputTokens += metrics.executorInputTokens;
     merged.executorOutputTokens += metrics.executorOutputTokens;
+    merged.systemPromptTokens += metrics.systemPromptTokens;
+    merged.replayInputTokens += metrics.replayInputTokens;
+    merged.stateCarrierTokens += metrics.stateCarrierTokens;
+    merged.transientContextTokens += metrics.transientContextTokens;
+    merged.visibleOutputTokens += metrics.visibleOutputTokens;
+    merged.hiddenOutputTokens += metrics.hiddenOutputTokens;
   }
   return merged;
 }
@@ -144,6 +162,12 @@ function buildBudgetReportFromParts(parts: {
     executorTokens,
     executorInputTokens: metrics.executorInputTokens,
     executorOutputTokens: metrics.executorOutputTokens,
+    systemPromptTokens: metrics.systemPromptTokens,
+    replayInputTokens: metrics.replayInputTokens,
+    stateCarrierTokens: metrics.stateCarrierTokens,
+    transientContextTokens: metrics.transientContextTokens,
+    visibleOutputTokens: metrics.visibleOutputTokens,
+    hiddenOutputTokens: metrics.hiddenOutputTokens,
     totalTurns: metrics.totalTurns,
     avgTokensPerTurn,
     toolsExposed: metrics.toolsExposed,
@@ -220,6 +244,12 @@ export function renderBudgetDashboard(options: {
     metric("executor", `${report.executorTokens.toLocaleString()}  ${pct(report.executorTokens, totalTokenBase)}`),
     metric("planner bar", bar(report.plannerTokens, totalTokenBase, chartWidth)),
     metric("exec bar", bar(report.executorTokens, totalTokenBase, chartWidth)),
+    "",
+    "INPUT MIX",
+    metric("system", `${(report.systemPromptTokens ?? 0).toLocaleString()}  ${pct(report.systemPromptTokens ?? 0, Math.max(report.inputTokens, 1))}`),
+    metric("replay", `${(report.replayInputTokens ?? 0).toLocaleString()}  ${pct(report.replayInputTokens ?? 0, Math.max(report.inputTokens, 1))}`),
+    metric("state", `${(report.stateCarrierTokens ?? 0).toLocaleString()}  ${pct(report.stateCarrierTokens ?? 0, Math.max(report.inputTokens, 1))}`),
+    metric("transient", `${(report.transientContextTokens ?? 0).toLocaleString()}  ${pct(report.transientContextTokens ?? 0, Math.max(report.inputTokens, 1))}`),
   ];
   const efficiencyLines = [
     "EFFICIENCY",
@@ -246,6 +276,10 @@ export function renderBudgetDashboard(options: {
     metric("plan misses", String(report.plannerCacheMisses)),
     metric("top bleed", `${report.topBleed.key}  ${report.topBleed.value}  ${report.topBleed.pct}`),
     metric("small bar", bar(report.smallModelTurns, totalTurns, chartWidth)),
+    "",
+    "OUTPUT MIX",
+    metric("visible", `${(report.visibleOutputTokens ?? 0).toLocaleString()}  ${pct(report.visibleOutputTokens ?? 0, Math.max(report.outputTokens, 1))}`),
+    metric("hidden", `${(report.hiddenOutputTokens ?? 0).toLocaleString()}  ${pct(report.hiddenOutputTokens ?? 0, Math.max(report.outputTokens, 1))}`),
   ];
   if ((report.topToolBleeds ?? []).length > 0) {
     routingLines.push("", "HOT TOOLS");

@@ -2,6 +2,7 @@ import { runFixedBenchmarkSuite, renderFixedBenchmarkReport } from "../dist/benc
 
 function parseArgs(argv) {
   const parsed = {
+    suite: "fixed",
     provider: undefined,
     model: undefined,
     mode: "build",
@@ -15,6 +16,9 @@ function parseArgs(argv) {
     const next = argv[i + 1];
     if (arg === "--provider" && next) {
       parsed.provider = next;
+      i += 1;
+    } else if (arg === "--suite" && next) {
+      parsed.suite = next;
       i += 1;
     } else if (arg === "--model" && next) {
       parsed.model = next;
@@ -40,6 +44,7 @@ function parseArgs(argv) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const result = await runFixedBenchmarkSuite({
+    suiteName: args.suite,
     provider: args.provider,
     model: args.model,
     mode: args.mode,

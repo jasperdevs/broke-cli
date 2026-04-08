@@ -138,6 +138,7 @@ export async function runModelTurn(options: {
     optimizeMessages: (messages) => selectMessagesForTurn(messages, policy, (msgs) => getContextOptimizer().optimizeMessages(msgs)),
     forceRoute,
     transientUserContext,
+    preparedSpend: prepared.spend,
     resolveSpecialistModel,
   });
   nextActivityTime = result.lastActivityTime;
@@ -163,6 +164,7 @@ export async function runModelTurn(options: {
       optimizeMessages: (messages) => selectMessagesForTurn(messages, policy, (msgs) => getContextOptimizer().optimizeMessages(msgs)),
       forceRoute: "main",
       transientUserContext,
+      preparedSpend: prepared.spend,
       resolveSpecialistModel,
     });
     nextActivityTime = result.lastActivityTime;
@@ -195,6 +197,7 @@ export async function runModelTurn(options: {
       optimizeMessages: (messages) => selectMessagesForTurn(messages, policy, (msgs) => getContextOptimizer().optimizeMessages(msgs)),
       forceRoute: "main",
       transientUserContext,
+      preparedSpend: prepared.spend,
     });
     nextActivityTime = result.lastActivityTime;
   }
@@ -208,6 +211,7 @@ export async function runModelTurn(options: {
 
   const validation = runValidationSuite(result.nextToolCalls.some((name) => name === "writeFile" || name === "editFile"));
   if (validation.attempted) {
+    session.recordVerification("validation", validation.failed ? "fail" : "pass", validation.report);
     app.addMessage("system", validation.report);
     if (validation.failed && getSettings().autoFixValidation && repairDepth < 1) {
       app.addMessage("system", "Validation failed - attempting one repair pass.");

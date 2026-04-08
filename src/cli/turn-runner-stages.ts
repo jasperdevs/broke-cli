@@ -3,6 +3,7 @@ import type { ModelHandle } from "../ai/providers.js";
 import { buildSystemPrompt, resolveCavemanLevel } from "../core/context.js";
 import { COMPACTION_SUMMARY_PREFIX, compactMessages, getTotalContextTokens, splitCompactedMessages } from "../core/compact.js";
 import { getModelContextLimitOverride, getSettings, type Mode } from "../core/config.js";
+import { REPO_STATE_CONTEXT_PREFIX } from "../core/session.js";
 import type { TurnPolicy } from "../core/turn-policy.js";
 import type { Session } from "../core/session.js";
 import { resolveExecutionTarget } from "./turn-runner-support.js";
@@ -30,6 +31,12 @@ export interface PreparedTurnContext {
   selectedMessages: TurnChatMessage[];
   contextTokens: number;
   contextPct: number;
+  spend: {
+    systemPromptTokens: number;
+    replayInputTokens: number;
+    stateCarrierTokens: number;
+    transientContextTokens: number;
+  };
 }
 
 export interface TurnExecutionResultLike {
@@ -80,12 +87,22 @@ export function selectMessagesForTurn(
     : baseMessages;
   if (!budget || budget.maxTokens <= 0) return windowed;
 
-  const summary = windowed[0]?.role === "user" && windowed[0].content.startsWith(COMPACTION_SUMMARY_PREFIX)
-    ? windowed[0]
-    : null;
-  const tail = summary ? windowed.slice(1) : windowed;
+  const prefixMessages: TurnChatMessage[] = [];
+  let prefixIndex = 0;
+  while (
+    prefixIndex < windowed.length
+    && windowed[prefixIndex]?.role === "user"
+    && (
+      windowed[prefixIndex]!.content.startsWith(COMPACTION_SUMMARY_PREFIX)
+      || windowed[prefixIndex]!.content.startsWith(REPO_STATE_CONTEXT_PREFIX)
+    )
+  ) {
+    prefixMessages.push(windowed[prefixIndex]!);
+    prefixIndex += 1;
+  }
+  const tail = windowed.slice(prefixIndex);
   const selected: TurnChatMessage[] = [];
-  let tokenCount = summary ? estimateTextTokens(summary.content, budget.modelId) : 0;
+  let tokenCount = prefixMessages.reduce((sum, message) => sum + estimateTextTokens(message.content, budget.modelId), 0);
   for (let i = tail.length - 1; i >= 0; i--) {
     const message = tail[i]!;
     const nextCost = estimateTextTokens(message.content, budget.modelId);
@@ -93,7 +110,33 @@ export function selectMessagesForTurn(
     selected.unshift(message);
     tokenCount += nextCost;
   }
-  return summary ? [summary, ...selected] : selected;
+  return [...prefixMessages, ...selected];
+}
+
+function measurePreparedSpend(messages: TurnChatMessage[], systemPrompt: string, modelId?: string, transientUserContext?: string): PreparedTurnContext["spend"] {
+  const systemPromptTokens = estimateTextTokens(systemPrompt, modelId);
+  const stateCarrierTokens = messages
+    .filter((message) => message.role === "user" && (
+      message.content.startsWith(COMPACTION_SUMMARY_PREFIX)
+      || message.content.startsWith(REPO_STATE_CONTEXT_PREFIX)
+    ))
+    .reduce((sum, message) => sum + estimateTextTokens(message.content, modelId), 0);
+  const replayInputTokens = messages
+    .filter((message) => !(message.role === "user" && (
+      message.content.startsWith(COMPACTION_SUMMARY_PREFIX)
+      || message.content.startsWith(REPO_STATE_CONTEXT_PREFIX)
+    )))
+    .slice(0, -1)
+    .reduce((sum, message) => sum + estimateTextTokens(message.content, modelId), 0);
+  const transientContextTokens = transientUserContext?.trim()
+    ? estimateTextTokens(transientUserContext, modelId)
+    : 0;
+  return {
+    systemPromptTokens,
+    replayInputTokens,
+    stateCarrierTokens,
+    transientContextTokens,
+  };
 }
 
 export async function maybeRefreshIdleContext(options: {
@@ -220,7 +263,14 @@ export function prepareTurnContext(options: {
   const contextTokens = getTotalContextTokens(selectedMessages, turnSystemPrompt, currentModelId);
   const contextPct = contextLimit > 0 ? Math.min(100, Math.round((contextTokens / contextLimit) * 100)) : 0;
   app.setContextUsage(contextTokens, contextLimit);
-  return { contextLimit, turnSystemPrompt, selectedMessages, contextTokens, contextPct };
+  return {
+    contextLimit,
+    turnSystemPrompt,
+    selectedMessages,
+    contextTokens,
+    contextPct,
+    spend: measurePreparedSpend(selectedMessages, turnSystemPrompt, previewTarget.executionModelId, transientUserContext),
+  };
 }
 
 export async function maybeAutoCompactTurnContext(options: {
@@ -267,7 +317,13 @@ export async function maybeAutoCompactTurnContext(options: {
     const contextTokens = getTotalContextTokens(selectedMessages, prepared.turnSystemPrompt, currentModelId);
     const contextPct = prepared.contextLimit > 0 ? Math.min(100, Math.round((contextTokens / prepared.contextLimit) * 100)) : 0;
     app.setContextUsage(contextTokens, prepared.contextLimit);
-    nextPrepared = { ...prepared, selectedMessages, contextTokens, contextPct };
+    nextPrepared = {
+      ...prepared,
+      selectedMessages,
+      contextTokens,
+      contextPct,
+      spend: measurePreparedSpend(selectedMessages, prepared.turnSystemPrompt, currentModelId, transientUserContext),
+    };
   } catch {
     app.setCompacting(false);
   }

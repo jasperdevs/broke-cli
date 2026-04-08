@@ -88,6 +88,23 @@ describe("session budget metrics", () => {
     expect(session.getCompactionSummary()?.tokensBefore).toBe(123);
   });
 
+  it("injects compact repo state into chat context without polluting visible transcript", () => {
+    const session = new Session(`test-repo-state-${Date.now()}`);
+    session.addMessage("user", "rename helper");
+    session.addMessage("assistant", "done");
+    session.recordRepoEdit("src/math.js", "edit");
+    session.recordRepoRead("src/index.js", 12);
+    session.recordRepoSearch("grep", "sumNumbers", ["src/math.js", "src/index.js"]);
+    session.recordVerification("validation", "pass", "tests pass");
+
+    expect(session.getMessages()).toHaveLength(2);
+    const chatMessages = session.getChatMessages();
+    expect(chatMessages[0]?.content).toContain("<repo-state>");
+    expect(chatMessages[0]?.content).toContain("edited: src/math.js");
+    expect(chatMessages[0]?.content).toContain("read: src/index.js");
+    expect(chatMessages[0]?.content).toContain("verify: pass validation");
+  });
+
   it("formats a structured budget report and summary", () => {
     const session = new Session(`test-insights-${Date.now()}`);
     session.addUsage(200, 40, 0.001);

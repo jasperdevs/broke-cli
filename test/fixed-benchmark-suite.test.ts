@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getFixedBenchmarkTasks, renderFixedBenchmarkReport, type BenchmarkSuiteResult } from "../src/benchmarks/fixed-suite.js";
+import { getExtendedBenchmarkTasks, getFixedBenchmarkTasks, renderFixedBenchmarkReport, type BenchmarkSuiteResult } from "../src/benchmarks/fixed-suite.js";
 
 describe("fixed benchmark suite", () => {
   it("ships the expected benchmark categories", () => {
@@ -13,8 +13,18 @@ describe("fixed benchmark suite", () => {
     ]);
   });
 
+  it("ships deeper stateful benchmark categories", () => {
+    const tasks = getExtendedBenchmarkTasks();
+    expect(tasks.map((task) => task.id)).toEqual([
+      "stateful_refactor_followup",
+      "rename_then_answer",
+      "bugfix_then_test",
+    ]);
+  });
+
   it("renders task results with spend and comparator estimates", () => {
     const report = renderFixedBenchmarkReport({
+      suiteName: "fixed",
       providerId: "codex",
       modelId: "gpt-5.4-mini",
       startedAt: "2026-04-08T00:00:00.000Z",
@@ -47,12 +57,19 @@ describe("fixed benchmark suite", () => {
             plannerOutputTokens: 5,
             executorInputTokens: 100,
             executorOutputTokens: 35,
+            systemPromptTokens: 30,
+            replayInputTokens: 20,
+            stateCarrierTokens: 10,
+            transientContextTokens: 0,
+            visibleOutputTokens: 28,
+            hiddenOutputTokens: 12,
             toolOutputTokens: 12,
             topToolOutputs: [{ tool: "readFile", tokens: 12 }],
           },
           turns: [
             {
               turn: 1,
+              step: 1,
               prompt: "Update a file",
               latencyMs: 1000,
               inputTokens: 120,
@@ -85,6 +102,8 @@ describe("fixed benchmark suite", () => {
     expect(report).toContain("provider/model: codex/gpt-5.4-mini");
     expect(report).toContain("read_modify: success");
     expect(report).toContain("planner in/out 20/5");
+    expect(report).toContain("input mix: system 30");
+    expect(report).toContain("output mix: visible 28");
     expect(report).toContain("OpenCode estimate: input 110-118");
   });
 });

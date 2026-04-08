@@ -2,15 +2,33 @@ import { randomUUID } from "crypto";
 import { ContextOptimizer } from "./context-optimizer.js";
 import { getSettings, type TreeFilterMode } from "./config.js";
 import { buildCompactionContextMessage } from "./compact.js";
+import {
+  buildRepoStateContextMessage,
+  buildRepoStateSummary,
+  cloneRepoState,
+  recordRepoEdit as updateRepoEditState,
+  recordRepoRead as updateRepoReadState,
+  recordRepoSearch as updateRepoSearchState,
+  recordRepoVerification as updateRepoVerificationState,
+} from "./repo-state.js";
 import { createDefaultSessionName } from "./session-naming.js";
+import {
+  buildChildrenMap,
+  collectAncestorIds,
+  entriesFromMessages,
+  getActiveEntries,
+  matchesTreeFilter,
+} from "./session-graph.js";
 import {
   type CompactionSummaryState,
   createEmptySessionBudgetMetrics,
+  createEmptySessionRepoState,
   type Message,
   type SessionBudgetMetrics,
   type SessionData,
   type SessionEntry,
   type SessionListItem,
+  type SessionRepoState,
   type SessionTreeItem,
 } from "./session-types.js";
 import {
@@ -28,78 +46,11 @@ export type {
   SessionTreeItem,
 } from "./session-types.js";
 export { createDefaultSessionName, isDefaultSessionName } from "./session-naming.js";
-
-function makeEntry(message: Message, parentId: string | null): SessionEntry {
-  return { ...message, id: randomUUID(), parentId };
-}
-
-function entriesFromMessages(messages: Message[]): { entries: SessionEntry[]; leafId: string | null } {
-  const entries: SessionEntry[] = [];
-  let parentId: string | null = null;
-  for (const message of messages) {
-    const entry = makeEntry(message, parentId);
-    entries.push(entry);
-    parentId = entry.id;
-  }
-  return { entries, leafId: parentId };
-}
-
-function getEntryMap(entries: SessionEntry[]): Map<string, SessionEntry> {
-  return new Map(entries.map((entry) => [entry.id, entry]));
-}
-
-function getActiveEntries(entries: SessionEntry[], leafId: string | null): SessionEntry[] {
-  if (!leafId) return [];
-  const map = getEntryMap(entries);
-  const path: SessionEntry[] = [];
-  let cursor: string | null = leafId;
-  while (cursor) {
-    const entry = map.get(cursor);
-    if (!entry) break;
-    path.push(entry);
-    cursor = entry.parentId;
-  }
-  return path.reverse();
-}
-
-function buildChildrenMap(entries: SessionEntry[]): Map<string | null, SessionEntry[]> {
-  const children = new Map<string | null, SessionEntry[]>();
-  for (const entry of entries) {
-    const bucket = children.get(entry.parentId) ?? [];
-    bucket.push(entry);
-    children.set(entry.parentId, bucket);
-  }
-  for (const bucket of children.values()) {
-    bucket.sort((a, b) => a.timestamp - b.timestamp);
-  }
-  return children;
-}
-
-function collectAncestorIds(entries: SessionEntry[], entryId: string | null): Set<string> {
-  const map = getEntryMap(entries);
-  const ids = new Set<string>();
-  let cursor = entryId;
-  while (cursor) {
-    ids.add(cursor);
-    cursor = map.get(cursor)?.parentId ?? null;
-  }
-  return ids;
-}
-
-function matchesTreeFilter(entry: SessionEntry, mode: TreeFilterMode): boolean {
-  switch (mode) {
-    case "all":
-      return true;
-    case "user-only":
-      return entry.role === "user";
-    case "labeled-only":
-      return !!entry.label;
-    case "no-tools":
-    case "default":
-    default:
-      return entry.role !== "system";
-  }
-}
+export {
+  REPO_STATE_CONTEXT_PREFIX,
+  REPO_STATE_CONTEXT_SUFFIX,
+  buildRepoStateContextMessage,
+} from "./repo-state.js";
 
 export class Session {
   private id: string;
@@ -111,6 +62,7 @@ export class Session {
   private totalCost = 0;
   private budgetMetrics: SessionBudgetMetrics = createEmptySessionBudgetMetrics();
   private compactionSummary: CompactionSummaryState | null = null;
+  private repoState: SessionRepoState = createEmptySessionRepoState();
   private cwd = process.cwd();
   private provider = "";
   private model = "";
@@ -173,11 +125,15 @@ export class Session {
     const visibleMessages = this.getMessages()
       .filter((m) => m.role === "user" || m.role === "assistant")
       .map((m) => ({ role: m.role as "user" | "assistant", content: m.content, images: m.images }));
-    if (!this.compactionSummary?.summary?.trim()) return visibleMessages;
-    return [
-      { role: "user", content: buildCompactionContextMessage(this.compactionSummary.summary) },
-      ...visibleMessages,
-    ];
+    const contextMessages: Array<{ role: "user"; content: string }> = [];
+    if (this.compactionSummary?.summary?.trim()) {
+      contextMessages.push({ role: "user", content: buildCompactionContextMessage(this.compactionSummary.summary) });
+    }
+    const repoStateSummary = buildRepoStateSummary(this.repoState);
+    if (repoStateSummary) {
+      contextMessages.push({ role: "user", content: buildRepoStateContextMessage(repoStateSummary) });
+    }
+    return [...contextMessages, ...visibleMessages];
   }
 
   getCompactionSummary(): CompactionSummaryState | null {
@@ -360,6 +316,30 @@ export class Session {
     return { ...this.budgetMetrics };
   }
 
+  getRepoState(): SessionRepoState {
+    return cloneRepoState(this.repoState);
+  }
+
+  recordRepoRead(path: string, lineCount: number): void {
+    this.repoState = updateRepoReadState(this.repoState, path, lineCount, this.budgetMetrics.totalTurns + 1);
+    this.save();
+  }
+
+  recordRepoEdit(path: string, kind: "write" | "edit"): void {
+    this.repoState = updateRepoEditState(this.repoState, path, kind, this.budgetMetrics.totalTurns + 1);
+    this.save();
+  }
+
+  recordRepoSearch(tool: SessionRepoState["recentSearches"][number]["tool"], query: string, hits: string[]): void {
+    this.repoState = updateRepoSearchState(this.repoState, tool, query, hits, this.budgetMetrics.totalTurns + 1);
+    this.save();
+  }
+
+  recordVerification(label: string, status: "pass" | "fail", detail = ""): void {
+    this.repoState = updateRepoVerificationState(this.repoState, label, status, detail, this.budgetMetrics.totalTurns + 1);
+    this.save();
+  }
+
   recordTurn(options: {
     smallModel?: boolean;
     toolsExposed?: number;
@@ -369,6 +349,12 @@ export class Session {
     plannerOutputTokens?: number;
     executorInputTokens?: number;
     executorOutputTokens?: number;
+    systemPromptTokens?: number;
+    replayInputTokens?: number;
+    stateCarrierTokens?: number;
+    transientContextTokens?: number;
+    visibleOutputTokens?: number;
+    hiddenOutputTokens?: number;
   }): void {
     this.budgetMetrics.totalTurns += 1;
     if (options.smallModel) this.budgetMetrics.smallModelTurns += 1;
@@ -380,6 +366,12 @@ export class Session {
     if (options.plannerOutputTokens) this.budgetMetrics.plannerOutputTokens += options.plannerOutputTokens;
     if (options.executorInputTokens) this.budgetMetrics.executorInputTokens += options.executorInputTokens;
     if (options.executorOutputTokens) this.budgetMetrics.executorOutputTokens += options.executorOutputTokens;
+    if (options.systemPromptTokens) this.budgetMetrics.systemPromptTokens += options.systemPromptTokens;
+    if (options.replayInputTokens) this.budgetMetrics.replayInputTokens += options.replayInputTokens;
+    if (options.stateCarrierTokens) this.budgetMetrics.stateCarrierTokens += options.stateCarrierTokens;
+    if (options.transientContextTokens) this.budgetMetrics.transientContextTokens += options.transientContextTokens;
+    if (options.visibleOutputTokens) this.budgetMetrics.visibleOutputTokens += options.visibleOutputTokens;
+    if (options.hiddenOutputTokens) this.budgetMetrics.hiddenOutputTokens += options.hiddenOutputTokens;
     this.save();
   }
 
@@ -414,6 +406,7 @@ export class Session {
     this.totalOutputTokens = 0;
     this.totalCost = 0;
     this.budgetMetrics = createEmptySessionBudgetMetrics();
+    this.repoState = createEmptySessionRepoState();
     this.contextOptimizer.reset();
     this.save();
   }
@@ -433,6 +426,7 @@ export class Session {
       totalOutputTokens: this.totalOutputTokens,
       totalCost: this.totalCost,
       budgetMetrics: this.budgetMetrics,
+      repoState: this.repoState,
       createdAt: this.createdAt,
       updatedAt: Date.now(),
     });
@@ -459,6 +453,7 @@ export class Session {
       ...session.budgetMetrics,
       ...(data.budgetMetrics ?? {}),
     };
+    session.repoState = data.repoState ?? createEmptySessionRepoState();
     session.cwd = data.cwd;
     session.provider = data.provider;
     session.model = data.model;
@@ -475,6 +470,7 @@ export class Session {
     forked.totalInputTokens = this.totalInputTokens;
     forked.totalOutputTokens = this.totalOutputTokens;
     forked.totalCost = this.totalCost;
+    forked.repoState = cloneRepoState(this.repoState);
     forked.cwd = this.cwd;
     forked.provider = this.provider;
     forked.model = this.model;

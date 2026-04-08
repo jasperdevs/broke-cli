@@ -33,8 +33,47 @@ export interface SessionBudgetMetrics {
   plannerOutputTokens: number;
   executorInputTokens: number;
   executorOutputTokens: number;
+  systemPromptTokens: number;
+  replayInputTokens: number;
+  stateCarrierTokens: number;
+  transientContextTokens: number;
+  visibleOutputTokens: number;
+  hiddenOutputTokens: number;
   toolOutputTokens: Record<string, number>;
   toolCallsByName: Record<string, number>;
+}
+
+export interface RepoStateRead {
+  path: string;
+  lineCount: number;
+  turn: number;
+}
+
+export interface RepoStateEdit {
+  path: string;
+  kind: "write" | "edit";
+  turn: number;
+}
+
+export interface RepoStateSearch {
+  tool: "grep" | "semSearch" | "listFiles";
+  query: string;
+  hits: string[];
+  turn: number;
+}
+
+export interface RepoStateVerification {
+  label: string;
+  status: "pass" | "fail";
+  detail: string;
+  turn: number;
+}
+
+export interface SessionRepoState {
+  recentReads: RepoStateRead[];
+  recentEdits: RepoStateEdit[];
+  recentSearches: RepoStateSearch[];
+  lastVerification: RepoStateVerification | null;
 }
 
 export interface CompactionSummaryState {
@@ -57,6 +96,7 @@ export interface SessionData {
   totalOutputTokens: number;
   totalCost: number;
   budgetMetrics?: SessionBudgetMetrics;
+  repoState?: SessionRepoState;
   createdAt: number;
   updatedAt: number;
 }
@@ -87,7 +127,22 @@ export function createEmptySessionBudgetMetrics(): SessionBudgetMetrics {
     plannerOutputTokens: 0,
     executorInputTokens: 0,
     executorOutputTokens: 0,
+    systemPromptTokens: 0,
+    replayInputTokens: 0,
+    stateCarrierTokens: 0,
+    transientContextTokens: 0,
+    visibleOutputTokens: 0,
+    hiddenOutputTokens: 0,
     toolOutputTokens: {},
     toolCallsByName: {},
+  };
+}
+
+export function createEmptySessionRepoState(): SessionRepoState {
+  return {
+    recentReads: [],
+    recentEdits: [],
+    recentSearches: [],
+    lastVerification: null,
   };
 }
