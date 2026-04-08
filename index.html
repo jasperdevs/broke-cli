@@ -1,397 +1,275 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Bubble Blast</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>broke-cli</title>
   <style>
     :root {
-      color-scheme: dark;
-      --bg: #09111f;
-      --bg2: #121b31;
-      --card: rgba(11, 18, 34, 0.82);
-      --ink: #f8f5ef;
-      --muted: #b7c2e2;
-      --accent: #ffd84d;
-      --accent2: #77f2c0;
-      --accent3: #ff7bd1;
-      --shadow: 0 26px 80px rgba(0, 0, 0, 0.45);
+      --bg: #07111f;
+      --bg-accent: #10233a;
+      --panel: rgba(9, 19, 34, 0.82);
+      --line: rgba(120, 171, 255, 0.22);
+      --text: #eef4ff;
+      --muted: #9cb3d9;
+      --hot: #63f0c2;
+      --warm: #ff8b5e;
+      --glow: #72a8ff;
     }
 
-    * { box-sizing: border-box; }
+    * {
+      box-sizing: border-box;
+    }
 
-    html, body {
+    body {
       margin: 0;
-      min-height: 100%;
-      background:
-        radial-gradient(circle at 20% 20%, rgba(255, 123, 209, 0.22), transparent 28%),
-        radial-gradient(circle at 80% 15%, rgba(119, 242, 192, 0.18), transparent 24%),
-        radial-gradient(circle at 50% 85%, rgba(255, 216, 77, 0.18), transparent 26%),
-        linear-gradient(135deg, var(--bg), var(--bg2));
-      color: var(--ink);
-      font-family: "Trebuchet MS", "Verdana", sans-serif;
-      overflow: hidden;
-    }
-
-    body::before {
-      content: "";
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      background-image:
-        linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px);
-      background-size: 24px 24px;
-      mask-image: radial-gradient(circle at center, black, transparent 80%);
-      opacity: 0.5;
-    }
-
-    .wrap {
       min-height: 100vh;
       display: grid;
       place-items: center;
       padding: 24px;
+      overflow: hidden;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(114, 168, 255, 0.28), transparent 34%),
+        radial-gradient(circle at 85% 20%, rgba(255, 139, 94, 0.22), transparent 28%),
+        linear-gradient(145deg, var(--bg) 0%, #030811 55%, #09192b 100%);
+      font-family: Consolas, "SFMono-Regular", "Cascadia Code", monospace;
     }
 
-    .card {
+    body::before,
+    body::after {
+      content: "";
+      position: fixed;
+      inset: auto;
+      border-radius: 999px;
+      filter: blur(60px);
+      opacity: 0.45;
+      pointer-events: none;
+    }
+
+    body::before {
+      width: 240px;
+      height: 240px;
+      top: 6%;
+      right: 8%;
+      background: rgba(99, 240, 194, 0.32);
+      animation: drift 12s ease-in-out infinite;
+    }
+
+    body::after {
+      width: 300px;
+      height: 300px;
+      left: 4%;
+      bottom: 4%;
+      background: rgba(114, 168, 255, 0.24);
+      animation: drift 16s ease-in-out infinite reverse;
+    }
+
+    .shell {
+      width: min(980px, 100%);
       position: relative;
-      width: min(920px, 100%);
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 32px;
-      background: linear-gradient(180deg, rgba(18, 27, 49, 0.82), rgba(7, 11, 21, 0.92));
-      box-shadow: var(--shadow);
-      padding: clamp(24px, 4vw, 44px);
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      box-shadow:
+        0 30px 80px rgba(0, 0, 0, 0.45),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      backdrop-filter: blur(18px);
       overflow: hidden;
     }
 
-    .card::after {
+    .shell::before {
       content: "";
       position: absolute;
-      inset: auto -12% -32% auto;
-      width: 240px;
-      height: 240px;
-      border-radius: 50%;
-      background: radial-gradient(circle, rgba(255,216,77,0.24), transparent 68%);
-      filter: blur(8px);
-      animation: float 8s ease-in-out infinite;
+      inset: 0;
+      background:
+        linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+      background-size: 32px 32px;
+      mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.75), transparent);
+      pointer-events: none;
     }
 
-    .eyebrow {
-      display: inline-flex;
+    .topbar {
+      display: flex;
       align-items: center;
       gap: 10px;
-      padding: 8px 14px;
-      border-radius: 999px;
-      background: rgba(255,255,255,0.08);
-      color: var(--muted);
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      font-size: 12px;
-      backdrop-filter: blur(10px);
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
     }
 
     .dot {
-      width: 10px;
-      height: 10px;
+      width: 12px;
+      height: 12px;
       border-radius: 50%;
-      background: var(--accent2);
-      box-shadow: 0 0 18px var(--accent2);
-      animation: pulse 1.6s ease-in-out infinite;
+    }
+
+    .dot:nth-child(1) { background: #ff5f57; }
+    .dot:nth-child(2) { background: #febc2e; }
+    .dot:nth-child(3) { background: #28c840; }
+
+    .label {
+      margin-left: 8px;
+      color: var(--muted);
+      font-size: 0.9rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .content {
+      position: relative;
+      display: grid;
+      gap: 28px;
+      padding: 42px 22px 26px;
+    }
+
+    .hero {
+      display: grid;
+      gap: 18px;
+    }
+
+    .kicker {
+      color: var(--hot);
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      font-size: 0.78rem;
     }
 
     h1 {
-      margin: 18px 0 12px;
+      margin: 0;
       max-width: 10ch;
-      font-size: clamp(3.4rem, 10vw, 7.8rem);
-      line-height: 0.9;
-      letter-spacing: -0.08em;
-      text-wrap: balance;
+      font-size: clamp(3rem, 9vw, 6.6rem);
+      line-height: 0.92;
+      letter-spacing: -0.06em;
+      text-shadow: 0 0 30px rgba(114, 168, 255, 0.2);
     }
 
-    .lead {
-      max-width: 52ch;
-      margin: 0 0 28px;
+    p {
+      margin: 0;
+      max-width: 58ch;
       color: var(--muted);
-      font-size: clamp(1rem, 2vw, 1.15rem);
-      line-height: 1.6;
+      font-size: 1.05rem;
+      line-height: 1.7;
     }
 
-    .grid {
+    .command {
+      width: fit-content;
+      max-width: 100%;
+      padding: 14px 18px;
+      border: 1px solid rgba(99, 240, 194, 0.28);
+      border-radius: 16px;
+      background: rgba(4, 10, 18, 0.82);
+      color: var(--text);
+      font-size: 0.98rem;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+      overflow-x: auto;
+    }
+
+    .command .prompt {
+      color: var(--hot);
+    }
+
+    .stats {
       display: grid;
-      grid-template-columns: 1.3fr 0.9fr;
-      gap: 20px;
-      align-items: stretch;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
     }
 
-    .toy {
-      position: relative;
-      min-height: 280px;
-      border-radius: 28px;
-      background:
-        radial-gradient(circle at 30% 30%, rgba(255,123,209,0.24), transparent 30%),
-        radial-gradient(circle at 70% 20%, rgba(119,242,192,0.22), transparent 26%),
-        linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
-      border: 1px solid rgba(255,255,255,0.12);
-      overflow: hidden;
-      padding: 24px;
+    .card {
+      padding: 18px;
+      border-radius: 20px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01));
     }
 
-    .orb {
-      position: absolute;
-      border-radius: 50%;
-      filter: drop-shadow(0 18px 30px rgba(0,0,0,0.25));
-      animation: bob 5s ease-in-out infinite;
-    }
-
-    .orb.one {
-      width: 160px;
-      height: 160px;
-      right: 18px;
-      top: 22px;
-      background: linear-gradient(145deg, #ffe56f, #ff9a4d);
-    }
-
-    .orb.two {
-      width: 112px;
-      height: 112px;
-      left: 26px;
-      bottom: 28px;
-      animation-delay: -1.5s;
-      background: linear-gradient(145deg, #7ef7d1, #2db9ff);
-    }
-
-    .face {
-      position: absolute;
-      inset: 50% auto auto 50%;
-      width: 120px;
-      height: 120px;
-      translate: -50% -50%;
-      border-radius: 50%;
-      background: rgba(6, 10, 20, 0.18);
-      border: 2px solid rgba(255,255,255,0.2);
-      display: grid;
-      place-items: center;
-      box-shadow: inset 0 0 0 10px rgba(255,255,255,0.08);
-    }
-
-    .eyes {
-      width: 56px;
-      display: flex;
-      justify-content: space-between;
-      margin-top: -18px;
-    }
-
-    .eyes span,
-    .mouth {
-      background: #11182c;
-      border-radius: 999px;
-    }
-
-    .eyes span { width: 12px; height: 18px; }
-    .mouth {
-      width: 36px;
-      height: 12px;
-      margin-top: 18px;
-      border-radius: 0 0 999px 999px;
-    }
-
-    .sticker {
-      position: absolute;
-      left: 24px;
-      top: 22px;
-      padding: 10px 14px;
-      border-radius: 14px;
-      background: rgba(255, 216, 77, 0.16);
-      border: 1px solid rgba(255, 216, 77, 0.24);
-      color: #ffe68b;
-      font-weight: 700;
-      transform: rotate(-8deg);
-    }
-
-    .panel {
-      display: grid;
-      gap: 16px;
-    }
-
-    .stat {
-      padding: 22px;
-      border-radius: 24px;
-      background: rgba(255,255,255,0.06);
-      border: 1px solid rgba(255,255,255,0.1);
-      backdrop-filter: blur(10px);
-    }
-
-    .stat strong {
+    .card strong {
       display: block;
-      font-size: 1.9rem;
-      margin-bottom: 6px;
-      color: var(--accent);
+      margin-bottom: 8px;
+      font-size: 1.8rem;
+      color: var(--text);
     }
 
-    .buttons {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-      margin-top: 26px;
-    }
-
-    button {
-      appearance: none;
-      border: 0;
-      border-radius: 999px;
-      padding: 14px 20px;
-      font: inherit;
-      font-weight: 700;
-      cursor: pointer;
-      transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
-    }
-
-    .primary {
-      color: #09111f;
-      background: linear-gradient(135deg, var(--accent), #fff1a8);
-      box-shadow: 0 16px 34px rgba(255, 216, 77, 0.25);
-    }
-
-    .ghost {
-      color: var(--ink);
-      background: rgba(255,255,255,0.08);
-      border: 1px solid rgba(255,255,255,0.14);
-    }
-
-    button:hover { transform: translateY(-2px) scale(1.01); }
-    button:active { transform: translateY(1px) scale(0.99); }
-
-    .spark {
-      position: fixed;
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      pointer-events: none;
-      will-change: transform, opacity;
+    .card span {
+      color: var(--muted);
+      line-height: 1.5;
     }
 
     .footer {
-      margin-top: 18px;
-      color: rgba(255,255,255,0.6);
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      padding-top: 8px;
+      color: var(--muted);
       font-size: 0.92rem;
+      border-top: 1px solid rgba(120, 171, 255, 0.14);
     }
 
-    @keyframes bob {
-      0%, 100% { transform: translateY(0) rotate(0deg); }
-      50% { transform: translateY(-12px) rotate(2deg); }
+    .footer b {
+      color: var(--warm);
+      font-weight: 600;
     }
 
-    @keyframes float {
-      0%, 100% { transform: translate(0, 0); }
-      50% { transform: translate(-10px, -16px); }
+    @keyframes drift {
+      0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+      50% { transform: translate3d(12px, -18px, 0) scale(1.08); }
     }
 
-    @keyframes pulse {
-      0%, 100% { transform: scale(1); opacity: 1; }
-      50% { transform: scale(0.8); opacity: 0.7; }
-    }
+    @media (max-width: 720px) {
+      .content {
+        padding: 30px 18px 22px;
+      }
 
-    @media (max-width: 820px) {
-      html, body { overflow: auto; }
-      .grid { grid-template-columns: 1fr; }
-      h1 { max-width: 12ch; }
+      .stats {
+        grid-template-columns: 1fr;
+      }
+
+      .footer {
+        flex-direction: column;
+      }
     }
   </style>
 </head>
 <body>
-  <main class="wrap">
-    <section class="card" aria-label="Fun landing page">
-      <span class="eyebrow"><span class="dot"></span> live joy engine</span>
-      <h1>Bubble Blast</h1>
-      <p class="lead">A tiny arcade moonbase for loud colors, happy blobs, and one button that turns the screen into a confetti storm.</p>
+  <main class="shell">
+    <div class="topbar">
+      <span class="dot"></span>
+      <span class="dot"></span>
+      <span class="dot"></span>
+      <span class="label">broke-cli / main</span>
+    </div>
 
-      <div class="grid">
-        <div class="toy">
-          <div class="sticker">tap the blast</div>
-          <div class="orb one"></div>
-          <div class="orb two"></div>
-          <div class="face" aria-hidden="true">
-            <div class="eyes"><span></span><span></span></div>
-            <div class="mouth"></div>
-          </div>
-        </div>
-
-        <aside class="panel">
-          <div class="stat">
-            <strong id="count">0</strong>
-            confetti pops
-          </div>
-          <div class="stat">
-            <strong>88%</strong>
-            nonsense, 12% utility
-          </div>
-          <div class="stat">
-            <strong>24/7</strong>
-            snack-size joy mode
-          </div>
-        </aside>
+    <section class="content">
+      <div class="hero">
+        <div class="kicker">Terminal-native chaos</div>
+        <h1>Looks broke. Ships hard.</h1>
+        <p>
+          A sharp little landing page for a CLI that feels fast, opinionated, and slightly dangerous in the good way.
+          Big contrast, glassy terminal chrome, and enough glow to look cool without turning into dashboard sludge.
+        </p>
+        <div class="command"><span class="prompt">$</span> npx broke-cli --ship-it</div>
       </div>
 
-      <div class="buttons">
-        <button class="primary" id="blast">Blast it</button>
-        <button class="ghost" id="spin">Spin mood</button>
+      <div class="stats">
+        <article class="card">
+          <strong>Fast</strong>
+          <span>Built to feel immediate, with a layout that lands on first glance.</span>
+        </article>
+        <article class="card">
+          <strong>Loud</strong>
+          <span>Monospace-first styling and neon accents push the CLI identity instead of hiding it.</span>
+        </article>
+        <article class="card">
+          <strong>Clean</strong>
+          <span>One file, no dependencies, responsive out of the box.</span>
+        </article>
       </div>
 
-      <div class="footer" id="status">Ready for spark chaos.</div>
+      <div class="footer">
+        <span><b>Theme:</b> midnight terminal / electric accents</span>
+        <span><b>Status:</b> index.html created</span>
+      </div>
     </section>
   </main>
-
-  <script>
-    const blast = document.getElementById('blast');
-    const spin = document.getElementById('spin');
-    const status = document.getElementById('status');
-    const count = document.getElementById('count');
-    const palette = ['#ffd84d', '#77f2c0', '#ff7bd1', '#6fe8ff', '#ffffff'];
-    let pops = 0;
-    let hue = 0;
-
-    function popConfetti() {
-      pops += 1;
-      count.textContent = pops;
-      status.textContent = ['Boom.', 'Bop.', 'Zap.', 'Yip!', 'Pop!'][Math.floor(Math.random() * 5)];
-
-      for (let i = 0; i < 24; i++) {
-        const spark = document.createElement('span');
-        const x = innerWidth * (0.2 + Math.random() * 0.6);
-        const y = innerHeight * (0.2 + Math.random() * 0.4);
-        const dx = (Math.random() - 0.5) * 260;
-        const dy = (Math.random() - 1) * 220;
-        const size = 6 + Math.random() * 8;
-
-        spark.className = 'spark';
-        spark.style.left = `${x}px`;
-        spark.style.top = `${y}px`;
-        spark.style.width = `${size}px`;
-        spark.style.height = `${size}px`;
-        spark.style.background = palette[(i + pops) % palette.length];
-        document.body.appendChild(spark);
-
-        spark.animate([
-          { transform: 'translate(0, 0) scale(1)', opacity: 1 },
-          { transform: `translate(${dx}px, ${dy}px) scale(0.2)`, opacity: 0 }
-        ], {
-          duration: 850 + Math.random() * 350,
-          easing: 'cubic-bezier(.2,.9,.2,1)'
-        }).onfinish = () => spark.remove();
-      }
-    }
-
-    function spinMood() {
-      hue = (hue + 36) % 360;
-      document.documentElement.style.setProperty('--accent', `hsl(${hue} 100% 64%)`);
-      document.documentElement.style.setProperty('--accent2', `hsl(${(hue + 120) % 360} 100% 68%)`);
-      document.documentElement.style.setProperty('--accent3', `hsl(${(hue + 260) % 360} 100% 70%)`);
-      status.textContent = 'Mood wheel spun.';
-      popConfetti();
-    }
-
-    blast.addEventListener('click', popConfetti);
-    spin.addEventListener('click', spinMood);
-  </script>
 </body>
 </html>
