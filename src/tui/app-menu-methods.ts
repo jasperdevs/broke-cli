@@ -1,13 +1,9 @@
-import stripAnsi from "strip-ansi";
 import { getSettings } from "../core/config.js";
-import { currentTheme } from "../core/themes.js";
 import { filterFiles, readFileForContext } from "./file-picker.js";
 import { insertInlineFileChip } from "./inline-chip-utils.js";
 import type { Keypress } from "./keypress.js";
-import { BOLD, RESET, bg, fg } from "../utils/ansi.js";
 import { DIM } from "../utils/ansi.js";
 import { visibleWidth } from "../utils/terminal-width.js";
-import { MUTED, TXT } from "./app-shared.js";
 import { wordWrap } from "./render/formatting.js";
 import type { MenuPromptKind, ModelOption, PickerItem, SettingEntry } from "./app-types.js";
 import { moveTreeSelection } from "./tree-view.js";
@@ -26,24 +22,6 @@ import {
 } from "./app-menu-entries.js";
 type AppState = any;
 
-function renderAttachmentChip(token: string): string {
-  return `${currentTheme().imageTagBg}${BOLD}${TXT()}${token}${RESET}`;
-}
-
-function renderFileChip(token: string): string {
-  return `${bg(245, 245, 245)}${fg(16, 16, 16)}${BOLD}${token}${RESET}`;
-}
-
-function styleComposerLine(app: AppState, line: string): string {
-  let styled = line;
-  const elements = app.input.getElements?.() ?? [];
-  for (const element of elements) {
-    const render = element.kind === "file" ? renderFileChip : renderAttachmentChip;
-    styled = styled.split(element.label).join(render(element.label));
-  }
-  return styled;
-}
-
 function getComposerSourceLines(app: AppState, text: string): string[] {
   void app;
   return `${text || ""}`.split("\n");
@@ -57,7 +35,7 @@ function wrapComposerLines(app: AppState, text: string, width: number, styled: b
     const lineParts = line.length === 0 ? [""] : wordWrap(line, usableWidth);
     for (const part of lineParts) {
       const plainLine = `${" ".repeat(padX)}${part}`;
-      wrapped.push(styled ? styleComposerLine(app, plainLine) : plainLine);
+      wrapped.push(plainLine);
     }
   }
   return wrapped.length > 0 ? wrapped : [" ".repeat(padX)];

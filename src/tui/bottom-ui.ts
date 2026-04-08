@@ -1,4 +1,3 @@
-import { currentTheme } from "../core/themes.js";
 import { getSettings } from "../core/config.js";
 import { getEffectiveThinkingLevel } from "../ai/thinking.js";
 import { BOLD, DIM, RESET } from "../utils/ansi.js";
@@ -26,41 +25,15 @@ function appendMenuDetailLine(app: AppState, bottomLines: string[], mainW: numbe
 }
 
 export function getPendingImagePromptLines(app: AppState, mainW: number): string[] {
-  if (!getSettings().terminal.showImages || !app.pendingImages || app.pendingImages.length === 0) return [];
-  const lines: string[] = [];
-  let current = "";
-  for (let i = 0; i < app.pendingImages.length; i++) {
-    const tag = `${currentTheme().imageTagBg}${BOLD}${TXT()}[Image #${i + 1}]${RESET}`;
-    const candidate = current ? `${current} ${tag}` : ` ${tag}`;
-    if (current && visibleWidth(candidate) > mainW) {
-      lines.push(current);
-      current = ` ${tag}`;
-    } else {
-      current = candidate;
-    }
-  }
-  if (current) lines.push(current);
-  return lines;
+  void app;
+  void mainW;
+  return [];
 }
 
 export function getPendingFilePromptLines(app: AppState, mainW: number): string[] {
-  const files = Array.from(app.fileContexts?.keys?.() ?? []) as string[];
-  if (files.length === 0) return [];
-  const lines: string[] = [];
-  let current = "";
-  for (const file of files) {
-    const label = file.split(/[\\/]/).pop() || file;
-    const tag = `${currentTheme().imageTagBg}${BOLD}${TXT()}[${label}]${RESET}`;
-    const candidate = current ? `${current} ${tag}` : ` ${tag}`;
-    if (current && visibleWidth(candidate) > mainW) {
-      lines.push(current);
-      current = ` ${tag}`;
-    } else {
-      current = candidate;
-    }
-  }
-  if (current) lines.push(current);
-  return lines;
+  void app;
+  void mainW;
+  return [];
 }
 
 export function getStatusPromptLines(app: AppState): string[] {
