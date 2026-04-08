@@ -1,9 +1,6 @@
-import { getContextLimit } from "../ai/cost.js";
 import type { ModelHandle } from "../ai/providers.js";
-import { buildSystemPrompt, resolveCavemanLevel } from "../core/context.js";
-import { compactMessages, getTotalContextTokens, splitCompactedMessages } from "../core/compact.js";
 import { checkBudget } from "../core/budget.js";
-import { getModelContextLimitOverride, getSettings, type Mode } from "../core/config.js";
+import { getSettings, type Mode } from "../core/config.js";
 import { resolveTurnPolicy } from "../core/turn-policy.js";
 import { clearTodo } from "../tools/todo.js";
 import { isDefaultSessionName, type Session } from "../core/session.js";
@@ -11,21 +8,16 @@ import { runValidationSuite } from "./auto-validate.js";
 import type { ToolName } from "../tools/registry.js";
 import { executeTurn } from "./turn-execution.js";
 import { maybeAutoNameSession } from "./chat-naming.js";
-import {
-  canUseSdkTools,
-  resolveExecutionTarget,
-} from "./turn-runner-support.js";
 import type { SpecialistModelRole } from "./model-routing.js";
-
-async function compactForModel(
-  messages: Array<{ role: "user" | "assistant"; content: string }>,
-  model: ModelHandle,
-): Promise<Array<{ role: "user" | "assistant"; content: string }>> {
-  if (model.runtime === "sdk" && model.model) {
-    return compactMessages(messages, model.model, { tailKeep: 5 });
-  }
-  return messages.slice(-6);
-}
+import {
+  addUserTurnToSession,
+  maybeAutoCompactTurnContext,
+  maybeRefreshIdleContext,
+  prepareTurnContext,
+  selectMessagesForTurn,
+  shouldRetryOnMainModel,
+  shouldRetryWithToolRequirement,
+} from "./turn-runner-stages.js";
 
 type PendingDelivery = "steering" | "followup";
 
@@ -55,18 +47,6 @@ interface TurnRunnerApp {
 
 interface ExtensionHooks {
   emit(event: string, payload: Record<string, unknown>): void;
-}
-
-function selectMessagesForTurn(
-  messages: Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }>,
-  policy: { promptProfile: "full" | "casual"; historyWindow: number | null },
-  optimizeMessages: (messages: Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }>) => Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }>,
-): Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }> {
-  const baseMessages = policy.promptProfile === "casual" ? messages : optimizeMessages(messages);
-  if (policy.historyWindow && baseMessages.length > policy.historyWindow) {
-    return baseMessages.slice(-policy.historyWindow);
-  }
-  return baseMessages;
 }
 
 export async function runModelTurn(options: {
@@ -106,93 +86,34 @@ export async function runModelTurn(options: {
     session.addUsage(policy.plannerUsage.inputTokens, policy.plannerUsage.outputTokens, policy.plannerUsage.cost);
     app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
   }
-
-  const idleMs = Date.now() - lastActivityTime;
-  const idleChatMessages = session.getChatMessages();
-  if (idleMs > 5 * 60 * 1000 && idleChatMessages.length > 4) {
-    const idleMins = Math.floor(idleMs / 60000);
-    session.recordIdleCacheCliff();
-    app.setStatus(`idle ${idleMins}m - context cache likely expired, consider /compact`);
-    if (settings.autoCompact && idleChatMessages.length > 8) {
-      try {
-        const idleContextTokens = getTotalContextTokens(idleChatMessages, systemPrompt, currentModelId);
-        const carryForward = await compactForModel(idleChatMessages, activeModel);
-        const parsed = splitCompactedMessages(carryForward);
-        if (parsed.summary) session.applyCompaction(parsed.summary, parsed.messages, idleContextTokens);
-        else session.replaceConversation(parsed.messages);
-        session.recordCompaction({ freshThreadCarryForward: true });
-        app.setStatus(`Refreshed hidden context after ${idleMins}m idle to avoid cache waste.`);
-      } catch {
-        // keep current transcript if carry-forward compaction fails
-      }
-    }
-  }
+  await maybeRefreshIdleContext({ app, session, systemPrompt, currentModelId, activeModel, lastActivityTime });
   let nextActivityTime = Date.now();
-
-  if (!alreadyAddedUserMessage) {
-    let fullText = text;
-    const fileContexts = app.getFileContexts?.();
-    if (fileContexts && fileContexts.size > 0) {
-      const contextBlock = [...fileContexts.entries()]
-        .map(([path, content]) => `--- @${path} ---\n${content}`)
-        .join("\n\n");
-      fullText = `${text}\n\n${contextBlock}`;
-    }
-    app.addMessage("user", text, effectiveImages);
-    session.addMessage("user", fullText, effectiveImages);
-  }
-
-  const effectiveCavemanLevel = resolveCavemanLevel(getSettings().cavemanLevel ?? "auto", text);
-  const previewTarget = resolveExecutionTarget({
+  addUserTurnToSession({ app, session, text, effectiveImages, alreadyAddedUserMessage });
+  let prepared = prepareTurnContext({
+    app,
+    session,
     text,
-    policy,
-    currentMode,
-    sessionMessageCount: session.getChatMessages().length,
-    lastToolCalls,
-    forceRoute,
     activeModel,
     currentModelId,
     smallModel,
     smallModelId,
-    effectiveImages,
-    resolveSpecialistModel,
-  });
-  const contextLimit = getModelContextLimitOverride(previewTarget.executionModel.provider.id, previewTarget.executionModelId)
-    ?? getContextLimit(previewTarget.executionModelId, previewTarget.executionModel.provider.id)
-    ?? 128000;
-  let turnSystemPrompt = buildSystemPrompt(
-    process.cwd(),
-    previewTarget.executionModel.provider.id,
     currentMode,
-    effectiveCavemanLevel,
-    policy.promptProfile,
-  );
-  turnSystemPrompt += `\n\nExecution scaffold (${policy.archetype}): ${policy.scaffold}`;
-  let chatMsgs = session.getChatMessages();
-  let selectedMessages = selectMessagesForTurn(chatMsgs, policy, (messages) => getContextOptimizer().optimizeMessages(messages));
-  let ctxTokens = getTotalContextTokens(selectedMessages, turnSystemPrompt, currentModelId);
-  let ctxPct = contextLimit > 0 ? Math.min(100, Math.round((ctxTokens / contextLimit) * 100)) : 0;
-  app.setContextUsage(ctxTokens, contextLimit);
-
-  if (settings.autoCompact && policy.promptProfile !== "casual" && ctxPct > 80 && chatMsgs.length > 8) {
-    try {
-      app.setCompacting(true, ctxTokens);
-      const compacted = await compactForModel(chatMsgs, activeModel);
-      const parsed = splitCompactedMessages(compacted);
-      if (parsed.summary) session.applyCompaction(parsed.summary, parsed.messages, ctxTokens);
-      else session.replaceConversation(parsed.messages);
-      session.recordCompaction();
-      app.setCompacting(false);
-      app.setStatus(`Auto-compacted older context. Kept ${session.getMessages().length} visible messages.`);
-      chatMsgs = session.getChatMessages();
-      selectedMessages = selectMessagesForTurn(chatMsgs, policy, (messages) => getContextOptimizer().optimizeMessages(messages));
-      ctxTokens = getTotalContextTokens(selectedMessages, turnSystemPrompt, currentModelId);
-      ctxPct = contextLimit > 0 ? Math.min(100, Math.round((ctxTokens / contextLimit) * 100)) : 0;
-      app.setContextUsage(ctxTokens, contextLimit);
-    } catch {
-      app.setCompacting(false);
-    }
-  }
+    policy,
+    effectiveImages,
+    lastToolCalls,
+    forceRoute,
+    resolveSpecialistModel,
+    optimizeMessages: (messages) => selectMessagesForTurn(messages, policy, (msgs) => getContextOptimizer().optimizeMessages(msgs)),
+  });
+  prepared = await maybeAutoCompactTurnContext({
+    app,
+    session,
+    activeModel,
+    currentModelId,
+    policy,
+    prepared,
+    optimizeMessages: (messages) => selectMessagesForTurn(messages, policy, (msgs) => getContextOptimizer().optimizeMessages(msgs)),
+  });
 
   app.setStreaming(true);
   clearTodo();
@@ -210,15 +131,15 @@ export async function runModelTurn(options: {
     buildTools,
     hooks,
     lastToolCalls,
-    contextLimit,
-    activeSystemPrompt: turnSystemPrompt,
+    contextLimit: prepared.contextLimit,
+    activeSystemPrompt: prepared.turnSystemPrompt,
     optimizeMessages: (messages) => selectMessagesForTurn(messages, policy, (msgs) => getContextOptimizer().optimizeMessages(msgs)),
     forceRoute,
     resolveSpecialistModel,
   });
   nextActivityTime = result.lastActivityTime;
 
-  if (!forceRoute && !result.toolActivity && result.completion === "insufficient") {
+  if (shouldRetryWithToolRequirement(result, forceRoute)) {
     app.setStatus("model answered without acting - retrying with tool requirement");
     result = await executeTurn({
       app,
@@ -234,8 +155,8 @@ export async function runModelTurn(options: {
       buildTools,
       hooks,
       lastToolCalls,
-      contextLimit,
-      activeSystemPrompt: `${turnSystemPrompt}\n\nIMPORTANT: This request requires real repo actions. Use the available tools to inspect or modify files before any completion text. Do not claim a file was added, changed, fixed, committed, or pushed unless a tool in this turn actually did it.`,
+      contextLimit: prepared.contextLimit,
+      activeSystemPrompt: `${prepared.turnSystemPrompt}\n\nIMPORTANT: This request requires real repo actions. Use the available tools to inspect or modify files before any completion text. Do not claim a file was added, changed, fixed, committed, or pushed unless a tool in this turn actually did it.`,
       optimizeMessages: (messages) => selectMessagesForTurn(messages, policy, (msgs) => getContextOptimizer().optimizeMessages(msgs)),
       forceRoute: "main",
       resolveSpecialistModel,
@@ -247,7 +168,7 @@ export async function runModelTurn(options: {
     }
   }
 
-  if (result.resolvedRoute === "small" && !forceRoute && !result.toolActivity && (result.completion === "empty" || result.completion === "error")) {
+  if (shouldRetryOnMainModel(result, forceRoute)) {
     app.setStatus(result.completion === "error"
       ? `small model failed - retrying main`
       : "small model empty - retrying main");
@@ -265,8 +186,8 @@ export async function runModelTurn(options: {
       buildTools,
       hooks,
       lastToolCalls,
-      contextLimit,
-      activeSystemPrompt: turnSystemPrompt,
+      contextLimit: prepared.contextLimit,
+      activeSystemPrompt: prepared.turnSystemPrompt,
       optimizeMessages: (messages) => selectMessagesForTurn(messages, policy, (msgs) => getContextOptimizer().optimizeMessages(msgs)),
       forceRoute: "main",
     });

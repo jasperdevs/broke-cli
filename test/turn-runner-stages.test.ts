@@ -1,0 +1,67 @@
+import { describe, expect, it, vi } from "vitest";
+import { Session } from "../src/core/session.js";
+import {
+  addUserTurnToSession,
+  selectMessagesForTurn,
+  shouldRetryOnMainModel,
+  shouldRetryWithToolRequirement,
+} from "../src/cli/turn-runner-stages.js";
+
+describe("turn runner stages", () => {
+  it("keeps casual history windows bounded", () => {
+    const messages = [
+      { role: "user" as const, content: "1" },
+      { role: "assistant" as const, content: "2" },
+      { role: "user" as const, content: "3" },
+    ];
+    const selected = selectMessagesForTurn(messages, { promptProfile: "casual", historyWindow: 2 }, vi.fn(() => messages));
+    expect(selected.map((entry) => entry.content)).toEqual(["2", "3"]);
+  });
+
+  it("adds file context blocks only once when capturing the user turn", () => {
+    const session = new Session(`turn-stage-${Date.now()}`);
+    const app = {
+      addMessage: vi.fn(),
+      getFileContexts: () => new Map([["src/app.ts", "const x = 1;"]]),
+    };
+
+    addUserTurnToSession({ app, session, text: "inspect this", effectiveImages: undefined, alreadyAddedUserMessage: false });
+
+    expect(app.addMessage).toHaveBeenCalledWith("user", "inspect this", undefined);
+    expect(session.getMessages()[0]?.content).toContain("--- @src/app.ts ---");
+
+    addUserTurnToSession({ app, session, text: "inspect this", effectiveImages: undefined, alreadyAddedUserMessage: true });
+    expect(session.getMessages()).toHaveLength(1);
+  });
+
+  it("recognizes the tool-requirement retry condition", () => {
+    expect(shouldRetryWithToolRequirement({
+      completion: "insufficient",
+      resolvedRoute: "main",
+      toolActivity: false,
+    })).toBe(true);
+    expect(shouldRetryWithToolRequirement({
+      completion: "insufficient",
+      resolvedRoute: "main",
+      toolActivity: true,
+    })).toBe(false);
+  });
+
+  it("recognizes the small-model fallback retry condition", () => {
+    expect(shouldRetryOnMainModel({
+      completion: "empty",
+      resolvedRoute: "small",
+      toolActivity: false,
+    })).toBe(true);
+    expect(shouldRetryOnMainModel({
+      completion: "error",
+      resolvedRoute: "small",
+      toolActivity: false,
+    })).toBe(true);
+    expect(shouldRetryOnMainModel({
+      completion: "success",
+      resolvedRoute: "small",
+      toolActivity: false,
+    })).toBe(false);
+  });
+});
