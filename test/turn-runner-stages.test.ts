@@ -55,6 +55,28 @@ describe("turn runner stages", () => {
     expect(session.getMessages()).toHaveLength(1);
   });
 
+  it("keeps follow-up recent-edit context state-first instead of replaying file snippets", () => {
+    const session = new Session(`turn-stage-followup-${Date.now()}`);
+    session.recordRepoEdit("src/flags.js", "edit");
+    const app = {
+      addMessage: vi.fn(),
+      getFileContexts: () => new Map<string, string>(),
+    };
+
+    const result = addUserTurnToSession({
+      app,
+      session,
+      text: "Add node:test coverage for the flags fix.",
+      effectiveImages: undefined,
+      alreadyAddedUserMessage: false,
+    });
+
+    expect(session.getMessages()[0]?.content).toContain("[recent edits available only for this turn]");
+    expect(result.transientUserContext).toContain("Recent edited files from the last turn: src/flags.js");
+    expect(result.transientUserContext).toContain("Reuse repo state first.");
+    expect(result.transientUserContext).not.toContain("--- @recent-edit:");
+  });
+
   it("recognizes the tool-requirement retry condition", () => {
     expect(shouldRetryWithToolRequirement({
       completion: "insufficient",

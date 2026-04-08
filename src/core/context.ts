@@ -204,6 +204,14 @@ function buildCorePrompt(profile: PromptProfile): string {
         "After tool work, reply in at most 2 short lines: changed + verification/blocker.",
         "Never expose tool or protocol syntax.",
       ].join("\n");
+    case "followup":
+      return [
+        "You are continuing repo work from the last turn.",
+        "Reuse recent edit state first.",
+        "Re-open files only if needed.",
+        "Make one narrow change, then stop.",
+        "Reply in one short line.",
+      ].join("\n");
     case "full":
     default:
       return [

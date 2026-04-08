@@ -1,5 +1,5 @@
 import { execFileSync } from "child_process";
-import { existsSync, statSync, readFileSync, readdirSync } from "fs";
+import { existsSync, statSync, readdirSync } from "fs";
 import { join } from "path";
 import type { Session } from "../core/session.js";
 
@@ -116,35 +116,51 @@ export function recordNativeWorkspaceDelta(
   return touched;
 }
 
-function readSnippet(path: string): string | null {
-  try {
-    const content = readFileSync(path, "utf8");
-    const lines = content.split("\n");
-    if (lines.length > 80) {
-      return `${lines.slice(0, 80).join("\n")}\n[... ${lines.length - 80} more lines omitted ...]`;
-    }
-    return content;
-  } catch {
-    return null;
-  }
+type FollowupContextMode = "summary" | "snippets";
+
+function buildRecentEditList(recentEdits: string[], maxFiles: number): string[] {
+  return recentEdits
+    .filter(shouldTrackPath)
+    .slice(0, maxFiles)
+    .map((relativePath) => relativePath.replace(/\\/g, "/"));
 }
 
 export function buildNativeFollowupStateContext(
   cwd: string,
   recentEdits: string[],
   maxFiles = 2,
+  mode: FollowupContextMode = "summary",
 ): { transcriptNote: string; promptBlock: string } | null {
-  const snippets = recentEdits
-    .filter(shouldTrackPath)
-    .slice(0, maxFiles)
+  const recentEditList = buildRecentEditList(recentEdits, maxFiles);
+  if (recentEditList.length === 0) return null;
+  if (mode === "summary") {
+    const joined = recentEditList.join(", ");
+    return {
+      transcriptNote: `[recent edits available only for this turn] ${joined}`,
+      promptBlock: `Recent edited files from the last turn: ${joined}\nReuse repo state first. Re-open files only if needed.`,
+    };
+  }
+
+  const snippets = recentEditList
     .map((relativePath) => {
-      const content = readSnippet(join(cwd, relativePath));
-      return content ? `--- @recent-edit:${relativePath} ---\n${content}` : null;
+      const fullPath = join(cwd, relativePath);
+      if (!existsSync(fullPath)) return null;
+      try {
+        const content = execFileSync("git", ["show", `HEAD:${relativePath}`], {
+          cwd,
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "ignore"],
+          windowsHide: true,
+        });
+        return `--- @recent-edit:${relativePath} ---\n${content}`;
+      } catch {
+        return null;
+      }
     })
     .filter((entry): entry is string => !!entry);
   if (snippets.length === 0) return null;
   return {
-    transcriptNote: `[recent edit context available only for this turn] ${recentEdits.slice(0, maxFiles).join(", ")}`,
+    transcriptNote: `[recent edit context available only for this turn] ${recentEditList.join(", ")}`,
     promptBlock: snippets.join("\n\n"),
   };
 }

@@ -68,6 +68,7 @@ describe("turn policy", () => {
 
     expect(policy.allowedTools).toEqual(["readFile", "writeFile", "editFile"]);
     expect(policy.maxToolSteps).toBe(2);
+    expect(policy.promptProfile).toBe("followup");
     expect(policy.historyWindow).toBe(1);
   });
 
@@ -79,6 +80,7 @@ describe("turn policy", () => {
 
     expect(policy.allowedTools).toEqual(["writeFile", "editFile"]);
     expect(policy.maxToolSteps).toBe(2);
+    expect(policy.promptProfile).toBe("followup");
     expect(policy.historyWindow).toBe(1);
   });
 
@@ -91,6 +93,7 @@ describe("turn policy", () => {
     expect(policy.archetype).toBe("explore");
     expect(policy.allowedTools).toEqual([]);
     expect(policy.maxToolSteps).toBe(0);
+    expect(policy.promptProfile).toBe("followup");
     expect(policy.historyWindow).toBe(1);
   });
 });

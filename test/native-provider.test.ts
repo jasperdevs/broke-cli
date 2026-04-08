@@ -14,6 +14,13 @@ vi.mock("../src/core/config.js", () => ({
   getBaseUrl: configMocks.getBaseUrl,
   getProviderCredential: configMocks.getProviderCredential,
   getSettings: () => ({
+    thinkingBudgets: {
+      minimal: 1024,
+      low: 4096,
+      medium: 10240,
+      high: 32768,
+      xhigh: 65536,
+    },
     disabledTools: [],
     disabledExtensions: [],
     autonomy: {
@@ -379,4 +386,5 @@ describe("native provider runtime selection", () => {
       if (platform) Object.defineProperty(process, "platform", platform);
     }
   });
+
 });

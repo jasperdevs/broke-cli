@@ -64,12 +64,13 @@ function buildFollowupRepoContext(session: Session, text: string): { transcriptN
   if (!/\b(test|tests|coverage|spec|without changing|which files import|what imports|where .* imported)\b/i.test(text)) {
     return null;
   }
-  return buildNativeFollowupStateContext(
-    process.cwd(),
-    repoState.recentEdits.map((entry) => entry.path),
-    importOnlyFollowup ? 3 : 2,
-  );
-}
+    return buildNativeFollowupStateContext(
+      process.cwd(),
+      repoState.recentEdits.map((entry) => entry.path),
+      importOnlyFollowup ? 3 : 2,
+      "summary",
+    );
+  }
 
 export function injectTransientUserContext(messages: TurnChatMessage[], transientUserContext?: string): TurnChatMessage[] {
   if (!transientUserContext?.trim()) return messages;
@@ -94,7 +95,7 @@ export async function compactForModel(
 
 export function selectMessagesForTurn(
   messages: TurnChatMessage[],
-  policy: { promptProfile: "full" | "casual" | "lean" | "edit"; historyWindow: number | null },
+  policy: { promptProfile: "full" | "casual" | "lean" | "edit" | "followup"; historyWindow: number | null },
   optimizeMessages: (messages: TurnChatMessage[]) => TurnChatMessage[],
   budget?: { maxTokens: number; modelId?: string },
 ): TurnChatMessage[] {
@@ -329,11 +330,11 @@ export async function maybeAutoCompactTurnContext(options: {
           ),
         ),
         modelId: currentModelId,
-      }), transientUserContext),
-      "",
-      `${policy.archetype}: ${policy.scaffold}`,
-      policy.allowedTools,
-    );
+        }), transientUserContext),
+        "",
+        `${policy.archetype}: ${policy.scaffold}`,
+        policy.allowedTools,
+      );
     const contextTokens = getTotalContextTokens(selectedMessages, prepared.turnSystemPrompt, currentModelId);
     const contextPct = prepared.contextLimit > 0 ? Math.min(100, Math.round((contextTokens / prepared.contextLimit) * 100)) : 0;
     app.setContextUsage(contextTokens, prepared.contextLimit);
