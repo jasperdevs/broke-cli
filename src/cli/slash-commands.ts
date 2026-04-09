@@ -5,7 +5,7 @@ import { createDefaultSessionName } from "../core/session.js";
 import { runConnectFlow } from "./connect-flow.js";
 import { runLoginFlow } from "./login-flow.js";
 import { openExtensionsMenu, openSettingsMenu } from "./slash-command-menus.js";
-import { createSlashCommandRegistry } from "./slash-command-registry.js";
+import { createSlashCommandRegistry, type RegisteredSlashCommand } from "./slash-command-registry.js";
 import type { HandleSlashCommandOptions, ParsedSlashCommand, SlashCommandResult } from "./slash-command-types.js";
 import { handleUiSlashCommand } from "./slash-command-ui.js";
 import { getResolvedModelPreference } from "./model-routing.js";
@@ -14,9 +14,11 @@ interface CoreSlashCommandContext extends ParsedSlashCommand {
   waitFor: (ms: number) => Promise<void>;
 }
 
-const coreSlashCommands = createSlashCommandRegistry<CoreSlashCommandContext, SlashCommandResult>([
+export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<CoreSlashCommandContext, SlashCommandResult>> = [
   {
     names: ["help"],
+    description: "show slash command browser",
+    showInPicker: false,
     run: ({ app }) => {
       app.setStatus?.("Type / to browse commands.");
       app.setDraft?.("/");
@@ -25,6 +27,8 @@ const coreSlashCommands = createSlashCommandRegistry<CoreSlashCommandContext, Sl
   },
   {
     names: ["new", "clear"],
+    pickerName: "clear",
+    description: "start a new session",
     run: ({ session, app, getContextOptimizer }) => {
       session.clear();
       session.resetName?.();
@@ -37,6 +41,7 @@ const coreSlashCommands = createSlashCommandRegistry<CoreSlashCommandContext, Sl
   },
   {
     names: ["connect"],
+    description: "connect api key or local endpoint",
     run: async ({ restText, app, providerRegistry, refreshProviderState, isSkippedPromptAnswer, isValidHttpBaseUrl }) => {
       await runConnectFlow({
         providerId: restText || undefined,
@@ -51,6 +56,7 @@ const coreSlashCommands = createSlashCommandRegistry<CoreSlashCommandContext, Sl
   },
   {
     names: ["login"],
+    description: "login with subscription/oauth",
     run: async ({ restText, app, providerRegistry, refreshProviderState }) => {
       await runLoginFlow({
         providerId: restText || undefined,
@@ -63,6 +69,8 @@ const coreSlashCommands = createSlashCommandRegistry<CoreSlashCommandContext, Sl
   },
   {
     names: ["model"],
+    description: "switch model and assign routing slots",
+    hotkey: "ctrl+l",
     run: ({ restText, app, providerRegistry, buildVisibleModelOptions, activeModel, onModelChange, session, onModelRoutingChange }) => {
       const allOptions = buildVisibleModelOptions();
       if (allOptions.length === 0) {
@@ -126,6 +134,7 @@ const coreSlashCommands = createSlashCommandRegistry<CoreSlashCommandContext, Sl
   },
   {
     names: ["btw"],
+    description: "ask an ephemeral side question",
     run: ({ restText, app, onBtw }) => {
       if (!restText) {
         app.setDraft?.("/btw ");
@@ -145,6 +154,8 @@ const coreSlashCommands = createSlashCommandRegistry<CoreSlashCommandContext, Sl
   },
   {
     names: ["settings"],
+    description: "configure options",
+    sortPriority: -1,
     run: ({ app, activeModel, currentMode, onModeChange, onSystemPromptChange }) => {
       openSettingsMenu({ app, activeModel, currentMode, onModeChange, onSystemPromptChange });
       return { handled: true };
@@ -152,6 +163,7 @@ const coreSlashCommands = createSlashCommandRegistry<CoreSlashCommandContext, Sl
   },
   {
     names: ["mode"],
+    description: "switch build or plan mode",
     run: ({ restText, app, activeModel, onModeChange, onSystemPromptChange }) => {
       const setMode = (nextMode: Mode) => {
         updateSetting("mode", nextMode);
@@ -174,6 +186,8 @@ const coreSlashCommands = createSlashCommandRegistry<CoreSlashCommandContext, Sl
   },
   {
     names: ["extensions"],
+    showInPicker: false,
+    description: "manage extension loading",
     run: ({ app, hooks }) => {
       openExtensionsMenu(app, hooks);
       return { handled: true };
@@ -181,6 +195,7 @@ const coreSlashCommands = createSlashCommandRegistry<CoreSlashCommandContext, Sl
   },
   {
     names: ["compact"],
+    description: "compress context",
     run: async ({ activeModel, hooks, session, systemPrompt, currentModelId, app, restText, waitFor }) => {
       if (!activeModel) {
         app.setStatus?.("No model available for compaction.");
@@ -215,6 +230,7 @@ const coreSlashCommands = createSlashCommandRegistry<CoreSlashCommandContext, Sl
   },
   {
     names: ["fork"],
+    description: "branch from current session",
     run: ({ session, activeModel, currentModelId, onSessionReplace, app }) => {
       const forked = session.fork();
       if (activeModel) forked.setProviderModel(activeModel.provider.name, currentModelId);
@@ -225,6 +241,9 @@ const coreSlashCommands = createSlashCommandRegistry<CoreSlashCommandContext, Sl
   },
   {
     names: ["caveman"],
+    showInPicker: false,
+    description: "cycle token saving",
+    hotkey: "ctrl+y",
     run: ({ restText, app, activeModel, currentMode, onSystemPromptChange }) => {
       const requested = restText.toLowerCase();
       if (requested === "off" || requested === "lite" || requested === "auto" || requested === "ultra") {
@@ -241,6 +260,8 @@ const coreSlashCommands = createSlashCommandRegistry<CoreSlashCommandContext, Sl
   },
   {
     names: ["thinking"],
+    description: "cycle thinking",
+    hotkey: "ctrl+t",
     run: ({ app }) => {
       app.cycleThinkingMode();
       return { handled: true };
@@ -248,6 +269,8 @@ const coreSlashCommands = createSlashCommandRegistry<CoreSlashCommandContext, Sl
   },
   {
     names: ["name"],
+    showInPicker: false,
+    description: "rename this session",
     run: ({ text, app, session }) => {
       const name = text.slice(6).trim();
       if (name) {
@@ -279,7 +302,9 @@ const coreSlashCommands = createSlashCommandRegistry<CoreSlashCommandContext, Sl
       return { handled: true };
     },
   },
-]);
+];
+
+const coreSlashCommands = createSlashCommandRegistry<CoreSlashCommandContext, SlashCommandResult>(CORE_SLASH_COMMAND_SPECS);
 
 export async function handleSlashCommand(options: HandleSlashCommandOptions): Promise<SlashCommandResult> {
   const { text } = options;

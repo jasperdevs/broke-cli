@@ -13,7 +13,7 @@ import { handleLogoutMenu, openEmptyItemMenu, openExportMenu, openProjectsMenu, 
 import { formatKeypressBinding, loadKeybindings, reloadKeybindings, updateKeybinding, type Keybindings } from "../core/keybindings.js";
 import { reloadContext } from "../core/context.js";
 import { undoLastCheckpoint } from "../core/git.js";
-import { createSlashCommandRegistry } from "./slash-command-registry.js";
+import { createSlashCommandRegistry, type RegisteredSlashCommand } from "./slash-command-registry.js";
 import type { ParsedSlashCommand, SlashCommandApp, SlashCommandResult } from "./slash-command-types.js";
 import type { ModelHandle } from "../ai/providers.js";
 import type { PickerItem } from "../ui-contracts.js";
@@ -74,9 +74,10 @@ function getHotkeyLabels(bindings: Keybindings): Array<{ id: keyof Keybindings; 
 
 interface UiSlashCommandContext extends ParsedSlashCommand {}
 
-const uiSlashCommands = createSlashCommandRegistry<UiSlashCommandContext, SlashCommandResult>([
+export const UI_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<UiSlashCommandContext, SlashCommandResult>> = [
   {
     names: ["budget"],
+    description: "inspect token pressure",
     run: async ({ app, session }) => {
       if (app.openBudgetView) app.openBudgetView("Budget Inspector", await loadBudgetReports(session), "all");
       else {
@@ -88,6 +89,8 @@ const uiSlashCommands = createSlashCommandRegistry<UiSlashCommandContext, SlashC
   },
   {
     names: ["update"],
+    showInPicker: false,
+    description: "update app",
     run: async ({ app }) => {
       const update = await checkForNewVersion(APP_VERSION);
       if (!update) {
@@ -113,6 +116,7 @@ const uiSlashCommands = createSlashCommandRegistry<UiSlashCommandContext, SlashC
   },
   {
     names: ["tree"],
+    description: "jump to any point in session history",
     run: ({ app, session, activeModel }) => {
       app.openTreeView?.("Session Tree", session, async (entryId: string) => {
         const target = session.getTreeEntry(entryId);
@@ -149,6 +153,7 @@ const uiSlashCommands = createSlashCommandRegistry<UiSlashCommandContext, SlashC
   },
   {
     names: ["session"],
+    description: "show active session info",
     run: ({ app, session, activeModel, currentModelId }) => {
       const sessionDir = getSettings().sessionDir?.trim();
       const sessionFile = SessionManager.open(session.getId(), sessionDir || undefined, session.getCwd()).getSessionFile() ?? "in-memory";
@@ -175,6 +180,7 @@ const uiSlashCommands = createSlashCommandRegistry<UiSlashCommandContext, SlashC
   },
   {
     names: ["hotkeys"],
+    description: "show keyboard shortcuts",
     run: ({ app }) => {
       let bindings = loadKeybindings();
       let rebinding: keyof Keybindings | null = null;
@@ -252,6 +258,7 @@ const uiSlashCommands = createSlashCommandRegistry<UiSlashCommandContext, SlashC
   },
   {
     names: ["reload"],
+    description: "reload templates, context, and extensions",
     run: async ({ hooks, refreshProviderState }) => {
       hooks.reload?.();
       reloadKeybindings();
@@ -262,6 +269,8 @@ const uiSlashCommands = createSlashCommandRegistry<UiSlashCommandContext, SlashC
   },
   {
     names: ["changelog"],
+    showInPicker: false,
+    description: "show recent changes",
     run: ({ app }) => {
       try {
         const raw = execSync("git log -n 8 --pretty=format:%h%x09%s", { encoding: "utf-8", cwd: process.cwd() }).trim();
@@ -279,6 +288,8 @@ const uiSlashCommands = createSlashCommandRegistry<UiSlashCommandContext, SlashC
   },
   {
     names: ["copy"],
+    showInPicker: false,
+    description: "copy last response",
     run: ({ app }) => {
       const lastContent = app.getLastAssistantContent();
       if (!lastContent) {
@@ -298,6 +309,8 @@ const uiSlashCommands = createSlashCommandRegistry<UiSlashCommandContext, SlashC
   },
   {
     names: ["export"],
+    showInPicker: false,
+    description: "export or copy transcript",
     run: ({ app, session, activeModel, currentModelId, text }) => {
       openExportMenu({ app, session, activeModel, currentModelId, text });
       return { handled: true };
@@ -305,6 +318,8 @@ const uiSlashCommands = createSlashCommandRegistry<UiSlashCommandContext, SlashC
   },
   {
     names: ["sessions", "resume"],
+    pickerName: "resume",
+    description: "resume session",
     run: ({ app, restText, onSessionReplace }) => {
       openResumeMenu({ app, restText, onSessionReplace });
       return { handled: true };
@@ -312,6 +327,8 @@ const uiSlashCommands = createSlashCommandRegistry<UiSlashCommandContext, SlashC
   },
   {
     names: ["projects"],
+    showInPicker: false,
+    description: "switch or search recent projects",
     run: ({ app, restText, onProjectChange }) => {
       openProjectsMenu(app, restText, onProjectChange);
       return { handled: true };
@@ -319,6 +336,8 @@ const uiSlashCommands = createSlashCommandRegistry<UiSlashCommandContext, SlashC
   },
   {
     names: ["undo"],
+    showInPicker: false,
+    description: "undo last change",
     run: ({ app }) => {
       app.setStatus?.(undoLastCheckpoint().message);
       return { handled: true };
@@ -326,6 +345,7 @@ const uiSlashCommands = createSlashCommandRegistry<UiSlashCommandContext, SlashC
   },
   {
     names: ["templates"],
+    description: "browse slash templates",
     run: ({ app }) => {
       const templates = listTemplates();
       const items = [
@@ -360,6 +380,8 @@ const uiSlashCommands = createSlashCommandRegistry<UiSlashCommandContext, SlashC
   },
   {
     names: ["skills"],
+    showInPicker: false,
+    description: "list loaded skills",
     run: ({ app }) => {
       const skills = listSkills();
       if (skills.length === 0) {
@@ -379,6 +401,8 @@ const uiSlashCommands = createSlashCommandRegistry<UiSlashCommandContext, SlashC
   },
   {
     names: ["logout"],
+    showInPicker: false,
+    description: "clear stored auth",
     run: async ({ app, restText, activeModel, refreshProviderState }) => {
       await handleLogoutMenu({ app, restText, activeModel, refreshProviderState });
       return { handled: true };
@@ -386,12 +410,15 @@ const uiSlashCommands = createSlashCommandRegistry<UiSlashCommandContext, SlashC
   },
   {
     names: ["quit"],
+    description: "quit",
     run: ({ app }) => {
       app.stop();
       return { handled: true };
     },
   },
-]);
+];
+
+const uiSlashCommands = createSlashCommandRegistry<UiSlashCommandContext, SlashCommandResult>(UI_SLASH_COMMAND_SPECS);
 
 export async function handleUiSlashCommand(options: UiSlashCommandContext): Promise<SlashCommandResult | null> {
   const { cmd, text, app, session } = options;

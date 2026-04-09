@@ -1,3 +1,6 @@
+import { CORE_SLASH_COMMAND_SPECS } from "../cli/slash-commands.js";
+import { UI_SLASH_COMMAND_SPECS } from "../cli/slash-command-ui.js";
+
 export interface CommandEntry {
   name: string;
   desc: string;
@@ -20,37 +23,29 @@ export interface ParsedCommandInput {
   hasArgs: boolean;
 }
 
+function toCommandEntry(spec: {
+  names: string[];
+  description?: string;
+  hotkey?: string;
+  sortPriority?: number;
+  pickerName?: string;
+  showInPicker?: boolean;
+}): CommandEntry {
+  if (spec.showInPicker === false) return null as never;
+  const primaryName = spec.pickerName ?? spec.names[0]!;
+  return {
+    name: primaryName,
+    aliases: spec.names.filter((name) => name !== primaryName),
+    desc: spec.description ?? primaryName,
+    hotkey: spec.hotkey,
+    sortPriority: spec.sortPriority,
+  };
+}
+
 export const COMMANDS: CommandEntry[] = [
-  { name: "settings", desc: "configure options", aliases: ["set"], sortPriority: -1 },
-  { name: "login", desc: "login with subscription/oauth" },
-  { name: "connect", desc: "connect api key or local endpoint" },
-  { name: "logout", desc: "clear stored auth" },
-  { name: "model", desc: "switch model and assign routing slots", hotkey: "ctrl+l" },
-  { name: "btw", desc: "ask an ephemeral side question" },
-  { name: "mode", desc: "switch build or plan mode" },
-  { name: "compact", desc: "compress context" },
-  { name: "update", desc: "update app" },
-  { name: "budget", desc: "inspect token pressure" },
-  { name: "extensions", desc: "manage extension loading" },
-  { name: "skills", desc: "list loaded skills" },
-  { name: "projects", desc: "switch or search recent projects" },
-  { name: "resume", desc: "resume session (sessions)", aliases: ["sessions"] },
-  { name: "tree", desc: "jump to any point in session history" },
-  { name: "fork", desc: "branch from current session" },
-  { name: "session", desc: "show active session info" },
-  { name: "hotkeys", desc: "show keyboard shortcuts" },
-  { name: "reload", desc: "reload templates, context, and extensions" },
-  { name: "changelog", desc: "show recent changes" },
-  { name: "templates", desc: "browse slash templates" },
-  { name: "name", desc: "rename this session" },
-  { name: "export", desc: "export or copy transcript" },
-  { name: "copy", desc: "copy last response" },
-  { name: "undo", desc: "undo last change" },
-  { name: "thinking", desc: "cycle thinking", hotkey: "ctrl+t" },
-  { name: "caveman", desc: "cycle token saving", hotkey: "ctrl+y" },
-  { name: "clear", desc: "clear chat (new)", aliases: ["new"] },
-  { name: "quit", desc: "quit" },
-];
+  ...CORE_SLASH_COMMAND_SPECS,
+  ...UI_SLASH_COMMAND_SPECS,
+].filter((spec) => spec.showInPicker !== false).map(toCommandEntry);
 
 function isCommandVisible(command: CommandEntry, context?: CommandSurfaceContext): boolean {
   switch (command.name) {
