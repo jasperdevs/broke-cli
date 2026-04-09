@@ -45,14 +45,14 @@ describe("command aliases", () => {
 });
 
 describe("sidebar scrolling", () => {
-  it("enables mouse tracking for split-pane chats so clicks still work with separate panes", () => {
+  it("keeps mouse tracking enabled for active chats so wheel and clicks stay inside the TUI", () => {
     const originalHideSidebar = getSettings().hideSidebar;
     updateSetting("hideSidebar", false);
     try {
       const app = new App() as any;
       app.messages = [{ role: "user", content: "hello" }];
       app.screen = { height: 18, width: 100, hasSidebar: true, mainWidth: 73, sidebarWidth: 24, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
-      expect(app.shouldEnableMenuMouse()).toBe(false);
+      expect(app.shouldEnableMenuMouse()).toBe(true);
     } finally {
       updateSetting("hideSidebar", originalHideSidebar);
     }

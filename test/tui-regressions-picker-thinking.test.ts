@@ -306,27 +306,39 @@ describe("thinking preview", () => {
 
   it("persists streamed thinking in the transcript after the answer and next user turn", () => {
     const app = new App() as any;
-    app.setStreaming(true);
-    app.appendThinking("first pass");
-    app.appendToLastMessage("final answer");
-    app.setStreaming(false);
-    let output = app.renderMessages(80).map((line: string) => stripAnsi(line)).join("\n");
-    expect(output).toContain("Thinking");
-    expect(output).toContain("first pass");
-    expect(output.indexOf("first pass")).toBeLessThan(output.indexOf("final answer"));
-    app.addMessage("user", "next");
-    output = app.renderMessages(80).map((line: string) => stripAnsi(line)).join("\n");
-    expect(output).toContain("first pass");
-    expect(output).toContain("next");
+    const previousHideThinkingBlock = getSettings().hideThinkingBlock;
+    try {
+      updateSetting("hideThinkingBlock", false);
+      app.setStreaming(true);
+      app.appendThinking("first pass");
+      app.appendToLastMessage("final answer");
+      app.setStreaming(false);
+      let output = app.renderMessages(80).map((line: string) => stripAnsi(line)).join("\n");
+      expect(output).toContain("Thinking");
+      expect(output).toContain("first pass");
+      expect(output.indexOf("first pass")).toBeLessThan(output.indexOf("final answer"));
+      app.addMessage("user", "next");
+      output = app.renderMessages(80).map((line: string) => stripAnsi(line)).join("\n");
+      expect(output).toContain("first pass");
+      expect(output).toContain("next");
+    } finally {
+      updateSetting("hideThinkingBlock", previousHideThinkingBlock);
+    }
   });
 
   it("renders all streamed thinking instead of truncating to a tail preview", () => {
     const app = new App() as any;
-    app.setStreaming(true);
-    app.appendThinking(Array.from({ length: 12 }, (_, index) => `thought ${index + 1}`).join("\n"));
-    const output = app.renderMessages(120).map((line: string) => stripAnsi(line)).join("\n");
-    expect(output).toContain("thought 1");
-    expect(output).toContain("thought 12");
+    const previousHideThinkingBlock = getSettings().hideThinkingBlock;
+    try {
+      updateSetting("hideThinkingBlock", false);
+      app.setStreaming(true);
+      app.appendThinking(Array.from({ length: 12 }, (_, index) => `thought ${index + 1}`).join("\n"));
+      const output = app.renderMessages(120).map((line: string) => stripAnsi(line)).join("\n");
+      expect(output).toContain("thought 1");
+      expect(output).toContain("thought 12");
+    } finally {
+      updateSetting("hideThinkingBlock", previousHideThinkingBlock);
+    }
   });
 
   it("does not append churn notes into the transcript when a stream ends", () => {

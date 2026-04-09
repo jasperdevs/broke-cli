@@ -1,5 +1,4 @@
 import type { Keypress } from "./keypress.js";
-
 export interface InputElement<T = unknown> {
   id: string;
   kind: string;
@@ -17,15 +16,10 @@ type InsertElementOptions<T> = {
   replaceStart?: number;
   replaceEnd?: number;
 };
-
-/**
- * Text input widget with atomic inline elements.
- * Elements stay in the text buffer as placeholder labels, but cursor movement
- * and deletion treat them as indivisible chips.
- */
 export class InputWidget {
   private text = "";
   private cursor = 0;
+  private preferredColumn: number | null = null;
   private history: string[] = [];
   private historyIndex = -1;
   private elements: InputElement[] = [];
@@ -35,18 +29,14 @@ export class InputWidget {
   private normalizeInsertedText(text: string): string {
     return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
   }
-
   getText(): string { return this.text; }
   getCursor(): number { return this.cursor; }
-
   getElements(): InputElement[] {
     return this.elements.map((element) => ({ ...element }));
   }
-
   private clampCursor(): void {
     this.cursor = Math.max(0, Math.min(this.cursor, this.text.length));
   }
-
   onChange(listener: (text: string) => void): void {
     this.changeListeners.push(listener);
   }
@@ -58,47 +48,46 @@ export class InputWidget {
       .filter((element) => element.start >= 0 && element.end <= text.length && element.start < element.end)
       .sort((a, b) => a.start - b.start);
     this.cursor = placeCursorAtEnd ? this.text.length : Math.min(this.cursor, this.text.length);
+    this.preferredColumn = null;
     this.clampCursor();
     this.snapCursorOutsideElement();
     this.emitChange();
   }
-
   setCursor(cursor: number): void {
     this.cursor = Math.max(0, Math.min(cursor, this.text.length));
+    this.preferredColumn = null;
     this.clampCursor();
     this.snapCursorOutsideElement();
   }
-
   clear(): void {
     this.text = "";
     this.cursor = 0;
+    this.preferredColumn = null;
     this.historyIndex = -1;
     this.elements = [];
     this.emitChange();
   }
-
   submit(): string {
-    const value = this.text.trim();
-    if (value) this.history.push(value);
+    const value = this.text;
+    const historyValue = value.trim();
+    if (historyValue) this.history.push(historyValue);
     this.clear();
     return value;
   }
-
   paste(text: string): void {
     this.insertText(this.normalizeInsertedText(text));
   }
-
   insertText(text: string): void {
     text = this.normalizeInsertedText(text);
     if (!text) return;
     this.clampCursor();
     this.snapCursorOutsideElement();
+    this.preferredColumn = null;
     this.text = this.text.slice(0, this.cursor) + text + this.text.slice(this.cursor);
     this.shiftElements(this.cursor, text.length);
     this.cursor += text.length;
     this.emitChange();
   }
-
   insertElement<T>(label: string, kind: string, options: InsertElementOptions<T>): InputElement<T> {
     const replaceStart = options.replaceStart ?? this.cursor;
     const replaceEnd = options.replaceEnd ?? this.cursor;
@@ -136,6 +125,7 @@ export class InputWidget {
     this.elements.push(element);
     this.elements.sort((a, b) => a.start - b.start);
     this.cursor = end + suffix.length;
+    this.preferredColumn = null;
     this.emitChange();
     return { ...element };
   }
@@ -221,9 +211,9 @@ export class InputWidget {
     this.clampCursor();
     if (key.ctrl && key.name === "c") return "interrupt";
 
-    const isModifiedEnter = !key.ctrl && (
+    const isModifiedEnter = !key.ctrl && !key.meta && (
       key.name === "linefeed"
-      || ((key.shift || key.meta) && (key.name === "return" || key.name === "enter" || key.name === "linefeed"))
+      || (key.shift && (key.name === "return" || key.name === "enter" || key.name === "linefeed"))
     );
     if (isModifiedEnter) {
       this.insertText("\n");
@@ -283,8 +273,55 @@ export class InputWidget {
           : candidate
       ));
     this.cursor = Math.min(deleteStart, this.text.length);
+    this.preferredColumn = null;
     this.clampCursor();
     this.emitChange();
+  }
+
+  private getLineStarts(): number[] {
+    const starts = [0];
+    for (let i = 0; i < this.text.length; i++) {
+      if (this.text[i] === "\n") starts.push(i + 1);
+    }
+    return starts;
+  }
+
+  private getLineMetrics(cursor = this.cursor): { starts: number[]; row: number; col: number; lineStart: number; lineEnd: number } {
+    const starts = this.getLineStarts();
+    let row = 0;
+    for (let i = 0; i < starts.length; i++) {
+      const start = starts[i]!;
+      const nextStart = starts[i + 1] ?? this.text.length + 1;
+      if (cursor < nextStart) {
+        row = i;
+        break;
+      }
+    }
+    const lineStart = starts[row] ?? 0;
+    const lineEnd = row + 1 < starts.length ? (starts[row + 1] ?? this.text.length + 1) - 1 : this.text.length;
+    return {
+      starts,
+      row,
+      col: Math.max(0, cursor - lineStart),
+      lineStart,
+      lineEnd,
+    };
+  }
+
+  private moveCursorVertical(delta: -1 | 1): boolean {
+    if (!this.text.includes("\n")) return false;
+    const metrics = this.getLineMetrics();
+    const targetRow = Math.max(0, Math.min(metrics.starts.length - 1, metrics.row + delta));
+    if (targetRow === metrics.row) return true;
+    const desiredColumn = this.preferredColumn ?? metrics.col;
+    const targetStart = metrics.starts[targetRow] ?? 0;
+    const targetEnd = targetRow + 1 < metrics.starts.length
+      ? (metrics.starts[targetRow + 1] ?? this.text.length + 1) - 1
+      : this.text.length;
+    this.cursor = Math.max(targetStart, Math.min(targetEnd, targetStart + desiredColumn));
+    this.preferredColumn = desiredColumn;
+    this.snapCursorOutsideElement();
+    return true;
   }
 
   private handleAtomicElementKey(key: Keypress): boolean {
@@ -339,6 +376,7 @@ export class InputWidget {
     this.text = this.text.slice(0, i) + this.text.slice(this.cursor);
     this.shiftElements(this.cursor, i - this.cursor);
     this.cursor = i;
+    this.preferredColumn = null;
     this.emitChange();
   }
 
@@ -352,6 +390,7 @@ export class InputWidget {
         this.text = this.text.slice(0, this.cursor - 1) + this.text.slice(this.cursor);
         this.shiftElements(this.cursor, -1);
         this.cursor--;
+        this.preferredColumn = null;
         this.emitChange();
       }
       return true;
@@ -360,6 +399,7 @@ export class InputWidget {
       if (this.cursor < this.text.length) {
         this.text = this.text.slice(0, this.cursor) + this.text.slice(this.cursor + 1);
         this.shiftElements(this.cursor + 1, -1);
+        this.preferredColumn = null;
         this.emitChange();
       }
       return true;
@@ -370,26 +410,33 @@ export class InputWidget {
   private applyNavigationKey(key: Keypress): boolean {
     if (key.name === "left") {
       if (this.cursor > 0) this.cursor--;
+      this.preferredColumn = null;
       this.snapCursorOutsideElement();
       return true;
     }
     if (key.name === "right") {
       if (this.cursor < this.text.length) this.cursor++;
+      this.preferredColumn = null;
       this.snapCursorOutsideElement();
       return true;
     }
+    if (key.name === "up") return this.moveCursorVertical(-1);
+    if (key.name === "down") return this.moveCursorVertical(1);
     if (key.name === "home" || (key.ctrl && key.name === "a")) {
-      this.cursor = 0;
+      this.cursor = this.getLineMetrics().lineStart;
+      this.preferredColumn = null;
       return true;
     }
     if (key.name === "end" || (key.ctrl && key.name === "e")) {
-      this.cursor = this.text.length;
+      this.cursor = this.getLineMetrics().lineEnd;
+      this.preferredColumn = null;
       return true;
     }
     return false;
   }
 
   private applyHistoryKey(key: Keypress): boolean {
+    if (this.text.includes("\n")) return false;
     if (key.name === "up") {
       if (this.history.length > 0) {
         if (this.historyIndex === -1) this.historyIndex = this.history.length - 1;

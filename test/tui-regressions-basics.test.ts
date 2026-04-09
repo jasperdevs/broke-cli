@@ -28,14 +28,14 @@ describe("mouse reporting mode", () => {
     expect(MOUSE_OFF).toBe("");
   });
 
-  it("keeps passive sidebar mode out of mouse-capture until a modal owns the UI", () => {
+  it("captures mouse input once the transcript is active so wheel scrolling stays inside the app", () => {
     const originalHideSidebar = getSettings().hideSidebar;
     updateSetting("hideSidebar", false);
     try {
       const app = new App() as any;
       app.messages = [{ role: "user", content: "hello" }];
       app.screen = { height: 18, width: 100, hasSidebar: true, mainWidth: 73, sidebarWidth: 24, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
-      expect(app.shouldEnableMenuMouse()).toBe(false);
+      expect(app.shouldEnableMenuMouse()).toBe(true);
     } finally {
       updateSetting("hideSidebar", originalHideSidebar);
     }

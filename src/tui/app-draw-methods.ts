@@ -22,17 +22,11 @@ function renderMenuCount(current: number, total: number): string {
 
 export function draw(app: AppState): void {
   if (app.drawScheduled) return;
-  const now = Date.now();
-  const elapsed = now - app.lastDrawTime;
-  if (elapsed >= app.constructor.DRAW_THROTTLE_MS) {
-    app.drawImmediate();
-    return;
-  }
   app.drawScheduled = true;
-  setTimeout(() => {
+  queueMicrotask(() => {
     app.drawScheduled = false;
     app.drawImmediate();
-  }, app.constructor.DRAW_THROTTLE_MS - elapsed);
+  });
 }
 
 export function drawNow(app: AppState): void {

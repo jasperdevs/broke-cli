@@ -113,4 +113,16 @@ describe("input and scroll regressions", () => {
     app.input.setText("left\r\nright\rcenter");
     expect(app.input.getText()).toBe("left\nright\ncenter");
   });
+
+  it("moves the cursor vertically inside multiline composer text instead of falling back to history behavior", () => {
+    const app = new App() as any;
+    app.input.setText("alpha\nbeta\ngamma");
+    app.input.setCursor("alpha\nbet".length);
+
+    app.handleKey({ name: "down", char: "", ctrl: false, meta: false, shift: false });
+    expect(app.input.getCursor()).toBe("alpha\nbeta\ngam".length);
+
+    app.handleKey({ name: "up", char: "", ctrl: false, meta: false, shift: false });
+    expect(app.input.getCursor()).toBe("alpha\nbet".length);
+  });
 });
