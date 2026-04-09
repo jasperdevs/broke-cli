@@ -291,6 +291,8 @@ export function setStreaming(app: CoreAppState, streaming: boolean): void {
       app.currentActivityStep = null;
     }
     app.persistCurrentActivityToLastAssistant?.();
+    app.currentActivityStep = null;
+    app.toolExecutions = [];
     if (app.streamStartTime > 0) {
       app.streamStartTime = 0;
     }

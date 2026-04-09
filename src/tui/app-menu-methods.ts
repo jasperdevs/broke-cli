@@ -10,7 +10,7 @@ import { TXT } from "./app-shared.js";
 import { wordWrap } from "./render/formatting.js";
 import type { MenuPromptKind, ModelOption, PickerItem, SettingEntry } from "./app-types.js";
 import { moveTreeSelection } from "./tree-view.js";
-import { buildFooterLines, getPendingFilePromptLines, getPendingImagePromptLines } from "./bottom-ui.js";
+import { buildFooterLines, getPendingFilePromptLines, getPendingImagePromptLines, getPendingMessagePromptLines } from "./bottom-ui.js";
 import { getQuestionMenuLineCount, scrollQuestionMenu } from "./question-menu.js";
 import { getModelLanePickerEntries, openModelLanePicker, selectModelLaneEntry } from "./model-lane-picker.js";
 import {
@@ -90,12 +90,15 @@ export function getSidebarViewportHeight(app: AppState): number {
 export function getBottomLineCount(app: AppState, mainW: number, maxHeight: number): number {
   const maxVisibleRows = Math.max(1, getSettings().autocompleteMaxVisible);
   const btwBubbleLineCount = app.renderBtwBubble(mainW).length;
+  const pendingMessageLineCount = getPendingMessagePromptLines(app, mainW).length;
   const inputLineCount = app.getWrappedInputLines(app.input.getText(), mainW).length;
   const statusLineCount = app.statusMessage ? 2 : 0;
   const footerLineCount = buildFooterLines(app, app.shouldShowSidebar(), mainW).length;
   const detailLineCount = hasActiveBottomMenuDetail(app) ? 1 : 0;
   const tailReserve = 2;
-  let count = 1 + footerLineCount + inputLineCount + statusLineCount + btwBubbleLineCount;
+  let count = 2 + footerLineCount + inputLineCount + statusLineCount;
+  if (btwBubbleLineCount > 0) count += btwBubbleLineCount + 1;
+  if (pendingMessageLineCount > 0) count += pendingMessageLineCount + 1;
   const baseCount = count;
 
   if (app.filePicker) {
