@@ -145,7 +145,7 @@ function openInlineSkillPicker(app: AppState): void {
   if (dollar < 0) return;
   const items = skillPickerItems();
   if (items.length === 0) return;
-  app.openItemPicker("Skills", items, (id: string) => {
+  const insertSkill = (id: string) => {
     const range = app.itemPicker?.inlineSkill ?? { tokenStart: dollar, nameStart: dollar + 1 };
     const currentCursor = app.input.getCursor();
     app.input.insertElement(`$${id}`, "skill", {
@@ -157,9 +157,20 @@ function openInlineSkillPicker(app: AppState): void {
     });
     app.itemPicker = null;
     app.drawNow();
-  }, {
+  };
+  app.openItemPicker("Skills", items, insertSkill, {
     closeOnSelect: false,
     onKey: (pickerKey: Keypress) => {
+      if ((pickerKey.name === "return" || pickerKey.name === "enter" || pickerKey.name === "tab") && !pickerKey.ctrl && !pickerKey.meta && !pickerKey.shift) {
+        const item = app.getFilteredItems()[app.itemPicker?.cursor ?? 0];
+        if (item) insertSkill(item.id);
+        return true;
+      }
+      if (pickerKey.name === "escape") {
+        app.itemPicker = null;
+        app.drawNow();
+        return true;
+      }
       const editable = pickerKey.name === "backspace"
         || pickerKey.name === "delete"
         || pickerKey.name === "left"
