@@ -286,9 +286,10 @@ describe("thinking preview", () => {
     const app = new App() as any;
     app.setStreaming(true);
     app.setThinkingRequested(true);
+    app.setStreamingActivitySummary("planning changes to README.md");
     const output = app.renderMessages(80).map((line: string) => stripAnsi(line)).join("\n");
     expect(output).toContain("Thinking...");
-    expect(output).not.toContain("waiting for model reasoning");
+    expect(output).toContain("planning changes to README.md");
     expect(output).not.toContain("Reasoning");
     app.setStreaming(false);
   });
@@ -334,6 +335,49 @@ describe("thinking preview", () => {
       "user:make file",
       "system:note",
     ]);
+  });
+});
+
+describe("tool-call visibility", () => {
+  it("shows live status for running tools before results arrive", () => {
+    const app = new App() as any;
+    app.screen = {
+      height: 16,
+      width: 80,
+      hasSidebar: false,
+      mainWidth: 80,
+      sidebarWidth: 0,
+      render: () => {},
+      setCursor: () => {},
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+    app.addToolCall("readFile", "...");
+    const output = stripAnsi(app.messages[app.messages.length - 1].content);
+    expect(output).toContain("starting");
+    expect(output).toContain("waiting for tool details");
+  });
+
+  it("shows completion timing once a tool finishes", () => {
+    const app = new App() as any;
+    app.screen = {
+      height: 16,
+      width: 80,
+      hasSidebar: false,
+      mainWidth: 80,
+      sidebarWidth: 0,
+      render: () => {},
+      setCursor: () => {},
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+    app.addToolCall("readFile", "README.md");
+    app.toolCallGroups[0].startedAt = Date.now() - 2100;
+    app.addToolResult("readFile", "ok", false, "42 lines");
+    const output = stripAnsi(app.messages[app.messages.length - 1].content);
+    expect(output).toContain("done");
+    expect(output).toContain("2s");
+    expect(output).toContain("42 lines");
   });
 });
 

@@ -64,7 +64,7 @@ export function updateTodo(app: AppState, items: TodoItem[]): void {
 }
 
 export function addToolCall(app: AppState, name: string, preview: string, args?: unknown): void {
-  app.toolCallGroups.push({ name, preview, args, expanded: app.allToolsExpanded });
+  app.toolCallGroups.push({ name, preview, args, expanded: app.allToolsExpanded, startedAt: Date.now() });
   const maxW = app.screen.mainWidth - 4;
   const tc = app.toolCallGroups[app.toolCallGroups.length - 1];
   const block = app.renderToolCallBlock(tc, maxW);
@@ -102,6 +102,7 @@ export function addToolResult(app: AppState, name: string, result: string, error
       app.toolCallGroups[i].result = result;
       app.toolCallGroups[i].error = error;
       app.toolCallGroups[i].resultDetail = resultDetail;
+      app.toolCallGroups[i].completedAt = Date.now();
       const maxW = app.screen.mainWidth - 4;
       const block = app.renderToolCallBlock(app.toolCallGroups[i], maxW);
       const messageIndex = app.toolCallGroups[i].messageIndex;

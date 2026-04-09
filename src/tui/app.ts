@@ -101,7 +101,7 @@ export class App {
   private onPendingMessagesReady: ((delivery: "steering" | "followup") => void) | null = null;
   private streamStartTime = 0;
   private streamTokens = 0;
-  private toolCallGroups: Array<{ name: string; preview: string; args?: unknown; resultDetail?: string; result?: string; error?: boolean; expanded: boolean; streamOutput?: string; messageIndex?: number }> = [];
+  private toolCallGroups: Array<{ name: string; preview: string; args?: unknown; resultDetail?: string; result?: string; error?: boolean; expanded: boolean; streamOutput?: string; messageIndex?: number; startedAt?: number; completedAt?: number }> = [];
   private allToolsExpanded = false;
   private isCompacting = false;
   private escPrimed = false;

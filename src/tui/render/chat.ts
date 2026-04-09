@@ -8,6 +8,8 @@ export interface ToolCallRenderGroup {
   expanded: boolean;
   streamOutput?: string;
   messageIndex?: number;
+  startedAt?: number;
+  completedAt?: number;
 }
 
 export interface TodoRenderItem {
@@ -116,6 +118,17 @@ export function toolDescription(tc: ToolCallRenderGroup): string {
   }
 }
 
+function formatElapsedLabel(tc: ToolCallRenderGroup): string | null {
+  if (!tc.startedAt) return null;
+  const end = tc.completedAt ?? Date.now();
+  const elapsedMs = Math.max(0, end - tc.startedAt);
+  const seconds = Math.floor(elapsedMs / 1000);
+  if (seconds < 1) return "<1s";
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}m ${seconds % 60}s`;
+}
+
 export function renderToolCallBlock(options: {
   tc: ToolCallRenderGroup;
   maxWidth: number;
@@ -136,9 +149,21 @@ export function renderToolCallBlock(options: {
   const done = !!tc.result;
   const running = !done;
   const branch = "\u2514";
-  lines.push(`  ${done ? colors.muted : colors.text}• ${toolDescription(tc)}${reset}`);
+  const statusIcon = done
+    ? (tc.error ? `${colors.error}✖${reset}` : `${colors.ok}✔${reset}`)
+    : `${colors.accent2}${["◐", "◓", "◑", "◒"][spinnerFrame % 4]}${reset}`;
+  const statusLabel = done
+    ? (tc.error ? "failed" : "done")
+    : tc.preview === "..." && !tc.streamOutput ? "starting" : "running";
+  const elapsedLabel = formatElapsedLabel(tc);
+  const statusSuffix = `${colors.muted}${statusLabel}${elapsedLabel ? ` · ${elapsedLabel}` : ""}${reset}`;
+  lines.push(`  ${statusIcon} ${done ? colors.muted : colors.text}${toolDescription(tc)}${reset} ${statusSuffix}`);
 
   const a = tc.args as Record<string, string> | undefined;
+
+  if (running && tc.preview === "..." && !tc.streamOutput) {
+    lines.push(`${colors.muted}  ${branch} waiting for tool details...${reset}`);
+  }
 
   if (tc.name === "bash" && running && tc.streamOutput) {
     const outLines = tc.streamOutput.split("\n").filter((line) => line.trim());
@@ -204,6 +229,8 @@ export function renderToolCallBlock(options: {
       for (const wrappedLine of renderPrefixedWrappedLines(`  ${branch} `, tc.resultDetail, maxWidth)) {
         lines.push(`${colors.muted}${wrappedLine}${reset}`);
       }
+    } else if (!tc.error && elapsedLabel) {
+      lines.push(`${colors.muted}  ${branch} completed in ${elapsedLabel}${reset}`);
     }
   }
 
@@ -341,7 +368,9 @@ export function renderMessageOverlays(options: {
       ? "Thinking..."
       : "Composing...";
     lines.push(`  ${sparkleSpinner(spinnerFrame)} ${shimmerText(label, spinnerFrame)} ${colors.accent}(${statParts.join(" · ")})${colors.reset}`);
-    if (thinkingRequested && !thinkingBuffer && elapsed >= 8000) {
+    if (streamingActivitySummary?.trim()) {
+      lines.push(`  ${colors.dim}${streamingActivitySummary.trim()}${colors.reset}`);
+    } else if (thinkingRequested && !thinkingBuffer && elapsed >= 8000) {
       lines.push(`  ${colors.dim}${streamingActivitySummary?.trim() || "waiting for first visible event"}${colors.reset}`);
     }
     lines.push("");
