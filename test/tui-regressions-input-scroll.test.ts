@@ -20,6 +20,31 @@ describe("input and scroll regressions", () => {
     expect(submitted).toBe("hello\nworld");
   });
 
+  it("does not treat Meta+Enter as a hidden multiline fallback", () => {
+    const app = new App() as any;
+    let submitted = "";
+    app.onSubmit = (text: string) => { submitted = text; };
+
+    app.handlePaste("hello");
+    app.handleKey({ name: "return", char: "", ctrl: false, meta: true, shift: false });
+
+    expect(submitted).toBe("hello");
+    expect(app.input.getText()).toBe("");
+  });
+
+  it("submits multiline text without trimming away intentional leading or trailing whitespace", () => {
+    const app = new App() as any;
+    let submitted = "";
+    app.onSubmit = (text: string) => { submitted = text; };
+
+    app.handlePaste("  hello");
+    app.handleKey({ name: "return", char: "", ctrl: false, meta: false, shift: true });
+    app.handlePaste("world  ");
+    app.handleKey({ name: "return", char: "", ctrl: false, meta: false, shift: false });
+
+    expect(submitted).toBe("  hello\nworld  ");
+  });
+
   it("normalizes pasted CRLF text and keeps editing/backspace behavior consistent inside it", () => {
     const app = new App() as any;
     app.handlePaste("alpha\r\nbravo\r\ncharlie");
@@ -82,6 +107,32 @@ describe("input and scroll regressions", () => {
     expect(rendered.join("\n")).toContain("final line");
   });
 
+  it("keeps manual scroll mode explicit instead of re-enabling follow just because the viewport happens to touch bottom", () => {
+    const app = new App() as any;
+    app.messages = Array.from({ length: 20 }, (_, i) => ({ role: "assistant", content: `message ${i}` }));
+    app.screen = {
+      height: 12,
+      width: 60,
+      hasSidebar: false,
+      mainWidth: 60,
+      sidebarWidth: 0,
+      render: () => {},
+      setCursor: () => {},
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+
+    app.scrollToBottom();
+    app.handleKey({ name: "pageup", char: "", ctrl: false, meta: false, shift: false });
+    expect(app.transcriptAutoFollow).toBe(false);
+
+    const maxScroll = Math.max(0, app.renderMessages(app.getTranscriptRenderWidth()).length - app.getChatHeight());
+    app.scrollOffset = maxScroll;
+    app.drawImmediate();
+
+    expect(app.transcriptAutoFollow).toBe(false);
+  });
+
   it("keeps the same newline rules inside question/modal text editors", () => {
     const app = new App() as any;
     app.questionView = createQuestionView({
@@ -124,5 +175,17 @@ describe("input and scroll regressions", () => {
 
     app.handleKey({ name: "up", char: "", ctrl: false, meta: false, shift: false });
     expect(app.input.getCursor()).toBe("alpha\nbet".length);
+  });
+
+  it("keeps Ctrl+A/Ctrl+E scoped to the current multiline row instead of jumping the whole buffer", () => {
+    const app = new App() as any;
+    app.input.setText("alpha\nbeta\ngamma");
+    app.input.setCursor("alpha\nbet".length);
+
+    app.handleKey({ name: "a", char: "", ctrl: true, meta: false, shift: false });
+    expect(app.input.getCursor()).toBe("alpha\n".length);
+
+    app.handleKey({ name: "e", char: "", ctrl: true, meta: false, shift: false });
+    expect(app.input.getCursor()).toBe("alpha\nbeta".length);
   });
 });

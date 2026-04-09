@@ -200,7 +200,7 @@ export class InputWidget {
     for (const element of filtered) {
       sanitized = sanitized.slice(0, element.start) + sanitized.slice(element.end);
     }
-    return sanitized.replace(/[ \t]+\n/gu, "\n").replace(/[ \t]{2,}/gu, " ").trim();
+    return sanitized.replace(/[ \t]+\n/gu, "\n");
   }
 
   private emitChange(): void {

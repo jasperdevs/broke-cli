@@ -133,7 +133,6 @@ function buildFrameLines(app: AppState, opts: { height: number; mainW: number; h
     if (app.transcriptAutoFollow) app.scrollOffset = maxScroll;
     if (app.scrollOffset > maxScroll) app.scrollOffset = maxScroll;
     if (app.scrollOffset < 0) app.scrollOffset = 0;
-    app.transcriptAutoFollow = app.scrollOffset >= maxScroll;
     const visibleMsgs = messageLines.slice(app.scrollOffset, app.scrollOffset + chatH);
     mainTopLines.push(...fixedTopLines, ...visibleMsgs);
   }
