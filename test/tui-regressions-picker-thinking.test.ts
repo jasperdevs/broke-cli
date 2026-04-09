@@ -289,18 +289,18 @@ describe("thinking preview", () => {
     app.setStreamingActivitySummary("planning changes to README.md");
     const output = app.renderMessages(80).map((line: string) => stripAnsi(line)).join("\n");
     expect(output).toContain("Thinking...");
-    expect(output).toContain("planning changes to README.md");
+    expect(output).not.toContain("planning changes to README.md");
     expect(output).not.toContain("Reasoning");
     app.setStreaming(false);
   });
 
-  it("explains long silent thinking as waiting for a visible event", () => {
+  it("does not add a synthetic waiting line during long silent thinking", () => {
     const app = new App() as any;
     app.setStreaming(true);
     app.setThinkingRequested(true);
     app.streamStartTime = Date.now() - 9000;
     const output = app.renderMessages(80).map((line: string) => stripAnsi(line)).join("\n");
-    expect(output).toContain("waiting for first visible event");
+    expect(output).not.toContain("waiting for first visible event");
     app.setStreaming(false);
   });
 

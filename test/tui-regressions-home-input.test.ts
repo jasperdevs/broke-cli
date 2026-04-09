@@ -224,7 +224,7 @@ describe("input editing", () => {
     const output = rendered.map((line) => stripAnsi(line));
     const queueIndex = output.findIndex((line) => line.includes("Queued follow-up messages"));
     const inputIndex = output.findIndex((line) => line.includes("> draft"));
-    expect(output.join("\n")).toContain("Composing...");
+    expect(output.join("\n")).toContain("Working");
     expect(output.join("\n")).toContain("next step");
     expect(queueIndex).toBeGreaterThan(-1);
     expect(inputIndex).toBeGreaterThan(queueIndex);
@@ -368,6 +368,19 @@ describe("input editing", () => {
     expect(output).toContain("Thinking...");
     expect(output).not.toContain("waiting for model reasoning");
     expect(output).not.toContain("Reasoning\n");
+  });
+
+  it("shows a tab-to-queue hint while typing during a running turn", () => {
+    const app = new App() as any;
+    let rendered: string[] = [];
+    app.messages = [{ role: "assistant", content: "working" }];
+    app.isStreaming = true;
+    app.streamStartTime = Date.now() - 1000;
+    app.input.paste("f");
+    app.screen = { height: 12, width: 40, hasSidebar: false, mainWidth: 40, sidebarWidth: 0, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
+    app.drawImmediate();
+    const output = rendered.map((line) => stripAnsi(line)).join("\n");
+    expect(output).toContain("tab to queue message");
   });
 
   it("treats linefeed as a newline instead of submit", () => {

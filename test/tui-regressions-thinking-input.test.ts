@@ -94,7 +94,8 @@ describe("thinking and input regressions", () => {
     app.setStreamingActivitySummary("planning changes to index.html");
     app.setStreaming(true);
     const output = app.renderMessages(60).map((line: string) => stripAnsi(line)).join("\n");
-    expect(output).toContain("Composing...");
+    expect(output).toContain("Working");
+    expect(output).not.toContain("planning changes to index.html");
     expect(output).not.toContain("Working:");
     app.setStreaming(false);
     expect(app.currentActivityStep).toBeNull();

@@ -77,7 +77,7 @@ export function renderActivitySnapshot(app: AppState, activity: any, maxWidth: n
   const tools = Array.isArray(activity?.tools) ? activity.tools : [];
   const lines: string[] = [];
   if (tools.length > 0) {
-    lines.push(`  ${DIM}activity${RESET}`);
+    lines.push(`  ${DIM}actions${RESET}`);
     for (const [index, tc] of tools.entries()) {
       lines.push(...buildToolCallBlock({
         index,

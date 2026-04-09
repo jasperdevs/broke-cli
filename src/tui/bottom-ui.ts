@@ -224,7 +224,11 @@ function renderFooterRow(
 export function buildFooterLines(app: AppState, hasSidebar: boolean, mainW: number): string[] {
   if (app.messages.length === 0) return [];
   const infoRows = packFooterParts(buildInfoBarParts(app, hasSidebar), mainW);
-  return infoRows.length > 0 ? infoRows : [];
+  const lines = infoRows.length > 0 ? [...infoRows] : [];
+  if (app.isStreaming && app.input.getText().trim().length > 0) {
+    lines.push(` ${DIM}tab to queue message${RESET}`);
+  }
+  return lines;
 }
 
 export function buildLegacyFooterLines(app: AppState, hasSidebar: boolean, mainW: number): string[] {

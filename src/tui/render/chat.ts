@@ -241,7 +241,7 @@ function renderActivityBlock(options: {
   const { currentActivityStep, toolExecutions, maxWidth, spinnerFrame, colors } = options;
   if (!currentActivityStep && toolExecutions.length === 0) return [];
   const lines: string[] = [];
-  lines.push(`  ${colors.dim}${toolExecutions.length > 0 ? "actions" : "activity"}${colors.reset}`);
+  lines.push(`  ${colors.dim}${toolExecutions.length > 0 ? "actions" : "status"}${colors.reset}`);
   if (currentActivityStep && toolExecutions.length === 0) {
     const icon = currentActivityStep.status === "done"
       ? `${colors.dim}[done]${colors.reset}`
@@ -379,7 +379,7 @@ export function renderMessageOverlays(options: {
       const mins = Math.floor(secs / 60);
       const timeStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
       const inProgress = todoItems.find((item) => item.status === "in_progress");
-      const headerText = inProgress ? inProgress.text : (allDone ? "Done" : "Working...");
+      const headerText = inProgress ? inProgress.text : (allDone ? "Done" : "Working");
       lines.push(`  ${colors.accent}[run]${colors.reset} ${colors.accent}${headerText}${colors.reset}  ${colors.dim}${timeStr} · ${done}/${total}${colors.reset}`);
     } else {
       lines.push(`  ${allDone ? colors.dim : colors.accent}${allDone ? "[done]" : "[run]"}${colors.reset} ${colors.dim}tasks ${done}/${total}${colors.reset}`);
@@ -420,17 +420,8 @@ export function renderMessageOverlays(options: {
     }
     const label = thinkingRequested
       ? "Thinking..."
-      : "Composing...";
+      : "Working";
     lines.push(`  ${sparkleSpinner(spinnerFrame)} ${shimmerText(label, spinnerFrame)} ${colors.accent}(${statParts.join(" · ")})${colors.reset}`);
-    if (
-      streamingActivitySummary?.trim()
-      && toolExecutions.length === 0
-      && (!currentActivityStep || currentActivityStep.label !== streamingActivitySummary.trim())
-    ) {
-      lines.push(`  ${colors.dim}${streamingActivitySummary.trim()}${colors.reset}`);
-    } else if (thinkingRequested && !thinkingBuffer && elapsed >= 8000 && toolExecutions.length === 0) {
-      lines.push(`  ${colors.dim}${streamingActivitySummary?.trim() || "waiting for first visible event"}${colors.reset}`);
-    }
     lines.push("");
   }
 
