@@ -74,7 +74,6 @@ export function openSettingsMenu(args: {
       { key: "modeSwitching", label: "Mode switching", value: s.modeSwitching, description: "manual / ask / auto — switch build vs plan per turn" },
       { key: "autoCompact", label: "Auto-compact", value: String(s.autoCompact), description: "Automatically compress context when it gets too large" },
       { key: "autoSaveSessions", label: "Auto-save sessions", value: String(s.autoSaveSessions), description: "Save conversation history to disk" },
-      { key: "gitCheckpoints", label: "Git checkpoints", value: String(s.gitCheckpoints), description: "Opt-in auto-commit before file modifications" },
       { key: "thinkingLevel", label: "Thinking mode", value: effectiveThinking, description: `${thinkingLevels.join(" / ")} (ctrl+t to cycle)` },
       { key: "hideSidebar", label: "Hide sidebar", value: String(s.hideSidebar), description: "Hide the right sidebar panel" },
       { key: "autoRoute", label: "Auto-route", value: String(s.autoRoute), description: "Route simple tasks to cheaper model automatically" },

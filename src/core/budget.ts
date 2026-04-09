@@ -1,4 +1,4 @@
-import { loadConfig } from "./config.js";
+import { getSettings, loadConfig } from "./config.js";
 
 export interface BudgetCheck {
   allowed: boolean;
@@ -7,7 +7,8 @@ export interface BudgetCheck {
 
 export function checkBudget(sessionCost: number): BudgetCheck {
   const config = loadConfig();
-  const maxSession = config.budget?.maxSessionCost;
+  const settingsMaxSession = getSettings().maxSessionCost;
+  const maxSession = settingsMaxSession > 0 ? settingsMaxSession : config.budget?.maxSessionCost;
 
   if (maxSession && sessionCost >= maxSession) {
     return {

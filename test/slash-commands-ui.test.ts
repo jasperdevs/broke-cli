@@ -28,7 +28,7 @@ afterEach(() => {
 });
 
 describe("slash command UI surfaces", () => {
-  it("exposes mode switching in /settings", async () => {
+  it("exposes real settings in /settings", async () => {
     const app = createAppStub();
     let settingsEntries: Array<{ key: string; label: string; value: string; description: string }> = [];
     app.openSettings = (entries: Array<{ key: string; label: string; value: string; description: string }>) => {
@@ -45,9 +45,11 @@ describe("slash command UI surfaces", () => {
     expect(result.handled).toBe(true);
     expect(settingsEntries.some((entry) => entry.key === "mode")).toBe(true);
     expect(settingsEntries.some((entry) => entry.key === "modeSwitching")).toBe(true);
+    expect(settingsEntries.some((entry) => entry.key === "gitCheckpoints")).toBe(false);
     expect(settingsEntries.some((entry) => entry.key === "autonomy.allowNetwork")).toBe(true);
     expect(settingsEntries.some((entry) => entry.key === "autonomy.allowWriteOutsideWorkspace")).toBe(true);
     expect(settingsEntries.some((entry) => entry.key === "autonomy.additionalReadRoots")).toBe(true);
+    expect(settingsEntries.some((entry) => entry.key === "maxSessionCost")).toBe(true);
   });
 
   it("toggles autonomy booleans from /settings", async () => {
