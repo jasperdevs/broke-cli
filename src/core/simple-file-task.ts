@@ -54,6 +54,10 @@ function hasEditIntent(text: string): boolean {
   return /\b(edit|change|update|fix|patch|modify|improve|better|make)\b/i.test(text);
 }
 
+function hasMultipleActionIntent(text: string): boolean {
+  return /(?:,|\b(?:and|then|also)\b).*\b(?:add|write|create|run|test|verify|check|fix|edit|change|update)\b/i.test(text);
+}
+
 function toolFor(kind: SimpleFileTaskKind, existing: boolean): ToolName {
   if (kind === "read") return "readFile";
   if (kind === "create" && !existing) return "writeFile";
@@ -65,6 +69,7 @@ export function detectSimpleFileTask(text: string, cwd = process.cwd()): SimpleF
   if (!normalized || /\b(plan|review|audit|explain|why|how does|walk me through|compare|research)\b/i.test(normalized)) {
     return null;
   }
+  if (hasMultipleActionIntent(normalized)) return null;
   const path = explicitPath(normalized) ?? inferredPath(normalized, cwd);
   if (!path) return null;
   const existing = existsSync(join(cwd, path)) || existsSync(path);

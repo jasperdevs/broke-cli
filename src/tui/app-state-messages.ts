@@ -146,6 +146,7 @@ export function appendToLastMessage(app: AppState, text: string): void {
   const last = app.messages[app.messages.length - 1];
   if (last && last.role === "assistant") last.content += text;
   else app.messages.push({ role: "assistant", content: text });
+  if (!app.isStreaming) persistCurrentActivityToLastAssistant(app);
   app.invalidateMsgCache();
   app.scrollToBottom();
   app.draw();

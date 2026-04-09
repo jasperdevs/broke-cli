@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import stripAnsi from "strip-ansi";
 import { App } from "../src/tui/app.js";
-import { getSettings } from "../src/core/config.js";
+import { getSettings, updateSetting } from "../src/core/config.js";
 
 describe("menu layout regressions", () => {
   it("keeps the bottom info bar visible when a picker is open in a cramped pane", () => {
@@ -74,6 +74,8 @@ describe("menu layout regressions", () => {
   });
 
   it("keeps compact chat metadata visible by merging it into the bottom bar", () => {
+    const settings = getSettings();
+    const original = { enableThinking: settings.enableThinking, thinkingLevel: settings.thinkingLevel };
     const app = new App() as any;
     let rendered: string[] = [];
     app.messages = [{ role: "assistant", content: "hello" }];
@@ -93,15 +95,22 @@ describe("menu layout regressions", () => {
       forceRedraw: () => {},
     };
 
-    app.drawImmediate();
+    try {
+      updateSetting("enableThinking", true);
+      updateSetting("thinkingLevel", "high");
+      app.drawImmediate();
 
-    const output = rendered.map((line) => stripAnsi(line)).join("\n");
-    expect(output).toContain("GPT-5.4 mini");
-    expect(output).toContain("main");
-    expect(output).toContain("plan");
-    expect(output).toContain("high");
-    expect(output).not.toContain("/ commands");
-    expect(output).not.toContain("@ files");
+      const output = rendered.map((line) => stripAnsi(line)).join("\n");
+      expect(output).toContain("GPT-5.4 mini");
+      expect(output).toContain("main");
+      expect(output).toContain("plan");
+      expect(output).toContain("high");
+      expect(output).not.toContain("/ commands");
+      expect(output).not.toContain("@ files");
+    } finally {
+      updateSetting("enableThinking", original.enableThinking);
+      updateSetting("thinkingLevel", original.thinkingLevel);
+    }
   });
 
   it("renders picker details in one detail strip instead of below every model lane", () => {

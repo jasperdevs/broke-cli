@@ -42,4 +42,9 @@ describe("simple file task contract", () => {
     expect(block).toContain('editFile args: {"path":"target","old_string":"exact unique text from read context","new_string":"replacement"}');
     expect(block).not.toContain("steps:");
   });
+
+  it("leaves multi-action file requests on the normal turn lane", () => {
+    expect(detectSimpleFileTask("Fix add() in bug.js so npm test passes, add a regression test, and run npm test.")).toBeNull();
+    expect(detectSimpleFileTask("edit README.md and run the test")).toBeNull();
+  });
 });

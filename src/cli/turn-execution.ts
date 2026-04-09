@@ -124,9 +124,11 @@ export async function executeTurn(options: {
   const settings = getSettings();
   const simpleFileTask = detectSimpleFileTask(text);
   let effectiveTransientUserContext = transientUserContext;
+  let nativeWorkspaceSatisfiedSimpleTask = false;
   const hasRequiredSimpleTool = (): boolean => !simpleFileTask
     || simpleFileTask.completeWithRead
-    || nextToolCalls.includes(simpleFileTask.requiredTool);
+    || nextToolCalls.includes(simpleFileTask.requiredTool)
+    || nativeWorkspaceSatisfiedSimpleTask;
 
   const appendTransientContext = (block: string): void => {
     effectiveTransientUserContext = [effectiveTransientUserContext, block].filter(Boolean).join("\n\n");
@@ -177,6 +179,9 @@ export async function executeTurn(options: {
   const exposeOpaqueNativeEdits = (): void => {
     if (!nativeWorkspaceBaseline || sawToolActivity) return;
     const touched = recordNativeWorkspaceDelta(session, nativeWorkspaceBaseline);
+    if (simpleFileTask && touched.some((path) => path === simpleFileTask.path)) {
+      nativeWorkspaceSatisfiedSimpleTask = true;
+    }
     for (const path of touched) {
       const callId = `native-observed-edit:${path}`;
       nextToolCalls.push("workspaceEdit");

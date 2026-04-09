@@ -25,6 +25,7 @@ export function buildTurnFrame(userMessage: string, scaffold: string, allowedToo
         .replace(/\n?<\/task-rules>$/, "")
         .trim()
     : "";
+  if (allowedTools.length === 0 && !toolGuidance && !compactAddendum) return "";
   return [scaffold.trim(), toolGuidance, compactAddendum].filter(Boolean).join("\n");
 }
 
@@ -35,6 +36,7 @@ export function applyTurnFrame(
   allowedTools: readonly ToolName[] = [],
 ): Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }> {
   const frame = buildTurnFrame(userMessage, scaffold, allowedTools);
+  if (!frame) return messages;
   const lastUserIndex = [...messages]
     .map((message, index) => ({ message, index }))
     .reverse()

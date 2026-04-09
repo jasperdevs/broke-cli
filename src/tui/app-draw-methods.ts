@@ -325,8 +325,8 @@ export function start(app: AppState): void {
     autocompleteMaxVisible: 8,
     showHardwareCursor: true,
   });
-  try { app.gitBranch = execSync("git branch --show-current", { encoding: "utf-8", timeout: 3000 }).trim(); } catch {}
-  try { app.gitDirty = execSync("git status --porcelain", { encoding: "utf-8", timeout: 3000 }).trim().length > 0; } catch {}
+  try { app.gitBranch = execSync("git branch --show-current", { encoding: "utf-8", timeout: 3000, stdio: "pipe" }).trim(); } catch {}
+  try { app.gitDirty = execSync("git status --porcelain", { encoding: "utf-8", timeout: 3000, stdio: "pipe" }).trim().length > 0; } catch {}
   app.screen.enter();
   app.keypress.start();
   app.refreshWindowTitle();

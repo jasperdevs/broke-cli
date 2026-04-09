@@ -183,7 +183,7 @@ export class App {
     );
     this.refreshHomeScreenData();
     try {
-      this.gitBranch = execSync("git branch --show-current", { encoding: "utf-8", timeout: 3000 }).trim();
+      this.gitBranch = execSync("git branch --show-current", { encoding: "utf-8", timeout: 3000, stdio: "pipe" }).trim();
     } catch {}
   }
 }
