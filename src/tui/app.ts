@@ -28,6 +28,7 @@ import type { BtwBubble, BudgetView, ChatMessage, ModelLaneOption, ModelOption, 
 import type { ModelPreferenceSlot } from "../core/config.js";
 import type { ModelRuntime } from "../ai/providers.js";
 import { createDefaultSessionName } from "../core/session.js";
+import { createAppPickerState, createAppSidebarState, type AppPickerState, type AppSidebarState } from "./app-state-slices.js";
 
 export interface App extends AppStateCoreMethods, AppStateMessageMethods, AppStateUiMethods, AppMenuMethods, AppInputMethods, AppRenderMethods, AppDrawMethods {}
 
@@ -75,34 +76,13 @@ export class App {
   private statusTimer: ReturnType<typeof setTimeout> | null = null;
   private detectedProviders: string[] = [];
   private cwd = process.cwd();
-  private modelPicker: { options: ModelOption[]; cursor: number; scope: "all" | "scoped" } | null = null;
-  private onModelSelect: ((providerId: string, modelId: string) => void) | null = null;
-  private onModelPin: ((providerId: string, modelId: string, pinned: boolean) => void) | null = null;
-  private onModelAssign: ((providerId: string, modelId: string, slot: ModelPreferenceSlot) => void) | null = null;
-  private modelLanePicker: { model: ModelOption; options: ModelLaneOption[]; cursor: number } | null = null;
-  private settingsPicker: { entries: SettingEntry[]; cursor: number } | null = null;
-  private onSettingToggle: ((key: string) => void) | null = null;
-  private filePicker: { files: string[]; filtered: string[]; query: string; cursor: number } | null = null;
+  private readonly pickerState: AppPickerState = createAppPickerState();
+  private readonly sidebarState: AppSidebarState = createAppSidebarState();
   private projectFiles: string[] | null = null;
   private fileContexts: Map<string, string> = new Map();
   private cmdSuggestionCursor = 0;
-  private itemPicker: {
-    title: string;
-    items: PickerItem[];
-    cursor: number;
-    kind?: "model" | "mode" | "name" | "login" | "connect" | "settings" | "extensions" | "export" | "resume" | "session" | "hotkeys" | "tree" | "templates" | "skills" | "changelog" | "projects" | "logout";
-    previewHint?: string;
-    onPreview?: (id: string) => void;
-    onCancel?: () => void;
-    onSecondaryAction?: (id: string) => void;
-    onKey?: (key: import("./keypress.js").Keypress) => boolean;
-    secondaryHint?: string;
-    closeOnSelect?: boolean;
-  } | null = null;
   private budgetView: BudgetView | null = null;
   private treeView: TreeView | null = null;
-  private onTreeSelect: ((entryId: string) => void | Promise<void>) | null = null;
-  private onItemSelect: ((id: string) => void) | null = null;
   private toolOutputCollapsed = false;
   private questionView: QuestionView | null = null;
   private pendingImages: PendingImage[] = [];
@@ -129,11 +109,6 @@ export class App {
   private escTimeout: ReturnType<typeof setTimeout> | null = null;
   private compactStartTime = 0;
   private compactTokens = 0;
-  private sidebarFileTree: SidebarTreeItem[] | null = null;
-  private sidebarExpandedDirs = new Set<string>();
-  private sidebarTreeOpen = false;
-  private sidebarScrollOffset = 0;
-  private sidebarFocused = false;
   private hideCursorUntil = 0;
   private hideCursorTimer: NodeJS.Timeout | null = null;
   private activeMenuClickTargets = new Map<number, () => void>();
@@ -154,6 +129,38 @@ export class App {
   private animCost = new AnimCounter();
   private animStreamTokens = new AnimCounter();
   private animContext = new AnimCounter();
+
+  private get modelPicker() { return this.pickerState.model; }
+  private set modelPicker(value) { this.pickerState.model = value; }
+  private get onModelSelect() { return this.pickerState.onModelSelect; }
+  private set onModelSelect(value) { this.pickerState.onModelSelect = value; }
+  private get onModelPin() { return this.pickerState.onModelPin; }
+  private set onModelPin(value) { this.pickerState.onModelPin = value; }
+  private get onModelAssign() { return this.pickerState.onModelAssign; }
+  private set onModelAssign(value) { this.pickerState.onModelAssign = value; }
+  private get modelLanePicker() { return this.pickerState.modelLane; }
+  private set modelLanePicker(value) { this.pickerState.modelLane = value; }
+  private get settingsPicker() { return this.pickerState.settings; }
+  private set settingsPicker(value) { this.pickerState.settings = value; }
+  private get onSettingToggle() { return this.pickerState.onSettingToggle; }
+  private set onSettingToggle(value) { this.pickerState.onSettingToggle = value; }
+  private get filePicker() { return this.pickerState.file; }
+  private set filePicker(value) { this.pickerState.file = value; }
+  private get itemPicker() { return this.pickerState.item; }
+  private set itemPicker(value) { this.pickerState.item = value; }
+  private get onTreeSelect() { return this.pickerState.onTreeSelect; }
+  private set onTreeSelect(value) { this.pickerState.onTreeSelect = value; }
+  private get onItemSelect() { return this.pickerState.onItemSelect; }
+  private set onItemSelect(value) { this.pickerState.onItemSelect = value; }
+  private get sidebarFileTree() { return this.sidebarState.fileTree; }
+  private set sidebarFileTree(value) { this.sidebarState.fileTree = value; }
+  private get sidebarExpandedDirs() { return this.sidebarState.expandedDirs; }
+  private get sidebarTreeOpen() { return this.sidebarState.treeOpen; }
+  private set sidebarTreeOpen(value) { this.sidebarState.treeOpen = value; }
+  private get sidebarScrollOffset() { return this.sidebarState.scrollOffset; }
+  private set sidebarScrollOffset(value) { this.sidebarState.scrollOffset = value; }
+  private get sidebarFocused() { return this.sidebarState.focused; }
+  private set sidebarFocused(value) { this.sidebarState.focused = value; }
 
   constructor() {
     this.screen = new Screen();

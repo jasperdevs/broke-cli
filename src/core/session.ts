@@ -5,20 +5,9 @@ import { buildCompactionContextMessage } from "./compact.js";
 import {
   buildRepoStateContextMessage,
   buildRepoStateSummary,
-  cloneRepoState,
-  recordRepoEdit as updateRepoEditState,
-  recordRepoRead as updateRepoReadState,
-  recordRepoSearch as updateRepoSearchState,
-  recordRepoVerification as updateRepoVerificationState,
 } from "./repo-state.js";
 import { createDefaultSessionName } from "./session-naming.js";
-import {
-  buildChildrenMap,
-  collectAncestorIds,
-  entriesFromMessages,
-  getActiveEntries,
-  matchesTreeFilter,
-} from "./session-graph.js";
+import { entriesFromMessages, getActiveEntries } from "./session-graph.js";
 import {
   type CompactionSummaryState,
   createEmptySessionBudgetMetrics,
@@ -36,6 +25,21 @@ import {
   loadSessionData,
   saveSessionData,
 } from "./session-storage.js";
+import {
+  appendBranchSummaryEntry,
+  getEntriesToSummarizeForNavigation,
+  getSessionTreeItems,
+  navigateToEntry,
+  toggleEntryLabel,
+} from "./session-tree-ops.js";
+import {
+  cloneSessionRepoState,
+  createResetSessionMetrics,
+  recordSessionRepoEdit,
+  recordSessionRepoRead,
+  recordSessionRepoSearch,
+  recordSessionVerification,
+} from "./session-metrics-ops.js";
 
 export type {
   Message,
@@ -142,40 +146,7 @@ export class Session {
   }
 
   getTreeItems(filterMode: TreeFilterMode = "all"): SessionTreeItem[] {
-    const allItems: SessionTreeItem[] = [];
-    const children = buildChildrenMap(this.entries);
-    const activeIds = new Set(getActiveEntries(this.entries, this.leafId).map((entry) => entry.id));
-
-    const visit = (entry: SessionEntry, depth: number): void => {
-      const childEntries = [...(children.get(entry.id) ?? [])].sort((a, b) => {
-        const aActive = activeIds.has(a.id) ? 0 : 1;
-        const bActive = activeIds.has(b.id) ? 0 : 1;
-        return aActive - bActive || a.timestamp - b.timestamp;
-      });
-      allItems.push({
-        ...entry,
-        depth,
-        active: activeIds.has(entry.id),
-        hasChildren: childEntries.length > 0,
-      });
-      for (const child of childEntries) visit(child, depth + 1);
-    };
-
-    for (const root of children.get(null) ?? []) visit(root, 0);
-    if (filterMode === "all") return allItems;
-    if (filterMode === "labeled-only") return allItems.filter((item) => matchesTreeFilter(item, filterMode));
-
-    const byId = new Map(allItems.map((item) => [item.id, item]));
-    const visibleIds = new Set<string>();
-    for (const item of allItems) {
-      if (!matchesTreeFilter(item, filterMode) && !item.active) continue;
-      let cursor: SessionEntry | undefined = item;
-      while (cursor) {
-        visibleIds.add(cursor.id);
-        cursor = cursor.parentId ? byId.get(cursor.parentId) : undefined;
-      }
-    }
-    return allItems.filter((item) => visibleIds.has(item.id));
+    return getSessionTreeItems(this.entries, this.leafId, filterMode);
   }
 
   getTreeEntry(entryId: string): SessionEntry | undefined {
@@ -183,47 +154,21 @@ export class Session {
   }
 
   getEntriesToSummarizeForNavigation(targetId: string): SessionEntry[] {
-    const target = this.getTreeEntry(targetId);
-    if (!target || !this.leafId) return [];
-    const currentPath = getActiveEntries(this.entries, this.leafId);
-    const targetLeafId = target.role === "user" ? target.parentId : target.id;
-    const targetAncestors = collectAncestorIds(this.entries, targetLeafId);
-    const abandoned: SessionEntry[] = [];
-    for (let i = currentPath.length - 1; i >= 0; i--) {
-      const entry = currentPath[i];
-      if (targetAncestors.has(entry.id)) break;
-      if (entry.role === "user" || entry.role === "assistant") abandoned.unshift(entry);
-    }
-    return abandoned;
+    return getEntriesToSummarizeForNavigation(this.entries, this.leafId, targetId);
   }
 
   toggleLabel(entryId: string, label?: string): { labeled: boolean; value?: string } {
-    const entry = this.entries.find((candidate) => candidate.id === entryId);
-    if (!entry) return { labeled: false };
-    if (entry.label) {
-      delete entry.label;
-      delete entry.labelTimestamp;
-      this.save();
-      return { labeled: false };
-    }
-    const fallback = entry.content.split(/\r?\n/)[0]?.trim().slice(0, 80) || entry.role;
-    entry.label = (label?.trim() || fallback).trim();
-    entry.labelTimestamp = Date.now();
+    const result = toggleEntryLabel(this.entries, entryId, label);
     this.save();
-    return { labeled: true, value: entry.label };
+    return result;
   }
 
   navigateTo(targetId: string): { editorText?: string; cancelled: boolean } {
-    const target = this.entries.find((entry) => entry.id === targetId);
-    if (!target) return { cancelled: true };
-    if (target.role === "user") {
-      this.leafId = target.parentId;
-      this.save();
-      return { editorText: target.content, cancelled: false };
-    }
-    this.leafId = target.id;
+    const navigation = navigateToEntry(this.entries, targetId);
+    if (navigation.cancelled) return { cancelled: true };
+    this.leafId = navigation.leafId;
     this.save();
-    return { cancelled: false };
+    return { editorText: navigation.editorText, cancelled: false };
   }
 
   navigateTree(targetId: string, options?: { summary?: string; label?: string }): { editorText?: string; cancelled: boolean; summaryEntryId?: string } {
@@ -231,18 +176,10 @@ export class Session {
     if (navigation.cancelled) return navigation;
     let summaryEntryId: string | undefined;
     if (options?.summary?.trim()) {
-      const entry: SessionEntry = {
-        id: randomUUID(),
-        parentId: this.leafId,
-        role: "system",
-        content: `[Branch summary]\n${options.summary.trim()}`,
-        timestamp: Date.now(),
-        label: options.label?.trim() || "branch summary",
-        labelTimestamp: Date.now(),
-      };
-      this.entries.push(entry);
-      this.leafId = entry.id;
-      summaryEntryId = entry.id;
+      const next = appendBranchSummaryEntry(this.entries, this.leafId, options);
+      this.entries = next.entries;
+      this.leafId = next.leafId;
+      summaryEntryId = next.summaryEntryId;
     } else if (options?.label?.trim()) {
       const target = this.getTreeEntry(targetId);
       if (target) {
@@ -318,26 +255,26 @@ export class Session {
   }
 
   getRepoState(): SessionRepoState {
-    return cloneRepoState(this.repoState);
+    return cloneSessionRepoState(this.repoState);
   }
 
   recordRepoRead(path: string, lineCount: number): void {
-    this.repoState = updateRepoReadState(this.repoState, path, lineCount, this.budgetMetrics.totalTurns + 1);
+    this.repoState = recordSessionRepoRead(this.repoState, path, lineCount, this.budgetMetrics.totalTurns + 1);
     this.save();
   }
 
   recordRepoEdit(path: string, kind: "write" | "edit"): void {
-    this.repoState = updateRepoEditState(this.repoState, path, kind, this.budgetMetrics.totalTurns + 1);
+    this.repoState = recordSessionRepoEdit(this.repoState, path, kind, this.budgetMetrics.totalTurns + 1);
     this.save();
   }
 
   recordRepoSearch(tool: SessionRepoState["recentSearches"][number]["tool"], query: string, hits: string[]): void {
-    this.repoState = updateRepoSearchState(this.repoState, tool, query, hits, this.budgetMetrics.totalTurns + 1);
+    this.repoState = recordSessionRepoSearch(this.repoState, tool, query, hits, this.budgetMetrics.totalTurns + 1);
     this.save();
   }
 
   recordVerification(label: string, status: "pass" | "fail", detail = ""): void {
-    this.repoState = updateRepoVerificationState(this.repoState, label, status, detail, this.budgetMetrics.totalTurns + 1);
+    this.repoState = recordSessionVerification(this.repoState, label, status, detail, this.budgetMetrics.totalTurns + 1);
     this.save();
   }
 
@@ -406,8 +343,9 @@ export class Session {
     this.totalInputTokens = 0;
     this.totalOutputTokens = 0;
     this.totalCost = 0;
-    this.budgetMetrics = createEmptySessionBudgetMetrics();
-    this.repoState = createEmptySessionRepoState();
+    const reset = createResetSessionMetrics();
+    this.budgetMetrics = reset.budgetMetrics;
+    this.repoState = reset.repoState;
     this.contextOptimizer.reset();
     this.save();
   }
@@ -471,7 +409,7 @@ export class Session {
     forked.totalInputTokens = this.totalInputTokens;
     forked.totalOutputTokens = this.totalOutputTokens;
     forked.totalCost = this.totalCost;
-    forked.repoState = cloneRepoState(this.repoState);
+    forked.repoState = cloneSessionRepoState(this.repoState);
     forked.cwd = this.cwd;
     forked.provider = this.provider;
     forked.model = this.model;
