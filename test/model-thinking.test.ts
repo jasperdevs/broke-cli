@@ -15,12 +15,12 @@ describe("model reasoning support", () => {
     expect(modelSupportsReasoning("default", "llamacpp")).toBe(false);
   });
 
-  it("still requests think tags for sdk models when thinking is enabled", () => {
+  it("does not ask models to externalize private reasoning into visible text", () => {
     expect(shouldRequestThinkTags({
       provider: { id: "llamacpp", name: "llama.cpp", defaultModel: "default", models: ["default"] },
       modelId: "default",
       runtime: "sdk",
-    }, true)).toBe(true);
+    }, true)).toBe(false);
     expect(shouldRequestThinkTags({
       provider: { id: "codex", name: "Codex", defaultModel: "gpt-5-mini", models: ["gpt-5-mini"] },
       modelId: "gpt-5-mini",

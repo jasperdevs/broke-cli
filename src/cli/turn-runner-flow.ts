@@ -59,11 +59,6 @@ function deriveStreamingActivitySummary(text: string, archetype: string): string
   const fileMatch = normalized.match(/\b[A-Za-z0-9_./-]+\.[A-Za-z0-9]+\b/);
   const target = fileMatch?.[0];
   switch (archetype) {
-    case "edit":
-    case "bugfix":
-      return target ? `preparing action for ${target}` : "preparing the first action";
-    case "explore":
-      return target ? `checking ${target}` : "scanning the repo";
     case "shell":
       return "preparing the command result";
     case "review":
@@ -350,7 +345,7 @@ export async function executeTurnWithRetries(options: {
       hooks,
       lastToolCalls,
       contextLimit: prepared.contextLimit,
-      activeSystemPrompt: `${prepared.turnSystemPrompt}\n\nLocal-model empty-output recovery: reply now with final visible answer text only. Do not write private reasoning, analysis, thinking steps, or hidden reasoning. For greetings, return one brief greeting.`,
+      activeSystemPrompt: `${prepared.turnSystemPrompt}\n\nLocal-model empty-output recovery: reply now with user-facing answer text only. Never output internal planning, routing, context summaries, checklists, or labels like Input:, Context:, Action:, Plan:, or Execution:. For greetings, return one brief greeting.`,
       optimizeMessages: (messages) => selectMessagesForTurn(messages, policy, (msgs) => getContextOptimizer().optimizeMessages(msgs)),
       forceRoute: "main",
       transientUserContext,

@@ -97,5 +97,6 @@ describe("thinking and input regressions", () => {
     expect(output).toContain("Composing...");
     expect(output).not.toContain("Working:");
     app.setStreaming(false);
+    expect(app.currentActivityStep).toBeNull();
   });
 });

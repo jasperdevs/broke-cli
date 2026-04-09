@@ -4,6 +4,8 @@ import { getSettings, type Mode } from "../core/config.js";
 import type { TurnPolicy } from "../core/turn-policy.js";
 import { resolvePreferredSpecialistRole, type SpecialistModelRole } from "./model-routing.js";
 import { routeMessage } from "../ai/router.js";
+import { readFileDirect } from "../tools/file-ops.js";
+import { observeToolResult } from "./turn-tool-observer.js";
 
 const SDK_TOOL_PROVIDER_IDS = new Set([
   "anthropic", "openai", "codex", "google", "mistral", "groq", "xai",
@@ -20,17 +22,90 @@ export interface MinimalOutputPolicy {
   maxOutputTokens: number;
 }
 
+export function exposeSimpleReadRuntime(options: {
+  simpleFileTask: { path: string; preRead?: boolean; completeWithRead?: boolean } | null;
+  nextToolCalls: string[];
+  session: any;
+  app: { addToolCall(name: string, preview: string, args?: unknown, callId?: string): void; addToolResult(name: string, result: string, error?: boolean, detail?: string, callId?: string): void };
+}): { content: string; totalLines?: number; failed?: boolean } | null {
+  const { simpleFileTask, nextToolCalls, session, app } = options;
+  if (!simpleFileTask || (!simpleFileTask.preRead && !simpleFileTask.completeWithRead)) return null;
+  const args = { path: simpleFileTask.path, mode: "full" as const, refresh: true };
+  const callId = `simple-read:${simpleFileTask.path}`;
+  nextToolCalls.push("readFile");
+  app.addToolCall("readFile", simpleFileTask.path, args, callId);
+  const result = readFileDirect(args);
+  const detail = observeToolResult({ session, toolName: "readFile", result, toolArgs: args });
+  if (result.success === false) {
+    app.addToolResult("readFile", result.error.slice(0, 80), true, detail, callId);
+    return { content: "", failed: true };
+  }
+  app.addToolResult("readFile", "ok", false, detail, callId);
+  return { content: result.content, totalLines: result.totalLines };
+}
+
 export function supportsThinking(model: ModelHandle): boolean {
   return modelSupportsReasoning(model.modelId, model.provider.id);
 }
 
 export function shouldRequestThinkTags(model: ModelHandle, thinkingRequested: boolean): boolean {
-  return thinkingRequested && model.runtime === "sdk";
+  void model;
+  void thinkingRequested;
+  return false;
 }
 
 export function buildModelVisibleThinkingInstruction(cavemanLevel: string): string {
   const style = cavemanLevel === "off" ? "Keep it plain text, concise, and specific to this request." : "Use the same output-style for the reasoning: clipped, direct, no recap, no checklist, no warm-up, fragments fine.";
   return `If this model exposes reasoning in text, place that reasoning inside <think>...</think> before the final answer. ${style} If the model does not support that format, ignore this instruction and answer normally.`;
+}
+
+const RAW_THINK_BLOCK = /<think\b[^>]*>[\s\S]*?(?:<\/think>|$)/gi;
+const INTERNAL_ORCHESTRATION_LINE = /^\s*(?:[-*•]\s*)?(?:user wants|the user asked|input\s*:|context\s*:|action\s*:|output style\s*:|final response\s*:|constraint(?: checklist)?(?: & confidence score)?\s*:|confidence score\s*:|plan\s*:|execution\s*:|casual turn\s*:|tool(?:s)? needed\b|no tools\b|reply now\b|mode\s*:)/i;
+const INTERNAL_ORCHESTRATION_NUMBERED = /^\s*\d+\.\s+.+$/;
+const INTERNAL_ORCHESTRATION_SENTENCE = /^\s*(?:the user (?:wants|asked)|answer (?:naturally|plain text only)|keep it (?:plain text|super short)|no recap\b|no narration\b|output style\b|local-model empty-output recovery\b)/i;
+
+function stripRawThinkBlocks(text: string): string {
+  return text.replace(RAW_THINK_BLOCK, "");
+}
+
+function stripLeadingOrchestrationPrelude(text: string): string {
+  const lines = stripRawThinkBlocks(text).split(/\r?\n/);
+  let index = 0;
+  let sawPrelude = false;
+  let sawStructuredPrelude = false;
+
+  while (index < lines.length) {
+    const line = lines[index] ?? "";
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      if (!sawPrelude) {
+        index++;
+        continue;
+      }
+      sawStructuredPrelude = true;
+      index++;
+      continue;
+    }
+
+    const matchesInternal = INTERNAL_ORCHESTRATION_LINE.test(trimmed)
+      || INTERNAL_ORCHESTRATION_SENTENCE.test(trimmed)
+      || (sawStructuredPrelude && INTERNAL_ORCHESTRATION_NUMBERED.test(trimmed));
+    if (!matchesInternal) break;
+    sawPrelude = true;
+    index++;
+  }
+
+  if (!sawPrelude) return stripRawThinkBlocks(text);
+  return lines.slice(index).join("\n").trimStart();
+}
+
+export function sanitizeVisibleAssistantText(
+  text: string,
+  policy: { archetype: string },
+): string {
+  void policy;
+  return stripLeadingOrchestrationPrelude(text).trimStart();
 }
 
 export function shouldEnforceToolFirstTurn(options: {

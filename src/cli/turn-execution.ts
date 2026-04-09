@@ -11,16 +11,16 @@ import type { ToolName } from "../tools/registry.js";
 import { setActiveToolContext } from "../tools/runtime-context.js";
 import {
   buildToolPreview,
-  buildModelVisibleThinkingInstruction,
   buildMinimalOutputInstruction,
   canUseSdkTools,
+  exposeSimpleReadRuntime,
   formatTurnErrorMessage,
   getMinimalOutputPolicy,
   looksLikeRawToolPayload,
   normalizeEditCompletionText,
   resolveExecutionTarget,
+  sanitizeVisibleAssistantText,
   shouldEnforceToolFirstTurn,
-  shouldRequestThinkTags,
   shouldSuppressPlanningNarration,
   shouldUseToolFirstDisplay,
 } from "./turn-runner-support.js";
@@ -32,8 +32,6 @@ import { createStreamTokenTracker } from "./stream-token-tracker.js";
 import { executeRawToolPayloadFallback } from "./raw-tool-fallback.js";
 import { captureNativeWorkspaceBaseline, recordNativeWorkspaceDelta, shouldExposeOpaqueNativeWorkspaceEdits } from "./native-workspace-observer.js";
 import { resolveTurnExecution } from "./turn-execution-setup.js";
-import { readFileDirect } from "../tools/file-ops.js";
-import { observeToolResult } from "./turn-tool-observer.js";
 type PendingDelivery = "steering" | "followup";
 interface TurnExecutionApp {
   addMessage(role: "user" | "assistant" | "system", content: string, images?: Array<{ mimeType: string; data: string }>): void;
@@ -133,28 +131,7 @@ export async function executeTurn(options: {
   const appendTransientContext = (block: string): void => {
     effectiveTransientUserContext = [effectiveTransientUserContext, block].filter(Boolean).join("\n\n");
   };
-  const exposeSimpleRead = (): { content: string; totalLines?: number; failed?: boolean } | null => {
-    if (!simpleFileTask || (!simpleFileTask.preRead && !simpleFileTask.completeWithRead)) return null;
-    const args = { path: simpleFileTask.path, mode: "full" as const, refresh: true };
-    const callId = `simple-read:${simpleFileTask.path}`;
-    nextToolCalls.push("readFile");
-    app.addToolCall("readFile", simpleFileTask.path, args, callId);
-    const result = readFileDirect(args);
-    const detail = observeToolResult({
-      session,
-      toolName: "readFile",
-      result,
-      toolArgs: args,
-    });
-    if (result.success === false) {
-      app.addToolResult("readFile", result.error.slice(0, 80), true, detail, callId);
-      return { content: "", failed: true };
-    }
-    app.addToolResult("readFile", "ok", false, detail, callId);
-    return { content: result.content, totalLines: result.totalLines };
-  };
-
-  const preRead = exposeSimpleRead();
+  const preRead = exposeSimpleReadRuntime({ simpleFileTask, nextToolCalls, session, app });
   if (simpleFileTask) {
     appendTransientContext(buildSimpleFileTaskPromptBlock(simpleFileTask));
   }
@@ -224,10 +201,6 @@ export async function executeTurn(options: {
     abortController = null;
   });
 
-  if (shouldRequestThinkTags(executionModel, thinkingRequested)) {
-    turnSystemPrompt += `\n\n${buildModelVisibleThinkingInstruction(effectiveCavemanLevel)}`;
-  }
-
   let completion: "success" | "empty" | "error" | "insufficient" = "success";
   let errorMessage: string | undefined;
   let rawToolPayloadText: string | null = null;
@@ -258,9 +231,19 @@ export async function executeTurn(options: {
     onText: (delta: string) => {
       const nextText = streamedText + delta;
       const actionTextMayStream = simpleFileTask ? hasRequiredSimpleTool() : sawToolActivity;
+      const visibleSourceText = toolFirstDisplay && actionTextMayStream && heldPreToolText
+        ? nextText.slice(heldPreToolText.length)
+        : nextText;
+      const sanitizedNextText = sanitizeVisibleAssistantText(visibleSourceText, policy);
+      const sanitizedVisibleDelta = sanitizedNextText.slice(visibleAssistantText.length);
       if (looksLikeRawToolPayload(nextText)) {
         streamedText = nextText;
         if (toolFirstDisplay && !actionTextMayStream) heldPreToolText += delta;
+        return;
+      }
+      if (!sanitizedVisibleDelta) {
+        streamedText = nextText;
+        streamTokenTracker.schedule();
         return;
       }
       if (!actionTextMayStream && shouldSuppressPlanningNarration(nextText, policy, executionModel.runtime)) {
@@ -273,9 +256,9 @@ export async function executeTurn(options: {
         heldPreToolText += delta;
         return;
       }
-      app.appendToLastMessage(delta);
+      app.appendToLastMessage(sanitizedVisibleDelta);
       streamedText = nextText;
-      visibleAssistantText += delta;
+      visibleAssistantText = sanitizedNextText;
       streamTokenTracker.schedule();
     },
     onReasoning: (delta: string) => {
@@ -288,7 +271,7 @@ export async function executeTurn(options: {
       app.setThinkingRequested(false);
       exposeOpaqueNativeEdits();
       const rawContent = streamedText.trim();
-      let content = (visibleAssistantText.trim() || rawContent);
+      let content = sanitizeVisibleAssistantText(visibleAssistantText.trim() || rawContent, policy);
       const rawPayload = looksLikeRawToolPayload(rawContent) ? rawContent : null;
       if (!rawPayload) content = normalizeEditCompletionText(content, policy);
       const missingSimpleRequiredTool = !hasRequiredSimpleTool();
@@ -360,6 +343,16 @@ export async function executeTurn(options: {
       }
       if (content) {
         session.addMessage("assistant", content);
+        if (getSettings().notifyOnResponse) sendResponseNotification();
+        if (app.hasPendingMessages("steering")) app.flushPendingMessages("steering");
+        completion = "success";
+        return;
+      }
+      if ((sawToolActivity || nextToolCalls.length > 0) && !missingSimpleRequiredTool) {
+        const fallbackDone = "Done.";
+        app.appendToLastMessage(fallbackDone);
+        visibleAssistantText = fallbackDone;
+        session.addMessage("assistant", fallbackDone);
         if (getSettings().notifyOnResponse) sendResponseNotification();
         if (app.hasPendingMessages("steering")) app.flushPendingMessages("steering");
         completion = "success";
