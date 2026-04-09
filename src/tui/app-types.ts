@@ -9,6 +9,8 @@ export type { ModelLaneOption, ModelOption, PickerItem, SettingEntry, UpdateNoti
 export interface ChatMessage {
   role: "user" | "assistant" | "system";
   content: string;
+  thinking?: string;
+  thinkingDuration?: number;
   images?: ResolvedImage[];
 }
 

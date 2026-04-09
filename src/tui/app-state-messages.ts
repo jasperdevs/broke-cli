@@ -103,6 +103,8 @@ export function appendToLastMessage(app: AppState, text: string): void {
   if (app.thinkingStartTime > 0 && app.thinkingBuffer) {
     app.thinkingDuration = Math.floor((Date.now() - app.thinkingStartTime) / 1000);
     app.thinkingStartTime = 0;
+    const last = app.messages[app.messages.length - 1];
+    if (last?.role === "assistant") last.thinkingDuration = app.thinkingDuration;
   }
   const last = app.messages[app.messages.length - 1];
   if (last && last.role === "assistant") last.content += text;
@@ -124,6 +126,13 @@ export function replaceLastAssistantMessage(app: AppState, text: string): void {
 export function appendThinking(app: AppState, delta: string): void {
   if (!app.thinkingBuffer && delta) app.thinkingStartTime = Date.now();
   app.thinkingBuffer += delta;
+  let last = app.messages[app.messages.length - 1];
+  if (!last || last.role !== "assistant") {
+    last = { role: "assistant", content: "" };
+    app.messages.push(last);
+  }
+  last.thinking = `${last.thinking ?? ""}${delta}`;
+  app.invalidateMsgCache();
   app.scrollToBottom();
   app.draw();
 }

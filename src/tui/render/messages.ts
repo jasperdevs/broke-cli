@@ -6,6 +6,8 @@ import { currentTheme } from "../../core/themes.js";
 export interface RenderChatMessage {
   role: "user" | "assistant" | "system";
   content: string;
+  thinking?: string;
+  thinkingDuration?: number;
   images?: Array<{ mimeType: string; data: string }>;
 }
 
@@ -37,6 +39,26 @@ function renderUserImageRows(images: Array<{ mimeType: string; data: string }>, 
   }
   if (current) rows.push(current);
   return rows;
+}
+
+function renderAssistantThinking(options: {
+  thinking: string;
+  duration?: number;
+  maxWidth: number;
+  wordWrap: (text: string, width: number) => string[];
+  colors: { muted: string };
+  reset: string;
+}): string[] {
+  const { thinking, duration, maxWidth, wordWrap, colors, reset } = options;
+  const lines: string[] = [];
+  const label = duration && duration > 0 ? `Thinking · ${duration}s` : "Thinking";
+  lines.push(`${colors.muted}  ${label}${reset}`);
+  for (const rawLine of thinking.split("\n")) {
+    for (const wrappedLine of wordWrap(rawLine, Math.max(8, maxWidth - 4))) {
+      lines.push(`${colors.muted}  ${wrappedLine}${reset}`);
+    }
+  }
+  return lines;
 }
 
 export function renderStaticMessages(options: {
@@ -78,6 +100,22 @@ export function renderStaticMessages(options: {
       }
       lines.push("");
     } else if (msg.role === "assistant") {
+      const hideThinking = getSettings().hideThinkingBlock;
+      if (msg.thinking && !hideThinking) {
+        lines.push(...renderAssistantThinking({
+          thinking: msg.thinking,
+          duration: msg.thinkingDuration,
+          maxWidth,
+          wordWrap,
+          colors: { muted: colors.muted },
+          reset,
+        }));
+        if (msg.content.trim()) lines.push("");
+      }
+      if (!msg.content.trim()) {
+        idx++;
+        continue;
+      }
       const rendered = currentTheme().dark ? renderMarkdown(msg.content) : stripAnsi(renderMarkdown(msg.content));
       const wrapW = maxWidth - 4;
       let firstAssistantLine = true;

@@ -318,7 +318,6 @@ export function renderMessageOverlays(options: {
     thinkingBuffer,
     thinkingRequested,
     streamingActivitySummary,
-    hideThinkingBlock,
     isStreaming,
     todoItems,
     spinnerFrame,
@@ -360,18 +359,6 @@ export function renderMessageOverlays(options: {
   if (activityLines.length > 0) {
     ensureOverlayGap(lines);
     lines.push(...activityLines);
-    lines.push("");
-  }
-
-  if (thinkingBuffer && !hideThinkingBlock) {
-    ensureOverlayGap(lines);
-    const thinkLines = thinkingBuffer.split("\n").slice(-8);
-    lines.push(`  ${colors.dim}${isStreaming ? "Reasoning" : "Reasoned"}${colors.reset}`);
-    for (const line of thinkLines) {
-      for (const wrappedLine of wrapVisibleText(line, Math.max(8, maxWidth - 4))) {
-        lines.push(`  ${colors.dim}${wrappedLine}${colors.reset}`);
-      }
-    }
     lines.push("");
   }
 
