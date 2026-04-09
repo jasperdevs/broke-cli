@@ -356,7 +356,7 @@ export function buildSidebarLines(app: AppState): string[] {
     sessionName: app.sessionName,
     appVersion: app.appVersion,
     sessionDetails: [
-      { label: "Chat model", value: chatModelLabel },
+      { label: "Current model", value: chatModelLabel },
     ],
     roleModels,
     mcpConnections: app.mcpConnections,

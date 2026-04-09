@@ -75,7 +75,7 @@ describe("startup home view", () => {
       app.messages = [{ role: "user", content: "hello" }];
       app.drawImmediate();
       const output = rendered.map((line) => stripAnsi(line)).join("\n");
-      expect(output).toContain("Chat model");
+      expect(output).toContain("Current model");
       expect(output).not.toContain("Mode");
       expect(output).toContain("Role models");
     } finally {

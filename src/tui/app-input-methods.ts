@@ -1,4 +1,5 @@
 import { collectProjectFiles } from "./file-picker.js";
+import { listSkills } from "../core/skills.js";
 import type { Keypress } from "./keypress.js";
 import { matchesBinding, loadKeybindings } from "../core/keybindings.js";
 import { getSettings } from "../core/config.js";
@@ -127,6 +128,63 @@ function scrollTranscriptWithEmptyComposer(app: AppState, key: Keypress): boolea
   app.hideCursorBriefly();
   app.draw();
   return true;
+}
+
+function skillPickerItems(): Array<{ id: string; label: string; detail?: string }> {
+  return listSkills().map((skill) => ({
+    id: skill.name,
+    label: `$${skill.name}`,
+    detail: skill.description || "skill",
+  }));
+}
+
+function openInlineSkillPicker(app: AppState): void {
+  const text = app.input.getText();
+  const cursor = app.input.getCursor();
+  const dollar = text.lastIndexOf("$", Math.max(0, cursor - 1));
+  if (dollar < 0) return;
+  const items = skillPickerItems();
+  if (items.length === 0) return;
+  app.openItemPicker("Skills", items, (id: string) => {
+    const range = app.itemPicker?.inlineSkill ?? { tokenStart: dollar, nameStart: dollar + 1 };
+    const currentCursor = app.input.getCursor();
+    app.input.insertElement(`$${id}`, "skill", {
+      meta: { name: id },
+      replaceStart: range.tokenStart,
+      replaceEnd: currentCursor,
+      leadingSpace: false,
+      trailingSpace: false,
+    });
+    app.itemPicker = null;
+    app.drawNow();
+  }, {
+    closeOnSelect: false,
+    onKey: (pickerKey: Keypress) => {
+      const editable = pickerKey.name === "backspace"
+        || pickerKey.name === "delete"
+        || pickerKey.name === "left"
+        || pickerKey.name === "right"
+        || (!!pickerKey.char && !pickerKey.ctrl && !pickerKey.meta && pickerKey.char.length === 1);
+      if (!editable) return false;
+      const before = app.input.getText();
+      const beforeCursor = app.input.getCursor();
+      app.input.handleKey(pickerKey);
+      const range = app.itemPicker?.inlineSkill;
+      const after = app.input.getText();
+      const afterCursor = app.input.getCursor();
+      if (!range || afterCursor <= range.tokenStart || after[range.tokenStart] !== "$" || /\s/.test(after.slice(range.tokenStart, afterCursor))) {
+        app.itemPicker = null;
+        if (before === after && beforeCursor === afterCursor) app.input.handleKey(pickerKey);
+        return true;
+      }
+      app.itemPicker.cursor = 0;
+      ensureInlineChipElements(app);
+      return true;
+    },
+  });
+  app.itemPicker.inlineSkill = { tokenStart: dollar, nameStart: dollar + 1 };
+  app.input.setCursor(cursor);
+  app.drawNow();
 }
 
 function handleClickOrScroll(app: AppState, key: Keypress): boolean {
@@ -426,5 +484,6 @@ export function handleKey(app: AppState, key: Keypress): void {
       cursor: 0,
     };
   }
+  if (key.char === "$" && !app.itemPicker) openInlineSkillPicker(app);
   app.draw();
 }

@@ -1,8 +1,27 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import stripAnsi from "strip-ansi";
-import { getSettings, updateSetting } from "../src/core/config.js";
+import { mkdtemp, rm, writeFile, mkdir } from "fs/promises";
+import { tmpdir } from "os";
+import { join } from "path";
+import { clearRuntimeSettings, getSettings, setRuntimeSettings, updateSetting } from "../src/core/config.js";
 import { App } from "../src/tui/app.js";
 import type { Keypress } from "../src/tui/keypress.js";
+
+const tempRoots: string[] = [];
+
+async function addTempSkill(name: string): Promise<void> {
+  const root = await mkdtemp(join(tmpdir(), "brokecli-tui-skill-"));
+  tempRoots.push(root);
+  const dir = join(root, name);
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, "SKILL.md"), `---\nname: ${name}\ndescription: ${name} skill\n---\n\nUse ${name}.\n`, "utf8");
+  setRuntimeSettings({ skills: [root], discoverSkills: false });
+}
+
+afterEach(async () => {
+  clearRuntimeSettings();
+  await Promise.all(tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+});
 
 describe("thinking and input regressions", () => {
   it("deletes the previous word with Alt+Backspace", () => {
@@ -54,6 +73,19 @@ describe("thinking and input regressions", () => {
     expect(app.scrollOffset).toBeLessThan(bottomOffset);
     app.handleKey({ name: "down", char: "", ctrl: false, meta: false, shift: false });
     expect(app.scrollOffset).toBe(bottomOffset);
+  });
+
+  it("opens an inline $skill picker and inserts the selected skill as an atomic token", async () => {
+    await addTempSkill("writer");
+    const app = new App() as any;
+    app.handlePaste("use ");
+    app.handleKey({ name: "", char: "$", ctrl: false, meta: false, shift: false });
+    expect(app.itemPicker?.title).toBe("Skills");
+    app.handleKey({ name: "return", char: "", ctrl: false, meta: false, shift: false });
+    expect(app.input.getText()).toBe("use $writer");
+    expect(app.input.getElements().some((element: any) => element.kind === "skill" && element.label === "$writer")).toBe(true);
+    app.handleKey({ name: "backspace", char: "", ctrl: false, meta: false, shift: false });
+    expect(app.input.getText()).toBe("use");
   });
 
   it("does not show a synthetic streaming activity summary", () => {

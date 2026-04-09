@@ -166,7 +166,10 @@ export function getFilteredSettings(app: AppState): SettingEntry[] {
 
 export function getFilteredItems(app: AppState): PickerItem[] {
   if (!app.itemPicker) return [];
-  const q = app.getMenuFilterQuery().toLowerCase();
+  const inlineSkill = app.itemPicker.inlineSkill;
+  const q = (inlineSkill
+    ? app.input.getText().slice(inlineSkill.nameStart, app.input.getCursor())
+    : app.getMenuFilterQuery()).toLowerCase();
   if (!q) return app.itemPicker.items;
   return app.itemPicker.items.filter((i: PickerItem) => i.label.toLowerCase().includes(q) || (i.detail ?? "").toLowerCase().includes(q));
 }

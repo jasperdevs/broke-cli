@@ -24,7 +24,8 @@ export function ensureInlineChipElements(app: AppState): void {
 
   for (const name of skillNames) {
     const label = `$${name}`;
-    const pattern = new RegExp(`(^|\\s)\\${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=\\s|$)`, "g");
+    const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const pattern = new RegExp(`(^|\\s)${escapedLabel}(?=\\s|$)`, "g");
     let match: RegExpExecArray | null;
     while ((match = pattern.exec(text)) !== null) {
       const start = match.index + match[1].length;
