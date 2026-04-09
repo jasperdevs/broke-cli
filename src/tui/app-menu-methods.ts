@@ -415,9 +415,7 @@ export function scrollTranscript(app: AppState, delta: number): boolean {
 
 export function shouldEnableMenuMouse(app: AppState): boolean {
   return !!(
-    app.shouldShowSidebar()
-    || app.sidebarFocused
-    || app.filePicker
+    app.filePicker
     || app.itemPicker
     || app.settingsPicker
     || app.modelPicker

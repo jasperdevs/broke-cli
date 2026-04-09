@@ -221,26 +221,9 @@ function renderFooterRow(
 }
 
 export function buildFooterLines(app: AppState, hasSidebar: boolean, mainW: number): string[] {
-  if (hasSidebar || app.messages.length === 0) return [];
-  const settings = getSettings();
-  if (!settings.showTokens) return [];
-
-  const tokenParts = app.renderTokenSummaryParts();
-  const footerParts: FooterPart[] = [];
-  const costPart = tokenParts.find((part: string) => part.startsWith("$") || part === "local/unpriced");
-  if (costPart && costPart !== "local/unpriced") {
-    footerParts.push({ text: `${TXT()}${costPart}${RESET}`, plain: costPart });
-  }
-  for (const part of tokenParts.filter((part: string) => part !== costPart && part !== "local/unpriced")) {
-    footerParts.push({ text: `${DIM}${part}${RESET}`, plain: part });
-  }
-  if (app.contextLimitTokens > 0) {
-    const ctxText = `${app.contextTokenCount >= 0 ? fmtTokens(app.contextTokenCount) : "?"}/${fmtTokens(app.contextLimitTokens)} ctx`;
-    const pct = app.contextUsed <= 0 ? "0%" : app.contextUsed < 1 ? "<1%" : `${Math.round(app.contextUsed)}%`;
-    footerParts.push({ text: `${TXT()}${ctxText}${RESET}`, plain: ctxText });
-    footerParts.push({ text: `${app.getModeAccent()}${pct}${RESET}`, plain: pct });
-  }
-  return packFooterParts(footerParts, mainW);
+  if (app.messages.length === 0) return [];
+  const infoRows = packFooterParts(buildInfoBarParts(app, hasSidebar), mainW);
+  return infoRows.length > 0 ? infoRows : [];
 }
 
 export function buildLegacyFooterLines(app: AppState, hasSidebar: boolean, mainW: number): string[] {

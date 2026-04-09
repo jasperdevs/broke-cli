@@ -145,6 +145,13 @@ export function shouldSuppressPlanningNarration(
   if (policy.archetype !== "edit" && policy.archetype !== "bugfix") return false;
   const normalized = nextText.trimStart().toLowerCase();
   return normalized.startsWith("using ")
+    || normalized.startsWith("the user asked")
+    || normalized.startsWith("the task is")
+    || normalized.startsWith("i'm going to")
+    || normalized.startsWith("i am going to")
+    || normalized.startsWith("i will use")
+    || normalized.startsWith("i'll use")
+    || normalized.startsWith("i can ")
     || normalized.startsWith("first step")
     || normalized.startsWith("need ")
     || normalized.startsWith("i'm checking")
@@ -161,6 +168,28 @@ export function shouldSuppressPlanningNarration(
     || normalized.startsWith("before editing")
     || normalized.startsWith("before recreating")
     || normalized.startsWith("i need to");
+}
+
+export function normalizeEditCompletionText(
+  text: string,
+  policy: { archetype: string },
+): string {
+  if (policy.archetype !== "edit" && policy.archetype !== "bugfix") return text.trim();
+  let normalized = text.trim();
+  normalized = normalized
+    .replace(/^the user asked me to\s+/i, "")
+    .replace(/^i (?:will|would|can|used|use)\s+/i, "")
+    .replace(/^i(?:'ve| have)\s+(?:successfully\s+)?/i, "")
+    .replace(/^successfully\s+/i, "")
+    .replace(/^i\s+(?:have\s+)?successfully\s+/i, "")
+    .replace(/^i(?:'m| am)\s+/i, "");
+  normalized = normalized.replace(/\s+/g, " ").trim();
+  if (/^created\b/i.test(normalized)) return normalized.replace(/^created\b/i, "Created");
+  if (/^updated\b/i.test(normalized)) return normalized.replace(/^updated\b/i, "Updated");
+  if (/^fixed\b/i.test(normalized)) return normalized.replace(/^fixed\b/i, "Fixed");
+  if (/^wrote\b/i.test(normalized)) return normalized.replace(/^wrote\b/i, "Wrote");
+  if (/^implemented\b/i.test(normalized)) return normalized.replace(/^implemented\b/i, "Implemented");
+  return normalized ? normalized[0]!.toUpperCase() + normalized.slice(1) : normalized;
 }
 
 export function shouldForceMinimalResponse(options: {

@@ -35,7 +35,7 @@ describe("mouse reporting mode", () => {
       const app = new App() as any;
       app.messages = [{ role: "user", content: "hello" }];
       app.screen = { height: 18, width: 100, hasSidebar: true, mainWidth: 73, sidebarWidth: 24, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
-      expect(app.shouldEnableMenuMouse()).toBe(true);
+      expect(app.shouldEnableMenuMouse()).toBe(false);
     } finally {
       updateSetting("hideSidebar", originalHideSidebar);
     }
@@ -201,57 +201,24 @@ describe("sidebar token summary", () => {
     expect(app.renderTokenSummaryParts()).toEqual(["$0.0016", "210 total", "150 in", "60 out"]);
   });
 
-  it("shows only lifetime totals plus current context usage in the sidebar footer", () => {
-    const originalShowTokens = getSettings().showTokens;
-    updateSetting("showTokens", true);
+  it("keeps the sidebar footer empty so state only appears once in the bottom bar", () => {
     const app = new App() as any;
     app.setContextUsage(132, 344_000);
     app.updateUsage(0.0016, 150, 60);
-    const footer = app.renderSidebarFooter().map((line: string) => stripAnsi(line)).join("\n");
-    expect(footer).not.toContain("Session");
-    expect(footer).not.toContain("Next request");
-    expect(footer).toContain("210 total");
-    expect(footer).toContain("$0.0016");
-    expect(footer).toContain("150 in");
-    expect(footer).toContain("60 out");
-    expect(footer).toContain("132/344k ctx");
-    expect(footer).toContain("<1%");
-    expect(footer).toContain("▰");
-    updateSetting("showTokens", originalShowTokens);
+    expect(app.renderSidebarFooter()).toEqual([]);
   });
 
-  it("keeps the token region to totals plus explicitly labeled context", () => {
-    const originalShowTokens = getSettings().showTokens;
-    updateSetting("showTokens", true);
+  it("shows a bottom bar in compact view without token clutter", () => {
     const app = new App() as any;
-    app.screen = { sidebarWidth: 12, width: 80, height: 24, hasSidebar: true, mainWidth: 61, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
-    updateSetting("cavemanLevel", "ultra");
-    app.setContextUsage(132_000, 344_000);
-    app.updateUsage(0.0016, 150, 60);
-    const footer = app.renderSidebarFooter().map((line: string) => stripAnsi(line));
-    expect(footer.some((line: string) => line.trim() === "210 total")).toBe(true);
-    expect(footer.some((line: string) => line.trim() === "$0.0016")).toBe(true);
-    expect(footer.some((line: string) => line.trim() === "150 in")).toBe(true);
-    expect(footer.some((line: string) => line.trim() === "60 out")).toBe(true);
-    expect(footer.some((line: string) => line.trim() === "132k/344k ctx")).toBe(true);
-    expect(footer.some((line: string) => line.includes("38%"))).toBe(true);
-    expect(footer.some((line: string) => line.includes("▰") || line.includes("▱"))).toBe(true);
-    expect(footer.filter((line: string) => line.trim() === "").length).toBeGreaterThan(1);
-    updateSetting("cavemanLevel", "off");
-    updateSetting("showTokens", originalShowTokens);
-  });
-
-  it("shows less-than-one-percent prompt usage instead of rounding down to zero", () => {
-    const originalShowTokens = getSettings().showTokens;
-    updateSetting("showTokens", true);
-    const app = new App() as any;
-    app.setContextUsage(822, 400_000);
-    app.updateUsage(0.0016, 150, 60);
-    const footer = app.renderSidebarFooter().map((line: string) => stripAnsi(line)).join("\n");
-    expect(footer).toContain("822/400k ctx");
-    expect(footer).toContain("<1%");
-    expect(footer).toContain("▰");
-    updateSetting("showTokens", originalShowTokens);
+    app.messages = [{ role: "user", content: "hello" }];
+    app.setModel("OpenAI", "gpt-5.4-mini", { providerId: "openai", runtime: "sdk" });
+    let rendered: string[] = [];
+    app.screen = { height: 16, width: 80, hasSidebar: false, mainWidth: 80, sidebarWidth: 0, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
+    app.drawImmediate();
+    const output = rendered.map((line) => stripAnsi(line)).join("\n");
+    expect(output).toContain("build");
+    expect(output).not.toContain("210 total");
+    expect(output).not.toContain("$0.0016");
   });
 
   it("keeps mode, thinking, and caveman badges in the bottom bar when the main footer owns status", () => {

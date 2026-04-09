@@ -205,6 +205,7 @@ describe("stream tool steps", () => {
     expect(app.appendToLastMessage).not.toHaveBeenCalled();
   });
 
+
   it("streams ordinary assistant text immediately before tool activity starts", async () => {
     const app = {
       addMessage: vi.fn(),
@@ -242,7 +243,7 @@ describe("stream tool steps", () => {
 
     streamTextMock.mockReturnValueOnce({
       fullStream: (async function* () {
-        yield { type: "text-delta", text: "I can update README.md after a quick read." };
+        yield { type: "text-delta", text: "README.md needs a title fix." };
         yield { type: "tool-input-start", toolName: "readFile" };
         yield { type: "tool-call", toolName: "readFile", input: { path: "README.md" } };
       })(),
@@ -265,7 +266,7 @@ describe("stream tool steps", () => {
       lastActivityTime: Date.now(),
     });
 
-    expect(app.appendToLastMessage).toHaveBeenCalledWith("I can update README.md after a quick read.");
+    expect(app.appendToLastMessage).toHaveBeenCalledWith("README.md needs a title fix.");
     expect(app.addToolCall).toHaveBeenCalledWith("readFile", "...");
     expect(app.updateToolCallArgs).toHaveBeenCalledWith("readFile", "README.md", { path: "README.md" });
   });
@@ -338,7 +339,7 @@ describe("stream tool steps", () => {
 
     expect(streamTextMock).toHaveBeenCalledTimes(2);
     expect(app.setStatus).toHaveBeenCalledWith("small model empty - retrying main");
-    expect(session.addMessage).toHaveBeenCalledWith("assistant", "real answer");
+    expect(session.addMessage).toHaveBeenCalledWith("assistant", "Real answer");
     expect(app.addMessage).not.toHaveBeenCalledWith("system", "No response from model. Try again or switch models with /model.");
   });
 

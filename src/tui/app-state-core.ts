@@ -192,27 +192,8 @@ function shouldHideSidebarFooter(app: CoreAppState): boolean {
 }
 
 export function renderSidebarFooter(app: CoreAppState): string[] {
-  const settings = getSettings();
-  if (shouldHideSidebarFooter(app)) return [];
-  const width = app.screen.sidebarWidth;
-  return buildSidebarFooter({
-    width,
-    showTokens: settings.showTokens,
-    statusParts: [],
-    tokenParts: app.renderTokenSummaryParts(),
-    contextUsed: app.contextLimitTokens > 0 && app.contextTokenCount >= 0 ? app.contextUsed : undefined,
-    contextTokens: app.contextLimitTokens > 0
-      ? `${app.contextTokenCount >= 0 ? fmtTokens(app.contextTokenCount) : "?"}/${fmtTokens(app.contextLimitTokens)}`
-      : undefined,
-    colors: {
-      accent: app.getModeAccent(),
-      muted: MUTED(),
-      dim: DIM,
-      text: TXT(),
-      warning: currentTheme().warning,
-      error: currentTheme().error,
-    },
-  });
+  void app;
+  return [];
 }
 
 export function clearInterruptPrompt(app: CoreAppState): void {

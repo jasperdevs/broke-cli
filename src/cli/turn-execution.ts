@@ -17,6 +17,7 @@ import {
   formatTurnErrorMessage,
   getMinimalOutputPolicy,
   looksLikeRawToolPayload,
+  normalizeEditCompletionText,
   resolveExecutionTarget,
   shouldEnforceToolFirstTurn,
   shouldRequestThinkTags,
@@ -303,6 +304,8 @@ export async function executeTurn(options: {
       streamTokenTracker.flush();
       app.setThinkingRequested(false);
       let content = streamedText.trim();
+      const rawPayload = looksLikeRawToolPayload(content) ? content : null;
+      if (!rawPayload) content = normalizeEditCompletionText(content, policy);
       if (effectiveCavemanLevel !== "off" && content) {
         const compressed = rewriteAssistantForCaveman(content, effectiveCavemanLevel);
         if (compressed && compressed !== content) {
@@ -342,9 +345,9 @@ export async function executeTurn(options: {
         completion = "insufficient";
         return;
       }
-      if (looksLikeRawToolPayload(content)) {
+      if (rawPayload) {
         app.rollbackLastAssistantMessage();
-        rawToolPayloadText = content;
+        rawToolPayloadText = rawPayload;
         completion = "empty";
         return;
       }
