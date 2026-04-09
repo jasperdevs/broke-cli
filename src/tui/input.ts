@@ -52,6 +52,7 @@ export class InputWidget {
   }
 
   setText(text: string, placeCursorAtEnd = true, elements?: InputElement[]): void {
+    text = this.normalizeInsertedText(text);
     this.text = text;
     this.elements = (elements ?? []).map((element) => ({ ...element }))
       .filter((element) => element.start >= 0 && element.end <= text.length && element.start < element.end)

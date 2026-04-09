@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { App } from "../src/tui/app.js";
+import { createQuestionView, handleQuestionViewKey } from "../src/tui/question-view.js";
 
 describe("input and scroll regressions", () => {
   it("uses Shift+Enter for newline and does not treat Ctrl+J as a multiline shortcut", () => {
@@ -79,5 +80,37 @@ describe("input and scroll regressions", () => {
     app.appendToLastMessage("\nfinal line");
     app.drawImmediate();
     expect(rendered.join("\n")).toContain("final line");
+  });
+
+  it("keeps the same newline rules inside question/modal text editors", () => {
+    const app = new App() as any;
+    app.questionView = createQuestionView({
+      title: "Question",
+      submitLabel: "Submit",
+      questions: [
+        {
+          id: "notes",
+          label: "Notes",
+          prompt: "Add notes",
+          kind: "text",
+          options: [],
+          required: true,
+        },
+      ],
+    }, () => {});
+
+    handleQuestionViewKey(app, { name: "a", char: "a", ctrl: false, meta: false, shift: false });
+    handleQuestionViewKey(app, { name: "return", char: "", ctrl: false, meta: false, shift: true });
+    handleQuestionViewKey(app, { name: "b", char: "b", ctrl: false, meta: false, shift: false });
+    expect(app.questionView.editor.getText()).toBe("a\nb");
+
+    handleQuestionViewKey(app, { name: "j", char: "\n", ctrl: true, meta: false, shift: false });
+    expect(app.questionView.editor.getText()).toBe("a\nb");
+  });
+
+  it("normalizes setText input so every editor path shares one newline model", () => {
+    const app = new App() as any;
+    app.input.setText("left\r\nright\rcenter");
+    expect(app.input.getText()).toBe("left\nright\ncenter");
   });
 });

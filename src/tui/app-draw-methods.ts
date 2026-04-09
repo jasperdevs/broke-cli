@@ -134,7 +134,7 @@ function buildFrameLines(app: AppState, opts: { height: number; mainW: number; h
     mainTopLines.push(...fixedTopLines, ...homeLines);
   } else {
     const chatH = Math.max(1, mainTopHeight - fixedTopLines.length);
-    const messageLines = app.renderMessages(mainW);
+    const messageLines = app.renderMessages(app.getTranscriptRenderWidth());
     const maxScroll = Math.max(0, messageLines.length - chatH);
     if (app.transcriptAutoFollow) app.scrollOffset = maxScroll;
     if (app.scrollOffset > maxScroll) app.scrollOffset = maxScroll;

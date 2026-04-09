@@ -72,8 +72,7 @@ function getVisibleMenuLineCount(app: AppState, entries: Array<{ lines: string[]
 }
 export function scrollToBottom(app: AppState): void {
   const chatHeight = app.getChatHeight();
-  const messageWidth = app.shouldShowSidebar() ? app.screen.mainWidth : app.screen.width;
-  const messageLines = app.renderMessages(messageWidth);
+  const messageLines = app.renderMessages(app.getTranscriptRenderWidth());
   app.scrollOffset = Math.max(0, messageLines.length - chatHeight);
   app.transcriptAutoFollow = true;
 }
@@ -413,6 +412,10 @@ export function hideCursorBriefly(app: AppState, durationMs = 140): void {
   void durationMs;
 }
 
+export function getTranscriptRenderWidth(app: AppState): number {
+  return app.shouldShowSidebar() ? app.screen.mainWidth : app.screen.width;
+}
+
 export function getSidebarBorder(app: AppState): string {
   void app;
   return getSidebarBorderLine();
@@ -420,8 +423,7 @@ export function getSidebarBorder(app: AppState): string {
 
 export function scrollTranscript(app: AppState, delta: number): boolean {
   const chatHeight = app.getChatHeight();
-  const messageWidth = app.shouldShowSidebar() ? app.screen.mainWidth : app.screen.width;
-  const messageLines = app.renderMessages(messageWidth);
+  const messageLines = app.renderMessages(app.getTranscriptRenderWidth());
   const maxScroll = Math.max(0, messageLines.length - chatHeight);
   const next = Math.max(0, Math.min(maxScroll, app.scrollOffset + delta));
   if (next === app.scrollOffset) return false;
