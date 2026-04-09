@@ -2,6 +2,8 @@ import { execFileSync } from "child_process";
 import { existsSync, statSync, readdirSync } from "fs";
 import { join } from "path";
 import type { Session } from "../core/session.js";
+import type { TurnArchetype } from "../core/turn-policy.js";
+import type { ToolName } from "../tools/registry.js";
 
 export interface NativeWorkspaceBaseline {
   cwd: string;
@@ -114,6 +116,14 @@ export function recordNativeWorkspaceDelta(
     touched.push(normalized);
   }
   return touched;
+}
+
+export function shouldExposeOpaqueNativeWorkspaceEdits(policy: {
+  archetype: TurnArchetype;
+  allowedTools: ToolName[];
+}): boolean {
+  if (policy.archetype !== "edit" && policy.archetype !== "bugfix") return false;
+  return policy.allowedTools.includes("writeFile") || policy.allowedTools.includes("editFile");
 }
 
 type FollowupContextMode = "summary" | "snippets";

@@ -29,7 +29,7 @@ import type { SpecialistModelRole } from "./model-routing.js";
 import { createLiveToolCallbacks } from "./turn-tool-callbacks.js";
 import { createStreamTokenTracker } from "./stream-token-tracker.js";
 import { executeRawToolPayloadFallback } from "./raw-tool-fallback.js";
-import { captureNativeWorkspaceBaseline, recordNativeWorkspaceDelta } from "./native-workspace-observer.js";
+import { captureNativeWorkspaceBaseline, recordNativeWorkspaceDelta, shouldExposeOpaqueNativeWorkspaceEdits } from "./native-workspace-observer.js";
 import { resolveTurnExecution } from "./turn-execution-setup.js";
 import { readFileDirect } from "../tools/file-ops.js";
 import { observeToolResult } from "./turn-tool-observer.js";
@@ -195,7 +195,7 @@ export async function executeTurn(options: {
   const effectiveCavemanLevel = resolveCavemanLevel(settings.cavemanLevel ?? "auto", text);
   const minimalOutputPolicy = getMinimalOutputPolicy({ text, policy, modelRuntime: executionModel.runtime });
   const toolFirstDisplay = shouldUseToolFirstDisplay({ text, policy });
-  const nativeWorkspaceBaseline = executionModel.runtime === "native-cli" ? captureNativeWorkspaceBaseline(process.cwd()) : null;
+  const nativeWorkspaceBaseline = executionModel.runtime === "native-cli" && shouldExposeOpaqueNativeWorkspaceEdits(policy) ? captureNativeWorkspaceBaseline(process.cwd()) : null;
 
   const exposeOpaqueNativeEdits = (): void => {
     if (!nativeWorkspaceBaseline || sawToolActivity) return;
