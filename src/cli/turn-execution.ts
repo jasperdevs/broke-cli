@@ -2,10 +2,8 @@ import { startNativeStream } from "../ai/native-stream.js";
 import { startStream } from "../ai/stream.js";
 import { estimateTextTokens } from "../ai/tokens.js";
 import type { ModelHandle } from "../ai/providers.js";
-import { observeToolResult } from "./turn-tool-observer.js";
 import { rewriteAssistantForCaveman } from "../core/caveman.js";
-import { buildSystemPrompt, resolveCavemanLevel } from "../core/context.js";
-import { getTotalContextTokens } from "../core/compact.js";
+import { resolveCavemanLevel } from "../core/context.js";
 import { getSettings, type Mode } from "../core/config.js";
 import type { TurnPolicy } from "../core/turn-policy.js";
 import type { ToolName } from "../tools/registry.js";
@@ -22,15 +20,16 @@ import {
   shouldEnforceToolFirstTurn,
   shouldRequestThinkTags,
   shouldSuppressPlanningNarration,
+  shouldUseToolFirstDisplay,
 } from "./turn-runner-support.js";
 import type { Session } from "../core/session.js";
 import { sendResponseNotification } from "./notify.js";
 import type { SpecialistModelRole } from "./model-routing.js";
 import { createLiveToolCallbacks } from "./turn-tool-callbacks.js";
-import { applyTurnFrame } from "./turn-frame.js";
-import { injectTransientUserContext } from "./turn-runner-stages.js";
 import { createStreamTokenTracker } from "./stream-token-tracker.js";
 import { executeRawToolPayloadFallback } from "./raw-tool-fallback.js";
+import { captureNativeWorkspaceBaseline, recordNativeWorkspaceDelta } from "./native-workspace-observer.js";
+import { resolveTurnExecution } from "./turn-execution-setup.js";
 type PendingDelivery = "steering" | "followup";
 
 interface TurnExecutionApp {
@@ -55,92 +54,6 @@ interface TurnExecutionApp {
 }
 
 interface ExtensionHooks { emit(event: string, payload: Record<string, unknown>): void; }
-function resolveTurnExecution(options: {
-  text: string;
-  policy: TurnPolicy;
-  currentMode: Mode;
-  session: Session;
-  lastToolCalls: string[];
-  forceRoute?: "main" | "small";
-  activeModel: ModelHandle;
-  currentModelId: string;
-  smallModel: ModelHandle | null;
-  smallModelId: string;
-  effectiveImages?: Array<{ mimeType: string; data: string }>;
-  contextLimit: number;
-  activeSystemPrompt: string;
-  optimizeMessages: (messages: Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }>) => Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }>;
-  transientUserContext?: string;
-  app: Pick<TurnExecutionApp, "setContextUsage">;
-  resolveSpecialistModel?: (role: SpecialistModelRole) => { model: ModelHandle; modelId: string } | null;
-}): {
-  turnSystemPrompt: string;
-  optimizedMessages: Array<{ role: "user" | "assistant"; content: string; images?: Array<{ mimeType: string; data: string }> }>;
-  resolvedRoute: "main" | "small";
-  executionModel: ModelHandle;
-  executionModelId: string;
-  thinkingRequested: boolean;
-} {
-  const {
-    text,
-    policy,
-    currentMode,
-    session,
-    lastToolCalls,
-    forceRoute,
-    activeModel,
-    currentModelId,
-    smallModel,
-    smallModelId,
-    effectiveImages,
-    contextLimit,
-    activeSystemPrompt,
-    optimizeMessages,
-    transientUserContext,
-    app,
-    resolveSpecialistModel,
-  } = options;
-  let turnSystemPrompt = activeSystemPrompt;
-  const { resolvedRoute, executionModel, executionModelId, thinkingRequested } = resolveExecutionTarget({
-    text,
-    policy,
-    currentMode,
-    sessionMessageCount: session.getChatMessages().length,
-    lastToolCalls,
-    forceRoute,
-    activeModel,
-    currentModelId,
-    smallModel,
-    smallModelId,
-    effectiveImages,
-    resolveSpecialistModel,
-  });
-  if (executionModel.provider.id !== activeModel.provider.id || executionModelId !== currentModelId) {
-    turnSystemPrompt = buildSystemPrompt(
-      process.cwd(),
-      executionModel.provider.id,
-      currentMode,
-      resolveCavemanLevel(getSettings().cavemanLevel ?? "auto", text),
-      policy.promptProfile,
-    );
-  }
-  const optimizedMessages = applyTurnFrame(
-    injectTransientUserContext(optimizeMessages(session.getChatMessages()), transientUserContext),
-    text,
-    `${policy.archetype}: ${policy.scaffold}`,
-    policy.allowedTools,
-  );
-  const ctxTokens = getTotalContextTokens(optimizedMessages, turnSystemPrompt, executionModelId);
-  app.setContextUsage(ctxTokens, contextLimit);
-  return {
-    turnSystemPrompt,
-    optimizedMessages,
-    resolvedRoute,
-    executionModel,
-    executionModelId,
-    thinkingRequested,
-  };
-}
 export async function executeTurn(options: {
   app: TurnExecutionApp;
   session: Session;
@@ -200,6 +113,8 @@ export async function executeTurn(options: {
     resolveSpecialistModel,
   } = options;
   let streamedText = "";
+  let visibleAssistantText = "";
+  let heldPreToolText = "";
   let streamedReasoning = "";
   let sawToolActivity = false;
   session.getContextOptimizer().nextTurn();
@@ -238,6 +153,22 @@ export async function executeTurn(options: {
   const exposedToolCount = canUseSdkTools(executionModel) ? policy.allowedTools.length : 0;
   const effectiveCavemanLevel = resolveCavemanLevel(settings.cavemanLevel ?? "auto", text);
   const minimalOutputPolicy = getMinimalOutputPolicy({ text, policy, modelRuntime: executionModel.runtime });
+  const toolFirstDisplay = shouldUseToolFirstDisplay({ text, policy });
+  const nativeWorkspaceBaseline = executionModel.runtime === "native-cli"
+    ? captureNativeWorkspaceBaseline(process.cwd())
+    : null;
+
+  const exposeOpaqueNativeEdits = (): void => {
+    if (!nativeWorkspaceBaseline || sawToolActivity) return;
+    const touched = recordNativeWorkspaceDelta(session, nativeWorkspaceBaseline);
+    for (const path of touched) {
+      const callId = `native-observed-edit:${path}`;
+      nextToolCalls.push("editFile");
+      app.addToolCall("editFile", path, { path }, callId);
+      app.addToolResult("editFile", "ok", false, "changed on disk", callId);
+    }
+    if (touched.length > 0) sawToolActivity = true;
+  };
 
   if (minimalOutputPolicy) {
     turnSystemPrompt += `\n\n${buildMinimalOutputInstruction({
@@ -287,12 +218,24 @@ export async function executeTurn(options: {
   const streamCallbacks = {
     onText: (delta: string) => {
       const nextText = streamedText + delta;
-      if (looksLikeRawToolPayload(nextText) || shouldSuppressPlanningNarration(nextText, policy, executionModel.runtime)) {
+      if (looksLikeRawToolPayload(nextText)) {
         streamedText = nextText;
+        if (toolFirstDisplay && !sawToolActivity) heldPreToolText += delta;
+        return;
+      }
+      if (!sawToolActivity && shouldSuppressPlanningNarration(nextText, policy, executionModel.runtime)) {
+        streamedText = nextText;
+        if (toolFirstDisplay) heldPreToolText += delta;
+        return;
+      }
+      if (toolFirstDisplay && !sawToolActivity) {
+        streamedText = nextText;
+        heldPreToolText += delta;
         return;
       }
       app.appendToLastMessage(delta);
       streamedText = nextText;
+      visibleAssistantText += delta;
       streamTokenTracker.schedule();
     },
     onReasoning: (delta: string) => {
@@ -303,9 +246,24 @@ export async function executeTurn(options: {
     onFinish: (usage: { inputTokens: number; outputTokens: number; cost: number }) => {
       streamTokenTracker.flush();
       app.setThinkingRequested(false);
-      let content = streamedText.trim();
-      const rawPayload = looksLikeRawToolPayload(content) ? content : null;
+      exposeOpaqueNativeEdits();
+      const rawContent = streamedText.trim();
+      let content = (visibleAssistantText.trim() || rawContent);
+      const rawPayload = looksLikeRawToolPayload(rawContent) ? rawContent : null;
       if (!rawPayload) content = normalizeEditCompletionText(content, policy);
+      if (
+        toolFirstDisplay
+        && !visibleAssistantText.trim()
+        && (sawToolActivity || nextToolCalls.length > 0)
+      ) {
+        const heldRaw = heldPreToolText.trim();
+        const held = normalizeEditCompletionText(heldRaw, policy);
+        content = held && !shouldSuppressPlanningNarration(heldRaw, policy, executionModel.runtime)
+          ? held
+          : "Done.";
+        app.appendToLastMessage(content);
+        visibleAssistantText = content;
+      }
       if (effectiveCavemanLevel !== "off" && content) {
         const compressed = rewriteAssistantForCaveman(content, effectiveCavemanLevel);
         if (compressed && compressed !== content) {
@@ -341,12 +299,12 @@ export async function executeTurn(options: {
         policy,
         model: executionModel,
       })) {
-        app.rollbackLastAssistantMessage();
+        if (visibleAssistantText.trim()) app.rollbackLastAssistantMessage();
         completion = "insufficient";
         return;
       }
       if (rawPayload) {
-        app.rollbackLastAssistantMessage();
+        if (visibleAssistantText.trim()) app.rollbackLastAssistantMessage();
         rawToolPayloadText = rawPayload;
         completion = "empty";
         return;

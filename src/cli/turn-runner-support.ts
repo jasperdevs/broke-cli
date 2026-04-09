@@ -170,6 +170,24 @@ export function shouldSuppressPlanningNarration(
     || normalized.startsWith("i need to");
 }
 
+export function shouldUseToolFirstDisplay(options: {
+  text: string;
+  policy: { archetype: string; allowedTools: readonly string[] };
+}): boolean {
+  const { text, policy } = options;
+  if (policy.archetype !== "edit" && policy.archetype !== "bugfix" && policy.archetype !== "explore") {
+    return false;
+  }
+  const exposesFileAction = policy.allowedTools.some((tool) =>
+    tool === "readFile"
+    || tool === "writeFile"
+    || tool === "editFile"
+    || tool === "bash"
+  );
+  if (!exposesFileAction) return false;
+  return /\b(read|show|open|cat|make|create|add|write|edit|update|change|fix|patch|modify)\b/i.test(text);
+}
+
 export function normalizeEditCompletionText(
   text: string,
   policy: { archetype: string },

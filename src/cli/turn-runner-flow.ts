@@ -17,11 +17,6 @@ import {
   shouldRetryWithToolRequirement,
   type PreparedTurnContext,
 } from "./turn-runner-stages.js";
-import {
-  captureNativeWorkspaceBaseline,
-  recordNativeWorkspaceDelta,
-  type NativeWorkspaceBaseline,
-} from "./native-workspace-observer.js";
 import { runValidationSuite } from "./auto-validate.js";
 
 type PendingDelivery = "steering" | "followup";
@@ -62,7 +57,7 @@ function deriveStreamingActivitySummary(text: string, archetype: string): string
   switch (archetype) {
     case "edit":
     case "bugfix":
-      return target ? `planning changes to ${target}` : "planning the code changes";
+      return target ? `preparing action for ${target}` : "preparing the first action";
     case "explore":
       return target ? `checking ${target}` : "scanning the repo";
     case "shell":
@@ -194,14 +189,9 @@ async function runObservedTurn(
   session: Session,
   turnOptions: Parameters<typeof executeTurn>[0],
 ) {
-  const baseline: NativeWorkspaceBaseline | null = activeModel.runtime === "native-cli"
-    ? captureNativeWorkspaceBaseline(process.cwd())
-    : null;
-  const outcome = await executeTurn(turnOptions);
-  if (activeModel.runtime === "native-cli" && outcome.completion === "success") {
-    recordNativeWorkspaceDelta(session, baseline);
-  }
-  return outcome;
+  void activeModel;
+  void session;
+  return executeTurn(turnOptions);
 }
 
 export async function executeTurnWithRetries(options: {

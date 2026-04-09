@@ -55,4 +55,45 @@ describe("tool rendering detail", () => {
     expect(output).toContain("5 lines · 32 bytes written");
     expect(output).toContain("2 -> 3 lines replaced");
   });
+
+  it("keeps simple create, edit, and read flows centered on visible action blocks", () => {
+    const renderCreate = () => {
+      const app = makeApp();
+      app.addMessage("user", "make an index.html file");
+      app.addToolCall("writeFile", "...", undefined, "call_create");
+      app.updateToolCallArgs("writeFile", "index.html", { path: "index.html", content: "<h1>Hi</h1>" }, "call_create");
+      app.addToolResult("writeFile", "ok", false, "1 line · 11 bytes written", "call_create");
+      app.addMessage("assistant", "Done.");
+      return app.renderMessages(96).map((line: string) => stripAnsi(line)).join("\n");
+    };
+
+    const renderEdit = () => {
+      const app = makeApp();
+      app.addMessage("user", "edit this file");
+      app.addToolCall("editFile", "index.html", { path: "index.html", old_string: "Hi", new_string: "Hello" }, "call_edit");
+      app.addToolResult("editFile", "ok", false, "1 -> 1 lines replaced", "call_edit");
+      app.addMessage("assistant", "Done.");
+      return app.renderMessages(96).map((line: string) => stripAnsi(line)).join("\n");
+    };
+
+    const renderRead = () => {
+      const app = makeApp();
+      app.addMessage("user", "read this file");
+      app.addToolCall("readFile", "README.md", { path: "README.md", mode: "minimal" }, "call_read");
+      app.addToolResult("readFile", "ok", false, "read 4 lines from README.md", "call_read");
+      app.addMessage("assistant", "Done.");
+      return app.renderMessages(96).map((line: string) => stripAnsi(line)).join("\n");
+    };
+
+    const outputs = [renderCreate(), renderEdit(), renderRead()];
+    expect(outputs[0]).toContain("write index.html");
+    expect(outputs[1]).toContain("edit index.html");
+    expect(outputs[2]).toContain("read README.md");
+    for (const output of outputs) {
+      expect(output).toContain("Done.");
+      expect(output).not.toContain("I'll");
+      expect(output).not.toContain("I will");
+      expect(output).not.toContain("planning");
+    }
+  });
 });

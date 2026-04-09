@@ -417,7 +417,8 @@ describe("stream tool steps", () => {
     });
 
     expect(streamTextMock).toHaveBeenCalledTimes(2);
-    expect(app.rollbackLastAssistantMessage).toHaveBeenCalled();
+    expect(app.rollbackLastAssistantMessage).not.toHaveBeenCalled();
+    expect(app.appendToLastMessage).not.toHaveBeenCalledWith("Added index.html with a modern, dark-themed landing page. Commit/push now.");
     expect(app.setStatus).toHaveBeenCalledWith("model answered without acting - retrying with tool requirement");
     expect(app.addToolCall).toHaveBeenCalledWith("writeFile", "...");
     expect(session.addMessage).toHaveBeenCalledWith("assistant", "Created index.html.");
