@@ -4,6 +4,7 @@ import { startNativeStream } from "../ai/native-stream.js";
 import { startStream } from "../ai/stream.js";
 import { buildSystemPrompt, resolveCavemanLevel } from "../core/context.js";
 import { Session } from "../core/session.js";
+import { expandSkillInvocation } from "../core/skills.js";
 import { getTools, type ToolName } from "../tools/registry.js";
 import { getSettings, type Mode } from "../core/config.js";
 import { resolveTurnPolicy } from "../core/turn-policy.js";
@@ -72,15 +73,17 @@ export async function runOneShotPrompt(options: {
   streamCallbacks?: OneShotStreamCallbacks;
 }): Promise<OneShotResult> {
   const { prompt, mode, providers, providerRegistry, opts, streamCallbacks } = options;
+  const skillExpansion = expandSkillInvocation(prompt);
+  const modelPrompt = skillExpansion.expandedText;
   const session = new Session();
-  session.addMessage("user", prompt);
+  session.addMessage("user", modelPrompt);
   const deterministicMeta = { providerId: "deterministic", modelId: "fastpath" };
   const applyDeterministicSessionMeta = (): { providerId: string; modelId: string } => {
     session.setProviderModel("deterministic", "fastpath");
     return deterministicMeta;
   };
 
-  const fastPath = tryCsvToParquetFastPath(prompt) ?? tryLostGitRecoveryFastPath(prompt);
+  const fastPath = skillExpansion.skillName ? null : (tryCsvToParquetFastPath(prompt) ?? tryLostGitRecoveryFastPath(prompt));
   if (fastPath) {
     const { providerId, modelId } = applyDeterministicSessionMeta();
     session.addMessage("assistant", fastPath.content);
@@ -99,7 +102,7 @@ export async function runOneShotPrompt(options: {
     return result;
   }
 
-  const repoFastPath = await tryRepoTaskFastPath({ root: process.cwd(), prompt, session });
+  const repoFastPath = skillExpansion.skillName ? null : await tryRepoTaskFastPath({ root: process.cwd(), prompt, session });
   if (repoFastPath) {
     const { providerId, modelId } = applyDeterministicSessionMeta();
     session.addMessage("assistant", repoFastPath.content);
@@ -127,7 +130,7 @@ export async function runOneShotPrompt(options: {
   session.setProviderModel(activeModel.provider.name, modelId);
 
   const policy = await resolveTurnPolicy(
-    prompt,
+    modelPrompt,
     [],
     undefined,
     activeModel.runtime === "sdk" && activeModel.model
@@ -146,7 +149,7 @@ export async function runOneShotPrompt(options: {
     process.cwd(),
     providerId,
     mode,
-    resolveCavemanLevel(getSettings().cavemanLevel ?? "auto", prompt),
+    resolveCavemanLevel(getSettings().cavemanLevel ?? "auto", modelPrompt),
     policy.promptProfile,
   );
   let systemPrompt = opts.systemPrompt
@@ -154,7 +157,7 @@ export async function runOneShotPrompt(options: {
     : opts.appendSystemPrompt
       ? `${baseSystemPrompt}\n\n${opts.appendSystemPrompt}`
       : baseSystemPrompt;
-  const minimalOutputPolicy = getMinimalOutputPolicy({ text: prompt, policy });
+  const minimalOutputPolicy = getMinimalOutputPolicy({ text: modelPrompt, policy });
   if (minimalOutputPolicy) {
     systemPrompt += `\n\n${buildMinimalOutputInstruction({
       archetype: policy.archetype,
@@ -166,7 +169,7 @@ export async function runOneShotPrompt(options: {
     : session.getChatMessages();
   const turnMessages = applyTurnFrame(
     baseMessages,
-    prompt,
+    modelPrompt,
     `${policy.archetype}: ${policy.scaffold}`,
     policy.allowedTools,
   );

@@ -12,6 +12,7 @@ import { buildNativeFollowupStateContext } from "./native-workspace-observer.js"
 import { buildSemanticTaskContext } from "./semantic-task-context.js";
 import { applyTurnFrame } from "./turn-frame.js";
 import { estimateTextTokens } from "../ai/tokens.js";
+import { expandSkillInvocation } from "../core/skills.js";
 
 export type TurnChatMessage = {
   role: "user" | "assistant";
@@ -204,9 +205,16 @@ export function addUserTurnToSession(options: {
     userMessage: text,
     repoState: typeof session.getRepoState === "function" ? session.getRepoState() : undefined,
   });
-  const transcriptNotes = [fileContext?.transcriptNote, repoContext?.transcriptNote, semanticContext?.transcriptNote].filter(Boolean);
+  const skillExpansion = expandSkillInvocation(text);
+  const transcriptNotes = [
+    skillExpansion.skillName ? `[skill invoked] ${skillExpansion.skillName}` : null,
+    fileContext?.transcriptNote,
+    repoContext?.transcriptNote,
+    semanticContext?.transcriptNote,
+  ].filter(Boolean);
   const promptBlocks = [fileContext?.promptBlock, repoContext?.promptBlock, semanticContext?.promptBlock].filter(Boolean);
-  const fullText = transcriptNotes.length > 0 ? `${text}\n\n${transcriptNotes.join("\n")}` : text;
+  const modelText = skillExpansion.expandedText;
+  const fullText = transcriptNotes.length > 0 ? `${modelText}\n\n${transcriptNotes.join("\n")}` : modelText;
   app.addMessage("user", text, effectiveImages);
   session.addMessage("user", fullText, effectiveImages);
   return { transientUserContext: promptBlocks.length > 0 ? promptBlocks.join("\n\n") : undefined };
