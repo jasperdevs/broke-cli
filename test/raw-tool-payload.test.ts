@@ -164,7 +164,7 @@ describe("raw tool payload fallback", () => {
 
     expect(app.addToolCall).toHaveBeenCalledWith("writeFile", "...");
     expect(app.updateToolCallArgs).toHaveBeenCalledWith("writeFile", "index.html", expect.objectContaining({ path: "index.html" }));
-    expect(app.addToolResult).toHaveBeenCalledWith("writeFile", "ok", false, undefined);
+    expect(app.addToolResult).toHaveBeenCalledWith("writeFile", "ok", false, "1 line · 15 bytes written");
     expect(session.addMessage).toHaveBeenCalledWith("assistant", "index.html created.");
   });
 });

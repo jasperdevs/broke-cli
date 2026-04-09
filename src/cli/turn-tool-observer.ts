@@ -3,6 +3,15 @@ import type { Session } from "../core/session.js";
 
 const MAX_TOOL_RESULT_SERIALIZED_CHARS = 6000;
 
+function lineCount(text: string | undefined): number {
+  if (!text) return 0;
+  return text.split("\n").length;
+}
+
+function uniqueFileCount(entries: Array<string | undefined>): number {
+  return new Set(entries.filter((entry): entry is string => !!entry)).size;
+}
+
 export function estimateToolResultTokens(result: unknown): number {
   try {
     const serialized = JSON.stringify(result);
@@ -60,8 +69,13 @@ function inferToolResultDetail(
     }
     if (commandText && /\b(test|lint|build|verify|check)\b/i.test(commandText)) {
       session.recordVerification(commandText, result.success === false ? "fail" : "pass", result.output?.slice(0, 200) ?? result.error ?? "");
+      return result.success === false ? `failed · ${commandText}` : `passed · ${commandText}`;
     }
-    return result.output?.slice(0, 200);
+    if (result.output?.trim()) {
+      const firstLine = result.output.trim().split("\n")[0]!;
+      return firstLine.length > 120 ? `${firstLine.slice(0, 117)}...` : firstLine;
+    }
+    return result.success === false ? "command failed" : "completed";
   }
 
   if (toolName === "readFile" && result.content) {
@@ -71,17 +85,21 @@ function inferToolResultDetail(
       session.getContextOptimizer().trackFileRead(readPath, lineCount);
       session.recordRepoRead(readPath, lineCount);
     }
-    return `${lineCount} lines`;
+    const mode = typeof (result as any)?.mode === "string" ? (result as any).mode : "";
+    const truncated = (result as any)?.truncated ? " · truncated" : "";
+    return `${lineCount} lines${mode ? ` · ${mode}` : ""}${truncated}`;
   }
 
   if (toolName === "grep" && result.matches) {
     const capped = (result as any)?.capped;
+    const files = (result.matches as Array<{ file?: string }>).map((entry) => entry.file);
     session.recordRepoSearch(
       "grep",
       typeof toolArgs?.pattern === "string" ? toolArgs.pattern : "grep",
-      (result.matches as Array<{ file?: string }>).map((entry) => entry.file).filter((entry): entry is string => !!entry),
+      files.filter((entry): entry is string => !!entry),
     );
-    return `${result.matches.length} matches${capped ? " capped" : ""}`;
+    const fileCount = uniqueFileCount(files);
+    return `${result.matches.length} matches in ${fileCount} file${fileCount === 1 ? "" : "s"}${capped ? " · capped" : ""}`;
   }
 
   if (toolName === "listFiles" && result.files) {
@@ -92,7 +110,8 @@ function inferToolResultDetail(
       typeof toolArgs?.path === "string" ? toolArgs.path : ".",
       result.files.slice(0, 3),
     );
-    return totalEntries && totalEntries > shown ? `${shown}/${totalEntries} entries` : `${shown} entries`;
+    const base = typeof toolArgs?.path === "string" ? toolArgs.path : ".";
+    return totalEntries && totalEntries > shown ? `${shown}/${totalEntries} entries from ${base}` : `${shown} entries from ${base}`;
   }
 
   if (toolName === "semSearch") {
@@ -107,9 +126,23 @@ function inferToolResultDetail(
     return `${hits.length} ranked hits`;
   }
 
-  if ((toolName === "writeFile" || toolName === "editFile") && result.success !== false) {
+  if (toolName === "writeFile" && result.success !== false) {
     const path = typeof toolArgs?.path === "string" ? toolArgs.path : "";
-    if (path) session.recordRepoEdit(path, toolName === "writeFile" ? "write" : "edit");
+    if (path) session.recordRepoEdit(path, "write");
+    const content = typeof toolArgs?.content === "string" ? toolArgs.content : "";
+    const lines = lineCount(content);
+    const bytes = typeof (result as any)?.bytesWritten === "number" ? (result as any).bytesWritten : content.length;
+    return `${lines} line${lines === 1 ? "" : "s"} · ${bytes} bytes written`;
+  }
+
+  if (toolName === "editFile" && result.success !== false) {
+    const path = typeof toolArgs?.path === "string" ? toolArgs.path : "";
+    if (path) session.recordRepoEdit(path, "edit");
+    const oldText = typeof toolArgs?.old_string === "string" ? toolArgs.old_string : "";
+    const newText = typeof toolArgs?.new_string === "string" ? toolArgs.new_string : "";
+    const oldLines = lineCount(oldText);
+    const newLines = lineCount(newText);
+    return `${oldLines} -> ${newLines} lines replaced`;
   }
 
   return undefined;

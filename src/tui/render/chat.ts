@@ -1,3 +1,5 @@
+import { renderPrefixedWrappedLines, toolArgumentSummary, toolDescription, wrapVisibleText } from "./tool-render.js";
+
 export interface TodoRenderItem {
   id: string;
   text: string;
@@ -48,72 +50,9 @@ export function renderPendingMessagesBlock(options: {
   return lines;
 }
 
-function compactPreview(text: string, maxLength = 88): string {
-  const normalized = text.replace(/\s+/g, " ").trim();
-  return normalized.length <= maxLength ? normalized : `${normalized.slice(0, maxLength - 3)}...`;
-}
-
 function ensureOverlayGap(lines: string[]): void {
   if (lines.length === 0) return;
   if (lines[lines.length - 1] !== "") lines.push("");
-}
-
-function wrapVisibleText(text: string, width: number): string[] {
-  if (width <= 0) return [text];
-  const parts = text.split(/([ \t]+|[\\/._:-]+)/);
-  const lines: string[] = [];
-  let current = "";
-
-  for (const part of parts) {
-    if (!part) continue;
-    if (current.length + part.length <= width) {
-      current += part;
-      continue;
-    }
-    if (current.trim().length > 0) {
-      lines.push(current.trimEnd());
-      current = /^[ \t]+$/.test(part) ? "" : part.trimStart();
-      continue;
-    }
-    lines.push(part.slice(0, width));
-    current = part.slice(width);
-  }
-
-  if (current.length > 0) lines.push(current.trimEnd());
-  return lines.length > 0 ? lines : [""];
-}
-
-function renderPrefixedWrappedLines(prefix: string, text: string, width: number): string[] {
-  const available = Math.max(8, width - prefix.length);
-  return wrapVisibleText(text, available).map((line) => `${prefix}${line}`);
-}
-
-export function toolDescription(tc: { name: string; preview: string }): string {
-  switch (tc.name) {
-    case "bash":
-      return `run ${tc.preview}`;
-    case "Read":
-    case "readFile":
-      return `read ${tc.preview}`.trim();
-    case "Write":
-    case "writeFile":
-      return `write ${tc.preview}`.trim();
-    case "Edit":
-    case "editFile":
-      return `edit ${tc.preview}`.trim();
-    case "Glob":
-    case "glob":
-      return `find ${tc.preview}`.trim();
-    case "LS":
-    case "listFiles":
-      return `list ${tc.preview}`.trim();
-    case "grep":
-      return `grep ${tc.preview}`.trim();
-    case "semSearch":
-      return `search ${tc.preview}`.trim();
-    default:
-      return tc.preview && tc.preview !== "..." ? `${tc.name} ${tc.preview}` : tc.name;
-  }
 }
 
 function formatElapsedLabel(tc: { startedAt?: number; completedAt?: number }): string | null {
@@ -175,6 +114,13 @@ export function renderToolCallBlock(options: {
     lines.push(`${colors.muted}  ${branch} waiting for tool details...${reset}`);
   }
 
+  const argSummary = toolArgumentSummary(tc);
+  if (argSummary && (running || (!done && !tc.resultDetail))) {
+    for (const wrappedLine of renderPrefixedWrappedLines(`  ${branch} `, argSummary, maxWidth)) {
+      lines.push(`${colors.muted}${wrappedLine}${reset}`);
+    }
+  }
+
   if (tc.name === "bash" && running && tc.streamOutput) {
     const outLines = tc.streamOutput.split("\n").filter((line) => line.trim());
     const tail = outLines.slice(-5);
@@ -191,7 +137,7 @@ export function renderToolCallBlock(options: {
       const oldLines = a.old_string.split("\n");
       const newLines = a.new_string.split("\n");
       const diffW = maxWidth - 6;
-      lines.push(`${colors.muted}  ${branch} +${newLines.length} -${oldLines.length} lines${reset}`);
+      lines.push(`${colors.muted}  ${branch} ${tc.resultDetail || `+${newLines.length} -${oldLines.length} lines`}${reset}`);
       for (const line of oldLines.slice(0, 4)) {
         const text = `- ${line}`.slice(0, diffW - 2);
         const pad = Math.max(0, diffW - 2 - text.length);
@@ -207,7 +153,7 @@ export function renderToolCallBlock(options: {
     } else if (tc.name === "writeFile" && a?.content) {
       const newLines = a.content.split("\n");
       const diffW = maxWidth - 6;
-      lines.push(`${colors.muted}  ${branch} ${newLines.length} lines written${reset}`);
+      lines.push(`${colors.muted}  ${branch} ${tc.resultDetail || `${newLines.length} lines written`}${reset}`);
       for (const line of newLines.slice(0, 6)) {
         const text = `+ ${line}`.slice(0, diffW - 2);
         const pad = Math.max(0, diffW - 2 - text.length);
@@ -237,6 +183,10 @@ export function renderToolCallBlock(options: {
       lines.push(`${colors.muted}  ${branch} (no output)${reset}`);
     } else if (tc.resultDetail) {
       for (const wrappedLine of renderPrefixedWrappedLines(`  ${branch} `, tc.resultDetail, maxWidth)) {
+        lines.push(`${colors.muted}${wrappedLine}${reset}`);
+      }
+    } else if (argSummary) {
+      for (const wrappedLine of renderPrefixedWrappedLines(`  ${branch} `, argSummary, maxWidth)) {
         lines.push(`${colors.muted}${wrappedLine}${reset}`);
       }
     } else if (!tc.error && elapsedLabel) {

@@ -264,13 +264,40 @@ export function formatTurnErrorMessage(options: {
 }
 
 export function buildToolPreview(name: string, args: unknown): string {
-  if (name === "Read" || name === "readFile") return (args as any)?.file_path ?? (args as any)?.path ?? "?";
+  if (name === "Read" || name === "readFile") {
+    const path = (args as any)?.file_path ?? (args as any)?.path ?? "?";
+    const offset = (args as any)?.offset;
+    const limit = (args as any)?.limit;
+    const tail = (args as any)?.tail;
+    if (typeof tail === "number" && tail > 0) return `${path} · last ${tail}`;
+    if (typeof offset === "number" || typeof limit === "number") {
+      const start = typeof offset === "number" ? offset + 1 : 1;
+      const end = typeof limit === "number" ? start + limit - 1 : "";
+      return `${path}:${start}${end ? `-${end}` : ""}`;
+    }
+    return path;
+  }
   if (name === "Write" || name === "writeFile") return (args as any)?.file_path ?? (args as any)?.path ?? "?";
   if (name === "Edit" || name === "editFile") return (args as any)?.file_path ?? (args as any)?.path ?? "?";
-  if (name === "Glob" || name === "glob") return (args as any)?.pattern ?? (args as any)?.path ?? "?";
-  if (name === "LS" || name === "listFiles") return (args as any)?.path ?? "?";
-  if (name === "grep") return (args as any)?.path ?? (args as any)?.pattern ?? "?";
-  if (name === "semSearch") return (args as any)?.query ?? (args as any)?.path ?? "?";
+  if (name === "Glob" || name === "glob") {
+    const pattern = (args as any)?.pattern ?? "?";
+    const path = (args as any)?.path;
+    return path && path !== "." ? `${pattern} in ${path}` : pattern;
+  }
+  if (name === "LS" || name === "listFiles") {
+    const path = (args as any)?.path ?? ".";
+    const include = (args as any)?.include;
+    return include ? `${path} · ${include}` : path;
+  }
+  if (name === "grep") {
+    const path = (args as any)?.path ?? ".";
+    const pattern = (args as any)?.pattern ?? "?";
+    return `${pattern} in ${path}`;
+  }
+  if (name === "semSearch") {
+    const query = (args as any)?.query ?? "?";
+    return query.length > 48 ? `${query.slice(0, 45)}...` : query;
+  }
   if (name === "bash") {
     const command = (args as any)?.command ?? "?";
     return command.length > 60 ? `${command.slice(0, 57)}...` : command;
