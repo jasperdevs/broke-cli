@@ -87,6 +87,7 @@ program.action(async (promptParts, opts) => {
         systemPrompt: opts.systemPrompt,
         appendSystemPrompt: opts.appendSystemPrompt,
       },
+      extraTools: hooks.getTools(),
       streamCallbacks: jsonMode ? {
         onStart: ({ providerId, modelId }) => process.stdout.write(JSON.stringify({ type: "start", provider: providerId, model: modelId }) + "\n"),
         onText: (delta) => process.stdout.write(JSON.stringify({ type: "text", delta }) + "\n"),
@@ -290,6 +291,7 @@ program.action(async (promptParts, opts) => {
   const buildTools = (allowedTools: readonly ToolName[]) => ({
     ...getTools({
       include: allowedTools,
+      extraTools: hooks.getTools(),
     }),
   });
 

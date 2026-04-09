@@ -3,6 +3,7 @@ import { bashTool } from "./bash.js";
 import { readFileTool, writeFileTool, editFileTool, listFilesTool, grepTool, semSearchTool } from "./file-ops-tools.js";
 import { webSearchTool, webFetchTool } from "./web.js";
 import { todoWriteTool } from "./todo.js";
+import { getExtensionTools } from "../core/extensions.js";
 import { isToolAllowed } from "../core/permissions.js";
 
 export const TOOL_NAMES = [
@@ -18,7 +19,7 @@ export const TOOL_NAMES = [
   "todoWrite",
 ] as const;
 
-export type ToolName = typeof TOOL_NAMES[number];
+export type ToolName = typeof TOOL_NAMES[number] | string;
 
 const BASE_TOOLS: ToolSet = {
   bash: bashTool,
@@ -35,12 +36,13 @@ const BASE_TOOLS: ToolSet = {
 
 /** All tools available to the agent */
 export function getTools(options?: {
-  include?: readonly ToolName[];
+  include?: readonly string[];
   extraTools?: ToolSet;
 }): ToolSet {
   const include = options?.include ? new Set<string>(options.include) : null;
   const all: ToolSet = {
     ...BASE_TOOLS,
+    ...getExtensionTools(),
     ...(options?.extraTools ?? {}),
   };
 

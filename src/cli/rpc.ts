@@ -129,6 +129,7 @@ export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts:
     const tools = policy.allowedTools.length > 0
       ? getTools({
           include: policy.allowedTools as readonly ToolName[],
+          extraTools: hooks.getTools() as any,
         })
       : undefined;
 

@@ -74,6 +74,7 @@ export async function runModelTurn(options: {
     effectiveImages,
     lastToolCalls,
     lastActivityTime,
+    hooks,
     forceRoute,
     transientUserContext: fastPath.transientUserContext,
     resolveSpecialistModel,

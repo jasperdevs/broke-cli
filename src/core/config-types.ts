@@ -10,6 +10,7 @@ export interface PackageFilterSource {
   extensions?: string[];
   skills?: string[];
   prompts?: string[];
+  themes?: string[];
 }
 
 export type PackageSource = string | PackageFilterSource;
@@ -96,10 +97,13 @@ export interface Settings {
   extensions: string[];
   skills: string[];
   prompts: string[];
+  themes: string[];
+  theme: string;
   enableSkillCommands: boolean;
   discoverExtensions: boolean;
   discoverSkills: boolean;
   discoverPrompts: boolean;
+  discoverThemes: boolean;
 }
 
 export interface BrokeConfig {

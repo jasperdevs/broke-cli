@@ -18,6 +18,7 @@ type RuntimeProgramOptions = {
   extension?: string[];
   skill?: string[];
   promptTemplate?: string[];
+  theme?: string;
   apiKey?: string;
   provider?: string;
   exportOut?: string;
@@ -36,6 +37,7 @@ export function applyProgramRuntimeSettings(opts: RuntimeProgramOptions, parsedM
   if (opts.extension?.length) setRuntimeSettings({ extensions: opts.extension });
   if (opts.skill?.length) setRuntimeSettings({ skills: opts.skill });
   if (opts.promptTemplate?.length) setRuntimeSettings({ prompts: opts.promptTemplate });
+  if (opts.theme) setRuntimeSettings({ theme: opts.theme });
   if (opts.apiKey) setRuntimeProviderApiKey(parsedModel.provider ?? opts.provider ?? "openai", opts.apiKey);
 }
 

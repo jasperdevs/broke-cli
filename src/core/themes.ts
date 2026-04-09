@@ -1,6 +1,12 @@
 import { bg, fg } from "../utils/ansi.js";
 import { getSettings } from "./config.js";
 import type { Theme, ThemePalette } from "./theme-types.js";
+import { THEME_PALETTES_A } from "./theme-palettes-a.js";
+import { THEME_PALETTES_B } from "./theme-palettes-b.js";
+import {
+  listThemes as listThemeResources,
+  loadThemePalette as loadConfiguredThemePalette,
+} from "./resources.js";
 
 export type { Theme } from "./theme-types.js";
 
@@ -28,6 +34,8 @@ const BASE_PALETTE: ThemePalette = {
   imageTagBg: [40, 145, 40],
 };
 
+const runtimeThemes = new Map<string, ThemePalette>();
+
 function mixRgb(a: [number, number, number], b: [number, number, number], ratio: number): [number, number, number] {
   const clamp = (value: number) => Math.max(0, Math.min(255, Math.round(value)));
   return [
@@ -53,6 +61,25 @@ function getModePalette(): ThemePalette {
     userBubble: [32, 29, 23],
     codeBg: [34, 31, 24],
     imageTagBg: [72, 62, 34],
+  };
+}
+
+function applyPlanTint(palette: ThemePalette): ThemePalette {
+  if (getSettings().mode !== "plan") return palette;
+  return {
+    ...palette,
+    primary: mixRgb(palette.primary, [240, 204, 92], palette.dark ? 0.55 : 0.35),
+    secondary: mixRgb(palette.secondary, [250, 222, 142], palette.dark ? 0.45 : 0.3),
+    warning: mixRgb(palette.warning, [250, 222, 142], palette.dark ? 0.4 : 0.25),
+    success: mixRgb(palette.success, [240, 204, 92], palette.dark ? 0.35 : 0.2),
+    textMuted: mixRgb(palette.textMuted, [191, 174, 119], palette.dark ? 0.35 : 0.2),
+    border: mixRgb(palette.border, [92, 78, 39], palette.dark ? 0.4 : 0.25),
+    sidebarBorder: mixRgb(palette.sidebarBorder, [82, 69, 35], palette.dark ? 0.35 : 0.2),
+    background: palette.background ? mixRgb(palette.background, [27, 24, 18], palette.dark ? 0.28 : 0.12) : palette.background,
+    userBubble: mixRgb(palette.userBubble, [32, 29, 23], palette.dark ? 0.25 : 0.1),
+    codeBg: mixRgb(palette.codeBg, [34, 31, 24], palette.dark ? 0.22 : 0.1),
+    imageTagBg: mixRgb(palette.imageTagBg, [72, 62, 34], palette.dark ? 0.28 : 0.18),
+    plan: mixRgb(palette.plan, [240, 204, 92], 0.4),
   };
 }
 
@@ -86,13 +113,44 @@ function toTheme(palette: ThemePalette): Theme {
 }
 
 export function listThemes(): Theme[] {
-  return [toTheme(BASE_PALETTE)];
+  const palettes = new Map<string, ThemePalette>();
+  for (const palette of [BASE_PALETTE, ...THEME_PALETTES_A, ...THEME_PALETTES_B]) palettes.set(palette.key, palette);
+  for (const palette of runtimeThemes.values()) palettes.set(palette.key, palette);
+  for (const resource of listThemeResources()) {
+    const palette = loadConfiguredThemePalette(resource.key);
+    if (palette) palettes.set(palette.key, palette);
+  }
+  return [...palettes.values()].map(toTheme).sort((a, b) => a.label.localeCompare(b.label));
 }
 
 export function currentTheme(): Theme {
+  const configuredKey = getSettings().theme?.trim();
+  if (configuredKey) {
+    const selected = getThemePalette(configuredKey);
+    if (selected) return toTheme(applyPlanTint(selected));
+  }
   return toTheme(getModePalette());
 }
 
 export function getPlanColor(): string {
   return currentTheme().plan;
+}
+
+export function registerThemePalettes(palettes: ThemePalette[]): void {
+  for (const palette of palettes) {
+    if (!palette?.key || !palette?.label) continue;
+    runtimeThemes.set(palette.key, palette);
+  }
+}
+
+export function clearRegisteredThemes(): void {
+  runtimeThemes.clear();
+}
+
+export function getThemePalette(key: string): ThemePalette | null {
+  if (key === BASE_PALETTE.key) return getModePalette();
+  if (runtimeThemes.has(key)) return runtimeThemes.get(key) ?? null;
+  const builtIn = [...THEME_PALETTES_A, ...THEME_PALETTES_B].find((palette) => palette.key === key);
+  if (builtIn) return builtIn;
+  return loadConfiguredThemePalette(key);
 }

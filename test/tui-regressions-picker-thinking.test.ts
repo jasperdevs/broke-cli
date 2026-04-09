@@ -424,15 +424,18 @@ describe("tool-call visibility", () => {
 });
 
 describe("theme catalog", () => {
-  it("collapses to the single built-in palette while switching is disabled", () => {
+  it("exposes the built-in theme catalog", () => {
     const themes = listThemes();
-    expect(themes).toHaveLength(1);
-    expect(themes[0]?.key).toBe("brokecli");
+    expect(themes.length).toBeGreaterThan(5);
+    expect(themes.some((theme) => theme.key === "brokecli")).toBe(true);
+    expect(themes.some((theme) => theme.key === "github-dark")).toBe(true);
   });
 
   it("tints the built-in palette when plan mode is active", () => {
     const previousMode = getSettings().mode;
+    const previousTheme = getSettings().theme;
     try {
+      updateSetting("theme", "brokecli");
       updateSetting("mode", "build");
       const buildTheme = currentTheme();
       updateSetting("mode", "plan");
@@ -442,6 +445,7 @@ describe("theme catalog", () => {
       expect(planTheme.sidebarBackground).not.toBe(buildTheme.sidebarBackground);
     } finally {
       updateSetting("mode", previousMode);
+      updateSetting("theme", previousTheme);
     }
   });
 });

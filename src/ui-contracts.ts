@@ -42,6 +42,7 @@ export type MenuPromptKind =
   | "connect"
   | "settings"
   | "extensions"
+  | "theme"
   | "export"
   | "resume"
   | "session"

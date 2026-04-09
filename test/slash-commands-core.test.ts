@@ -238,6 +238,25 @@ describe("slash command handling", () => {
     expect(opened?.reports.all.sessionCount).toBeGreaterThanOrEqual(1);
   });
 
+  it("updates the configured theme for /theme", async () => {
+    const app = createAppStub();
+    const previousTheme = loadConfig().settings?.theme ?? "brokecli";
+
+    try {
+      const result = await handleSlashCommand({
+        text: "/theme github-dark",
+        app,
+        session: new Session(`test-theme-${Date.now()}`),
+        ...createSlashArgs(),
+      });
+
+      expect(result.handled).toBe(true);
+      expect(app.statusMessage).toBe("Theme: GitHub Dark");
+    } finally {
+      updateSetting("theme", previousTheme);
+    }
+  });
+
   it("stages /btw when invoked without a question", async () => {
     const app = createAppStub();
     let draft = "";

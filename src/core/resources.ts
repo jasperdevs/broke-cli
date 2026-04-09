@@ -4,6 +4,7 @@ import { homedir } from "os";
 import { describePackageResources, resolvePackageRoots } from "./package-manager.js";
 import { getSettings, type PackageSource } from "./config.js";
 import { isExtensionEnabled } from "./permissions.js";
+import type { ThemePalette } from "./theme-types.js";
 
 export interface ExtensionResource {
   id: string;
@@ -24,6 +25,13 @@ export interface SkillResource {
   description: string;
   path: string;
   baseDir: string;
+  source: string;
+}
+
+export interface ThemeResource {
+  key: string;
+  label: string;
+  path: string;
   source: string;
 }
 
@@ -103,11 +111,11 @@ function packageScans(): Array<{ source: PackageSource; scope: "global" | "proje
   }));
 }
 
-function packageSourcePatterns(source: PackageSource, type: "extensions" | "skills" | "prompts"): string[] | undefined {
+function packageSourcePatterns(source: PackageSource, type: "extensions" | "skills" | "prompts" | "themes"): string[] | undefined {
   return typeof source === "string" ? undefined : source[type];
 }
 
-function resolvePackageEntries(type: "extensions" | "skills" | "prompts"): Array<{ dir: string; source: string; patterns?: string[] }> {
+function resolvePackageEntries(type: "extensions" | "skills" | "prompts" | "themes"): Array<{ dir: string; source: string; patterns?: string[] }> {
   const scans = packageScans();
   const results: Array<{ dir: string; source: string; patterns?: string[] }> = [];
   for (const scan of scans) {
@@ -205,6 +213,69 @@ export function listPromptTemplates(): PromptTemplateResource[] {
     }
   }
   return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function loadThemeModule(filePath: string): ThemePalette[] {
+  try {
+    if (extname(filePath).toLowerCase() === ".json") {
+      const parsed = JSON.parse(readFileSync(filePath, "utf-8")) as ThemePalette | ThemePalette[];
+      return Array.isArray(parsed) ? parsed : [parsed];
+    }
+    const raw = readFileSync(filePath, "utf-8")
+      .replace(/\bexport\s+default\s+/g, "module.exports.default = ")
+      .replace(/\bexport\s+const\s+themes\s*=\s*/g, "module.exports.themes = ")
+      .replace(/\bexport\s+const\s+theme\s*=\s*/g, "module.exports.theme = ");
+    const exports: { default?: ThemePalette | ThemePalette[]; themes?: ThemePalette[]; theme?: ThemePalette } = {};
+    const module = { exports };
+    const fn = new Function("module", "exports", `${raw}\n;return module.exports;`);
+    const result = fn(module, exports) as typeof module.exports;
+    const candidate = result.default ?? result.themes ?? result.theme;
+    if (!candidate) return [];
+    return Array.isArray(candidate) ? candidate : [candidate];
+  } catch {
+    return [];
+  }
+}
+
+export function listThemes(): ThemeResource[] {
+  const settings = getSettings();
+  const configured = settings.themes ?? [];
+  const bases: Array<{ dir: string; source: string; patterns?: string[] }> = [
+    ...(settings.discoverThemes ? [
+      { dir: join(GLOBAL_ROOT, "themes"), source: "global:themes" },
+      { dir: join(PROJECT_ROOT, "themes"), source: "project:themes" },
+    ] : []),
+    ...configured.map((path) => ({ dir: resolveConfiguredPath(path, PROJECT_ROOT), source: `config:${path}` })),
+    ...resolvePackageEntries("themes"),
+  ];
+  const byId = new Map<string, ThemeResource>();
+  for (const base of bases) {
+    const stat = safeStat(base.dir);
+    if (!stat) continue;
+    const files = stat.isDirectory() ? walk(base.dir, { recursive: false }) : [base.dir];
+    const themeFiles = files.filter((file) => [".js", ".mjs", ".cjs", ".json"].includes(extname(file).toLowerCase()));
+    const relativeFiles = themeFiles.map((file) => stat.isDirectory() ? relative(base.dir, file).replace(/\\/g, "/") : basename(file));
+    const visible = "patterns" in base ? applyPatterns(relativeFiles, base.patterns) : relativeFiles;
+    for (const rel of visible) {
+      const filePath = stat.isDirectory() ? join(base.dir, rel) : base.dir;
+      for (const palette of loadThemeModule(filePath)) {
+        if (!palette?.key || !palette?.label) continue;
+        byId.set(palette.key, {
+          key: palette.key,
+          label: palette.label,
+          path: filePath,
+          source: base.source,
+        });
+      }
+    }
+  }
+  return [...byId.values()].sort((a, b) => a.label.localeCompare(b.label));
+}
+
+export function loadThemePalette(name: string): ThemePalette | null {
+  const theme = listThemes().find((entry) => entry.key === name);
+  if (!theme) return null;
+  return loadThemeModule(theme.path).find((palette) => palette.key === name) ?? null;
 }
 
 function collectSkillRoots(baseDir: string): string[] {

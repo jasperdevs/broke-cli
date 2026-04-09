@@ -318,6 +318,10 @@ export async function handleSlashCommand(options: HandleSlashCommandOptions): Pr
   if (command) {
     return await command({ ...options, cmd, restText, waitFor });
   }
+  const extensionCommand = options.hooks.getSlashCommands?.().find((entry) => entry.names.includes(cmd));
+  if (extensionCommand) {
+    return await extensionCommand.run({ ...options, cmd, restText, waitFor });
+  }
   const uiResult = await handleUiSlashCommand({ ...options, cmd, restText });
   if (uiResult) return uiResult;
   options.app.setStatus?.(`Unknown: /${cmd}`);

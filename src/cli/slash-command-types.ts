@@ -48,8 +48,10 @@ export interface SlashCommandApp {
 }
 
 export interface ExtensionHooks {
-  emit(event: string, payload: Record<string, unknown>): void;
+  emit(event: string, payload: Record<string, unknown>): void | Promise<void>;
   reload?(): void;
+  getTools?(): Record<string, unknown>;
+  getSlashCommands?: () => Array<import("./slash-command-registry.js").RegisteredSlashCommand<any, SlashCommandResult>>;
 }
 
 export interface SlashCommandResult {

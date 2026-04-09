@@ -5,9 +5,9 @@ import { generateText, type LanguageModel } from "ai";
 import { calculateCost, type TokenUsage } from "../ai/cost.js";
 import { estimateTextTokens } from "../ai/tokens.js";
 import { getSettings } from "./config.js";
+import { getExtensionTools } from "./extensions.js";
 import type { SessionRepoState } from "./session-types.js";
 import type { ToolName } from "../tools/registry.js";
-
 export type TurnArchetype =
   | "casual"
   | "question"
@@ -21,7 +21,6 @@ export type TurnArchetype =
 
 export type PromptProfile = "full" | "casual" | "lean" | "edit" | "followup";
 export type ScaffoldSource = "builtin" | "planned";
-
 export interface PlannerContext {
   model: LanguageModel;
   modelId: string;
@@ -52,6 +51,21 @@ const NO_TOOLS: ToolName[] = [];
 const READ_ONLY_TOOLS: ToolName[] = ["semSearch", "readFile", "listFiles", "grep"];
 const SHELL_TOOLS: ToolName[] = ["semSearch", "bash", "readFile", "listFiles", "grep"];
 const RESEARCH_TOOLS: ToolName[] = ["semSearch", "readFile", "listFiles", "grep", "webSearch", "webFetch"];
+
+function withExtensionTools(base: ToolName[], archetype: TurnArchetype): ToolName[] {
+  const extra = Object.keys(getExtensionTools());
+  if (extra.length === 0) return base;
+  switch (archetype) {
+    case "explore":
+    case "shell":
+    case "edit":
+    case "bugfix":
+    case "research":
+      return [...new Set([...base, ...extra])];
+    default:
+      return base;
+  }
+}
 
 const CASUAL_MESSAGE_PATTERNS = [
   /^(?:hi|hey|hello|hey there|hello there|yo|sup|what(?:'s| is)\s+up|how(?:'s| is)\s+it\s+going|how are you|thanks|thank you|thx|cool|nice|ok|okay|lol|lmao|gm|gn)[!.?\s]*$/i,
@@ -98,6 +112,10 @@ export function classifyTurnArchetype(userMessage: string, lastToolCalls: string
 }
 
 function getBuiltInPolicy(archetype: TurnArchetype): TurnPolicy {
+  const allEditTools = withExtensionTools(ALL_EDIT_TOOLS, archetype);
+  const readOnlyTools = withExtensionTools(READ_ONLY_TOOLS, archetype);
+  const shellTools = withExtensionTools(SHELL_TOOLS, archetype);
+  const researchTools = withExtensionTools(RESEARCH_TOOLS, archetype);
   switch (archetype) {
     case "casual":
       return {
@@ -124,7 +142,7 @@ function getBuiltInPolicy(archetype: TurnArchetype): TurnPolicy {
     case "explore":
       return {
         archetype,
-        allowedTools: READ_ONLY_TOOLS,
+        allowedTools: readOnlyTools,
         maxToolSteps: 2,
         scaffold: STATIC_SCAFFOLDS[archetype],
         scaffoldSource: "builtin",
@@ -135,7 +153,7 @@ function getBuiltInPolicy(archetype: TurnArchetype): TurnPolicy {
     case "shell":
       return {
         archetype,
-        allowedTools: SHELL_TOOLS,
+        allowedTools: shellTools,
         maxToolSteps: 2,
         scaffold: STATIC_SCAFFOLDS[archetype],
         scaffoldSource: "builtin",
@@ -146,7 +164,7 @@ function getBuiltInPolicy(archetype: TurnArchetype): TurnPolicy {
     case "review":
       return {
         archetype,
-        allowedTools: READ_ONLY_TOOLS,
+        allowedTools: readOnlyTools,
         maxToolSteps: 3,
         scaffold: STATIC_SCAFFOLDS[archetype],
         scaffoldSource: "builtin",
@@ -157,7 +175,7 @@ function getBuiltInPolicy(archetype: TurnArchetype): TurnPolicy {
     case "research":
       return {
         archetype,
-        allowedTools: RESEARCH_TOOLS,
+        allowedTools: researchTools,
         maxToolSteps: 3,
         scaffold: STATIC_SCAFFOLDS[archetype],
         scaffoldSource: "builtin",
@@ -168,7 +186,7 @@ function getBuiltInPolicy(archetype: TurnArchetype): TurnPolicy {
     case "planning":
       return {
         archetype,
-        allowedTools: READ_ONLY_TOOLS,
+        allowedTools: readOnlyTools,
         maxToolSteps: 2,
         scaffold: STATIC_SCAFFOLDS[archetype],
         scaffoldSource: "builtin",
@@ -179,7 +197,7 @@ function getBuiltInPolicy(archetype: TurnArchetype): TurnPolicy {
     case "edit":
       return {
         archetype,
-        allowedTools: ALL_EDIT_TOOLS,
+        allowedTools: allEditTools,
         maxToolSteps: 6,
         scaffold: STATIC_SCAFFOLDS[archetype],
         scaffoldSource: "builtin",
@@ -191,7 +209,7 @@ function getBuiltInPolicy(archetype: TurnArchetype): TurnPolicy {
     default:
       return {
         archetype,
-        allowedTools: ALL_EDIT_TOOLS,
+        allowedTools: allEditTools,
         maxToolSteps: 7,
         scaffold: STATIC_SCAFFOLDS.bugfix,
         scaffoldSource: "builtin",

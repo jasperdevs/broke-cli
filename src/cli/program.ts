@@ -20,6 +20,7 @@ export function createProgram(appVersion: string): Command {
     .option("--mode <mode>", "Output mode: tui, json, or rpc", "tui")
     .option("--tools <patterns>", "Comma-separated tool allowlist/excludes for this run")
     .option("--thinking <level>", "Thinking level: off, minimal, low, medium, high, xhigh")
+    .option("--theme <theme>", "Theme key to use for this run")
     .option("--list-models [search]", "List visible models and exit")
     .option("--system-prompt <text>", "Replace the default system prompt for this run")
     .option("--append-system-prompt <text>", "Append to the system prompt for this run")

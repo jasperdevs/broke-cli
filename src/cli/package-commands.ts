@@ -1,6 +1,12 @@
 import { runSelfUpdateCommand } from "../core/update.js";
 import type { Command } from "commander";
 import {
+  getExtendedBenchmarkTasks,
+  getFixedBenchmarkTasks,
+  renderFixedBenchmarkReport,
+  runFixedBenchmarkSuite,
+} from "../benchmarks/fixed-suite.js";
+import {
   describePackageResources,
   getPackageConfigPaths,
   guessPackageLabel,
@@ -24,9 +30,15 @@ function renderConfigOverview(): string {
     lines.push(`  ext:    ${resources.extensions.length > 0 ? resources.extensions.join(", ") : "-"}`);
     lines.push(`  skills: ${resources.skills.length > 0 ? resources.skills.join(", ") : "-"}`);
     lines.push(`  prompts:${resources.prompts.length > 0 ? ` ${resources.prompts.join(", ")}` : " -"}`);
+    lines.push(`  themes: ${resources.themes.length > 0 ? resources.themes.join(", ") : "-"}`);
     lines.push("");
   }
   return lines.length > 0 ? lines.join("\n").trimEnd() : "No installed packages.";
+}
+
+function parseRepeatedList(values: string[]): string[] | undefined {
+  const items = values.flatMap((entry) => entry.split(",")).map((entry) => entry.trim()).filter(Boolean);
+  return items.length > 0 ? items : undefined;
 }
 
 export function registerPackageCommands(program: Command): void {
@@ -101,7 +113,7 @@ export function registerPackageCommands(program: Command): void {
     .command("config")
     .argument("[source]")
     .option("-l, --local", "edit project package settings")
-    .option("--type <type>", "resource type: extensions, skills, prompts")
+      .option("--type <type>", "resource type: extensions, skills, prompts, themes")
     .option("--patterns <patterns>", "comma-separated filter patterns")
     .description("Inspect or configure package resources")
     .action((source: string | undefined, opts: { local?: boolean; type?: string; patterns?: string }) => {
@@ -110,12 +122,58 @@ export function registerPackageCommands(program: Command): void {
         process.stdout.write(`${renderConfigOverview()}\n\nconfig files:\n  global: ${paths.global}\n  project: ${paths.project}\n`);
         return;
       }
-      if (!["extensions", "skills", "prompts"].includes(opts.type)) {
-        throw new Error("type must be extensions, skills, or prompts");
+      if (!["extensions", "skills", "prompts", "themes"].includes(opts.type)) {
+        throw new Error("type must be extensions, skills, prompts, or themes");
       }
       const patterns = opts.patterns.split(",").map((entry) => entry.trim()).filter(Boolean);
-      setPackageResourceConfig(source, opts.type as "extensions" | "skills" | "prompts", patterns, opts.local ? "project" : "global");
+      setPackageResourceConfig(source, opts.type as "extensions" | "skills" | "prompts" | "themes", patterns, opts.local ? "project" : "global");
       process.stdout.write(`Updated ${opts.type} filters for ${source}\n`);
+    });
+
+  program
+    .command("benchmark")
+    .aliases(["bench", "eval"])
+    .description("Run the built-in benchmark/eval suite")
+    .option("--suite <suite>", "fixed or extended", "fixed")
+    .option("--provider <provider>", "provider override")
+    .option("--model <model>", "model override")
+    .option("--mode <mode>", "build or plan", "build")
+    .option("--max-turns <n>", "maximum turns per task")
+    .option("--task <id>", "task id filter (repeatable or comma-separated)", (value, acc: string[]) => [...acc, value], [])
+    .option("--json", "print machine-readable JSON")
+    .option("--keep-workspaces", "keep benchmark workspaces")
+    .action(async (opts: {
+      suite?: "fixed" | "extended";
+      provider?: string;
+      model?: string;
+      mode?: "build" | "plan";
+      maxTurns?: string;
+      task: string[];
+      json?: boolean;
+      keepWorkspaces?: boolean;
+    }) => {
+      const result = await runFixedBenchmarkSuite({
+        suiteName: opts.suite === "extended" ? "extended" : "fixed",
+        provider: opts.provider,
+        model: opts.model,
+        mode: opts.mode === "plan" ? "plan" : "build",
+        maxTurns: opts.maxTurns ? Number.parseInt(opts.maxTurns, 10) : undefined,
+        keepWorkspaces: !!opts.keepWorkspaces,
+        taskIds: parseRepeatedList(opts.task) as any,
+      });
+      process.stdout.write(opts.json ? `${JSON.stringify(result, null, 2)}\n` : `${renderFixedBenchmarkReport(result)}\n`);
+    });
+
+  program
+    .command("benchmark-tasks")
+    .alias("eval-tasks")
+    .description("List built-in benchmark/eval tasks")
+    .option("--suite <suite>", "fixed or extended", "fixed")
+    .action((opts: { suite?: "fixed" | "extended" }) => {
+      const tasks = opts.suite === "extended" ? getExtendedBenchmarkTasks() : getFixedBenchmarkTasks();
+      for (const task of tasks) {
+        process.stdout.write(`${task.id}\t${task.description}\t${task.prompt ?? task.steps?.[0]?.prompt ?? ""}\n`);
+      }
     });
 }
 

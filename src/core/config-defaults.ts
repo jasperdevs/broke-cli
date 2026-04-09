@@ -76,8 +76,11 @@ export const DEFAULT_SETTINGS: Settings = {
   extensions: [],
   skills: [],
   prompts: [],
+  themes: [],
+  theme: "brokecli",
   enableSkillCommands: true,
   discoverExtensions: true,
   discoverSkills: true,
   discoverPrompts: true,
+  discoverThemes: true,
 };

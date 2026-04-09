@@ -51,7 +51,8 @@ export interface TurnRunnerApp {
 }
 
 export interface ExtensionHooks {
-  emit(event: string, payload: Record<string, unknown>): void;
+  emit(event: string, payload: Record<string, unknown>): void | Promise<void>;
+  getTools?(): Record<string, unknown>;
 }
 
 function deriveStreamingActivitySummary(text: string, archetype: string): string {
@@ -163,11 +164,12 @@ export async function prepareTurnExecution(options: {
   effectiveImages?: Array<{ mimeType: string; data: string }>;
   lastToolCalls: string[];
   lastActivityTime: number;
+  hooks: ExtensionHooks;
   forceRoute?: "main" | "small";
   transientUserContext?: string;
   resolveSpecialistModel?: (role: SpecialistModelRole) => { model: ModelHandle; modelId: string } | null;
 }): Promise<{ policy: Awaited<ReturnType<typeof resolveTurnPolicy>>; prepared: PreparedTurnContext }> {
-  const { app, session, text, activeModel, currentModelId, smallModel, smallModelId, currentMode, systemPrompt, effectiveImages, lastToolCalls, lastActivityTime, forceRoute, transientUserContext, resolveSpecialistModel } = options;
+  const { app, session, text, activeModel, currentModelId, smallModel, smallModelId, currentMode, systemPrompt, effectiveImages, lastToolCalls, lastActivityTime, hooks, forceRoute, transientUserContext, resolveSpecialistModel } = options;
   const getContextOptimizer = (): ReturnType<Session["getContextOptimizer"]> => session.getContextOptimizer();
   const repoState = typeof (session as Session & { getRepoState?: () => ReturnType<Session["getRepoState"]> }).getRepoState === "function"
     ? (session as Session & { getRepoState: () => ReturnType<Session["getRepoState"]> }).getRepoState()
@@ -175,6 +177,13 @@ export async function prepareTurnExecution(options: {
   let policy = await resolveTurnPolicy(text, lastToolCalls, repoState, activeModel.runtime === "sdk" && activeModel.model
     ? { model: activeModel.model, modelId: currentModelId, providerId: activeModel.provider.id }
     : null);
+  await hooks.emit("on_turn_policy", {
+    text,
+    archetype: policy.archetype,
+    allowedTools: [...policy.allowedTools],
+    maxToolSteps: policy.maxToolSteps,
+    promptProfile: policy.promptProfile,
+  });
   policy = applySimpleFileTaskPolicy(policy, detectSimpleFileTask(text));
   if (policy.plannerUsage) {
     session.addUsage(policy.plannerUsage.inputTokens, policy.plannerUsage.outputTokens, policy.plannerUsage.cost);
@@ -267,6 +276,12 @@ export async function executeTurnWithRetries(options: {
 }): Promise<{ result: Awaited<ReturnType<typeof executeTurn>>; lastActivityTime: number }> {
   const { app, session, text, activeModel, currentModelId, smallModel, smallModelId, currentMode, policy, effectiveImages, buildTools, hooks, lastToolCalls, prepared, forceRoute, transientUserContext, resolveSpecialistModel, executeTurnForTests } = options;
   const getContextOptimizer = (): ReturnType<Session["getContextOptimizer"]> => session.getContextOptimizer();
+  await hooks.emit("on_turn_start", {
+    text,
+    archetype: policy.archetype,
+    providerId: activeModel.provider.id,
+    modelId: currentModelId,
+  });
   app.setStreamingActivitySummary?.(deriveStreamingActivitySummary(text, policy.archetype));
   app.setStreaming(true);
 
@@ -401,6 +416,16 @@ export async function executeTurnWithRetries(options: {
     }, executeTurnForTests);
     nextActivityTime = result.lastActivityTime;
   }
+
+  await hooks.emit("on_turn_finish", {
+    text,
+    archetype: policy.archetype,
+    providerId: activeModel.provider.id,
+    modelId: currentModelId,
+    completion: result.completion,
+    toolCalls: [...result.nextToolCalls],
+    usedTools: result.toolActivity,
+  });
 
   return { result, lastActivityTime: nextActivityTime };
 }

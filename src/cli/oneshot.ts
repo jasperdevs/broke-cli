@@ -1,4 +1,4 @@
-import type { LanguageModel } from "ai";
+import type { LanguageModel, ToolSet } from "ai";
 import { pickDefault, type DetectedProvider } from "../ai/detect.js";
 import { startNativeStream } from "../ai/native-stream.js";
 import { startStream } from "../ai/stream.js";
@@ -71,8 +71,9 @@ export async function runOneShotPrompt(options: {
   providerRegistry: ProviderRegistry;
   opts: { model?: string; provider?: string; systemPrompt?: string; appendSystemPrompt?: string };
   streamCallbacks?: OneShotStreamCallbacks;
+  extraTools?: ToolSet;
 }): Promise<OneShotResult> {
-  const { prompt, mode, providers, providerRegistry, opts, streamCallbacks } = options;
+  const { prompt, mode, providers, providerRegistry, opts, streamCallbacks, extraTools } = options;
   const skillExpansion = expandInlineSkillInvocations(prompt);
   const modelPrompt = skillExpansion.expandedText;
   const session = new Session();
@@ -143,6 +144,7 @@ export async function runOneShotPrompt(options: {
   const tools = policy.allowedTools.length > 0
     ? getTools({
         include: policy.allowedTools as readonly ToolName[],
+        extraTools,
       })
     : undefined;
   const baseSystemPrompt = buildSystemPrompt(
