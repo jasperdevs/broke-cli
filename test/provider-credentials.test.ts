@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseClaudeCredentialsData, parseCodexAuthData } from "../src/core/config.js";
+import { parseClaudeCredentialsData, parseCodexAuthData } from "../src/core/provider-credentials.js";
 
 describe("provider credential parsing", () => {
   it("treats Claude Code OAuth as native-only rather than an Anthropic API key", () => {

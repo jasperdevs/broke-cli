@@ -1,5 +1,6 @@
 import type { DetectedProvider } from "../ai/detect.js";
-import { getProviderCredential, updateProviderConfig } from "../core/config.js";
+import { updateProviderConfig } from "../core/config.js";
+import { getProviderCredential } from "../core/provider-credentials.js";
 import { LOCAL_PROVIDER_DEFAULTS, type ProviderRegistry } from "../ai/provider-registry.js";
 
 interface ConnectFlowItem {

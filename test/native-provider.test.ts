@@ -10,9 +10,7 @@ const configMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../src/core/config.js", () => ({
-  getApiKey: configMocks.getApiKey,
   getBaseUrl: configMocks.getBaseUrl,
-  getProviderCredential: configMocks.getProviderCredential,
   getSettings: () => ({
     thinkingBudgets: {
       minimal: 1024,
@@ -33,6 +31,11 @@ vi.mock("../src/core/config.js", () => ({
       additionalWriteRoots: [],
     },
   }),
+}));
+
+vi.mock("../src/core/provider-credentials.js", () => ({
+  getApiKey: configMocks.getApiKey,
+  getProviderCredential: configMocks.getProviderCredential,
 }));
 
 vi.mock("child_process", async () => {

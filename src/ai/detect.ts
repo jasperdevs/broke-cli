@@ -1,4 +1,5 @@
-import { getBaseUrl, getProviderCredential, loadConfig } from "../core/config.js";
+import { getBaseUrl, loadConfig } from "../core/config.js";
+import { getProviderCredential } from "../core/provider-credentials.js";
 import { hasNativeCommand } from "./native-cli.js";
 
 export interface DetectedProvider {

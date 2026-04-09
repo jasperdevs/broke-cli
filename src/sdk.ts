@@ -1,7 +1,8 @@
 import { chdir } from "process";
 import { ProviderRegistry } from "./ai/provider-registry.js";
 import { Session } from "./core/session.js";
-import { clearRuntimeSettings, setRuntimeProviderApiKey, setRuntimeSettings, type Mode } from "./core/config.js";
+import { clearRuntimeSettings, setRuntimeSettings, type Mode } from "./core/config.js";
+import { setRuntimeProviderApiKey } from "./core/provider-credentials.js";
 import { SessionManager } from "./core/session-manager.js";
 import { SettingsManager } from "./core/settings-manager.js";
 import { runOneShotPrompt, type OneShotResult } from "./cli/oneshot.js";

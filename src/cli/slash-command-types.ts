@@ -3,8 +3,7 @@ import type { ProviderRegistry } from "../ai/provider-registry.js";
 import type { BudgetReport } from "../core/budget-insights.js";
 import type { Mode, ModelPreferenceSlot, Settings } from "../core/config.js";
 import type { Session } from "../core/session.js";
-import type { ModelOption, PickerItem, SettingEntry, UpdateNotice } from "../tui/app-types.js";
-import type { Keypress } from "../tui/keypress.js";
+import type { ModelOption, PickerItem, SettingEntry, UpdateNotice, ItemPickerOptions } from "../ui-contracts.js";
 
 export interface SlashCommandApp {
   addMessage(role: "user" | "assistant" | "system", content: string): void;
@@ -31,17 +30,7 @@ export interface SlashCommandApp {
     title: string,
     items: PickerItem[],
     onSelect: (id: string) => void,
-    options?: {
-      initialCursor?: number;
-      previewHint?: string;
-      onPreview?: (id: string) => void;
-      onCancel?: () => void;
-      onSecondaryAction?: (id: string) => void;
-      onKey?: (key: Keypress) => boolean;
-      secondaryHint?: string;
-      closeOnSelect?: boolean;
-      kind?: "login" | "connect" | "mode" | "name" | "extensions" | "export" | "resume" | "session" | "hotkeys" | "tree" | "templates" | "skills" | "changelog" | "projects" | "logout";
-    },
+    options?: ItemPickerOptions,
   ): void;
   openTreeView?(title: string, session: Session, onSelect: (entryId: string) => void | Promise<void>): void;
   stop(): void;

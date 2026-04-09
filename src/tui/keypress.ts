@@ -10,14 +10,8 @@ import {
   MENU_MOUSE_OFF,
   write,
 } from "../utils/ansi.js";
-
-export interface Keypress {
-  name: string;       // "return", "backspace", "up", "down", "left", "right", "tab", "escape", or the char itself
-  char: string;       // The actual character (empty for special keys)
-  ctrl: boolean;
-  meta: boolean;
-  shift: boolean;
-}
+import type { Keypress } from "../utils/keypress-types.js";
+export type { Keypress } from "../utils/keypress-types.js";
 
 function decodeModifiedKey(code: number, mod: number): Keypress | null {
   const shift = mod === 2 || mod === 4 || mod === 6 || mod === 8;

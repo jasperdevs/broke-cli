@@ -1,7 +1,8 @@
 import { writeFileSync } from "fs";
 import { buildHtmlExport } from "./exports.js";
 import { SessionManager } from "../core/session-manager.js";
-import { clearRuntimeSettings, setRuntimeProviderApiKey, setRuntimeSettings } from "../core/config.js";
+import { clearRuntimeSettings, setRuntimeSettings } from "../core/config.js";
+import { setRuntimeProviderApiKey } from "../core/provider-credentials.js";
 import type { ThinkingLevel } from "../core/config-types.js";
 import { TOOL_NAMES, type ToolName } from "../tools/registry.js";
 

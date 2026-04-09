@@ -16,7 +16,7 @@ import { undoLastCheckpoint } from "../core/git.js";
 import { createSlashCommandRegistry } from "./slash-command-registry.js";
 import type { ParsedSlashCommand, SlashCommandApp, SlashCommandResult } from "./slash-command-types.js";
 import type { ModelHandle } from "../ai/providers.js";
-import type { PickerItem } from "../tui/app-types.js";
+import type { PickerItem } from "../ui-contracts.js";
 
 async function loadBudgetReports(session: Session): Promise<{ all: BudgetReport; session: BudgetReport }> {
   const sessionDir = getSettings().sessionDir?.trim() || undefined;

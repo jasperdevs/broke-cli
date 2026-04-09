@@ -3,7 +3,8 @@ import { rmSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import { resetAuthCacheForTests, saveCredentials } from "../src/core/auth.js";
-import { getProviderCredential, loadConfig, updateProviderConfig } from "../src/core/config.js";
+import { loadConfig, updateProviderConfig } from "../src/core/config.js";
+import { getProviderCredential } from "../src/core/provider-credentials.js";
 import { detectProviders } from "../src/ai/detect.js";
 
 const authPath = join(homedir(), ".brokecli", "auth.json");

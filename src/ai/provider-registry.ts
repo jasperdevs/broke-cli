@@ -10,7 +10,8 @@ import {
   syncCloudProviderModelsFromCatalog,
   type ModelHandle,
 } from "./providers.js";
-import { getBaseUrl, getProviderCredential } from "../core/config.js";
+import { getBaseUrl } from "../core/config.js";
+import { getProviderCredential } from "../core/provider-credentials.js";
 
 const LOCAL_PROVIDER_DEFAULTS: Record<string, string> = {
   ollama: "http://127.0.0.1:11434/v1",

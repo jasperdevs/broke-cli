@@ -1,46 +1,15 @@
 import type { RgbColor } from "./render/mascot.js";
 import type { BudgetReport } from "../core/budget-insights.js";
-import type { UpdateInfo } from "../core/update.js";
 import type { InputWidget } from "./input.js";
 import type { Session, SessionTreeItem } from "../core/session.js";
 import type { TreeFilterMode } from "../core/config.js";
+import type { ModelLaneOption, ModelOption, PickerItem, SettingEntry, UpdateNotice, MenuPromptKind } from "../ui-contracts.js";
+export type { ModelLaneOption, ModelOption, PickerItem, SettingEntry, UpdateNotice, MenuPromptKind } from "../ui-contracts.js";
 
 export interface ChatMessage {
   role: "user" | "assistant" | "system";
   content: string;
   images?: ResolvedImage[];
-}
-
-export interface ModelOption {
-  providerId: string;
-  providerName: string;
-  modelId: string;
-  displayName?: string;
-  active: boolean;
-  badges?: string[];
-  isHeader?: boolean;
-}
-
-export interface ModelLaneOption {
-  id: string;
-  slot: "all" | "default" | "small" | "btw" | "review" | "planning" | "ui" | "architecture";
-  label: string;
-  detail: string;
-  assignedModelLabel?: string;
-}
-
-export interface SettingEntry {
-  key: string;
-  label: string;
-  value: string;
-  description: string;
-}
-
-export interface PickerItem {
-  id: string;
-  label: string;
-  detail?: string;
-  tone?: "default" | "danger";
 }
 
 export interface BtwBubble {
@@ -62,8 +31,6 @@ export interface BudgetView {
   section: "usage" | "efficiency" | "routing" | "context";
   scrollOffset: number;
 }
-
-export type UpdateNotice = UpdateInfo;
 
 export interface TreeView {
   title: string;
@@ -125,25 +92,6 @@ export interface QuestionView {
 }
 
 export type PendingDelivery = "steering" | "followup";
-
-export type MenuPromptKind =
-  | "model"
-  | "mode"
-  | "name"
-  | "login"
-  | "connect"
-  | "settings"
-  | "extensions"
-  | "export"
-  | "resume"
-  | "session"
-  | "hotkeys"
-  | "tree"
-  | "templates"
-  | "skills"
-  | "changelog"
-  | "projects"
-  | "logout";
 
 export interface TreeRow {
   item: SessionTreeItem;

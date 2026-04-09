@@ -180,6 +180,9 @@ export function getMinimalOutputPolicy(options: {
 }): MinimalOutputPolicy | null {
   const { text, policy, modelRuntime } = options;
   if (!shouldForceMinimalResponse({ text, policy })) return null;
+  if (modelRuntime === "native-cli" && (policy.archetype === "edit" || policy.archetype === "bugfix")) {
+    return null;
+  }
 
   switch (policy.archetype) {
     case "casual":

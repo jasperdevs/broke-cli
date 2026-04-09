@@ -1,7 +1,7 @@
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
-import type { Keypress } from "../tui/keypress.js";
+import type { Keypress } from "../utils/keypress-types.js";
 
 export interface Keybindings {
   modelPicker: string;
