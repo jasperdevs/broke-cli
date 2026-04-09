@@ -1,4 +1,5 @@
 import type { InputElement } from "./input.js";
+import { listSkills } from "../core/skills.js";
 
 type AppState = any;
 
@@ -17,8 +18,28 @@ function getComposerElements(app: AppState): InputElement[] {
 export function ensureInlineChipElements(app: AppState): void {
   const text = app.input.getText();
   const existing = getComposerElements(app);
-  const preserved = existing.filter((element) => element.kind !== "image");
+  const preserved = existing.filter((element) => element.kind !== "image" && element.kind !== "skill");
   const rebuilt: InputElement[] = [...preserved];
+  const skillNames = listSkills().map((skill) => skill.name).sort((a, b) => b.length - a.length);
+
+  for (const name of skillNames) {
+    const label = `$${name}`;
+    const pattern = new RegExp(`(^|\\s)\\${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=\\s|$)`, "g");
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(text)) !== null) {
+      const start = match.index + match[1].length;
+      const end = start + label.length;
+      const existingElement = existing.find((element) => element.kind === "skill" && element.start === start && element.end === end);
+      rebuilt.push(existingElement ?? {
+        id: `skill:${name}:${start}`,
+        kind: "skill",
+        label,
+        start,
+        end,
+        meta: { name },
+      });
+    }
+  }
 
   for (let index = 0; index < (app.pendingImages?.length ?? 0); index++) {
     const attachment = app.pendingImages[index];

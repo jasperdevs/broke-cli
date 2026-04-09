@@ -4,7 +4,7 @@ import { startNativeStream } from "../ai/native-stream.js";
 import { startStream } from "../ai/stream.js";
 import { buildSystemPrompt, resolveCavemanLevel } from "../core/context.js";
 import { Session } from "../core/session.js";
-import { expandSkillInvocation } from "../core/skills.js";
+import { expandInlineSkillInvocations } from "../core/skills.js";
 import { getTools, type ToolName } from "../tools/registry.js";
 import { getSettings, type Mode } from "../core/config.js";
 import { resolveTurnPolicy } from "../core/turn-policy.js";
@@ -73,7 +73,7 @@ export async function runOneShotPrompt(options: {
   streamCallbacks?: OneShotStreamCallbacks;
 }): Promise<OneShotResult> {
   const { prompt, mode, providers, providerRegistry, opts, streamCallbacks } = options;
-  const skillExpansion = expandSkillInvocation(prompt);
+  const skillExpansion = expandInlineSkillInvocations(prompt);
   const modelPrompt = skillExpansion.expandedText;
   const session = new Session();
   session.addMessage("user", modelPrompt);

@@ -119,6 +119,16 @@ function scrollTranscriptIfVisible(app: AppState, delta: number): boolean {
   return app.scrollTranscript(delta);
 }
 
+function scrollTranscriptWithEmptyComposer(app: AppState, key: Keypress): boolean {
+  if ((key.name !== "up" && key.name !== "down") || key.ctrl || key.meta || key.shift) return false;
+  if (app.input.getText().trim().length > 0) return false;
+  const delta = key.name === "up" ? -1 : 1;
+  if (!scrollTranscriptIfVisible(app, delta)) return false;
+  app.hideCursorBriefly();
+  app.draw();
+  return true;
+}
+
 function handleClickOrScroll(app: AppState, key: Keypress): boolean {
   if (key.name === "click" && key.char) {
     const pointer = getPointerPosition(key);
@@ -300,6 +310,7 @@ export function handleKey(app: AppState, key: Keypress): void {
   }
 
   if (handleEscapeAndBindings(app, key)) return;
+  if (scrollTranscriptWithEmptyComposer(app, key)) return;
 
   if (key.name === "backspace" && !key.ctrl && !key.meta && !key.shift && app.input.getText().length === 0) {
     const fileKeys = Array.from(app.fileContexts.keys());

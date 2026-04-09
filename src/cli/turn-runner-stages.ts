@@ -12,7 +12,7 @@ import { buildNativeFollowupStateContext } from "./native-workspace-observer.js"
 import { buildSemanticTaskContext } from "./semantic-task-context.js";
 import { applyTurnFrame } from "./turn-frame.js";
 import { estimateTextTokens } from "../ai/tokens.js";
-import { expandSkillInvocation } from "../core/skills.js";
+import { expandInlineSkillInvocations } from "../core/skills.js";
 
 export type TurnChatMessage = {
   role: "user" | "assistant";
@@ -205,7 +205,7 @@ export function addUserTurnToSession(options: {
     userMessage: text,
     repoState: typeof session.getRepoState === "function" ? session.getRepoState() : undefined,
   });
-  const skillExpansion = expandSkillInvocation(text);
+  const skillExpansion = expandInlineSkillInvocations(text);
   const transcriptNotes = [
     skillExpansion.skillName ? `[skill invoked] ${skillExpansion.skillName}` : null,
     fileContext?.transcriptNote,

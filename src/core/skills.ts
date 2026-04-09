@@ -34,6 +34,25 @@ function stripFrontmatter(raw: string): string {
   return match ? match[1] : raw;
 }
 
+function buildSkillBlock(skillName: string): { block?: string; skillName?: string; skillPath?: string } {
+  const skill = loadSkill(skillName);
+  if (!skill) return {};
+  const raw = loadSkillPrompt(skillName);
+  if (!raw) return {};
+  const body = stripFrontmatter(raw).trim();
+  return {
+    block: [
+      `<skill name="${skill.name}" location="${skill.path}">`,
+      `References are relative to ${skill.baseDir}.`,
+      "",
+      body,
+      "</skill>",
+    ].join("\n"),
+    skillName: skill.name,
+    skillPath: skill.path,
+  };
+}
+
 export function expandSkillInvocation(text: string): { expandedText: string; skillName?: string; skillPath?: string } {
   const trimmedStart = text.trimStart();
   const leadingWhitespace = text.slice(0, text.length - trimmedStart.length);
@@ -44,23 +63,28 @@ export function expandSkillInvocation(text: string): { expandedText: string; ski
 
   const skillName = match[1];
   const args = match[2]?.trim() ?? "";
-  const skill = loadSkill(skillName);
-  if (!skill) return { expandedText: text };
-
-  const raw = loadSkillPrompt(skillName);
-  if (!raw) return { expandedText: text };
-
-  const body = stripFrontmatter(raw).trim();
-  const skillBlock = [
-    `<skill name="${skill.name}" location="${skill.path}">`,
-    `References are relative to ${skill.baseDir}.`,
-    "",
-    body,
-    "</skill>",
-  ].join("\n");
+  const { block: skillBlock, skillName: resolvedName, skillPath } = buildSkillBlock(skillName);
+  if (!skillBlock || !resolvedName) return { expandedText: text };
   return {
     expandedText: args ? `${leadingWhitespace}${skillBlock}\n\n${args}` : `${leadingWhitespace}${skillBlock}`,
-    skillName: skill.name,
-    skillPath: skill.path,
+    skillName: resolvedName,
+    skillPath,
+  };
+}
+
+export function expandInlineSkillInvocations(text: string): { expandedText: string; skillName?: string; skillPath?: string } {
+  const direct = expandSkillInvocation(text);
+  if (direct.skillName) return direct;
+  const match = text.match(/(^|\s)\$([a-zA-Z0-9_-]+)\b/);
+  if (!match || match.index === undefined) return { expandedText: text };
+  const skillTokenStart = match.index + match[1].length;
+  const skillTokenEnd = skillTokenStart + match[2].length + 1;
+  const { block, skillName, skillPath } = buildSkillBlock(match[2]);
+  if (!block || !skillName) return { expandedText: text };
+  const promptWithoutToken = `${text.slice(0, skillTokenStart)}${text.slice(skillTokenEnd)}`.replace(/[ \t]{2,}/g, " ").trim();
+  return {
+    expandedText: promptWithoutToken ? `${block}\n\n${promptWithoutToken}` : block,
+    skillName,
+    skillPath,
   };
 }

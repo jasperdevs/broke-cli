@@ -3,7 +3,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, describe, expect, it } from "vitest";
 import { clearRuntimeSettings, setRuntimeSettings } from "../src/core/config.js";
-import { expandSkillInvocation } from "../src/core/skills.js";
+import { expandInlineSkillInvocations, expandSkillInvocation } from "../src/core/skills.js";
 import { addUserTurnToSession } from "../src/cli/turn-runner-stages.js";
 import { Session } from "../src/core/session.js";
 
@@ -70,5 +70,17 @@ describe("skill invocation", () => {
 
     expect(expanded.expandedText).toContain(`<skill name="review" location="${skillPath}">`);
     expect(expanded.expandedText.endsWith("this diff")).toBe(true);
+  });
+
+  it("expands $skill tokens embedded anywhere in the prompt", async () => {
+    const { root, skillPath } = await makeSkill("writer");
+    setRuntimeSettings({ skills: [root], discoverSkills: false });
+
+    const expanded = expandInlineSkillInvocations("rewrite this with $writer and keep names exact");
+
+    expect(expanded.skillName).toBe("writer");
+    expect(expanded.expandedText).toContain(`<skill name="writer" location="${skillPath}">`);
+    expect(expanded.expandedText).toContain("rewrite this with and keep names exact");
+    expect(expanded.expandedText).not.toContain("$writer");
   });
 });

@@ -186,7 +186,7 @@ function buildSidebarColumnLines(app: AppState, height: number, footerLines: str
 }
 
 export function sparkleSpinner(app: AppState, frame: number, color?: string): string {
-  const chars = ["·", "✧", "✦", "✧"];
+  const chars = ["●", "●", "○", "●"];
   return `${color ?? T()}${chars[frame % chars.length]}${RESET}`;
 }
 

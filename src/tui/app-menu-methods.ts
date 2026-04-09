@@ -30,8 +30,10 @@ function styleComposerLine(app: AppState, line: string): string {
   let styled = line;
   const elements = app.input.getElements?.() ?? [];
   for (const element of elements) {
-    if (element.kind !== "image") continue;
-    const styledLabel = `${currentTheme().imageTagBg}${BOLD}${TXT()}${element.label}${RESET}`;
+    if (element.kind !== "image" && element.kind !== "skill") continue;
+    const styledLabel = element.kind === "image"
+      ? `${currentTheme().imageTagBg}${BOLD}${TXT()}${element.label}${RESET}`
+      : `\x1b[38;2;80;170;255m${element.label}${RESET}`;
     styled = styled.split(element.label).join(styledLabel);
   }
   return styled;

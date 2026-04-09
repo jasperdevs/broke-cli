@@ -27,7 +27,8 @@ export function isToolOutput(_app: AppState, content: string): boolean {
 }
 
 export function renderStaticMessages(app: AppState, maxWidth: number): string[] {
-  if (app.msgCacheLines && app.msgCacheWidth === maxWidth && app.msgCacheLen === app.messages.length) return app.msgCacheLines;
+  const msgCacheSignature = `${getSettings().hideThinkingBlock ? "hide" : "show"}`;
+  if (app.msgCacheLines && app.msgCacheWidth === maxWidth && app.msgCacheLen === app.messages.length && app.msgCacheSignature === msgCacheSignature) return app.msgCacheLines;
   const lines = buildStaticMessages({
     messages: app.messages,
     maxWidth,
@@ -49,6 +50,7 @@ export function renderStaticMessages(app: AppState, maxWidth: number): string[] 
   app.msgCacheLines = lines;
   app.msgCacheWidth = maxWidth;
   app.msgCacheLen = app.messages.length;
+  app.msgCacheSignature = msgCacheSignature;
   return lines;
 }
 
@@ -111,9 +113,9 @@ export function renderCompactHeader(app: AppState): string {
   const settings = getSettings();
   const parts: string[] = [];
   parts.push(`${T()}${getPrettyModelName(app.modelName, app.modelProviderId)}${RESET}`);
+  parts.push(`${DIM}${app.formatShortCwd(Math.max(8, Math.floor(process.stdout.columns / 5) || 16))}${RESET}`);
   if (app.gitBranch) parts.push(`${MUTED()}${app.gitBranch}${app.gitDirty ? "*" : ""}${RESET}`);
   if (app.isStreaming) parts.push(`${DIM}esc stop${RESET}`);
-  parts.push(`${app.mode === "plan" ? T() : OK()}${app.mode}${RESET}`);
   const thinkLevel = getEffectiveThinkingLevel({
     providerId: app.modelProviderId,
     modelId: app.modelName === "none" ? undefined : app.modelName,
@@ -341,6 +343,7 @@ export function buildSidebarLines(app: AppState): string[] {
     return getPrettyModelName(modelId, providerId);
   };
   const roleModels = [
+    { label: "Chat", value: chatModelLabel },
     { label: "Fast", value: resolveSlotLabel("small") },
     { label: "BTW", value: resolveSlotLabel("btw") },
     { label: "Review", value: resolveSlotLabel("review") },

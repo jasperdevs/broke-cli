@@ -31,6 +31,31 @@ describe("thinking and input regressions", () => {
     }
   });
 
+  it("hides already-rendered reasoning after the hidden-thinking setting is toggled", () => {
+    const app = new App() as any;
+    const original = getSettings().hideThinkingBlock;
+    try {
+      updateSetting("hideThinkingBlock", false);
+      app.appendThinking("persisted thought");
+      expect(app.renderStaticMessages(80).map((line: string) => stripAnsi(line)).join("\n")).toContain("persisted thought");
+      updateSetting("hideThinkingBlock", true);
+      expect(app.renderStaticMessages(80).map((line: string) => stripAnsi(line)).join("\n")).not.toContain("persisted thought");
+    } finally {
+      updateSetting("hideThinkingBlock", original);
+    }
+  });
+
+  it("scrolls the transcript with plain arrows when the composer is empty", () => {
+    const app = new App() as any;
+    for (let i = 0; i < 40; i++) app.messages.push({ role: "assistant", content: `line ${i}` });
+    app.scrollToBottom();
+    const bottomOffset = app.scrollOffset;
+    app.handleKey({ name: "up", char: "", ctrl: false, meta: false, shift: false });
+    expect(app.scrollOffset).toBeLessThan(bottomOffset);
+    app.handleKey({ name: "down", char: "", ctrl: false, meta: false, shift: false });
+    expect(app.scrollOffset).toBe(bottomOffset);
+  });
+
   it("does not show a synthetic streaming activity summary", () => {
     const app = new App() as any;
     app.messages = [{ role: "assistant", content: "working" }];

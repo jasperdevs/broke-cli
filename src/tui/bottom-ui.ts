@@ -148,7 +148,7 @@ function buildInfoBarParts(app: AppState, hasSidebar: boolean): FooterPart[] {
   });
   if (thinkLevel !== "off") parts.push({ text: `${T()}${thinkLevel}${RESET}`, plain: thinkLevel });
   const caveLevel = settings.cavemanLevel ?? "auto";
-  if (caveLevel !== "off") parts.push({ text: `🪨 ${WARN()}${caveLevel}${RESET}`, plain: `rock ${caveLevel}` });
+  if (caveLevel !== "off") parts.push({ text: `${WARN()}◆${RESET} ${WARN()}${caveLevel}${RESET}`, plain: `caveman ${caveLevel}` });
   const liveTokens = app.getLiveTotalTokens();
   if (settings.showTokens && !hasSidebar && liveTokens > 0) {
     const tokenPart = app.renderTokenSummaryParts()
@@ -156,6 +156,10 @@ function buildInfoBarParts(app: AppState, hasSidebar: boolean): FooterPart[] {
       .join(" ");
     const statStr = tokenPart;
     parts.push({ text: `${DIM}${statStr}${RESET}`, plain: statStr });
+  }
+  if (!hasSidebar && app.contextTokenCount > 0) {
+    const contextPart = `${fmtTokens(app.contextTokenCount)} ctx`;
+    parts.push({ text: `${DIM}${contextPart} ${Math.round(app.contextUsed)}%${RESET}`, plain: `${contextPart} ${Math.round(app.contextUsed)}%` });
   }
   return parts;
 }
