@@ -9,6 +9,7 @@ import { getSettings } from "../core/config.js";
 import { buildPromptCacheKey } from "../core/context.js";
 import { getBaseUrl } from "../core/config.js";
 import { startLocalOpenAIStream } from "./local-openai-stream.js";
+import { parsePossiblyPartialJson } from "./native-tool-events.js";
 
 export interface StreamCallbacks {
   onText: (delta: string) => void;
@@ -119,6 +120,7 @@ export async function startStream(
     const normalizeUsageField = (value: unknown): number =>
       typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
 
+    const emittedToolResultIds = new Set<string>();
     const result = streamText({
       model: opts.model,
       system: opts.system,
@@ -135,7 +137,10 @@ export async function startStream(
       onStepFinish: (event) => {
         if (event.toolResults) {
           for (const tr of event.toolResults) {
-            callbacks.onToolResult?.(tr.toolName, tr.output);
+            const callId = normalizeToolCallId(tr);
+            if (callId && emittedToolResultIds.has(callId)) continue;
+            callbacks.onToolResult?.(tr.toolName, tr.output, callId);
+            if (callId) emittedToolResultIds.add(callId);
           }
           // Trigger after tool call callback for pending messages
           callbacks.onAfterToolCall?.();
@@ -151,6 +156,7 @@ export async function startStream(
     let streamFailed = false;
     let emittedText = "";
     let emittedReasoning = "";
+    const toolInputByCallId = new Map<string, { name: string; input: string }>();
     try {
       for await (const part of result.fullStream) {
         if (part.type === "text-delta") {
@@ -215,11 +221,28 @@ export async function startStream(
         } else if ((part as any).type === "tool-input-start") {
           // Show tool call immediately when model starts generating it
           const tc = part as any;
-          callbacks.onToolCallStart?.(tc.toolName);
+          const callId = normalizeToolCallId(tc);
+          callbacks.onToolCallStart?.(tc.toolName, callId);
+          if (callId) toolInputByCallId.set(callId, { name: tc.toolName, input: "" });
+        } else if ((part as any).type === "tool-input-delta") {
+          const tc = part as any;
+          const callId = normalizeToolCallId(tc);
+          const toolName = tc.toolName ?? (callId ? toolInputByCallId.get(callId)?.name : undefined) ?? "tool";
+          if (callId && !toolInputByCallId.has(callId)) callbacks.onToolCallStart?.(toolName, callId);
+          const previous = callId ? toolInputByCallId.get(callId)?.input ?? "" : "";
+          const next = `${previous}${typeof tc.delta === "string" ? tc.delta : ""}`;
+          if (callId) toolInputByCallId.set(callId, { name: toolName, input: next });
+          callbacks.onToolCall?.(toolName, parsePossiblyPartialJson(next), callId);
         } else if (part.type === "tool-call") {
           // Tool call fully formed — pass complete args
           const tc = part as any;
-          callbacks.onToolCall?.(tc.toolName, tc.input);
+          callbacks.onToolCall?.(tc.toolName, tc.input, normalizeToolCallId(tc));
+        } else if ((part as any).type === "tool-result") {
+          const tr = part as any;
+          const callId = normalizeToolCallId(tr);
+          if (callId) emittedToolResultIds.add(callId);
+          callbacks.onToolResult?.(tr.toolName, tr.output ?? tr.result, callId);
+          callbacks.onAfterToolCall?.();
         }
       }
     } catch (streamErr: unknown) {
@@ -262,6 +285,14 @@ export async function startStream(
   } finally {
     process.stderr.write = origStderrWrite;
   }
+}
+
+function normalizeToolCallId(part: unknown): string | undefined {
+  const record = typeof part === "object" && part !== null ? part as Record<string, unknown> : {};
+  for (const candidate of [record.toolCallId, record.toolCallID, record.callId, record.call_id, record.id]) {
+    if (typeof candidate === "string" && candidate.trim()) return candidate;
+  }
+  return undefined;
 }
 
 function shouldUseDirectLocalOpenAIStream(opts: StreamOptions): boolean {

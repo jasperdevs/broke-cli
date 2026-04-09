@@ -67,6 +67,11 @@ function deriveStreamingActivitySummary(text: string, archetype: string): string
       return "working through the plan";
     case "research":
       return "gathering the answer";
+    case "explore":
+      return target ? `looking through ${target}` : "waiting for the first repository result";
+    case "edit":
+    case "bugfix":
+      return target ? `waiting for the first action on ${target}` : "waiting for the first file action";
     default:
       return "";
   }

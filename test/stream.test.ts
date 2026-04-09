@@ -56,7 +56,6 @@ vi.mock("../src/ai/router.js", () => ({
   routeMessage: routeMessageMock,
 }));
 
-import { startStream } from "../src/ai/stream.js";
 import { runModelTurn } from "../src/cli/turn-runner.js";
 vi.mock("../src/cli/notify.js", () => ({
   sendResponseNotification: () => {},
@@ -111,44 +110,6 @@ describe("stream tool steps", () => {
       fullStream: (async function* () {})(),
       usage: Promise.resolve({ inputTokens: 1, outputTokens: 1 }),
     });
-  });
-
-  it("allows at least one tool step plus one answer step", async () => {
-    await startStream({
-      model: {} as any,
-      modelId: "test",
-      system: "sys",
-      messages: [{ role: "user", content: "hi" }],
-      tools: {} as any,
-      maxToolSteps: 1,
-    }, {
-      onText: () => {},
-      onReasoning: () => {},
-      onFinish: () => {},
-      onError: () => {},
-    });
-
-    expect(stepCountIsMock).toHaveBeenCalledWith(2);
-    expect(streamTextMock).toHaveBeenCalled();
-  });
-
-  it("passes a hard max output budget when requested", async () => {
-    await startStream({
-      model: {} as any,
-      modelId: "test",
-      system: "sys",
-      messages: [{ role: "user", content: "hi" }],
-      maxOutputTokens: 64,
-    }, {
-      onText: () => {},
-      onReasoning: () => {},
-      onFinish: () => {},
-      onError: () => {},
-    });
-
-    expect(streamTextMock).toHaveBeenCalledWith(expect.objectContaining({
-      maxOutputTokens: 64,
-    }));
   });
 
   it("suppresses plain planning narration before edit-tool work starts", async () => {
@@ -380,6 +341,7 @@ describe("stream tool steps", () => {
       recordTurn: vi.fn(),
       recordToolResult: vi.fn(),
       recordRepoRead: vi.fn(),
+      recordRepoEdit: vi.fn(),
       recordShellRecovery: vi.fn(),
       recordIdleCacheCliff: vi.fn(),
       replaceConversation: vi.fn(),

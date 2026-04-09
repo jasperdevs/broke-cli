@@ -137,6 +137,11 @@ export function createNativeEventHandlers(options: {
       const itemType = extractItemType(item);
       const toolName = extractNativeToolName(item);
       const toolCallId = extractNativeToolCallId(item);
+      if (toolName && /tool|function/.test(itemType) && /(result|output|response)/.test(itemType)) {
+        callbacks.onToolResult?.(toolName, extractNativeToolResult(item, extractCodexItemText(item)), toolCallId ?? undefined);
+        callbacks.onAfterToolCall?.();
+        return;
+      }
       if (toolName && /function_call/.test(itemType)) {
         if (toolCallId) nativeToolNamesById.set(toolCallId, toolName);
         startToolIfNeeded(toolName, toolCallId);

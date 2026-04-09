@@ -126,6 +126,24 @@ function inferToolResultDetail(
     return `${hits.length} ranked hits`;
   }
 
+  if (toolName === "webSearch") {
+    const results = typeof (result as any)?.results === "string" ? (result as any).results : "";
+    const backend = typeof (result as any)?.backend === "string" ? ` · ${(result as any).backend}` : "";
+    const resultCount = results
+      ? results.split(/\n{2,}/).filter((entry: string) => entry.trim()).length
+      : 0;
+    return `${resultCount || "some"} web result${resultCount === 1 ? "" : "s"}${backend}`;
+  }
+
+  if (toolName === "webFetch") {
+    const content = typeof result.content === "string" ? result.content : "";
+    const contentType = typeof (result as any)?.contentType === "string" && (result as any).contentType
+      ? ` · ${(result as any).contentType.split(";")[0]}`
+      : "";
+    const truncated = (result as any)?.truncated ? " · truncated" : "";
+    return `${lineCount(content)} lines fetched${contentType}${truncated}`;
+  }
+
   if (toolName === "writeFile" && result.success !== false) {
     const path = typeof toolArgs?.path === "string" ? toolArgs.path : "";
     if (path) session.recordRepoEdit(path, "write");

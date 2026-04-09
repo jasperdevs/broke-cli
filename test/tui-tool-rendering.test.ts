@@ -67,6 +67,24 @@ describe("tool rendering detail", () => {
     expect(output).not.toContain("edit index.html");
   });
 
+  it("renders web search and fetch tools as first-class live actions", () => {
+    const app = makeApp();
+    app.addToolCall("webSearch", "...", undefined, "call_search");
+    app.updateToolCallArgs("webSearch", "OpenCode tools documentation", { query: "OpenCode tools documentation", numResults: 5 }, "call_search");
+    app.addToolResult("webSearch", "ok", false, "5 web results · exa", "call_search");
+    app.addToolCall("webFetch", "...", undefined, "call_fetch");
+    app.updateToolCallArgs("webFetch", "https://developers.openai.com/codex/cli/features", { url: "https://developers.openai.com/codex/cli/features", format: "markdown" }, "call_fetch");
+    app.addToolResult("webFetch", "ok", false, "42 lines fetched · text/html", "call_fetch");
+
+    const output = app.renderMessages(120).map((line: string) => stripAnsi(line)).join("\n");
+    expect(output).toContain("web search OpenCode tools documentation");
+    expect(output).toContain("5 web results · exa");
+    expect(output).toContain("fetch https://developers.openai.com/codex/cli/features");
+    expect(output).toContain("42 lines fetched · text/html");
+    expect(output).not.toContain("webSearch {");
+    expect(output).not.toContain("webFetch {");
+  });
+
   it("keeps simple create, edit, and read flows centered on visible action blocks", () => {
     const renderCreate = () => {
       const app = makeApp();

@@ -88,6 +88,18 @@ export function toolArgumentSummary(tc: { name: string; preview: string; args?: 
       const query = typeof args.query === "string" ? args.query : "";
       return query ? compactPreview(query, 72) : null;
     }
+    case "webSearch": {
+      const query = typeof args.query === "string" ? args.query : "";
+      return query ? `query: ${compactPreview(query, 72)}` : null;
+    }
+    case "webFetch": {
+      const format = typeof args.format === "string" ? args.format : "";
+      const timeout = typeof args.timeout === "number" ? args.timeout : null;
+      const parts: string[] = [];
+      if (format) parts.push(format);
+      if (timeout !== null) parts.push(`${timeout}s timeout`);
+      return parts.join(" · ") || null;
+    }
     case "glob":
     case "Glob": {
       const pattern = typeof args.pattern === "string" ? args.pattern : "";
@@ -128,6 +140,12 @@ export function toolDescription(tc: { name: string; preview: string }): string {
       return `grep ${tc.preview}`.trim();
     case "semSearch":
       return `search ${tc.preview}`.trim();
+    case "webSearch":
+      return `web search ${tc.preview}`.trim();
+    case "webFetch":
+      return `fetch ${tc.preview}`.trim();
+    case "todoWrite":
+      return `update tasks`;
     default:
       return tc.preview && tc.preview !== "..." ? `${tc.name} ${tc.preview}` : tc.name;
   }

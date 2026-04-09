@@ -396,6 +396,14 @@ export function buildToolPreview(name: string, args: unknown): string {
     const query = (args as any)?.query ?? "?";
     return query.length > 48 ? `${query.slice(0, 45)}...` : query;
   }
+  if (name === "webSearch") {
+    const query = (args as any)?.query ?? "?";
+    return query.length > 60 ? `${query.slice(0, 57)}...` : query;
+  }
+  if (name === "webFetch") {
+    const url = (args as any)?.url ?? "?";
+    return url.length > 72 ? `${url.slice(0, 69)}...` : url;
+  }
   if (name === "bash") {
     const command = (args as any)?.command ?? "?";
     return command.length > 60 ? `${command.slice(0, 57)}...` : command;

@@ -212,4 +212,48 @@ describe("native stream tool callbacks", () => {
     expect(onToolCall).toHaveBeenCalledWith("writeFile", { path: "index.html" }, "call_2");
     expect(onToolCall).toHaveBeenCalledWith("writeFile", { path: "index.html", content: "<html></html>" }, "call_2");
   });
+
+  it("surfaces Codex response output_item tool results through callbacks", async () => {
+    const stdoutHandlers: Record<string, (chunk: string) => void> = {};
+    const processHandlers: Record<string, (code?: number) => void> = {};
+    configMocks.spawn.mockReturnValue({
+      stdout: { on: (event: string, handler: (chunk: string) => void) => { stdoutHandlers[event] = handler; } },
+      stderr: { on: vi.fn() },
+      stdin: { end: vi.fn() },
+      on: (event: string, handler: (code?: number) => void) => { processHandlers[event] = handler; },
+      kill: vi.fn(),
+    });
+
+    const onToolResult = vi.fn();
+    const onAfterToolCall = vi.fn();
+    const pending = startNativeStream({
+      providerId: "codex",
+      modelId: "gpt-5.4-mini",
+      system: "system",
+      messages: [{ role: "user", content: "status?" }],
+    }, {
+      onText: vi.fn(),
+      onReasoning: vi.fn(),
+      onFinish: vi.fn(),
+      onError: vi.fn(),
+      onToolResult,
+      onAfterToolCall,
+    });
+
+    stdoutHandlers.data?.(`${JSON.stringify({
+      type: "response.output_item.done",
+      item: {
+        type: "function_call_output",
+        call_id: "call_result_1",
+        name: "bash",
+        output: "tests passed",
+      },
+    })}\n`);
+    stdoutHandlers.data?.(`${JSON.stringify({ type: "response.completed", response: { usage: {} } })}\n`);
+    processHandlers.close?.(0);
+
+    await pending;
+    expect(onToolResult).toHaveBeenCalledWith("bash", "tests passed", "call_result_1");
+    expect(onAfterToolCall).toHaveBeenCalledTimes(1);
+  });
 });

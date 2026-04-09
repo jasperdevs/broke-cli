@@ -27,6 +27,8 @@ function buildActivityLabel(name: string, preview: string): string | null {
       case "glob": return "finding files";
       case "grep": return "searching the repo";
       case "semSearch": return "running semantic search";
+      case "webSearch": return "searching the web";
+      case "webFetch": return "fetching a webpage";
       case "bash": return "running a command";
       default: return null;
     }
@@ -40,6 +42,8 @@ function buildActivityLabel(name: string, preview: string): string | null {
     case "glob": return `finding ${target}`;
     case "grep": return `searching ${target}`;
     case "semSearch": return `semantic search: ${target}`;
+    case "webSearch": return `web search: ${target}`;
+    case "webFetch": return `fetching ${target}`;
     case "bash": return `running ${target}`;
     default: return null;
   }
