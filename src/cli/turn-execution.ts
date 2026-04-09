@@ -11,6 +11,7 @@ import type { ToolName } from "../tools/registry.js";
 import { setActiveToolContext } from "../tools/runtime-context.js";
 import {
   buildToolPreview,
+  buildModelVisibleThinkingInstruction,
   buildMinimalOutputInstruction,
   canUseSdkTools,
   formatTurnErrorMessage,
@@ -34,7 +35,6 @@ import { resolveTurnExecution } from "./turn-execution-setup.js";
 import { readFileDirect } from "../tools/file-ops.js";
 import { observeToolResult } from "./turn-tool-observer.js";
 type PendingDelivery = "steering" | "followup";
-
 interface TurnExecutionApp {
   addMessage(role: "user" | "assistant" | "system", content: string, images?: Array<{ mimeType: string; data: string }>): void;
   appendToLastMessage(delta: string): void;
@@ -225,7 +225,7 @@ export async function executeTurn(options: {
   });
 
   if (shouldRequestThinkTags(executionModel, thinkingRequested)) {
-    turnSystemPrompt += "\n\nIf this model exposes reasoning in text, place that reasoning inside <think>...</think> before the final answer. Keep it plain text, concise, and specific to this request. If the model does not support that format, ignore this instruction and answer normally.";
+    turnSystemPrompt += `\n\n${buildModelVisibleThinkingInstruction(effectiveCavemanLevel)}`;
   }
 
   let completion: "success" | "empty" | "error" | "insufficient" = "success";

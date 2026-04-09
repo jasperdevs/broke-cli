@@ -335,7 +335,6 @@ export async function executeTurnWithRetries(options: {
   }
 
   if (shouldRetryEmptyLocalMain(result, forceRoute, activeModel)) {
-    app.setStatus("local model returned no visible text - retrying direct");
     result = await runObservedTurn(activeModel, session, {
       app,
       session,

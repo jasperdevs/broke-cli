@@ -28,6 +28,11 @@ export function shouldRequestThinkTags(model: ModelHandle, thinkingRequested: bo
   return thinkingRequested && model.runtime === "sdk";
 }
 
+export function buildModelVisibleThinkingInstruction(cavemanLevel: string): string {
+  const style = cavemanLevel === "off" ? "Keep it plain text, concise, and specific to this request." : "Use the same output-style for the reasoning: clipped, direct, no recap, no checklist, no warm-up, fragments fine.";
+  return `If this model exposes reasoning in text, place that reasoning inside <think>...</think> before the final answer. ${style} If the model does not support that format, ignore this instruction and answer normally.`;
+}
+
 export function shouldEnforceToolFirstTurn(options: {
   text: string;
   assistantText: string;

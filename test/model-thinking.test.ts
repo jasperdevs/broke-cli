@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { modelSupportsReasoning } from "../src/ai/model-catalog.js";
-import { shouldEnforceToolFirstTurn, shouldRequestThinkTags } from "../src/cli/turn-runner-support.js";
+import { buildModelVisibleThinkingInstruction, shouldEnforceToolFirstTurn, shouldRequestThinkTags } from "../src/cli/turn-runner-support.js";
 
 describe("model reasoning support", () => {
   it("tracks reasoning-capable frontier models from the catalog", () => {
@@ -53,5 +53,13 @@ describe("model reasoning support", () => {
         model: {} as any,
       },
     })).toBe(false);
+  });
+
+  it("asks model-visible think tags to follow caveman style", () => {
+    const prompt = buildModelVisibleThinkingInstruction("ultra");
+    expect(prompt).toContain("<think>");
+    expect(prompt).toContain("clipped, direct");
+    expect(prompt).toContain("no checklist");
+    expect(buildModelVisibleThinkingInstruction("off")).toContain("plain text, concise");
   });
 });

@@ -74,7 +74,7 @@ describe("local empty response retry", () => {
 
     expect(calls).toHaveLength(2);
     expect(calls[1].activeSystemPrompt).toContain("Local-model empty-output recovery");
-    expect(app.setStatus).toHaveBeenCalledWith("local model returned no visible text - retrying direct");
+    expect(app.setStatus).not.toHaveBeenCalled();
     expect(result.result.assistantText).toBe("Hey.");
   });
 });
