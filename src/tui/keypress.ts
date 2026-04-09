@@ -178,6 +178,7 @@ class PasteBurst {
  * Supports bracketed paste mode for multi-line pastes.
  */
 export class KeypressHandler {
+  private static readonly ESCAPE_SEQUENCE_WAIT_MS = 40;
   private onKey: KeyHandler;
   private onPaste: PasteHandler;
   private isPasting = false;
@@ -249,7 +250,7 @@ export class KeypressHandler {
             }
             // Fall back to readline for sequences we could not complete in time.
             origEmit("data", s);
-          }, 12);
+          }, KeypressHandler.ESCAPE_SEQUENCE_WAIT_MS);
           return false;
         }
         mouseSeqRe.lastIndex = 0;

@@ -27,4 +27,11 @@ describe("escape sequence assembly", () => {
     expect(decodeSpecialKeySequence("\x1b[13;2")).toBeNull();
     expect(decodeSpecialKeySequence("\x1b[13;2u")).toEqual({ name: "return", char: "", ctrl: false, meta: false, shift: true });
   });
+
+  it("keeps split shift-enter sequences decodable once the final chunk arrives", () => {
+    const firstChunk = "\x1b[27;2;";
+    const secondChunk = "13~";
+    expect(decodeSpecialKeySequence(firstChunk)).toBeNull();
+    expect(decodeSpecialKeySequence(firstChunk + secondChunk)).toEqual({ name: "return", char: "", ctrl: false, meta: false, shift: true });
+  });
 });
