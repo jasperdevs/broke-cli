@@ -49,7 +49,7 @@ export const COMMANDS: CommandEntry[] = [
   { name: "thinking", desc: "cycle thinking", hotkey: "ctrl+t" },
   { name: "caveman", desc: "cycle token saving", hotkey: "ctrl+y" },
   { name: "clear", desc: "clear chat (new)", aliases: ["new"] },
-  { name: "exit", desc: "quit", aliases: ["quit"] },
+  { name: "quit", desc: "quit" },
 ];
 
 function isCommandVisible(command: CommandEntry, context?: CommandSurfaceContext): boolean {

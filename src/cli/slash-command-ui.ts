@@ -385,7 +385,7 @@ const uiSlashCommands = createSlashCommandRegistry<UiSlashCommandContext, SlashC
     },
   },
   {
-    names: ["quit", "exit"],
+    names: ["quit"],
     run: ({ app }) => {
       app.stop();
       return { handled: true };

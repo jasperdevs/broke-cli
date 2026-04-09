@@ -57,11 +57,9 @@ export const DEFAULT_SETTINGS: Settings = {
     clearOnShrink: false,
   },
   images: {
-    autoResize: true,
     blockImages: false,
   },
   npmCommand: [],
-  enabledModels: [],
   markdown: {
     codeBlockIndent: "  ",
   },

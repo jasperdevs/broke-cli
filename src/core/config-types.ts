@@ -33,7 +33,6 @@ export interface TerminalSettings {
 }
 
 export interface ImageSettings {
-  autoResize: boolean;
   blockImages: boolean;
 }
 
@@ -91,7 +90,6 @@ export interface Settings {
   terminal: TerminalSettings;
   images: ImageSettings;
   npmCommand: string[];
-  enabledModels: string[];
   markdown: MarkdownSettings;
   autonomy: AutonomySettings;
   packages: PackageSource[];

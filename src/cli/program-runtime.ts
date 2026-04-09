@@ -11,7 +11,6 @@ type ParsedModelArg = { provider?: string; model?: string; thinking?: string };
 type RuntimeProgramOptions = {
   sessionDir?: string;
   session?: boolean;
-  models?: string;
   verbose?: boolean;
   extensions?: boolean;
   skills?: boolean;
@@ -30,7 +29,6 @@ export function applyProgramRuntimeSettings(opts: RuntimeProgramOptions, parsedM
   if (opts.sessionDir) setRuntimeSettings({ sessionDir: opts.sessionDir });
   if (opts.session === false) setRuntimeSettings({ autoSaveSessions: false });
   if (thinkingOverride) setRuntimeSettings({ thinkingLevel: thinkingOverride, enableThinking: thinkingOverride !== "off" });
-  if (opts.models) setRuntimeSettings({ enabledModels: opts.models.split(",").map((entry) => entry.trim()).filter(Boolean) });
   if (opts.verbose) setRuntimeSettings({ quietStartup: false });
   if (opts.extensions === false) setRuntimeSettings({ discoverExtensions: false });
   if (opts.skills === false) setRuntimeSettings({ discoverSkills: false });
