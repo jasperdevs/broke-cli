@@ -417,7 +417,6 @@ export function handleKey(app: AppState, key: Keypress): void {
     app.cycleCavemanMode();
     return;
   }
-
   if ((app.isStreaming || app.isCompacting) && app.input.getText().trim().length > 0) {
     if (key.name === "tab") {
       queueCurrentInput(app, "followup");
@@ -428,7 +427,7 @@ export function handleKey(app: AppState, key: Keypress): void {
       return;
     }
   }
-
+  if (key.name === "tab" && !key.ctrl && !key.meta && !key.shift && app.input.getText().trim().length > 0) { submitInput(app); return; }
   const inputText = app.input.getText();
   if (inputText.startsWith("/")) {
     const suggestions = app.getCommandMatches();

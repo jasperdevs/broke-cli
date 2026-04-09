@@ -178,7 +178,7 @@ class PasteBurst {
  * Supports bracketed paste mode for multi-line pastes.
  */
 export class KeypressHandler {
-  private static readonly ESCAPE_SEQUENCE_WAIT_MS = 40;
+  private static readonly ESCAPE_SEQUENCE_WAIT_MS = 120;
   private onKey: KeyHandler;
   private onPaste: PasteHandler;
   private isPasting = false;

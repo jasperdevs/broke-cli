@@ -202,6 +202,16 @@ describe("input editing", () => {
     expect(app.pendingMessages).toEqual([{ text: "hey", images: [], delivery: "followup" }]);
   });
 
+  it("submits with Tab when idle, matching the Codex composer contract", () => {
+    const app = new App() as any;
+    let submitted = "";
+    app.onSubmit = (text: string) => { submitted = text; };
+    app.input.paste("hey");
+    app.handleKey({ name: "tab", char: "\t", ctrl: false, meta: false, shift: false });
+    expect(submitted).toBe("hey");
+    expect(app.input.getText()).toBe("");
+  });
+
   it("queues steering with Enter while streaming", () => {
     const app = new App() as any;
     app.isStreaming = true;
