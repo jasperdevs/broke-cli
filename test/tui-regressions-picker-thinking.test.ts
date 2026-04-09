@@ -353,7 +353,7 @@ describe("tool-call visibility", () => {
       forceRedraw: () => {},
     };
     app.addToolCall("readFile", "...");
-    const output = stripAnsi(app.messages[app.messages.length - 1].content);
+    const output = app.renderMessages(80).map((line: string) => stripAnsi(line)).join("\n");
     expect(output).toContain("starting");
     expect(output).toContain("waiting for tool details");
   });
@@ -372,9 +372,9 @@ describe("tool-call visibility", () => {
       forceRedraw: () => {},
     };
     app.addToolCall("readFile", "README.md");
-    app.toolCallGroups[0].startedAt = Date.now() - 2100;
+    app.toolExecutions[0].startedAt = Date.now() - 2100;
     app.addToolResult("readFile", "ok", false, "42 lines");
-    const output = stripAnsi(app.messages[app.messages.length - 1].content);
+    const output = app.renderMessages(80).map((line: string) => stripAnsi(line)).join("\n");
     expect(output).toContain("done");
     expect(output).toContain("2s");
     expect(output).toContain("42 lines");

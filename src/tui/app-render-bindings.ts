@@ -32,7 +32,7 @@ type AppState = any;
 export interface AppRenderMethods {
   isToolOutput(content: string): boolean;
   renderStaticMessages(maxWidth: number): string[];
-  renderToolCallBlock(tc: { name: string; preview: string; args?: unknown; resultDetail?: string; result?: string; error?: boolean; expanded: boolean; streamOutput?: string; startedAt?: number; completedAt?: number }, maxWidth: number): string[];
+  renderToolCallBlock(tc: { name: string; preview: string; args?: unknown; resultDetail?: string; result?: string; error?: boolean; expanded: boolean; streamOutput?: string; status: "starting" | "running" | "done" | "failed"; startedAt?: number; completedAt?: number }, maxWidth: number): string[];
   renderMessages(maxWidth: number): string[];
   renderCompactHeader(): string;
   renderBtwBubble(width: number): string[];

@@ -327,7 +327,7 @@ export function handleKey(app: AppState, key: Keypress): void {
   if (key.ctrl && key.name === "o") {
     app.allToolsExpanded = !app.allToolsExpanded;
     app.toolOutputCollapsed = !app.allToolsExpanded;
-    for (const tc of app.toolCallGroups) tc.expanded = app.allToolsExpanded;
+    for (const tc of app.toolExecutions) tc.expanded = app.allToolsExpanded;
     app.invalidateMsgCache();
     app.draw();
     return;

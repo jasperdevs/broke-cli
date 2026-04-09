@@ -4,7 +4,7 @@ import { buildSidebarFooter } from "./render/sidebar-view.js";
 import { fmtCost, fmtTokens } from "./render/formatting.js";
 import { DIM, setWindowTitle } from "../utils/ansi.js";
 import { MUTED, OK, P, T, TXT } from "./app-shared.js";
-import type { BtwBubble, ChatMessage, ModelOption, UpdateNotice } from "./app-types.js";
+import type { ActivityStep, BtwBubble, ChatMessage, ModelOption, ToolExecutionActivity, UpdateNotice } from "./app-types.js";
 import type { ModelRuntime } from "../ai/providers.js";
 
 interface AnimatedValueLike {
@@ -57,7 +57,8 @@ interface CoreAppState {
   thinkingDuration: number;
   thinkingBuffer: string;
   streamingActivitySummary: string;
-  toolCallGroups: unknown[];
+  currentActivityStep: ActivityStep | null;
+  toolExecutions: ToolExecutionActivity[];
   messages: ChatMessage[];
   msgCacheLines: string[] | null;
   detectedProviders: string[];
@@ -260,7 +261,13 @@ export function setStreaming(app: CoreAppState, streaming: boolean): void {
     } else {
       app.thinkingDuration = 0;
     }
-    if (app.toolCallGroups.length > 0) app.collapseToolCalls();
+    if (app.currentActivityStep?.status === "running") {
+      app.currentActivityStep = {
+        ...app.currentActivityStep,
+        status: "done",
+        completedAt: Date.now(),
+      };
+    }
     if (app.streamStartTime > 0) {
       app.streamStartTime = 0;
     }
@@ -275,7 +282,8 @@ export function setStreaming(app: CoreAppState, streaming: boolean): void {
     app.streamStartTime = Date.now();
     app.streamTokens = 0;
     app.animStreamTokens.reset();
-    app.toolCallGroups = [];
+    app.currentActivityStep = null;
+    app.toolExecutions = [];
     app.ensureUiSpinner();
   } else {
     app.releaseUiSpinnerIfIdle();
@@ -295,6 +303,15 @@ export function setThinkingRequested(app: CoreAppState, requested: boolean): voi
 
 export function setStreamingActivitySummary(app: CoreAppState, summary: string): void {
   app.streamingActivitySummary = summary.trim();
+  if (app.streamingActivitySummary) {
+    if (!app.currentActivityStep || app.currentActivityStep.label !== app.streamingActivitySummary) {
+      app.currentActivityStep = {
+        label: app.streamingActivitySummary,
+        status: "running",
+        startedAt: Date.now(),
+      };
+    }
+  }
   if (app.isStreaming) app.draw();
 }
 

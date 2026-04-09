@@ -1,17 +1,3 @@
-export interface ToolCallRenderGroup {
-  name: string;
-  preview: string;
-  args?: unknown;
-  resultDetail?: string;
-  result?: string;
-  error?: boolean;
-  expanded: boolean;
-  streamOutput?: string;
-  messageIndex?: number;
-  startedAt?: number;
-  completedAt?: number;
-}
-
 export interface TodoRenderItem {
   id: string;
   text: string;
@@ -102,7 +88,7 @@ function renderPrefixedWrappedLines(prefix: string, text: string, width: number)
   return wrapVisibleText(text, available).map((line) => `${prefix}${line}`);
 }
 
-export function toolDescription(tc: ToolCallRenderGroup): string {
+export function toolDescription(tc: { name: string; preview: string }): string {
   switch (tc.name) {
     case "bash":
       return `Ran ${tc.preview}`;
@@ -118,7 +104,7 @@ export function toolDescription(tc: ToolCallRenderGroup): string {
   }
 }
 
-function formatElapsedLabel(tc: ToolCallRenderGroup): string | null {
+function formatElapsedLabel(tc: { startedAt?: number; completedAt?: number }): string | null {
   if (!tc.startedAt) return null;
   const end = tc.completedAt ?? Date.now();
   const elapsedMs = Math.max(0, end - tc.startedAt);
@@ -130,7 +116,19 @@ function formatElapsedLabel(tc: ToolCallRenderGroup): string | null {
 }
 
 export function renderToolCallBlock(options: {
-  tc: ToolCallRenderGroup;
+  tc: {
+    name: string;
+    preview: string;
+    args?: unknown;
+    resultDetail?: string;
+    result?: string;
+    error?: boolean;
+    expanded: boolean;
+    streamOutput?: string;
+    status: "starting" | "running" | "done" | "failed";
+    startedAt?: number;
+    completedAt?: number;
+  };
   maxWidth: number;
   spinnerFrame: number;
   colors: {
@@ -146,15 +144,13 @@ export function renderToolCallBlock(options: {
 }): string[] {
   const { tc, maxWidth, spinnerFrame, colors, reset } = options;
   const lines: string[] = [];
-  const done = !!tc.result;
-  const running = !done;
+  const done = tc.status === "done" || tc.status === "failed";
+  const running = tc.status === "starting" || tc.status === "running";
   const branch = "\u2514";
   const statusIcon = done
-    ? (tc.error ? `${colors.error}✖${reset}` : `${colors.ok}✔${reset}`)
+    ? (tc.status === "failed" ? `${colors.error}✖${reset}` : `${colors.ok}✔${reset}`)
     : `${colors.accent2}${["◐", "◓", "◑", "◒"][spinnerFrame % 4]}${reset}`;
-  const statusLabel = done
-    ? (tc.error ? "failed" : "done")
-    : tc.preview === "..." && !tc.streamOutput ? "starting" : "running";
+  const statusLabel = tc.status;
   const elapsedLabel = formatElapsedLabel(tc);
   const statusSuffix = `${colors.muted}${statusLabel}${elapsedLabel ? ` · ${elapsedLabel}` : ""}${reset}`;
   lines.push(`  ${statusIcon} ${done ? colors.muted : colors.text}${toolDescription(tc)}${reset} ${statusSuffix}`);
@@ -242,9 +238,85 @@ export function renderToolCallBlock(options: {
   return lines;
 }
 
+function renderActivityBlock(options: {
+  currentActivityStep: { label: string; status: "running" | "done"; startedAt: number; completedAt?: number } | null;
+  toolExecutions: Array<{
+    name: string;
+    preview: string;
+    args?: unknown;
+    resultDetail?: string;
+    result?: string;
+    error?: boolean;
+    expanded: boolean;
+    streamOutput?: string;
+    status: "starting" | "running" | "done" | "failed";
+    startedAt?: number;
+    completedAt?: number;
+  }>;
+  maxWidth: number;
+  spinnerFrame: number;
+  colors: {
+    accent: string;
+    ok: string;
+    warn: string;
+    dim: string;
+    text: string;
+    bold: string;
+    reset: string;
+    error: string;
+    accent2: string;
+    diffRemoveBg: string;
+    diffAddBg: string;
+  };
+}): string[] {
+  const { currentActivityStep, toolExecutions, maxWidth, spinnerFrame, colors } = options;
+  if (!currentActivityStep && toolExecutions.length === 0) return [];
+  const lines: string[] = [];
+  lines.push(`  ${colors.accent}${colors.bold}Activity${colors.reset}`);
+  if (currentActivityStep) {
+    const icon = currentActivityStep.status === "done"
+      ? `${colors.ok}✔${colors.reset}`
+      : `${colors.accent}${["◐", "◓", "◑", "◒"][spinnerFrame % 4]}${colors.reset}`;
+    const elapsed = formatElapsedLabel(currentActivityStep);
+    lines.push(`  ${icon} ${colors.text}${currentActivityStep.label}${colors.reset}${elapsed ? ` ${colors.dim}${elapsed}${colors.reset}` : ""}`);
+  }
+  for (const tc of toolExecutions) {
+    lines.push(...renderToolCallBlock({
+      tc,
+      maxWidth,
+      spinnerFrame,
+      colors: {
+        error: colors.error,
+        ok: colors.ok,
+        accent2: colors.accent2,
+        muted: colors.dim,
+        text: colors.text,
+        diffRemoveBg: colors.diffRemoveBg,
+        diffAddBg: colors.diffAddBg,
+      },
+      reset: colors.reset,
+    }));
+  }
+  return lines;
+}
+
 export function renderMessageOverlays(options: {
   staticLines: string[];
   maxWidth: number;
+  currentActivityStep: { label: string; status: "running" | "done"; startedAt: number; completedAt?: number } | null;
+  toolExecutions: Array<{
+    name: string;
+    preview: string;
+    args?: unknown;
+    resultDetail?: string;
+    result?: string;
+    error?: boolean;
+    expanded: boolean;
+    streamOutput?: string;
+    status: "starting" | "running" | "done" | "failed";
+    startedAt?: number;
+    completedAt?: number;
+  }>;
   thinkingBuffer: string;
   thinkingRequested: boolean;
   streamingActivitySummary?: string;
@@ -276,6 +348,8 @@ export function renderMessageOverlays(options: {
   const {
     staticLines,
     maxWidth,
+    currentActivityStep,
+    toolExecutions,
     thinkingBuffer,
     thinkingRequested,
     streamingActivitySummary,
@@ -298,6 +372,31 @@ export function renderMessageOverlays(options: {
   } = options;
 
   const lines = [...staticLines];
+
+  const activityLines = renderActivityBlock({
+    currentActivityStep,
+    toolExecutions,
+    maxWidth,
+    spinnerFrame,
+    colors: {
+      accent: colors.accent,
+      ok: colors.ok,
+      warn: colors.warn,
+      dim: colors.dim,
+      text: colors.text,
+      bold: colors.bold,
+      reset: colors.reset,
+      error: colors.warn,
+      accent2: colors.accent,
+      diffRemoveBg: "",
+      diffAddBg: "",
+    },
+  });
+  if (activityLines.length > 0) {
+    ensureOverlayGap(lines);
+    lines.push(...activityLines);
+    lines.push("");
+  }
 
   if (thinkingBuffer && !hideThinkingBlock) {
     ensureOverlayGap(lines);

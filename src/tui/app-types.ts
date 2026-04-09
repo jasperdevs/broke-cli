@@ -93,6 +93,29 @@ export interface QuestionView {
 
 export type PendingDelivery = "steering" | "followup";
 
+export interface ActivityStep {
+  label: string;
+  detail?: string;
+  status: "running" | "done";
+  startedAt: number;
+  completedAt?: number;
+}
+
+export interface ToolExecutionActivity {
+  id: string;
+  name: string;
+  preview: string;
+  args?: unknown;
+  resultDetail?: string;
+  result?: string;
+  error?: boolean;
+  expanded: boolean;
+  streamOutput?: string;
+  status: "starting" | "running" | "done" | "failed";
+  startedAt: number;
+  completedAt?: number;
+}
+
 export interface TreeRow {
   item: SessionTreeItem;
   marker: string;

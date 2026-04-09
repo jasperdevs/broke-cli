@@ -75,6 +75,8 @@ export function renderMessages(app: AppState, maxWidth: number): string[] {
   return renderMessageOverlays({
     staticLines: app.renderStaticMessages(maxWidth),
     maxWidth,
+    currentActivityStep: app.currentActivityStep,
+    toolExecutions: app.toolExecutions,
     thinkingBuffer: app.thinkingBuffer,
     thinkingRequested: app.thinkingRequested,
     streamingActivitySummary: app.streamingActivitySummary,

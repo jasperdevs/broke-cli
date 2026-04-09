@@ -1,9 +1,12 @@
+import { randomUUID } from "crypto";
 import type { PendingDelivery, PendingImage, PendingMessage, ResolvedImage, TodoItem } from "./app-types.js";
 
 type AppState = any;
 
 export function clearMessages(app: AppState): void {
   app.messages = [];
+  app.currentActivityStep = null;
+  app.toolExecutions = [];
   app.scrollOffset = 0;
   app.refreshHomeScreenData();
   app.invalidateMsgCache();
@@ -21,6 +24,8 @@ export function addMessage(app: AppState, role: "user" | "assistant" | "system",
     app.thinkingBuffer = "";
     app.thinkingStartTime = 0;
     app.thinkingDuration = 0;
+    app.currentActivityStep = null;
+    app.toolExecutions = [];
   }
   app.messages.push({ role, content, images });
   app.invalidateMsgCache();
@@ -64,30 +69,27 @@ export function updateTodo(app: AppState, items: TodoItem[]): void {
 }
 
 export function addToolCall(app: AppState, name: string, preview: string, args?: unknown): void {
-  app.toolCallGroups.push({ name, preview, args, expanded: app.allToolsExpanded, startedAt: Date.now() });
-  const maxW = app.screen.mainWidth - 4;
-  const tc = app.toolCallGroups[app.toolCallGroups.length - 1];
-  const block = app.renderToolCallBlock(tc, maxW);
-  if (block.length > 0) {
-    app.messages.push({ role: "system", content: block.join("\n") });
-    tc.messageIndex = app.messages.length - 1;
-  }
+  app.toolExecutions.push({
+    id: randomUUID(),
+    name,
+    preview,
+    args,
+    expanded: app.allToolsExpanded,
+    startedAt: Date.now(),
+    status: "starting",
+  });
   app.invalidateMsgCache();
   app.scrollToBottom();
   app.drawNow();
 }
 
 export function updateToolCallArgs(app: AppState, name: string, preview: string, args: unknown): void {
-  for (let i = app.toolCallGroups.length - 1; i >= 0; i--) {
-    const tc = app.toolCallGroups[i];
+  for (let i = app.toolExecutions.length - 1; i >= 0; i--) {
+    const tc = app.toolExecutions[i];
     if (tc.name === name && !tc.result) {
       tc.preview = preview;
       tc.args = args;
-      const maxW = app.screen.mainWidth - 4;
-      const block = app.renderToolCallBlock(tc, maxW);
-      if (typeof tc.messageIndex === "number" && app.messages[tc.messageIndex]?.role === "system") {
-        app.messages[tc.messageIndex].content = block.join("\n");
-      }
+      tc.status = "running";
       app.invalidateMsgCache();
       app.drawNow();
       return;
@@ -97,18 +99,13 @@ export function updateToolCallArgs(app: AppState, name: string, preview: string,
 }
 
 export function addToolResult(app: AppState, name: string, result: string, error?: boolean, resultDetail?: string): void {
-  for (let i = app.toolCallGroups.length - 1; i >= 0; i--) {
-    if (app.toolCallGroups[i].name === name && !app.toolCallGroups[i].result) {
-      app.toolCallGroups[i].result = result;
-      app.toolCallGroups[i].error = error;
-      app.toolCallGroups[i].resultDetail = resultDetail;
-      app.toolCallGroups[i].completedAt = Date.now();
-      const maxW = app.screen.mainWidth - 4;
-      const block = app.renderToolCallBlock(app.toolCallGroups[i], maxW);
-      const messageIndex = app.toolCallGroups[i].messageIndex;
-      if (typeof messageIndex === "number" && app.messages[messageIndex]?.role === "system") {
-        app.messages[messageIndex].content = block.join("\n");
-      }
+  for (let i = app.toolExecutions.length - 1; i >= 0; i--) {
+    if (app.toolExecutions[i].name === name && !app.toolExecutions[i].result) {
+      app.toolExecutions[i].result = result;
+      app.toolExecutions[i].error = error;
+      app.toolExecutions[i].resultDetail = resultDetail;
+      app.toolExecutions[i].completedAt = Date.now();
+      app.toolExecutions[i].status = error ? "failed" : "done";
       break;
     }
   }
@@ -139,15 +136,11 @@ export function setCompacting(app: AppState, compacting: boolean, tokenCount?: n
 }
 
 export function appendToolOutput(app: AppState, chunk: string): void {
-  for (let i = app.toolCallGroups.length - 1; i >= 0; i--) {
-    const tc = app.toolCallGroups[i];
+  for (let i = app.toolExecutions.length - 1; i >= 0; i--) {
+    const tc = app.toolExecutions[i];
     if (tc.name === "bash" && !tc.result) {
       tc.streamOutput = (tc.streamOutput ?? "") + chunk;
-      const maxW = app.screen.mainWidth - 4;
-      const block = app.renderToolCallBlock(tc, maxW);
-      if (typeof tc.messageIndex === "number" && app.messages[tc.messageIndex]?.role === "system") {
-        app.messages[tc.messageIndex].content = block.join("\n");
-      }
+      tc.status = "running";
       app.invalidateMsgCache();
       app.scrollToBottom();
       app.drawNow();
@@ -156,7 +149,7 @@ export function appendToolOutput(app: AppState, chunk: string): void {
   }
 }
 
-export function collapseToolCalls(app: AppState): void { app.toolCallGroups = []; }
+export function collapseToolCalls(app: AppState): void { app.toolExecutions = []; }
 
 export function getLastAssistantContent(app: AppState): string {
   for (let i = app.messages.length - 1; i >= 0; i--) {
