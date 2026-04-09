@@ -19,9 +19,35 @@ vi.mock("../src/ai/native-stream.js", () => ({
   startNativeStream: vi.fn(),
 }));
 
-import { runOneShotPrompt } from "../src/cli/oneshot.js";
+import { resolveOneShotModel, runOneShotPrompt } from "../src/cli/oneshot.js";
 
 describe("one-shot repo fast path", () => {
+  it("keeps slash-containing local model IDs intact when --provider is explicit", async () => {
+    const created: Array<{ providerId: string; modelId?: string }> = [];
+    const result = await resolveOneShotModel({
+      opts: {
+        provider: "llamacpp",
+        model: "ggml-org/gemma-4-E4B-it-GGUF:Q4_K_M",
+      },
+      providers: [{ id: "llamacpp", name: "llama.cpp", available: true, reason: "running" }],
+      providerRegistry: {
+        createModel: (providerId: string, modelId?: string) => {
+          created.push({ providerId, modelId });
+          return {
+            provider: { id: providerId, name: "llama.cpp", defaultModel: "default", models: [] },
+            modelId: modelId ?? "default",
+            runtime: "sdk",
+            model: {} as any,
+          };
+        },
+      } as any,
+    });
+
+    expect(created).toEqual([{ providerId: "llamacpp", modelId: "ggml-org/gemma-4-E4B-it-GGUF:Q4_K_M" }]);
+    expect(result.providerId).toBe("llamacpp");
+    expect(result.modelId).toBe("ggml-org/gemma-4-E4B-it-GGUF:Q4_K_M");
+  });
+
   it("preserves resolved provider/model metadata when a repo fast path handles the prompt", async () => {
     const workspace = await mkdtemp(join(tmpdir(), "brokecli-oneshot-fastpath-"));
     const previousCwd = process.cwd();

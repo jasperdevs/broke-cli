@@ -52,9 +52,11 @@ export async function bootstrapSession(options: {
   } else if (opts.model) {
     const modelArg = opts.model.split(":")[0];
     const slashIdx = modelArg.indexOf("/");
-    if (slashIdx > 0) {
+    if (!providerId && slashIdx > 0) {
       providerId = modelArg.slice(0, slashIdx);
       modelId = modelArg.slice(slashIdx + 1);
+    } else if (providerId) {
+      modelId = modelArg;
     } else {
       const def = pickDefault(providers);
       providerId = def?.id ?? "openai";

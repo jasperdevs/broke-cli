@@ -47,7 +47,7 @@ export async function resolveOneShotModel(options: {
   let providerId = opts.provider;
   let modelId = opts.model;
 
-  if (modelId?.includes("/")) {
+  if (!providerId && modelId?.includes("/")) {
     const [fromProvider, fromModel] = modelId.split("/", 2);
     providerId = fromProvider;
     modelId = fromModel;

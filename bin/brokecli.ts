@@ -82,8 +82,8 @@ program.action(async (promptParts, opts) => {
       providerRegistry,
       opts: {
         ...opts,
-        provider: parsedModel.provider ?? opts.provider,
-        model: parsedModel.model ?? opts.model,
+        provider: opts.provider ?? parsedModel.provider,
+        model: opts.provider ? opts.model : (parsedModel.model ?? opts.model),
         systemPrompt: opts.systemPrompt,
         appendSystemPrompt: opts.appendSystemPrompt,
       },
