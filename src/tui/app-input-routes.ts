@@ -351,7 +351,7 @@ function submitQueuedInput(app: AppState, delivery: "steering" | "followup"): vo
     .map((image) => ({ mimeType: image.mimeType!, data: image.data! }));
   if ((!text && images.length === 0) || !app.onSubmit) return;
   const trimmed = text.trimStart();
-  const shouldBypassQueue = trimmed.startsWith("/btw ");
+  const shouldBypassQueue = trimmed.startsWith("/");
   if (!app.isStreaming || shouldBypassQueue) {
     if (images.length > 0) (app.onSubmit as (text: string, images?: Array<{ mimeType: string; data: string }>) => void)(text, images);
     else app.onSubmit(text);

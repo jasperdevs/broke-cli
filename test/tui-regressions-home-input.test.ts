@@ -332,6 +332,32 @@ describe("input editing", () => {
     expect(app.pendingMessages).toEqual([]);
   });
 
+  it("runs /settings immediately instead of queueing it while the main stream is active", () => {
+    const app = new App() as any;
+    let submitted = "";
+    app.isStreaming = true;
+    app.onSubmit = (text: string) => {
+      submitted = text;
+    };
+    app.input.paste("/settings");
+    app.handleKey({ name: "return", char: "", ctrl: false, meta: false, shift: false });
+    expect(submitted).toBe("/settings");
+    expect(app.pendingMessages).toEqual([]);
+  });
+
+  it("runs all slash commands immediately instead of queueing them while the main stream is active", () => {
+    const app = new App() as any;
+    let submitted = "";
+    app.isStreaming = true;
+    app.onSubmit = (text: string) => {
+      submitted = text;
+    };
+    app.input.paste("/model");
+    app.handleKey({ name: "return", char: "", ctrl: false, meta: false, shift: false });
+    expect(submitted).toBe("/model");
+    expect(app.pendingMessages).toEqual([]);
+  });
+
   it("does not show an empty reasoning block when no reasoning text arrives", () => {
     const app = new App() as any;
     app.messages = [{ role: "assistant", content: "Reading files" }];
