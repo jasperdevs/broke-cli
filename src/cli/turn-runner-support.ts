@@ -60,6 +60,7 @@ export function buildModelVisibleThinkingInstruction(cavemanLevel: string): stri
 }
 
 const RAW_THINK_BLOCK = /<think\b[^>]*>[\s\S]*?(?:<\/think>|$)/gi;
+const RAW_TOOLISH_LINE = /^\s*(?:call:)?(?:writeFile|editFile|readFile|listFiles|grep|bash|Read|Write|Edit|Bash)\s*(?:\(|\{)/i;
 const INTERNAL_ORCHESTRATION_LINE = /^\s*(?:[-*•]\s*)?(?:user wants|the user asked|input\s*:|context\s*:|action\s*:|output style\s*:|final response\s*:|constraint(?: checklist)?(?: & confidence score)?\s*:|confidence score\s*:|plan\s*:|execution\s*:|casual turn\s*:|tool(?:s)? needed\b|no tools\b|reply now\b|mode\s*:)/i;
 const INTERNAL_ORCHESTRATION_NUMBERED = /^\s*\d+\.\s+.+$/;
 const INTERNAL_ORCHESTRATION_SENTENCE = /^\s*(?:the user (?:wants|asked)|answer (?:naturally|plain text only)|keep it (?:plain text|super short)|no recap\b|no narration\b|output style\b|local-model empty-output recovery\b)/i;
@@ -90,6 +91,7 @@ function stripLeadingOrchestrationPrelude(text: string): string {
 
     const matchesInternal = INTERNAL_ORCHESTRATION_LINE.test(trimmed)
       || INTERNAL_ORCHESTRATION_SENTENCE.test(trimmed)
+      || RAW_TOOLISH_LINE.test(trimmed)
       || (sawStructuredPrelude && INTERNAL_ORCHESTRATION_NUMBERED.test(trimmed));
     if (!matchesInternal) break;
     sawPrelude = true;
@@ -100,12 +102,23 @@ function stripLeadingOrchestrationPrelude(text: string): string {
   return lines.slice(index).join("\n").trimStart();
 }
 
+function normalizeAssistantProse(text: string): string {
+  return text
+    .replace(/([.!?])([A-Z`])/g, "$1 $2")
+    .replace(/([a-z0-9`])([A-Z][a-z])/g, "$1 $2")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function sanitizeVisibleAssistantText(
   text: string,
   policy: { archetype: string },
 ): string {
-  void policy;
-  return stripLeadingOrchestrationPrelude(text).trimStart();
+  const stripped = stripLeadingOrchestrationPrelude(text).trimStart();
+  if ((policy.archetype === "edit" || policy.archetype === "bugfix") && RAW_TOOLISH_LINE.test(stripped)) {
+    return "";
+  }
+  return normalizeAssistantProse(stripped);
 }
 
 export function shouldEnforceToolFirstTurn(options: {
@@ -307,10 +320,6 @@ export function getMinimalOutputPolicy(options: {
 }): MinimalOutputPolicy | null {
   const { text, policy, modelRuntime } = options;
   if (!shouldForceMinimalResponse({ text, policy })) return null;
-  if (modelRuntime === "native-cli" && (policy.archetype === "edit" || policy.archetype === "bugfix")) {
-    return null;
-  }
-
   switch (policy.archetype) {
     case "casual":
       return { maxChars: 32, maxOutputTokens: 24 };
@@ -332,7 +341,7 @@ export function buildMinimalOutputInstruction(options: {
   maxChars: number;
 }): string {
   return options.archetype === "edit" || options.archetype === "bugfix"
-    ? `Final response: plain text only, max ${options.maxChars} chars, no bullets. Format: changed; verify or blocker. No explanation.`
+    ? `Final response: plain text only, max ${options.maxChars} chars, no bullets. One or two short sentences max. Start with concrete result, then verification or blocker. No tool names, no protocol syntax, no intent narration.`
     : `Final response: plain text only, max ${options.maxChars} chars. Answer only what was asked. No explanation.`;
 }
 

@@ -103,13 +103,16 @@ describe("turn policy", () => {
     });
   });
 
-  it("does not force terse native-cli edit summaries", () => {
+  it("keeps native-cli edit summaries on the same concise contract", () => {
     const editPolicy = getTurnPolicy("make index.html more fun");
     expect(getMinimalOutputPolicy({
       text: "make index.html more fun",
       policy: editPolicy,
       modelRuntime: "native-cli",
-    })).toBeNull();
+    })).toEqual({
+      maxChars: 80,
+      maxOutputTokens: 96,
+    });
   });
 
   it("forces follow-up test requests onto a tight reuse lane when recent edits exist", () => {

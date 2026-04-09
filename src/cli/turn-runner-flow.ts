@@ -230,6 +230,21 @@ function shouldRetryEmptyLocalMain(result: Awaited<ReturnType<typeof executeTurn
     && LOCAL_EMPTY_RETRY_PROVIDERS.has(activeModel.provider.id);
 }
 
+function shouldRetryLocalToolRequirement(options: {
+  result: Awaited<ReturnType<typeof executeTurn>>;
+  forceRoute: "main" | "small" | undefined;
+  activeModel: ModelHandle;
+  policy: Awaited<ReturnType<typeof resolveTurnPolicy>>;
+}): boolean {
+  const { result, forceRoute, activeModel, policy } = options;
+  return !forceRoute
+    && result.resolvedRoute === "main"
+    && result.completion === "empty"
+    && !result.toolActivity
+    && LOCAL_EMPTY_RETRY_PROVIDERS.has(activeModel.provider.id)
+    && (policy.archetype === "edit" || policy.archetype === "bugfix");
+}
+
 export async function executeTurnWithRetries(options: {
   app: TurnRunnerApp;
   session: Session;
@@ -330,6 +345,33 @@ export async function executeTurnWithRetries(options: {
       forceRoute: "main",
       transientUserContext,
       preparedSpend: prepared.spend,
+    }, executeTurnForTests);
+    nextActivityTime = result.lastActivityTime;
+  }
+
+  if (shouldRetryLocalToolRequirement({ result, forceRoute, activeModel, policy })) {
+    app.setStatus("local model answered without acting - retrying with tool requirement");
+    result = await runObservedTurn(activeModel, session, {
+      app,
+      session,
+      text,
+      activeModel,
+      currentModelId,
+      smallModel,
+      smallModelId,
+      currentMode,
+      policy,
+      effectiveImages,
+      buildTools,
+      hooks,
+      lastToolCalls,
+      contextLimit: prepared.contextLimit,
+      activeSystemPrompt: `${prepared.turnSystemPrompt}\n\nIMPORTANT: Use the available tools before any completion text. Do not answer with tool syntax, pseudo-calls, or intent narration.`,
+      optimizeMessages: (messages) => selectMessagesForTurn(messages, policy, (msgs) => getContextOptimizer().optimizeMessages(msgs)),
+      forceRoute: "main",
+      transientUserContext,
+      preparedSpend: prepared.spend,
+      resolveSpecialistModel,
     }, executeTurnForTests);
     nextActivityTime = result.lastActivityTime;
   }

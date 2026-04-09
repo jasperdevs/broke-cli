@@ -133,7 +133,7 @@ describe("stream output contract", () => {
       recordIdleCacheCliff: vi.fn(),
       replaceConversation: vi.fn(),
       recordCompaction: vi.fn(),
-      getContextOptimizer: () => ({ optimizeMessages: (messages: any[]) => messages, nextTurn: vi.fn() }),
+      getContextOptimizer: () => ({ optimizeMessages: (messages: any[]) => messages, nextTurn: vi.fn(), trackFileRead: vi.fn() }),
       getCwd: () => process.cwd(),
       getTotalInputTokens: () => 0,
       getTotalOutputTokens: () => 0,
@@ -232,5 +232,72 @@ describe("stream output contract", () => {
     expect(app.appendToLastMessage).toHaveBeenCalledWith("Done.");
     expect(session.addMessage).toHaveBeenCalledWith("assistant", "Done.");
     expect(app.addMessage).not.toHaveBeenCalledWith("system", expect.stringContaining("No response from"));
+  });
+
+  it("drops raw tool-syntax final text on edit turns before it reaches chat", async () => {
+    const app = {
+      addMessage: vi.fn(),
+      appendToLastMessage: vi.fn(),
+      appendThinking: vi.fn(),
+      setThinkingRequested: vi.fn(),
+      getLastAssistantContent: vi.fn(() => ""),
+      setStreaming: vi.fn(),
+      setStreamTokens: vi.fn(),
+      updateUsage: vi.fn(),
+      setContextUsage: vi.fn(),
+      setCompacting: vi.fn(),
+      setStatus: vi.fn(),
+      addToolCall: vi.fn(),
+      updateToolCallArgs: vi.fn(),
+      addToolResult: vi.fn(),
+      onAbortRequest: vi.fn(),
+      hasPendingMessages: vi.fn(() => false),
+      flushPendingMessages: vi.fn(),
+      rollbackLastAssistantMessage: vi.fn(),
+    };
+    const session = {
+      getTotalCost: () => 0,
+      getChatMessages: () => [{ role: "user", content: "edit README.md" }],
+      addMessage: vi.fn(),
+      addUsage: vi.fn(),
+      recordTurn: vi.fn(),
+      recordToolResult: vi.fn(),
+      recordRepoRead: vi.fn(),
+      recordIdleCacheCliff: vi.fn(),
+      replaceConversation: vi.fn(),
+      recordCompaction: vi.fn(),
+      getContextOptimizer: () => ({ optimizeMessages: (messages: any[]) => messages, nextTurn: vi.fn(), trackFileRead: vi.fn() }),
+      getCwd: () => process.cwd(),
+      getTotalInputTokens: () => 0,
+      getTotalOutputTokens: () => 0,
+    } as any;
+
+    streamTextMock.mockReturnValueOnce({
+      fullStream: (async function* () {
+        yield { type: "tool-input-start", toolName: "editFile" };
+        yield { type: "tool-call", toolName: "editFile", input: { path: "README.md", old_string: "a", new_string: "b" } };
+        yield { type: "text-delta", text: "editFile{path:\"README.md\"} changed; verify" };
+      })(),
+      usage: Promise.resolve({ inputTokens: 1, outputTokens: 1 }),
+    });
+
+    await runModelTurn({
+      app: app as any,
+      session,
+      text: "edit README.md",
+      activeModel: { provider: { id: "openai", name: "OpenAI", defaultModel: "gpt-5.4-mini", models: [] }, runtime: "sdk", model: {} as any, modelId: "gpt-5.4-mini" },
+      currentModelId: "gpt-5.4-mini",
+      smallModel: null,
+      smallModelId: "",
+      currentMode: "build",
+      systemPrompt: "system",
+      buildTools: () => ({ editFile: {} }),
+      hooks: { emit: () => {} },
+      lastToolCalls: [],
+      lastActivityTime: Date.now(),
+    });
+
+    expect(app.appendToLastMessage).toHaveBeenCalledWith("Done.");
+    expect(app.appendToLastMessage).not.toHaveBeenCalledWith(expect.stringContaining("editFile{"));
   });
 });

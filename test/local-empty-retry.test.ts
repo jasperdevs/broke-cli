@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { executeTurnWithRetries } from "../src/cli/turn-runner-flow.js";
 
 describe("local empty response retry", () => {
-  it("retries an empty main local-model response with a direct-answer contract", async () => {
+  it("retries an empty main local-model casual response with the direct-answer contract", async () => {
     const app = {
       setStreamingActivitySummary: vi.fn(),
       setStreaming: vi.fn(),
