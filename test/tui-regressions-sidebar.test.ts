@@ -116,11 +116,13 @@ describe("sidebar scrolling", () => {
       app.setContextUsage(120_000, 128_000);
       app.updateUsage(0.0021, 8_200, 621);
       const footerWhileMenuOpen = app.renderSidebarFooter().map((line: string) => stripAnsi(line)).join("\n");
-      expect(footerWhileMenuOpen).toBe("");
+      expect(footerWhileMenuOpen).toContain("8.8k total");
       app.closeItemPicker();
       const footer = app.renderSidebarFooter();
       const footerText = footer.map((line: string) => stripAnsi(line)).join("\n");
-      expect(footerText).toBe("");
+      expect(footerText).toContain("8.8k total");
+      expect(footerText).toContain("120k/128k");
+      expect(footerText).not.toContain("plan");
     } finally {
       updateSetting("hideSidebar", originalHideSidebar);
     }
@@ -166,8 +168,8 @@ describe("sidebar scrolling", () => {
       expect(output).toContain("settings");
       expect(output).not.toContain("help");
       expect(output).toContain("build");
-      expect(output).not.toContain("120k/128k ctx");
-      expect(output).not.toContain("621 out");
+      expect(output).toContain("120k/128k");
+      expect(output).toContain("621 out");
       expect(stripAnsi(rendered[cursorRow - 1] ?? "")).toContain("/");
     } finally {
       updateSetting("hideSidebar", original.hideSidebar);
@@ -224,8 +226,8 @@ describe("sidebar scrolling", () => {
       const output = rendered.map((line) => stripAnsi(line)).join("\n");
       expect(output).toContain("Commands");
       expect(output).toContain("Chat model");
-      expect(output).toContain("Mode");
-      expect(output).toContain("Workspace");
+      expect(output).not.toContain("Mode");
+      expect(output).toContain("Role models");
       expect(output).not.toContain("same as chat");
       expect(output).not.toContain("Files");
     } finally {
@@ -255,8 +257,9 @@ describe("sidebar scrolling", () => {
       app.drawImmediate();
       const output = rendered.map((line) => stripAnsi(line)).join("\n");
       expect(output).toContain("build");
-      expect(output).not.toContain("210 total");
-      expect(app.renderSidebarFooter()).toEqual([]);
+      expect(output).toContain("Fast");
+      const footer = app.renderSidebarFooter().map((line: string) => stripAnsi(line)).join("\n");
+      expect(footer).toContain("0 total");
     } finally {
       updateSetting("hideSidebar", originalHideSidebar);
     }
@@ -333,12 +336,12 @@ describe("sidebar scrolling", () => {
       app.updateUsage(0.0021, 8_200, 621);
       app.input.setText("hi");
       const footerWhileTyping = app.renderSidebarFooter().map((line: string) => stripAnsi(line)).join("\n");
-      expect(footerWhileTyping).toBe("");
+      expect(footerWhileTyping).toContain("8.8k total");
 
       app.input.clear();
       app.setStreaming(true);
       const footerWhileStreaming = app.renderSidebarFooter().map((line: string) => stripAnsi(line)).join("\n");
-      expect(footerWhileStreaming).toBe("");
+      expect(footerWhileStreaming).toContain("8.8k total");
       if (app.spinnerTimer) clearInterval(app.spinnerTimer);
     } finally {
       updateSetting("showTokens", originalShowTokens);
@@ -361,7 +364,11 @@ describe("sidebar scrolling", () => {
       app.setContextUsage(120_000, 128_000);
       app.updateUsage(0.0021, 8_200, 621);
       const footer = app.renderSidebarFooter().map((line: string) => stripAnsi(line)).join("\n");
-      expect(footer).toBe("");
+      expect(footer).toContain("8.8k total");
+      expect(footer).not.toContain("build");
+      expect(footer).not.toContain("plan");
+      expect(footer).not.toContain("ultra");
+      expect(footer).not.toContain("low");
     } finally {
       updateSetting("showTokens", original.showTokens);
       updateSetting("showCost", original.showCost);

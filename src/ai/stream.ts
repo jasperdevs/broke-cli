@@ -13,9 +13,9 @@ export interface StreamCallbacks {
   onReasoning: (delta: string) => void;
   onFinish: (usage: TokenUsage) => void;
   onError: (error: Error) => void;
-  onToolCallStart?: (toolName: string) => void;
-  onToolCall?: (toolName: string, args: unknown) => void;
-  onToolResult?: (toolName: string, result: unknown) => void;
+  onToolCallStart?: (toolName: string, callId?: string) => void;
+  onToolCall?: (toolName: string, args: unknown, callId?: string) => void;
+  onToolResult?: (toolName: string, result: unknown, callId?: string) => void;
   onAfterToolCall?: () => void;
   onAfterResponse?: () => void;
 }

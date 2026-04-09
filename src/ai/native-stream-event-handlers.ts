@@ -5,14 +5,15 @@ import {
   extractNativeToolCallId,
   extractNativeToolName,
   extractNativeToolResult,
+  parsePossiblyPartialJson,
 } from "./native-tool-events.js";
 
 type HandlerCallbacks = {
   onText: (delta: string) => void;
   onReasoning: (delta: string) => void;
-  onToolCallStart?: (toolName: string) => void;
-  onToolCall?: (toolName: string, args: unknown) => void;
-  onToolResult?: (toolName: string, result: unknown) => void;
+  onToolCallStart?: (toolName: string, callId?: string) => void;
+  onToolCall?: (toolName: string, args: unknown, callId?: string) => void;
+  onToolResult?: (toolName: string, result: unknown, callId?: string) => void;
   onAfterToolCall?: () => void;
 };
 
@@ -84,9 +85,69 @@ export function createNativeEventHandlers(options: {
   let visibleText = "";
   let emittedReasoning = "";
   const nativeToolNamesById = new Map<string, string>();
+  const nativeToolArgsById = new Map<string, string>();
+  const startedToolIds = new Set<string>();
+
+  const startToolIfNeeded = (toolName: string, toolCallId: string | null) => {
+    if (!toolCallId) {
+      callbacks.onToolCallStart?.(toolName);
+      return;
+    }
+    if (startedToolIds.has(toolCallId)) return;
+    startedToolIds.add(toolCallId);
+    callbacks.onToolCallStart?.(toolName, toolCallId);
+  };
 
   const handleCodexEvent = (event: Record<string, unknown>) => {
     const type = typeof event.type === "string" ? event.type : "";
+    if (type === "response.output_item.added") {
+      const item = typeof event.item === "object" && event.item !== null ? event.item as Record<string, unknown> : {};
+      const itemType = extractItemType(item);
+      const toolName = extractNativeToolName(item);
+      const toolCallId = extractNativeToolCallId(item);
+      if (toolName && /function_call/.test(itemType)) {
+        if (toolCallId) nativeToolNamesById.set(toolCallId, toolName);
+        startToolIfNeeded(toolName, toolCallId);
+        const args = extractNativeToolArgs(item);
+        if (typeof args === "object" && args !== null && Object.keys(args as Record<string, unknown>).length > 0) {
+          callbacks.onToolCall?.(toolName, args, toolCallId ?? undefined);
+        }
+        return;
+      }
+    }
+    if (type === "response.function_call_arguments.delta" || type === "response.function_call_arguments.done") {
+      const toolCallId = typeof event.item_id === "string" && event.item_id.trim()
+        ? event.item_id.trim()
+        : typeof event.call_id === "string" && event.call_id.trim()
+          ? event.call_id.trim()
+          : "";
+      if (!toolCallId) return;
+      const toolName = nativeToolNamesById.get(toolCallId) ?? "tool";
+      startToolIfNeeded(toolName, toolCallId);
+      const previous = nativeToolArgsById.get(toolCallId) ?? "";
+      const nextRaw = type === "response.function_call_arguments.done"
+        ? (typeof event.arguments === "string" ? event.arguments : previous)
+        : `${previous}${typeof event.delta === "string" ? event.delta : ""}`;
+      nativeToolArgsById.set(toolCallId, nextRaw);
+      callbacks.onToolCall?.(toolName, parsePossiblyPartialJson(nextRaw), toolCallId);
+      return;
+    }
+    if (type === "response.output_item.done") {
+      const item = typeof event.item === "object" && event.item !== null ? event.item as Record<string, unknown> : {};
+      const itemType = extractItemType(item);
+      const toolName = extractNativeToolName(item);
+      const toolCallId = extractNativeToolCallId(item);
+      if (toolName && /function_call/.test(itemType)) {
+        if (toolCallId) nativeToolNamesById.set(toolCallId, toolName);
+        startToolIfNeeded(toolName, toolCallId);
+        callbacks.onToolCall?.(toolName, extractNativeToolArgs(item), toolCallId ?? undefined);
+        return;
+      }
+    }
+    if (type === "response.completed") {
+      finishWithUsage((event.response as Record<string, unknown> | undefined)?.usage);
+      return;
+    }
     if (type === "item.completed") {
       const item = typeof event.item === "object" && event.item !== null ? event.item as Record<string, unknown> : {};
       const itemType = extractItemType(item);
@@ -99,11 +160,11 @@ export function createNativeEventHandlers(options: {
       const text = extractCodexItemText(item);
       if (toolName && toolCallId) nativeToolNamesById.set(toolCallId, toolName);
       if (toolName && /tool|function/.test(itemType) && /(call|use|invocation|request|input|start)/.test(itemType)) {
-        callbacks.onToolCallStart?.(toolName);
-        callbacks.onToolCall?.(toolName, extractNativeToolArgs(item));
+        startToolIfNeeded(toolName, toolCallId);
+        callbacks.onToolCall?.(toolName, extractNativeToolArgs(item), toolCallId ?? undefined);
       }
       if (toolName && /tool|function/.test(itemType) && /(result|output|response)/.test(itemType)) {
-        callbacks.onToolResult?.(toolName, extractNativeToolResult(item, text));
+        callbacks.onToolResult?.(toolName, extractNativeToolResult(item, text), toolCallId ?? undefined);
         callbacks.onAfterToolCall?.();
       }
       if ((itemType === "agent_message" || itemType === "message") && text) {
@@ -145,8 +206,8 @@ export function createNativeEventHandlers(options: {
         const name = typeof block.name === "string" && block.name.trim() ? block.name.trim() : "tool";
         const toolUseId = typeof block.id === "string" && block.id.trim() ? block.id.trim() : null;
         if (toolUseId) nativeToolNamesById.set(toolUseId, name);
-        callbacks.onToolCallStart?.(name);
-        callbacks.onToolCall?.(name, block.input ?? {});
+        startToolIfNeeded(name, toolUseId);
+        callbacks.onToolCall?.(name, block.input ?? {}, toolUseId ?? undefined);
       }
       const text = extractClaudeText(message, "text");
       const reasoning = extractClaudeText(message, "thinking");
@@ -160,7 +221,7 @@ export function createNativeEventHandlers(options: {
       for (const block of toolResults) {
         const toolUseId = typeof block.tool_use_id === "string" && block.tool_use_id.trim() ? block.tool_use_id.trim() : "";
         const name = nativeToolNamesById.get(toolUseId) ?? "tool";
-        callbacks.onToolResult?.(name, block.content ?? "");
+        callbacks.onToolResult?.(name, block.content ?? "", toolUseId || undefined);
         callbacks.onAfterToolCall?.();
       }
       return;

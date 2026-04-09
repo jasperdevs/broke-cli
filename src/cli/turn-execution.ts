@@ -45,9 +45,9 @@ interface TurnExecutionApp {
   updateUsage(cost: number, inputTokens: number, outputTokens: number): void;
   setContextUsage(tokens: number, limit: number): void;
   setStatus(message: string): void;
-  addToolCall(name: string, preview: string): void;
-  updateToolCallArgs(name: string, preview: string, args?: unknown): void;
-  addToolResult(name: string, result: string, error?: boolean, detail?: string): void;
+  addToolCall(name: string, preview: string, args?: unknown, callId?: string): void;
+  updateToolCallArgs(name: string, preview: string, args?: unknown, callId?: string): void;
+  addToolResult(name: string, result: string, error?: boolean, detail?: string, callId?: string): void;
   onAbortRequest(callback: () => void): void;
   hasPendingMessages(delivery?: PendingDelivery): boolean;
   flushPendingMessages(delivery: PendingDelivery): void;

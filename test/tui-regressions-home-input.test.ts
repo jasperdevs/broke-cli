@@ -76,8 +76,8 @@ describe("startup home view", () => {
       app.drawImmediate();
       const output = rendered.map((line) => stripAnsi(line)).join("\n");
       expect(output).toContain("Chat model");
-      expect(output).toContain("Mode");
-      expect(output).toContain("Workspace");
+      expect(output).not.toContain("Mode");
+      expect(output).toContain("Role models");
     } finally {
       updateSetting("hideSidebar", originalHideSidebar);
     }

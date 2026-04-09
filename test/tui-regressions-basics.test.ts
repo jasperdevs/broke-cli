@@ -201,11 +201,14 @@ describe("sidebar token summary", () => {
     expect(app.renderTokenSummaryParts()).toEqual(["$0.0016", "210 total", "150 in", "60 out"]);
   });
 
-  it("keeps the sidebar footer empty so state only appears once in the bottom bar", () => {
+  it("keeps the sidebar footer focused on token and context state only", () => {
     const app = new App() as any;
     app.setContextUsage(132, 344_000);
     app.updateUsage(0.0016, 150, 60);
-    expect(app.renderSidebarFooter()).toEqual([]);
+    const footer = app.renderSidebarFooter().map((line: string) => stripAnsi(line)).join("\n");
+    expect(footer).toContain("210 total");
+    expect(footer).toContain("132/344k");
+    expect(footer).not.toContain("build");
   });
 
   it("shows a bottom bar in compact view without token clutter", () => {

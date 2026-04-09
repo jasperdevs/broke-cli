@@ -379,6 +379,33 @@ describe("tool-call visibility", () => {
     expect(output).toContain("2s");
     expect(output).toContain("42 lines");
   });
+
+  it("keeps repeated tool names separate when execution ids differ", () => {
+    const app = new App() as any;
+    app.screen = {
+      height: 16,
+      width: 80,
+      hasSidebar: false,
+      mainWidth: 80,
+      sidebarWidth: 0,
+      render: () => {},
+      setCursor: () => {},
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+    app.addToolCall("readFile", "...", undefined, "call_a");
+    app.addToolCall("readFile", "...", undefined, "call_b");
+    app.updateToolCallArgs("readFile", "README.md", { path: "README.md" }, "call_a");
+    app.updateToolCallArgs("readFile", "package.json", { path: "package.json" }, "call_b");
+    app.addToolResult("readFile", "ok", false, "42 lines", "call_a");
+    const output = app.renderMessages(80).map((line: string) => stripAnsi(line)).join("\n");
+    expect(output).toContain("1.");
+    expect(output).toContain("2.");
+    expect(output).toContain("read README.md");
+    expect(output).toContain("read package.json");
+    expect(output).toContain("42 lines");
+    expect(app.toolExecutions[1].status).toBe("running");
+  });
 });
 
 describe("theme catalog", () => {

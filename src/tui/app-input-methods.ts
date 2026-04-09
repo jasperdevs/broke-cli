@@ -210,15 +210,6 @@ function handleEscapeAndBindings(app: AppState, key: Keypress): boolean {
     }
     return true;
   }
-  if (key.name === "escape" && !app.isStreaming && !app.hasPendingMessages() && app.input.getText().trim().length === 0) {
-    if (app.escPrimed) {
-      app.clearInterruptPrompt();
-      app.onSubmit?.("/tree");
-    } else {
-      app.primeEscapeTree();
-    }
-    return true;
-  }
   if (key.ctrl && key.name === "c") {
     app.ctrlCCount++;
     if (app.ctrlCCount >= 2) {

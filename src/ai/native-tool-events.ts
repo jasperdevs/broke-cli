@@ -2,6 +2,26 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null ? value as Record<string, unknown> : null;
 }
 
+export function parsePossiblyPartialJson(value: unknown): unknown {
+  if (typeof value !== "string") return value ?? {};
+  const trimmed = value.trim();
+  if (!trimmed) return {};
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    const heuristics: Record<string, string> = {};
+    const pathMatch = trimmed.match(/"(?:path|file_path)"\s*:\s*"([^"]*)/);
+    if (pathMatch) heuristics.path = pathMatch[1]!;
+    const commandMatch = trimmed.match(/"command"\s*:\s*"([^"]*)/);
+    if (commandMatch) heuristics.command = commandMatch[1]!;
+    const patternMatch = trimmed.match(/"pattern"\s*:\s*"([^"]*)/);
+    if (patternMatch) heuristics.pattern = patternMatch[1]!;
+    const queryMatch = trimmed.match(/"query"\s*:\s*"([^"]*)/);
+    if (queryMatch) heuristics.query = queryMatch[1]!;
+    return heuristics;
+  }
+}
+
 export function extractClaudeContentBlocks(message: unknown, blockType: string): Array<Record<string, unknown>> {
   const record = asRecord(message);
   const content = Array.isArray(record?.content) ? record.content : [];
@@ -30,7 +50,7 @@ export function extractNativeToolName(item: unknown): string | null {
 
 export function extractNativeToolArgs(item: unknown): unknown {
   const record = asRecord(item);
-  return record?.input ?? record?.args ?? record?.arguments ?? record?.parameters ?? {};
+  return parsePossiblyPartialJson(record?.input ?? record?.args ?? record?.arguments ?? record?.parameters ?? {});
 }
 
 export function extractNativeToolResult(item: unknown, fallbackText: string): unknown {

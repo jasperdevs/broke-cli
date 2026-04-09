@@ -133,10 +133,7 @@ export function appendBottomMenus(
 function buildInfoBarParts(app: AppState, hasSidebar: boolean): FooterPart[] {
   const parts: FooterPart[] = [];
   if (app.ctrlCCount === 1) parts.push({ text: `${ERR()}Ctrl+C again to exit${RESET}`, plain: "Ctrl+C again to exit" });
-  else if (app.escPrimed) {
-    const escLabel = app.escAction === "tree" ? "Esc again for tree" : "Esc again to stop";
-    parts.push({ text: `${ERR()}${escLabel}${RESET}`, plain: escLabel });
-  }
+  else if (app.escPrimed) parts.push({ text: `${ERR()}Esc again to stop${RESET}`, plain: "Esc again to stop" });
   if (app.isStreaming) parts.push({ text: `${DIM}esc${RESET} ${DIM}stop${RESET}`, plain: "esc stop" });
 
   const settings = getSettings();

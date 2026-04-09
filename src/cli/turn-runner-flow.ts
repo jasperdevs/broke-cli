@@ -40,9 +40,9 @@ export interface TurnRunnerApp {
   setContextUsage(tokens: number, limit: number): void;
   setCompacting(compacting: boolean, tokenCount?: number): void;
   setStatus(message: string): void;
-  addToolCall(name: string, preview: string): void;
-  updateToolCallArgs(name: string, preview: string, args?: unknown): void;
-  addToolResult(name: string, result: string, error?: boolean, detail?: string): void;
+  addToolCall(name: string, preview: string, args?: unknown, callId?: string): void;
+  updateToolCallArgs(name: string, preview: string, args?: unknown, callId?: string): void;
+  addToolResult(name: string, result: string, error?: boolean, detail?: string, callId?: string): void;
   onAbortRequest(callback: () => void): void;
   hasPendingMessages(delivery?: PendingDelivery): boolean;
   flushPendingMessages(delivery: PendingDelivery): void;
@@ -74,7 +74,7 @@ function deriveStreamingActivitySummary(text: string, archetype: string): string
     case "research":
       return "gathering the answer";
     default:
-      return "working through the request";
+      return "";
   }
 }
 

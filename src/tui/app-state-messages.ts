@@ -3,6 +3,70 @@ import type { PendingDelivery, PendingImage, PendingMessage, ResolvedImage, Todo
 
 type AppState = any;
 
+function normalizeToolName(name: string): string {
+  switch (name) {
+    case "Read": return "readFile";
+    case "Write": return "writeFile";
+    case "Edit": return "editFile";
+    case "LS": return "listFiles";
+    case "Glob": return "glob";
+    default: return name;
+  }
+}
+
+function buildActivityLabel(name: string, preview: string): string | null {
+  const normalized = normalizeToolName(name);
+  const target = preview.trim();
+  if (!target || target === "...") {
+    switch (normalized) {
+      case "readFile": return "reading a file";
+      case "writeFile": return "writing a file";
+      case "editFile": return "editing a file";
+      case "listFiles": return "listing files";
+      case "glob": return "finding files";
+      case "grep": return "searching the repo";
+      case "semSearch": return "running semantic search";
+      case "bash": return "running a command";
+      default: return null;
+    }
+  }
+  switch (normalized) {
+    case "readFile": return `reading ${target}`;
+    case "writeFile": return `writing ${target}`;
+    case "editFile": return `editing ${target}`;
+    case "listFiles": return `listing ${target}`;
+    case "glob": return `finding ${target}`;
+    case "grep": return `searching ${target}`;
+    case "semSearch": return `semantic search: ${target}`;
+    case "bash": return `running ${target}`;
+    default: return null;
+  }
+}
+
+function setCurrentActivityFromTool(app: AppState, name: string, preview: string, startedAt?: number): void {
+  const label = buildActivityLabel(name, preview);
+  if (!label) return;
+  app.currentActivityStep = {
+    label,
+    status: "running",
+    startedAt: startedAt ?? Date.now(),
+  };
+}
+
+function findToolExecutionIndex(app: AppState, name: string, callId?: string): number {
+  if (callId) {
+    for (let i = app.toolExecutions.length - 1; i >= 0; i--) {
+      if (app.toolExecutions[i].callId === callId) return i;
+    }
+  }
+  const normalized = normalizeToolName(name);
+  for (let i = app.toolExecutions.length - 1; i >= 0; i--) {
+    const tc = app.toolExecutions[i];
+    if (normalizeToolName(tc.name) === normalized && !tc.result) return i;
+  }
+  return -1;
+}
+
 export function clearMessages(app: AppState): void {
   app.messages = [];
   app.currentActivityStep = null;
@@ -68,9 +132,10 @@ export function updateTodo(app: AppState, items: TodoItem[]): void {
   app.draw();
 }
 
-export function addToolCall(app: AppState, name: string, preview: string, args?: unknown): void {
+export function addToolCall(app: AppState, name: string, preview: string, args?: unknown, callId?: string): void {
   app.toolExecutions.push({
     id: randomUUID(),
+    callId,
     name,
     preview,
     args,
@@ -78,35 +143,42 @@ export function addToolCall(app: AppState, name: string, preview: string, args?:
     startedAt: Date.now(),
     status: "starting",
   });
+  setCurrentActivityFromTool(app, name, preview);
   app.invalidateMsgCache();
   app.scrollToBottom();
   app.drawNow();
 }
 
-export function updateToolCallArgs(app: AppState, name: string, preview: string, args: unknown): void {
-  for (let i = app.toolExecutions.length - 1; i >= 0; i--) {
-    const tc = app.toolExecutions[i];
-    if (tc.name === name && !tc.result) {
-      tc.preview = preview;
-      tc.args = args;
-      tc.status = "running";
-      app.invalidateMsgCache();
-      app.drawNow();
-      return;
-    }
+export function updateToolCallArgs(app: AppState, name: string, preview: string, args: unknown, callId?: string): void {
+  const index = findToolExecutionIndex(app, name, callId);
+  if (index >= 0) {
+    const tc = app.toolExecutions[index];
+    tc.preview = preview;
+    tc.args = args;
+    tc.status = "running";
+    setCurrentActivityFromTool(app, tc.name, tc.preview, tc.startedAt);
+    app.invalidateMsgCache();
+    app.drawNow();
+    return;
   }
-  app.addToolCall(name, preview, args);
+  app.addToolCall(name, preview, args, callId);
 }
 
-export function addToolResult(app: AppState, name: string, result: string, error?: boolean, resultDetail?: string): void {
-  for (let i = app.toolExecutions.length - 1; i >= 0; i--) {
-    if (app.toolExecutions[i].name === name && !app.toolExecutions[i].result) {
-      app.toolExecutions[i].result = result;
-      app.toolExecutions[i].error = error;
-      app.toolExecutions[i].resultDetail = resultDetail;
-      app.toolExecutions[i].completedAt = Date.now();
-      app.toolExecutions[i].status = error ? "failed" : "done";
-      break;
+export function addToolResult(app: AppState, name: string, result: string, error?: boolean, resultDetail?: string, callId?: string): void {
+  const index = findToolExecutionIndex(app, name, callId);
+  if (index >= 0) {
+    app.toolExecutions[index].result = result;
+    app.toolExecutions[index].error = error;
+    app.toolExecutions[index].resultDetail = resultDetail;
+    app.toolExecutions[index].completedAt = Date.now();
+    app.toolExecutions[index].status = error ? "failed" : "done";
+    const hasRunning = app.toolExecutions.some((tc: any) => tc.status === "starting" || tc.status === "running");
+    if (!hasRunning && app.currentActivityStep?.status === "running") {
+      app.currentActivityStep = {
+        ...app.currentActivityStep,
+        status: "done",
+        completedAt: Date.now(),
+      };
     }
   }
   app.invalidateMsgCache();
@@ -138,9 +210,10 @@ export function setCompacting(app: AppState, compacting: boolean, tokenCount?: n
 export function appendToolOutput(app: AppState, chunk: string): void {
   for (let i = app.toolExecutions.length - 1; i >= 0; i--) {
     const tc = app.toolExecutions[i];
-    if (tc.name === "bash" && !tc.result) {
+    if (normalizeToolName(tc.name) === "bash" && !tc.result) {
       tc.streamOutput = (tc.streamOutput ?? "") + chunk;
       tc.status = "running";
+      setCurrentActivityFromTool(app, tc.name, tc.preview, tc.startedAt);
       app.invalidateMsgCache();
       app.scrollToBottom();
       app.drawNow();
@@ -262,9 +335,9 @@ export interface AppStateMessageMethods {
   replaceLastAssistantMessage(text: string): void;
   appendThinking(delta: string): void;
   updateTodo(items: TodoItem[]): void;
-  addToolCall(name: string, preview: string, args?: unknown): void;
-  updateToolCallArgs(name: string, preview: string, args: unknown): void;
-  addToolResult(name: string, result: string, error?: boolean, resultDetail?: string): void;
+  addToolCall(name: string, preview: string, args?: unknown, callId?: string): void;
+  updateToolCallArgs(name: string, preview: string, args: unknown, callId?: string): void;
+  addToolResult(name: string, result: string, error?: boolean, resultDetail?: string, callId?: string): void;
   setStreamTokens(tokens: number): void;
   setCompacting(compacting: boolean, tokenCount?: number): void;
   appendToolOutput(chunk: string): void;
@@ -295,9 +368,9 @@ export const appStateMessageMethods: AppStateMessageMethods = {
   replaceLastAssistantMessage(this: AppState, text) { return replaceLastAssistantMessage(this, text); },
   appendThinking(this: AppState, delta) { return appendThinking(this, delta); },
   updateTodo(this: AppState, items) { return updateTodo(this, items); },
-  addToolCall(this: AppState, name, preview, args) { return addToolCall(this, name, preview, args); },
-  updateToolCallArgs(this: AppState, name, preview, args) { return updateToolCallArgs(this, name, preview, args); },
-  addToolResult(this: AppState, name, result, error, resultDetail) { return addToolResult(this, name, result, error, resultDetail); },
+  addToolCall(this: AppState, name, preview, args, callId) { return addToolCall(this, name, preview, args, callId); },
+  updateToolCallArgs(this: AppState, name, preview, args, callId) { return updateToolCallArgs(this, name, preview, args, callId); },
+  addToolResult(this: AppState, name, result, error, resultDetail, callId) { return addToolResult(this, name, result, error, resultDetail, callId); },
   setStreamTokens(this: AppState, tokens) { return setStreamTokens(this, tokens); },
   setCompacting(this: AppState, compacting, tokenCount) { return setCompacting(this, compacting, tokenCount); },
   appendToolOutput(this: AppState, chunk) { return appendToolOutput(this, chunk); },

@@ -91,14 +91,26 @@ function renderPrefixedWrappedLines(prefix: string, text: string, width: number)
 export function toolDescription(tc: { name: string; preview: string }): string {
   switch (tc.name) {
     case "bash":
-      return `Ran ${tc.preview}`;
+      return `run ${tc.preview}`;
     case "Read":
+    case "readFile":
+      return `read ${tc.preview}`.trim();
     case "Write":
+    case "writeFile":
+      return `write ${tc.preview}`.trim();
     case "Edit":
+    case "editFile":
+      return `edit ${tc.preview}`.trim();
     case "Glob":
+    case "glob":
+      return `find ${tc.preview}`.trim();
     case "LS":
+    case "listFiles":
+      return `list ${tc.preview}`.trim();
     case "grep":
-      return `${tc.name} ${tc.preview}`.trim();
+      return `grep ${tc.preview}`.trim();
+    case "semSearch":
+      return `search ${tc.preview}`.trim();
     default:
       return tc.preview && tc.preview !== "..." ? `${tc.name} ${tc.preview}` : tc.name;
   }
@@ -116,6 +128,7 @@ function formatElapsedLabel(tc: { startedAt?: number; completedAt?: number }): s
 }
 
 export function renderToolCallBlock(options: {
+  index?: number;
   tc: {
     name: string;
     preview: string;
@@ -142,7 +155,7 @@ export function renderToolCallBlock(options: {
   };
   reset: string;
 }): string[] {
-  const { tc, maxWidth, spinnerFrame, colors, reset } = options;
+  const { tc, maxWidth, spinnerFrame, colors, reset, index } = options;
   const lines: string[] = [];
   const done = tc.status === "done" || tc.status === "failed";
   const running = tc.status === "starting" || tc.status === "running";
@@ -153,7 +166,8 @@ export function renderToolCallBlock(options: {
   const statusLabel = tc.status;
   const elapsedLabel = formatElapsedLabel(tc);
   const statusSuffix = `${colors.muted}${statusLabel}${elapsedLabel ? ` · ${elapsedLabel}` : ""}${reset}`;
-  lines.push(`  ${statusIcon} ${done ? colors.muted : colors.text}${toolDescription(tc)}${reset} ${statusSuffix}`);
+  const ordinal = typeof index === "number" ? `${colors.muted}${index + 1}.${reset} ` : "";
+  lines.push(`  ${ordinal}${statusIcon} ${done ? colors.muted : colors.text}${toolDescription(tc)}${reset} ${statusSuffix}`);
 
   const a = tc.args as Record<string, string> | undefined;
 
@@ -272,16 +286,17 @@ function renderActivityBlock(options: {
   const { currentActivityStep, toolExecutions, maxWidth, spinnerFrame, colors } = options;
   if (!currentActivityStep && toolExecutions.length === 0) return [];
   const lines: string[] = [];
-  lines.push(`  ${colors.accent}${colors.bold}Activity${colors.reset}`);
-  if (currentActivityStep) {
+  lines.push(`  ${colors.accent}${colors.bold}${toolExecutions.length > 0 ? "Actions" : "Activity"}${colors.reset}`);
+  if (currentActivityStep && toolExecutions.length === 0) {
     const icon = currentActivityStep.status === "done"
       ? `${colors.ok}✔${colors.reset}`
       : `${colors.accent}${["◐", "◓", "◑", "◒"][spinnerFrame % 4]}${colors.reset}`;
     const elapsed = formatElapsedLabel(currentActivityStep);
     lines.push(`  ${icon} ${colors.text}${currentActivityStep.label}${colors.reset}${elapsed ? ` ${colors.dim}${elapsed}${colors.reset}` : ""}`);
   }
-  for (const tc of toolExecutions) {
+  for (const [index, tc] of toolExecutions.entries()) {
     lines.push(...renderToolCallBlock({
+      index,
       tc,
       maxWidth,
       spinnerFrame,
@@ -467,9 +482,13 @@ export function renderMessageOverlays(options: {
       ? "Thinking..."
       : "Composing...";
     lines.push(`  ${sparkleSpinner(spinnerFrame)} ${shimmerText(label, spinnerFrame)} ${colors.accent}(${statParts.join(" · ")})${colors.reset}`);
-    if (streamingActivitySummary?.trim()) {
+    if (
+      streamingActivitySummary?.trim()
+      && toolExecutions.length === 0
+      && (!currentActivityStep || currentActivityStep.label !== streamingActivitySummary.trim())
+    ) {
       lines.push(`  ${colors.dim}${streamingActivitySummary.trim()}${colors.reset}`);
-    } else if (thinkingRequested && !thinkingBuffer && elapsed >= 8000) {
+    } else if (thinkingRequested && !thinkingBuffer && elapsed >= 8000 && toolExecutions.length === 0) {
       lines.push(`  ${colors.dim}${streamingActivitySummary?.trim() || "waiting for first visible event"}${colors.reset}`);
     }
     lines.push("");

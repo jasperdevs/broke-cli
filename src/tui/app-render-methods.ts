@@ -347,14 +347,13 @@ export function buildSidebarLines(app: AppState): string[] {
     { label: "Planning", value: resolveSlotLabel("planning") },
     { label: "Design/UI", value: resolveSlotLabel("ui") },
     { label: "Architecture", value: resolveSlotLabel("architecture") },
-  ].filter((slot) => slot.value !== "unset" && slot.value !== chatModelLabel);
+  ].filter((slot) => slot.value !== "unset");
   return composeSidebarLines({
     width: app.screen.sidebarWidth,
     sessionName: app.sessionName,
     appVersion: app.appVersion,
     sessionDetails: [
       { label: "Chat model", value: chatModelLabel },
-      { label: "Mode", value: `${app.mode} · ${app.modelRuntime}` },
     ],
     roleModels,
     mcpConnections: app.mcpConnections,

@@ -103,6 +103,7 @@ export interface ActivityStep {
 
 export interface ToolExecutionActivity {
   id: string;
+  callId?: string;
   name: string;
   preview: string;
   args?: unknown;

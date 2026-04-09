@@ -29,9 +29,9 @@ export async function executeRawToolPayloadFallback(options: {
   policyAllowedTools: readonly ToolName[];
   buildTools: (allowedTools: readonly ToolName[]) => Record<string, unknown>;
   app: {
-    addToolCall(name: string, preview: string): void;
-    updateToolCallArgs(name: string, preview: string, args?: unknown): void;
-    addToolResult(name: string, result: string, error?: boolean, detail?: string): void;
+    addToolCall(name: string, preview: string, args?: unknown, callId?: string): void;
+    updateToolCallArgs(name: string, preview: string, args?: unknown, callId?: string): void;
+    addToolResult(name: string, result: string, error?: boolean, detail?: string, callId?: string): void;
   };
   hooks: { emit(event: string, payload: Record<string, unknown>): void };
   session: Session;
