@@ -19,7 +19,6 @@ import {
   shouldKeepFilePickerOpen,
   tryConsumeImageDraft,
 } from "./app-input-routes.js";
-
 type AppState = any;
 
 function syncComposerAttachmentsFromInput(app: AppState): void {
