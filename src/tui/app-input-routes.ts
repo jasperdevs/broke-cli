@@ -306,10 +306,14 @@ export function restoreQueuedMessage(app: AppState): void {
     app.draw();
     return;
   }
+  const currentText = app.input.getText();
+  const mergedText = currentText.trim().length > 0
+    ? `${queued.text}${currentText.startsWith("\n") ? "" : "\n\n"}${currentText}`
+    : queued.text;
   if (queued.images && queued.images.length > 0) {
     app.pendingImages = [...queued.images, ...app.pendingImages];
   }
-  app.input.setText(queued.text);
+  app.input.setText(mergedText);
   syncPlainFileContexts(app);
   syncInlineImageChipLabels(app);
   app.drawNow();

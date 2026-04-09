@@ -413,6 +413,7 @@ describe("input editing", () => {
     expect(app.pendingMessages).toEqual([]);
   });
 
+
   it("clears queued messages with Escape when idle and the editor is empty", () => {
     const app = new App() as any;
     app.addPendingMessage("first", [], "followup");

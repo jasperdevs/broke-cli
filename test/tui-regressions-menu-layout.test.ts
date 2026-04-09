@@ -139,7 +139,7 @@ describe("menu layout regressions", () => {
     const output = rendered.map((line) => stripAnsi(line)).join("\n");
     expect(output).toContain("Use everywhere");
     expect(output).toContain("Use for chat");
-    expect(output.match(/set this as chat/g)?.length).toBe(1);
+    expect(output.match(/switch to it now and make it the main chat model/g)?.length).toBe(1);
   });
 
   it("uses a taller default menu row budget when the interactive app starts", () => {

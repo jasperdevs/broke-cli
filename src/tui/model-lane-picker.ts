@@ -46,7 +46,7 @@ export function openModelLanePicker(app: AppState, index: number): void {
   app.modelPicker.cursor = index;
   app.modelLanePicker = {
     model: { ...selected, displayName: selected.displayName ?? getPrettyModelName(selected.modelId) },
-    cursor: 0,
+    cursor: 1,
     options: MODEL_LANE_OPTIONS.map((option) => {
       if (option.slot === "all") return { ...option };
       return {

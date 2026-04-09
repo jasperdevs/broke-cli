@@ -202,7 +202,7 @@ describe("picker menus", () => {
     app.drawImmediate();
     const scrolledOutput = rendered.map((line) => stripAnsi(line)).join("\n");
     expect(scrolledOutput).toContain("Use for fast");
-    expect(scrolledOutput).toContain("chat naming");
+    expect(scrolledOutput).toContain("ephemeral side questions");
   });
 
   it("shows current lane ownership and lets one action assign every lane", () => {
@@ -279,6 +279,7 @@ describe("picker menus", () => {
       updateModelPreference("architecture", originalPrefs.architecture);
     }
   });
+
 });
 
 describe("thinking preview", () => {

@@ -272,7 +272,8 @@ describe("sidebar scrolling", () => {
       app.drawImmediate();
       const output = rendered.map((line) => stripAnsi(line)).join("\n");
       expect(output).toContain("build");
-      expect(output).toContain("Fast");
+      expect(output).toContain("Role models");
+      expect(output).toContain("Chat");
       const footer = app.renderSidebarFooter().map((line: string) => stripAnsi(line)).join("\n");
       expect(footer).toContain("0 total");
     } finally {

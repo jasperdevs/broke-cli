@@ -369,8 +369,20 @@ export function formatTurnErrorMessage(options: {
 }
 
 export function buildToolPreview(name: string, args: unknown): string {
+  const shortenPath = (value: string): string => {
+    const normalized = value.replace(/\//g, "\\");
+    const cwd = process.cwd().replace(/\//g, "\\");
+    if (normalized.toLowerCase().startsWith(`${cwd.toLowerCase()}\\`)) {
+      return normalized.slice(cwd.length + 1).replace(/\\/g, "/");
+    }
+    if (/^[a-z]:\\/i.test(normalized) || normalized.startsWith("\\")) {
+      const parts = normalized.split(/\\+/).filter(Boolean);
+      return parts.slice(-2).join("/");
+    }
+    return value;
+  };
   if (name === "Read" || name === "readFile") {
-    const path = (args as any)?.file_path ?? (args as any)?.path ?? "?";
+    const path = shortenPath((args as any)?.file_path ?? (args as any)?.path ?? "?");
     const offset = (args as any)?.offset;
     const limit = (args as any)?.limit;
     const tail = (args as any)?.tail;
@@ -382,8 +394,8 @@ export function buildToolPreview(name: string, args: unknown): string {
     }
     return path;
   }
-  if (name === "Write" || name === "writeFile") return (args as any)?.file_path ?? (args as any)?.path ?? "?";
-  if (name === "Edit" || name === "editFile") return (args as any)?.file_path ?? (args as any)?.path ?? "?";
+  if (name === "Write" || name === "writeFile") return shortenPath((args as any)?.file_path ?? (args as any)?.path ?? "?");
+  if (name === "Edit" || name === "editFile") return shortenPath((args as any)?.file_path ?? (args as any)?.path ?? "?");
   if (name === "Glob" || name === "glob") {
     const pattern = (args as any)?.pattern ?? "?";
     const path = (args as any)?.path;

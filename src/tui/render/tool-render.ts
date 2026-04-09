@@ -3,6 +3,22 @@ export function compactPreview(text: string, maxLength = 88): string {
   return normalized.length <= maxLength ? normalized : `${normalized.slice(0, maxLength - 3)}...`;
 }
 
+function shortenDisplayPath(text: string): string {
+  const normalized = text.trim();
+  if (!normalized) return normalized;
+  const windowsLike = /^[a-z]:\\/i.test(normalized);
+  const unixLike = normalized.startsWith("/");
+  if (!windowsLike && !unixLike) return normalized;
+  const cwd = process.cwd().replace(/\//g, "\\");
+  const comparable = normalized.replace(/\//g, "\\");
+  if (comparable.toLowerCase().startsWith(`${cwd.toLowerCase()}\\`)) {
+    return comparable.slice(cwd.length + 1).replace(/\\/g, "/");
+  }
+  const parts = comparable.split(/\\+/).filter(Boolean);
+  const tail = parts.slice(-2).join("/");
+  return tail || comparable;
+}
+
 export function wrapVisibleText(text: string, width: number): string[] {
   if (width <= 0) return [text];
   const parts = text.split(/([ \t]+|[\\/._:-]+)/);
@@ -116,37 +132,38 @@ export function toolArgumentSummary(tc: { name: string; preview: string; args?: 
 }
 
 export function toolDescription(tc: { name: string; preview: string }): string {
+  const preview = shortenDisplayPath(tc.preview);
   switch (tc.name) {
     case "bash":
-      return `run ${tc.preview}`;
+      return `run ${compactPreview(preview, 60)}`;
     case "Read":
     case "readFile":
-      return `read ${tc.preview}`.trim();
+      return `read ${preview}`.trim();
     case "Write":
     case "writeFile":
-      return `write ${tc.preview}`.trim();
+      return `write ${preview}`.trim();
     case "Edit":
     case "editFile":
-      return `edit ${tc.preview}`.trim();
+      return `edit ${preview}`.trim();
     case "workspaceEdit":
-      return `changed ${tc.preview}`.trim();
+      return `changed ${preview}`.trim();
     case "Glob":
     case "glob":
-      return `find ${tc.preview}`.trim();
+      return `find ${preview}`.trim();
     case "LS":
     case "listFiles":
-      return `list ${tc.preview}`.trim();
+      return `list ${preview}`.trim();
     case "grep":
-      return `grep ${tc.preview}`.trim();
+      return `grep ${preview}`.trim();
     case "semSearch":
-      return `search ${tc.preview}`.trim();
+      return `search ${preview}`.trim();
     case "webSearch":
-      return `web search ${tc.preview}`.trim();
+      return `web search ${compactPreview(preview, 60)}`.trim();
     case "webFetch":
-      return `fetch ${tc.preview}`.trim();
+      return `fetch ${compactPreview(preview, 60)}`.trim();
     case "todoWrite":
       return `update tasks`;
     default:
-      return tc.preview && tc.preview !== "..." ? `${tc.name} ${tc.preview}` : tc.name;
+      return preview && preview !== "..." ? `${tc.name} ${compactPreview(preview, 60)}` : tc.name;
   }
 }

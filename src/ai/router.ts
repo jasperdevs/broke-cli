@@ -34,8 +34,15 @@ export function routeMessage(
   const msg = userMessage.toLowerCase().trim();
   const archetype = classifyTurnArchetype(userMessage, lastToolCalls);
 
-  // First message always goes to main model (needs full context understanding)
-  if (messageCount <= 1) return "main";
+  // First-message routing still respects obviously simple repo reads/questions.
+  if (messageCount <= 1) {
+    if (archetype === "edit" || archetype === "bugfix" || archetype === "planning" || archetype === "review") {
+      return "main";
+    }
+    if (archetype === "explore" || archetype === "shell" || archetype === "question" || archetype === "casual") {
+      return "small";
+    }
+  }
 
   if (archetype === "casual") return "small";
   if (archetype === "explore" || archetype === "shell" || archetype === "question") return "small";

@@ -1,4 +1,5 @@
 import { renderPrefixedWrappedLines, toolArgumentSummary, toolDescription, wrapVisibleText } from "./tool-render.js";
+import { visibleWidth } from "../../utils/terminal-width.js";
 
 export interface TodoRenderItem {
   id: string;
@@ -111,7 +112,15 @@ export function renderToolCallBlock(options: {
   const elapsedLabel = formatElapsedLabel(tc);
   const statusSuffix = `${colors.muted}${statusLabel}${elapsedLabel ? ` · ${elapsedLabel}` : ""}${reset}`;
   const ordinal = typeof index === "number" ? `${colors.muted}${index + 1}.${reset} ` : "";
-  lines.push(`  ${ordinal}${statusIcon} ${done ? colors.muted : colors.text}${toolDescription(tc)}${reset} ${statusSuffix}`);
+  const firstPrefix = `  ${ordinal}${statusIcon} `;
+  const continuationPrefix = "    ";
+  const headerWidth = Math.max(8, maxWidth - visibleWidth(firstPrefix) - 1);
+  const wrappedHeader = wrapVisibleText(toolDescription(tc), headerWidth);
+  wrappedHeader.forEach((line, headerIndex) => {
+    const prefix = headerIndex === 0 ? firstPrefix : continuationPrefix;
+    const suffix = headerIndex === wrappedHeader.length - 1 ? ` ${statusSuffix}` : "";
+    lines.push(`${prefix}${done ? colors.muted : colors.text}${line}${reset}${suffix}`);
+  });
 
   const a = tc.args as Record<string, string> | undefined;
 
@@ -247,7 +256,12 @@ function renderActivityBlock(options: {
       ? `${colors.dim}[done]${colors.reset}`
       : `${colors.accent}[run]${colors.reset}`;
     const elapsed = formatElapsedLabel(currentActivityStep);
-    lines.push(`  ${icon} ${colors.text}${currentActivityStep.label}${colors.reset}${elapsed ? ` ${colors.dim}${elapsed}${colors.reset}` : ""}`);
+    const prefix = `  ${icon} `;
+    const wrapped = wrapVisibleText(currentActivityStep.label, Math.max(8, maxWidth - visibleWidth("  [run] ") - 1));
+    wrapped.forEach((line, idx) => {
+      const suffix = idx === wrapped.length - 1 && elapsed ? ` ${colors.dim}${elapsed}${colors.reset}` : "";
+      lines.push(`${idx === 0 ? prefix : "    "}${colors.text}${line}${colors.reset}${suffix}`);
+    });
   }
   for (const [index, tc] of toolExecutions.entries()) {
     lines.push(...renderToolCallBlock({
@@ -392,7 +406,12 @@ export function renderMessageOverlays(options: {
         : item.status === "in_progress" ? `${colors.accent}[run]${colors.reset}`
         : `${colors.dim}[wait]${colors.reset}`;
       const textColor = item.status === "done" ? colors.dim : item.status === "in_progress" ? `${colors.text}${colors.bold}` : colors.dim;
-      lines.push(`  ${colors.dim}${branch}${colors.reset} ${icon} ${textColor}${item.text.slice(0, maxWidth - 10)}${colors.reset}`);
+      const todoPrefixPlain = `  ${branch} `;
+      const todoPrefixStyled = `  ${colors.dim}${branch}${colors.reset} ${icon} `;
+      const todoWrapWidth = Math.max(8, maxWidth - visibleWidth(todoPrefixPlain) - 6);
+      wrapVisibleText(item.text, todoWrapWidth).forEach((wrappedLine, wrappedIndex) => {
+        lines.push(`${wrappedIndex === 0 ? todoPrefixStyled : "      "}${textColor}${wrappedLine}${colors.reset}`);
+      });
     }
     lines.push("");
   }
@@ -421,7 +440,7 @@ export function renderMessageOverlays(options: {
     const label = thinkingRequested
       ? "Thinking..."
       : "Working";
-    lines.push(`  ${sparkleSpinner(spinnerFrame)} ${shimmerText(label, spinnerFrame)} ${colors.accent}(${statParts.join(" · ")})${colors.reset}`);
+    lines.push(`  ${sparkleSpinner(spinnerFrame, colors.dim)} ${shimmerText(label, spinnerFrame, colors.dim)} ${colors.accent}(${statParts.join(" · ")})${colors.reset}`);
     lines.push("");
   }
 
