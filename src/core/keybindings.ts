@@ -105,7 +105,10 @@ export function matchesBinding(binding: string, key: { name: string; ctrl: boole
   const needCtrl = parts.includes("ctrl");
   const needMeta = parts.includes("meta") || parts.includes("alt");
   const needShift = parts.includes("shift");
-  return key.name === keyName && key.ctrl === needCtrl && key.meta === needMeta && key.shift === needShift;
+  const matchesKeyName = keyName === "return"
+    ? key.name === "return" || key.name === "enter" || key.name === "linefeed"
+    : key.name === keyName;
+  return matchesKeyName && key.ctrl === needCtrl && key.meta === needMeta && key.shift === needShift;
 }
 
 export function formatKeypressBinding(key: Keypress): string | null {

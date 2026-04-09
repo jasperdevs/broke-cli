@@ -1,23 +1,15 @@
 import { collectProjectFiles } from "./file-picker.js";
 import { listSkills } from "../core/skills.js";
 import type { Keypress } from "./keypress.js";
-import { matchesBinding, loadKeybindings } from "../core/keybindings.js";
+import { getKeybinding, matchesBinding, loadKeybindings } from "../core/keybindings.js";
 import { getSettings } from "../core/config.js";
 import { ensureInlineChipElements, getImageChipLabel, syncInlineImageChipLabels } from "./inline-chip-utils.js";
 import { canonicalizeSlashInput } from "./command-surface.js";
 import { handleQuestionViewKey } from "./question-view.js";
 import {
-  handleBudgetViewKey,
-  handleFilePickerKey,
-  handlePaste,
-  handlePickerKey,
-  handleTreeViewKey,
-  scheduleDeferredImageDraftConsume,
-  queueCurrentInput,
-  restoreQueuedMessage,
-  submitInput,
-  shouldKeepFilePickerOpen,
-  tryConsumeImageDraft,
+  handleBudgetViewKey, handleFilePickerKey, handlePaste, handlePickerKey, handleTreeViewKey,
+  scheduleDeferredImageDraftConsume, queueCurrentInput, restoreQueuedMessage, submitInput,
+  shouldKeepFilePickerOpen, tryConsumeImageDraft,
 } from "./app-input-routes.js";
 type AppState = any;
 
@@ -25,7 +17,6 @@ function syncComposerAttachmentsFromInput(app: AppState): void {
   for (const file of Array.from(app.fileContexts.keys())) {
     if (!app.input.getText().includes(file)) app.fileContexts.delete(file);
   }
-
   const elements = app.input.getElements?.() ?? [];
   const activeImages = new Set(
     elements
@@ -379,6 +370,12 @@ export function handleKey(app: AppState, key: Keypress): void {
 
   if (handleEscapeAndBindings(app, key)) return;
   if (scrollTranscriptWithEmptyComposer(app, key)) return;
+  if (matchesBinding(getKeybinding("newline"), key)) {
+    app.input.insertText("\n");
+    syncComposerAttachmentsFromInput(app);
+    app.draw();
+    return;
+  }
 
   if (key.name === "backspace" && !key.ctrl && !key.meta && !key.shift && app.input.getText().length === 0) {
     const fileKeys = Array.from(app.fileContexts.keys());
