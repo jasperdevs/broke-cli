@@ -1,11 +1,14 @@
 import type { ModelHandle } from "../ai/providers.js";
 import { isDefaultSessionName, type Session } from "../core/session.js";
 import { getSettings, type Mode } from "../core/config.js";
+import { applySimpleFileTaskPolicy, detectSimpleFileTask } from "../core/simple-file-task.js";
 import { resolveTurnPolicy } from "../core/turn-policy.js";
 import type { ToolName } from "../tools/registry.js";
 import { executeTurn } from "./turn-execution.js";
 import { maybeAutoNameSession } from "./chat-naming.js";
 import { tryRepoTaskFastPath } from "./repo-fastpath.js";
+import { readFileDirect } from "../tools/file-ops.js";
+import { observeToolResult } from "./turn-tool-observer.js";
 import type { SpecialistModelRole } from "./model-routing.js";
 import {
   addUserTurnToSession,
@@ -97,6 +100,28 @@ export async function maybeHandleFastPathTurn(options: {
   const { transientUserContext } = addUserTurnToSession({ app, session, text, effectiveImages, alreadyAddedUserMessage });
   const fastPath = await tryRepoTaskFastPath({ root: process.cwd(), prompt: text, session });
   if (!fastPath) {
+    const simpleTask = detectSimpleFileTask(text);
+    if (simpleTask?.completeWithRead) {
+      const args = { path: simpleTask.path, mode: "full" as const, refresh: true };
+      const callId = `simple-read-only:${simpleTask.path}`;
+      app.addToolCall("readFile", simpleTask.path, args, callId);
+      const result = readFileDirect(args);
+      const detail = observeToolResult({ session, toolName: "readFile", result, toolArgs: args });
+      if (result.success === false) {
+        app.addToolResult("readFile", result.error.slice(0, 80), true, detail, callId);
+        const content = `Blocked: ${result.error}`;
+        app.addMessage("assistant", content);
+        session.addMessage("assistant", content);
+      } else {
+        app.addToolResult("readFile", "ok", false, detail, callId);
+        const content = `Read ${simpleTask.path}.`;
+        app.addMessage("assistant", content);
+        session.addMessage("assistant", content);
+      }
+      session.recordTurn({ toolsExposed: 1, toolsUsed: 1, visibleOutputTokens: 1, hiddenOutputTokens: 0 });
+      app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
+      return { handled: true, transientUserContext, lastActivityTime: Date.now() };
+    }
     return { handled: false, transientUserContext, lastActivityTime: Date.now() };
   }
 
@@ -146,9 +171,10 @@ export async function prepareTurnExecution(options: {
   const repoState = typeof (session as Session & { getRepoState?: () => ReturnType<Session["getRepoState"]> }).getRepoState === "function"
     ? (session as Session & { getRepoState: () => ReturnType<Session["getRepoState"]> }).getRepoState()
     : undefined;
-  const policy = await resolveTurnPolicy(text, lastToolCalls, repoState, activeModel.runtime === "sdk" && activeModel.model
+  let policy = await resolveTurnPolicy(text, lastToolCalls, repoState, activeModel.runtime === "sdk" && activeModel.model
     ? { model: activeModel.model, modelId: currentModelId, providerId: activeModel.provider.id }
     : null);
+  policy = applySimpleFileTaskPolicy(policy, detectSimpleFileTask(text));
   if (policy.plannerUsage) {
     session.addUsage(policy.plannerUsage.inputTokens, policy.plannerUsage.outputTokens, policy.plannerUsage.cost);
     app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());

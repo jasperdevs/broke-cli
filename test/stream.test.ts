@@ -40,6 +40,15 @@ vi.mock("../src/core/config.js", () => ({
     memoizeToolResults: true,
     modelGeneratedSessionNames: false,
     autoFixValidation: false,
+    autonomy: {
+      allowNetwork: true,
+      allowReadOutsideWorkspace: false,
+      allowWriteOutsideWorkspace: false,
+      allowShellOutsideWorkspace: false,
+      allowDestructiveShell: false,
+      additionalReadRoots: [],
+      additionalWriteRoots: [],
+    },
   }),
 }));
 
@@ -49,7 +58,6 @@ vi.mock("../src/ai/router.js", () => ({
 
 import { startStream } from "../src/ai/stream.js";
 import { runModelTurn } from "../src/cli/turn-runner.js";
-
 vi.mock("../src/cli/notify.js", () => ({
   sendResponseNotification: () => {},
 }));
@@ -93,7 +101,6 @@ vi.mock("../src/core/turn-policy.js", () => ({
 vi.mock("../src/tools/todo.js", () => ({
   clearTodo: () => {},
 }));
-
 describe("stream tool steps", () => {
   beforeEach(() => {
     streamTextMock.mockReset();
@@ -367,11 +374,12 @@ describe("stream tool steps", () => {
     };
     const session = {
       getTotalCost: () => 0,
-      getChatMessages: () => [{ role: "user", content: "make a index.html file thats cool" }],
+      getChatMessages: () => [{ role: "user", content: "make a cool-new-stream-test.html file thats cool" }],
       addMessage: vi.fn(),
       addUsage: vi.fn(),
       recordTurn: vi.fn(),
       recordToolResult: vi.fn(),
+      recordRepoRead: vi.fn(),
       recordShellRecovery: vi.fn(),
       recordIdleCacheCliff: vi.fn(),
       replaceConversation: vi.fn(),
@@ -403,7 +411,7 @@ describe("stream tool steps", () => {
     await runModelTurn({
       app: app as any,
       session,
-      text: "make a index.html file thats cool",
+      text: "make a cool-new-stream-test.html file thats cool",
       activeModel: { provider: { id: "llamacpp", name: "llama.cpp", defaultModel: "default", models: ["default"] }, runtime: "sdk", model: {} as any, modelId: "default" },
       currentModelId: "default",
       smallModel: null,

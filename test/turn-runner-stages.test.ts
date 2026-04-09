@@ -124,7 +124,7 @@ describe("turn runner stages", () => {
       completion: "insufficient",
       resolvedRoute: "main",
       toolActivity: true,
-    })).toBe(false);
+    })).toBe(true);
   });
 
   it("recognizes the small-model fallback retry condition", () => {

@@ -5,6 +5,7 @@ import type { ModelHandle } from "../ai/providers.js";
 import { rewriteAssistantForCaveman } from "../core/caveman.js";
 import { resolveCavemanLevel } from "../core/context.js";
 import { getSettings, type Mode } from "../core/config.js";
+import { buildSimpleFileTaskPromptBlock, detectSimpleFileTask } from "../core/simple-file-task.js";
 import type { TurnPolicy } from "../core/turn-policy.js";
 import type { ToolName } from "../tools/registry.js";
 import { setActiveToolContext } from "../tools/runtime-context.js";
@@ -30,6 +31,8 @@ import { createStreamTokenTracker } from "./stream-token-tracker.js";
 import { executeRawToolPayloadFallback } from "./raw-tool-fallback.js";
 import { captureNativeWorkspaceBaseline, recordNativeWorkspaceDelta } from "./native-workspace-observer.js";
 import { resolveTurnExecution } from "./turn-execution-setup.js";
+import { readFileDirect } from "../tools/file-ops.js";
+import { observeToolResult } from "./turn-tool-observer.js";
 type PendingDelivery = "steering" | "followup";
 
 interface TurnExecutionApp {
@@ -118,8 +121,47 @@ export async function executeTurn(options: {
   let streamedReasoning = "";
   let sawToolActivity = false;
   session.getContextOptimizer().nextTurn();
+  const nextToolCalls: string[] = [];
 
   const settings = getSettings();
+  const simpleFileTask = detectSimpleFileTask(text);
+  let effectiveTransientUserContext = transientUserContext;
+  const hasRequiredSimpleTool = (): boolean => !simpleFileTask
+    || simpleFileTask.completeWithRead
+    || nextToolCalls.includes(simpleFileTask.requiredTool);
+
+  const appendTransientContext = (block: string): void => {
+    effectiveTransientUserContext = [effectiveTransientUserContext, block].filter(Boolean).join("\n\n");
+  };
+  const exposeSimpleRead = (): { content: string; totalLines?: number; failed?: boolean } | null => {
+    if (!simpleFileTask || (!simpleFileTask.preRead && !simpleFileTask.completeWithRead)) return null;
+    const args = { path: simpleFileTask.path, mode: "full" as const, refresh: true };
+    const callId = `simple-read:${simpleFileTask.path}`;
+    nextToolCalls.push("readFile");
+    app.addToolCall("readFile", simpleFileTask.path, args, callId);
+    const result = readFileDirect(args);
+    const detail = observeToolResult({
+      session,
+      toolName: "readFile",
+      result,
+      toolArgs: args,
+    });
+    if (result.success === false) {
+      app.addToolResult("readFile", result.error.slice(0, 80), true, detail, callId);
+      return { content: "", failed: true };
+    }
+    app.addToolResult("readFile", "ok", false, detail, callId);
+    return { content: result.content, totalLines: result.totalLines };
+  };
+
+  const preRead = exposeSimpleRead();
+  if (simpleFileTask) {
+    appendTransientContext(buildSimpleFileTaskPromptBlock(simpleFileTask));
+  }
+  if (preRead && !preRead.failed && simpleFileTask) {
+    appendTransientContext(`--- @${simpleFileTask.path} (${preRead.totalLines ?? "?"} lines, already read by runtime) ---\n${preRead.content}`);
+  }
+
   const {
     turnSystemPrompt: initialTurnSystemPrompt,
     optimizedMessages,
@@ -142,21 +184,18 @@ export async function executeTurn(options: {
     contextLimit,
     activeSystemPrompt,
     optimizeMessages,
-    transientUserContext,
+    transientUserContext: effectiveTransientUserContext,
     app,
     resolveSpecialistModel,
   });
   let turnSystemPrompt = initialTurnSystemPrompt;
-  const nextToolCalls: string[] = [];
   let abortController: AbortController | null = new AbortController();
   let steeringInterruptRequested = false;
   const exposedToolCount = canUseSdkTools(executionModel) ? policy.allowedTools.length : 0;
   const effectiveCavemanLevel = resolveCavemanLevel(settings.cavemanLevel ?? "auto", text);
   const minimalOutputPolicy = getMinimalOutputPolicy({ text, policy, modelRuntime: executionModel.runtime });
   const toolFirstDisplay = shouldUseToolFirstDisplay({ text, policy });
-  const nativeWorkspaceBaseline = executionModel.runtime === "native-cli"
-    ? captureNativeWorkspaceBaseline(process.cwd())
-    : null;
+  const nativeWorkspaceBaseline = executionModel.runtime === "native-cli" ? captureNativeWorkspaceBaseline(process.cwd()) : null;
 
   const exposeOpaqueNativeEdits = (): void => {
     if (!nativeWorkspaceBaseline || sawToolActivity) return;
@@ -218,17 +257,18 @@ export async function executeTurn(options: {
   const streamCallbacks = {
     onText: (delta: string) => {
       const nextText = streamedText + delta;
+      const actionTextMayStream = simpleFileTask ? hasRequiredSimpleTool() : sawToolActivity;
       if (looksLikeRawToolPayload(nextText)) {
         streamedText = nextText;
-        if (toolFirstDisplay && !sawToolActivity) heldPreToolText += delta;
+        if (toolFirstDisplay && !actionTextMayStream) heldPreToolText += delta;
         return;
       }
-      if (!sawToolActivity && shouldSuppressPlanningNarration(nextText, policy, executionModel.runtime)) {
+      if (!actionTextMayStream && shouldSuppressPlanningNarration(nextText, policy, executionModel.runtime)) {
         streamedText = nextText;
         if (toolFirstDisplay) heldPreToolText += delta;
         return;
       }
-      if (toolFirstDisplay && !sawToolActivity) {
+      if (toolFirstDisplay && !actionTextMayStream) {
         streamedText = nextText;
         heldPreToolText += delta;
         return;
@@ -251,10 +291,12 @@ export async function executeTurn(options: {
       let content = (visibleAssistantText.trim() || rawContent);
       const rawPayload = looksLikeRawToolPayload(rawContent) ? rawContent : null;
       if (!rawPayload) content = normalizeEditCompletionText(content, policy);
+      const missingSimpleRequiredTool = !hasRequiredSimpleTool();
       if (
         toolFirstDisplay
         && !visibleAssistantText.trim()
         && (sawToolActivity || nextToolCalls.length > 0)
+        && !missingSimpleRequiredTool
       ) {
         const heldRaw = heldPreToolText.trim();
         const held = normalizeEditCompletionText(heldRaw, policy);
@@ -292,6 +334,19 @@ export async function executeTurn(options: {
       app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
       abortController = null;
       nextActivityTime = Date.now();
+      if (rawPayload) {
+        if (visibleAssistantText.trim()) app.rollbackLastAssistantMessage();
+        rawToolPayloadText = rawPayload;
+        completion = "empty";
+        return;
+      }
+      if (
+        missingSimpleRequiredTool
+      ) {
+        if (visibleAssistantText.trim()) app.rollbackLastAssistantMessage();
+        completion = "insufficient";
+        return;
+      }
       if (shouldEnforceToolFirstTurn({
         text,
         assistantText: content,
@@ -301,12 +356,6 @@ export async function executeTurn(options: {
       })) {
         if (visibleAssistantText.trim()) app.rollbackLastAssistantMessage();
         completion = "insufficient";
-        return;
-      }
-      if (rawPayload) {
-        if (visibleAssistantText.trim()) app.rollbackLastAssistantMessage();
-        rawToolPayloadText = rawPayload;
-        completion = "empty";
         return;
       }
       if (content) {
@@ -389,6 +438,9 @@ export async function executeTurn(options: {
         messages: optimizedMessages,
         tools: canUseSdkTools(executionModel) && policy.allowedTools.length > 0
           ? buildTools(policy.allowedTools) as any
+          : undefined,
+        toolChoice: simpleFileTask && canUseSdkTools(executionModel) && policy.allowedTools.includes(simpleFileTask.requiredTool)
+          ? { type: "tool", toolName: simpleFileTask.requiredTool }
           : undefined,
         abortSignal: abortController.signal,
         enableThinking: thinkingRequested,

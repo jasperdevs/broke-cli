@@ -36,6 +36,15 @@ vi.mock("../src/core/config.js", () => ({
     memoizeToolResults: true,
     modelGeneratedSessionNames: false,
     autoFixValidation: false,
+    autonomy: {
+      allowNetwork: true,
+      allowReadOutsideWorkspace: false,
+      allowWriteOutsideWorkspace: false,
+      allowShellOutsideWorkspace: false,
+      allowDestructiveShell: false,
+      additionalReadRoots: [],
+      additionalWriteRoots: [],
+    },
   }),
 }));
 
@@ -120,16 +129,17 @@ describe("raw tool payload fallback", () => {
     };
     const session = {
       getTotalCost: () => 0,
-      getChatMessages: () => [{ role: "user", content: "make index.html" }],
+      getChatMessages: () => [{ role: "user", content: "make raw-local-test.html" }],
       addMessage: vi.fn(),
       addUsage: vi.fn(),
       recordTurn: vi.fn(),
       recordToolResult: vi.fn(),
+      recordRepoRead: vi.fn(),
       recordRepoEdit: vi.fn(),
       recordIdleCacheCliff: vi.fn(),
       replaceConversation: vi.fn(),
       recordCompaction: vi.fn(),
-      getContextOptimizer: () => ({ optimizeMessages: (messages: any[]) => messages, nextTurn: vi.fn() }),
+      getContextOptimizer: () => ({ optimizeMessages: (messages: any[]) => messages, nextTurn: vi.fn(), trackFileRead: vi.fn() }),
       getCwd: () => process.cwd(),
       getTotalInputTokens: () => 0,
       getTotalOutputTokens: () => 0,
@@ -145,7 +155,7 @@ describe("raw tool payload fallback", () => {
     await runModelTurn({
       app: app as any,
       session,
-      text: "make index.html",
+      text: "make raw-local-test.html",
       activeModel: { provider: { id: "llamacpp", name: "llama.cpp", defaultModel: "default", models: ["default"] }, runtime: "sdk", model: {} as any, modelId: "default" },
       currentModelId: "default",
       smallModel: null,
@@ -163,8 +173,8 @@ describe("raw tool payload fallback", () => {
     });
 
     expect(app.addToolCall).toHaveBeenCalledWith("writeFile", "...");
-    expect(app.updateToolCallArgs).toHaveBeenCalledWith("writeFile", "index.html", expect.objectContaining({ path: "index.html" }));
+    expect(app.updateToolCallArgs).toHaveBeenCalledWith("writeFile", "raw-local-test.html", expect.objectContaining({ path: "raw-local-test.html" }));
     expect(app.addToolResult).toHaveBeenCalledWith("writeFile", "ok", false, "1 line · 15 bytes written");
-    expect(session.addMessage).toHaveBeenCalledWith("assistant", "index.html created.");
+    expect(session.addMessage).toHaveBeenCalledWith("assistant", "raw-local-test.html created.");
   });
 });

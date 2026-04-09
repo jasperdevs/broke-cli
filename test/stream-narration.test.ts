@@ -36,6 +36,15 @@ vi.mock("../src/core/config.js", () => ({
     memoizeToolResults: true,
     modelGeneratedSessionNames: false,
     autoFixValidation: false,
+    autonomy: {
+      allowNetwork: true,
+      allowReadOutsideWorkspace: false,
+      allowWriteOutsideWorkspace: false,
+      allowShellOutsideWorkspace: false,
+      allowDestructiveShell: false,
+      additionalReadRoots: [],
+      additionalWriteRoots: [],
+    },
   }),
 }));
 
@@ -122,6 +131,8 @@ describe("stream narration suppression", () => {
       addMessage: vi.fn(),
       addUsage: vi.fn(),
       recordTurn: vi.fn(),
+      recordToolResult: vi.fn(),
+      recordRepoRead: vi.fn(),
       recordIdleCacheCliff: vi.fn(),
       replaceConversation: vi.fn(),
       recordCompaction: vi.fn(),
@@ -182,14 +193,16 @@ describe("stream narration suppression", () => {
     };
     const session = {
       getTotalCost: () => 0,
-      getChatMessages: () => [{ role: "user", content: "make an index.html file" }],
+      getChatMessages: () => [{ role: "user", content: "make a cool-new-test-page.html file" }],
       addMessage: vi.fn(),
       addUsage: vi.fn(),
       recordTurn: vi.fn(),
+      recordToolResult: vi.fn(),
+      recordRepoRead: vi.fn(),
       recordIdleCacheCliff: vi.fn(),
       replaceConversation: vi.fn(),
       recordCompaction: vi.fn(),
-      getContextOptimizer: () => ({ optimizeMessages: (messages: any[]) => messages, nextTurn: vi.fn() }),
+      getContextOptimizer: () => ({ optimizeMessages: (messages: any[]) => messages, nextTurn: vi.fn(), trackFileRead: vi.fn() }),
       getCwd: () => process.cwd(),
       getTotalInputTokens: () => 0,
       getTotalOutputTokens: () => 0,
@@ -208,7 +221,7 @@ describe("stream narration suppression", () => {
     await runModelTurn({
       app: app as any,
       session,
-      text: "make an index.html file",
+      text: "make a cool-new-test-page.html file",
       activeModel: { provider: { id: "openai", name: "OpenAI", defaultModel: "gpt-5.4-mini", models: [] }, runtime: "sdk", model: {} as any, modelId: "gpt-5.4-mini" },
       currentModelId: "gpt-5.4-mini",
       smallModel: null,
@@ -258,20 +271,26 @@ describe("stream narration suppression", () => {
       getChatMessages: () => [
         { role: "user", content: "old question" },
         { role: "assistant", content: "previous assistant message" },
-        { role: "user", content: "create index.html" },
+        { role: "user", content: "create no-tool-test.html" },
       ],
       addMessage: vi.fn(),
       addUsage: vi.fn(),
       recordTurn: vi.fn(),
+      recordToolResult: vi.fn(),
+      recordRepoRead: vi.fn(),
       recordIdleCacheCliff: vi.fn(),
       replaceConversation: vi.fn(),
       recordCompaction: vi.fn(),
-      getContextOptimizer: () => ({ optimizeMessages: (messages: any[]) => messages, nextTurn: vi.fn() }),
+      getContextOptimizer: () => ({ optimizeMessages: (messages: any[]) => messages, nextTurn: vi.fn(), trackFileRead: vi.fn() }),
       getCwd: () => process.cwd(),
       getTotalInputTokens: () => 0,
       getTotalOutputTokens: () => 0,
     } as any;
 
+    streamTextMock.mockReturnValue({
+      fullStream: (async function* () {})(),
+      usage: Promise.resolve({ inputTokens: 1, outputTokens: 1 }),
+    });
     streamTextMock.mockReturnValueOnce({
       fullStream: (async function* () {
         yield { type: "text-delta", text: "Created index.html." };
@@ -287,7 +306,7 @@ describe("stream narration suppression", () => {
     await runModelTurn({
       app: app as any,
       session,
-      text: "create index.html",
+      text: "create no-tool-test.html",
       activeModel: { provider: { id: "openai", name: "OpenAI", defaultModel: "gpt-5.4-mini", models: [] }, runtime: "sdk", model: {} as any, modelId: "gpt-5.4-mini" },
       currentModelId: "gpt-5.4-mini",
       smallModel: null,
@@ -303,5 +322,147 @@ describe("stream narration suppression", () => {
     expect(app.appendToLastMessage).not.toHaveBeenCalled();
     expect(app.rollbackLastAssistantMessage).not.toHaveBeenCalled();
     expect(app.addMessage).toHaveBeenCalledWith("system", "Model answered without using tools. Try a stronger model with /model.");
+  });
+
+  it("uses a runtime read fast path for bare read-file prompts", async () => {
+    const events: string[] = [];
+    const app = {
+      addMessage: vi.fn((role: string, content: string) => events.push(`${role}:${content}`)),
+      appendToLastMessage: vi.fn((text: string) => events.push(`assistant-delta:${text}`)),
+      rollbackLastAssistantMessage: vi.fn(),
+      appendThinking: vi.fn(),
+      setThinkingRequested: vi.fn(),
+      getLastAssistantContent: vi.fn(() => ""),
+      setStreaming: vi.fn(),
+      setStreamingActivitySummary: vi.fn(),
+      setStreamTokens: vi.fn(),
+      updateUsage: vi.fn(),
+      setContextUsage: vi.fn(),
+      setCompacting: vi.fn(),
+      setStatus: vi.fn(),
+      addToolCall: vi.fn((name: string, preview: string) => events.push(`tool-start:${name}:${preview}`)),
+      updateToolCallArgs: vi.fn(),
+      addToolResult: vi.fn((name: string, result: string) => events.push(`tool-result:${name}:${result}`)),
+      onAbortRequest: vi.fn(),
+      hasPendingMessages: vi.fn(() => false),
+      flushPendingMessages: vi.fn(),
+    };
+    const session = {
+      getTotalCost: () => 0,
+      getChatMessages: () => [{ role: "user", content: "read package.json" }],
+      addMessage: vi.fn(),
+      addUsage: vi.fn(),
+      recordTurn: vi.fn(),
+      recordToolResult: vi.fn(),
+      recordRepoRead: vi.fn(),
+      recordIdleCacheCliff: vi.fn(),
+      replaceConversation: vi.fn(),
+      recordCompaction: vi.fn(),
+      getContextOptimizer: () => ({ optimizeMessages: (messages: any[]) => messages, nextTurn: vi.fn(), trackFileRead: vi.fn() }),
+      getCwd: () => process.cwd(),
+      getTotalInputTokens: () => 0,
+      getTotalOutputTokens: () => 0,
+    } as any;
+
+    await runModelTurn({
+      app: app as any,
+      session,
+      text: "read package.json",
+      activeModel: { provider: { id: "openai", name: "OpenAI", defaultModel: "gpt-5.4-mini", models: [] }, runtime: "sdk", model: {} as any, modelId: "gpt-5.4-mini" },
+      currentModelId: "gpt-5.4-mini",
+      smallModel: null,
+      smallModelId: "",
+      currentMode: "build",
+      systemPrompt: "system",
+      buildTools: () => ({}),
+      hooks: { emit: () => {} },
+      lastToolCalls: [],
+      lastActivityTime: Date.now(),
+    });
+
+    expect(streamTextMock).not.toHaveBeenCalled();
+    expect(events).toEqual(expect.arrayContaining([
+      "tool-start:readFile:package.json",
+      "tool-result:readFile:ok",
+      "assistant:Read package.json.",
+    ]));
+  });
+
+  it("pre-reads concrete edit targets and forces the structural edit tool", async () => {
+    const events: string[] = [];
+    const app = {
+      addMessage: vi.fn(),
+      appendToLastMessage: vi.fn((text: string) => events.push(`assistant-delta:${text}`)),
+      rollbackLastAssistantMessage: vi.fn(),
+      appendThinking: vi.fn(),
+      setThinkingRequested: vi.fn(),
+      getLastAssistantContent: vi.fn(() => ""),
+      setStreaming: vi.fn(),
+      setStreamingActivitySummary: vi.fn(),
+      setStreamTokens: vi.fn(),
+      updateUsage: vi.fn(),
+      setContextUsage: vi.fn(),
+      setCompacting: vi.fn(),
+      setStatus: vi.fn(),
+      addToolCall: vi.fn((name: string, preview: string) => events.push(`tool-start:${name}:${preview}`)),
+      updateToolCallArgs: vi.fn((name: string, preview: string) => events.push(`tool-call:${name}:${preview}`)),
+      addToolResult: vi.fn((name: string, result: string) => events.push(`tool-result:${name}:${result}`)),
+      onAbortRequest: vi.fn(),
+      hasPendingMessages: vi.fn(() => false),
+      flushPendingMessages: vi.fn(),
+    };
+    const session = {
+      getTotalCost: () => 0,
+      getChatMessages: () => [{ role: "user", content: "edit README.md" }],
+      addMessage: vi.fn(),
+      addUsage: vi.fn(),
+      recordTurn: vi.fn(),
+      recordToolResult: vi.fn(),
+      recordRepoRead: vi.fn(),
+      recordIdleCacheCliff: vi.fn(),
+      replaceConversation: vi.fn(),
+      recordCompaction: vi.fn(),
+      getContextOptimizer: () => ({ optimizeMessages: (messages: any[]) => messages, nextTurn: vi.fn(), trackFileRead: vi.fn() }),
+      getCwd: () => process.cwd(),
+      getTotalInputTokens: () => 0,
+      getTotalOutputTokens: () => 0,
+    } as any;
+
+    streamTextMock.mockReturnValueOnce({
+      fullStream: (async function* () {
+        yield { type: "tool-input-start", toolName: "editFile" };
+        yield { type: "tool-call", toolName: "editFile", input: { path: "README.md", old_string: "placeholder", new_string: "placeholder!" } };
+        yield { type: "text-delta", text: "Updated README.md." };
+      })(),
+      usage: Promise.resolve({ inputTokens: 1, outputTokens: 1 }),
+    });
+
+    await runModelTurn({
+      app: app as any,
+      session,
+      text: "edit README.md",
+      activeModel: { provider: { id: "openai", name: "OpenAI", defaultModel: "gpt-5.4-mini", models: [] }, runtime: "sdk", model: {} as any, modelId: "gpt-5.4-mini" },
+      currentModelId: "gpt-5.4-mini",
+      smallModel: null,
+      smallModelId: "",
+      currentMode: "build",
+      systemPrompt: "system",
+      buildTools: () => ({ editFile: {} }),
+      hooks: { emit: () => {} },
+      lastToolCalls: [],
+      lastActivityTime: Date.now(),
+    });
+
+    const streamOptions = streamTextMock.mock.calls[0]?.[0] as any;
+    expect(streamOptions.toolChoice).toEqual({ type: "tool", toolName: "editFile" });
+    expect(streamOptions.messages.at(-1).content).toContain("<simple-file-task>");
+    expect(streamOptions.messages.at(-1).content).toContain("--- @README.md");
+    expect(events.slice(0, 4)).toEqual([
+      "tool-start:readFile:README.md",
+      "tool-result:readFile:ok",
+      "tool-start:editFile:...",
+      "tool-call:editFile:README.md",
+    ]);
+    expect(events).toContain("assistant-delta:Updated README.md.");
   });
 });

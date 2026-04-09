@@ -32,6 +32,7 @@ export interface StreamOptions {
   thinkingLevel?: string;
   maxToolSteps?: number;
   maxOutputTokens?: number;
+  toolChoice?: "auto" | "none" | "required" | { type: "tool"; toolName: string };
 }
 
 export async function startStream(
@@ -107,6 +108,7 @@ export async function startStream(
       system: opts.system,
       messages,
       tools: opts.tools,
+      toolChoice: opts.toolChoice,
       maxOutputTokens: opts.maxOutputTokens,
       stopWhen: opts.tools ? stepCountIs(Math.max(2, opts.maxToolSteps ?? 10)) : stepCountIs(1),
       abortSignal: opts.abortSignal,

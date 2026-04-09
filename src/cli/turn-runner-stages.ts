@@ -361,7 +361,7 @@ export function shouldRetryWithToolRequirement(
   result: TurnExecutionResultLike,
   forceRoute?: "main" | "small",
 ): boolean {
-  return !forceRoute && !result.toolActivity && result.completion === "insufficient";
+  return !forceRoute && result.completion === "insufficient";
 }
 
 export function shouldRetryOnMainModel(
