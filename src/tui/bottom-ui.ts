@@ -65,7 +65,7 @@ export function appendBottomMenus(
   const maxVisibleRows = Math.max(1, getSettings().autocompleteMaxVisible);
   const tailReserve = 2;
   const getAvailableBodyRows = (chromeLines: number): number =>
-    Math.max(1, Math.min(maxVisibleRows, height - bottomLines.length - tailReserve - 1 - chromeLines));
+    Math.max(1, Math.min(maxVisibleRows, height - bottomLines.length - tailReserve - chromeLines));
 
   if (app.filePicker) {
     bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
@@ -86,7 +86,7 @@ export function appendBottomMenus(
   }
   if (app.modelPicker) {
     bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
-    app.appendModelPicker(bottomLines, getAvailableBodyRows(4), bottomMenuClicks);
+    app.appendModelPicker(bottomLines, getAvailableBodyRows(2), bottomMenuClicks);
     appendMenuDetailLine(app, bottomLines, mainW);
     return;
   }

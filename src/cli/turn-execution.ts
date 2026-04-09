@@ -163,9 +163,9 @@ export async function executeTurn(options: {
     const touched = recordNativeWorkspaceDelta(session, nativeWorkspaceBaseline);
     for (const path of touched) {
       const callId = `native-observed-edit:${path}`;
-      nextToolCalls.push("editFile");
-      app.addToolCall("editFile", path, { path }, callId);
-      app.addToolResult("editFile", "ok", false, "changed on disk", callId);
+      nextToolCalls.push("workspaceEdit");
+      app.addToolCall("workspaceEdit", path, { path }, callId);
+      app.addToolResult("workspaceEdit", "ok", false, "observed on disk", callId);
     }
     if (touched.length > 0) sawToolActivity = true;
   };

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import stripAnsi from "strip-ansi";
 import { App } from "../src/tui/app.js";
+import { getSettings } from "../src/core/config.js";
 
 describe("menu layout regressions", () => {
   it("keeps the bottom info bar visible when a picker is open in a cramped pane", () => {
@@ -101,5 +102,68 @@ describe("menu layout regressions", () => {
     expect(output).toContain("high");
     expect(output).not.toContain("/ commands");
     expect(output).not.toContain("@ files");
+  });
+
+  it("renders picker details in one detail strip instead of below every model lane", () => {
+    const app = new App() as any;
+    let rendered: string[] = [];
+    app.messages = [{ role: "assistant", content: "hello" }];
+    app.modelPicker = {
+      cursor: 0,
+      options: [{ providerId: "openai", providerName: "OpenAI", modelId: "gpt-5.4-mini", displayName: "GPT-5.4 mini", active: false }],
+    };
+    app.openModelLanePicker(0);
+    app.screen = {
+      height: 18,
+      width: 76,
+      hasSidebar: false,
+      mainWidth: 76,
+      sidebarWidth: 0,
+      render: (lines: string[]) => { rendered = lines; },
+      setCursor: () => {},
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+
+    app.drawImmediate();
+
+    const output = rendered.map((line) => stripAnsi(line)).join("\n");
+    expect(output).toContain("Use everywhere");
+    expect(output).toContain("Use for chat");
+    expect(output.match(/set this as chat/g)?.length).toBe(1);
+  });
+
+  it("uses a taller default menu row budget when the interactive app starts", () => {
+    const app = new App() as any;
+    app.screen = {
+      enter: () => {},
+      exit: () => {},
+      dispose: () => {},
+      height: 24,
+      width: 80,
+      hasSidebar: false,
+      mainWidth: 80,
+      sidebarWidth: 0,
+      render: () => {},
+      setCursor: () => {},
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+    app.keypress = {
+      start: () => {},
+      stop: () => {},
+      setMouseTracking: () => {},
+    };
+
+    app.start();
+    try {
+      expect(getSettings().autocompleteMaxVisible).toBeGreaterThanOrEqual(8);
+    } finally {
+      app.running = false;
+      process.stdout.off("resize", app.handleResize);
+      app.keypress.stop();
+      app.screen.exit();
+      app.screen.dispose();
+    }
   });
 });

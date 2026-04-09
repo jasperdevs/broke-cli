@@ -56,6 +56,17 @@ describe("tool rendering detail", () => {
     expect(output).toContain("2 -> 3 lines replaced");
   });
 
+  it("labels opaque native file deltas as observed workspace changes", () => {
+    const app = makeApp();
+    app.addToolCall("workspaceEdit", "index.html", { path: "index.html" }, "observed_index");
+    app.addToolResult("workspaceEdit", "ok", false, "observed on disk", "observed_index");
+
+    const output = app.renderMessages(96).map((line: string) => stripAnsi(line)).join("\n");
+    expect(output).toContain("changed index.html");
+    expect(output).toContain("observed on disk");
+    expect(output).not.toContain("edit index.html");
+  });
+
   it("keeps simple create, edit, and read flows centered on visible action blocks", () => {
     const renderCreate = () => {
       const app = makeApp();

@@ -116,6 +116,8 @@ export function toolDescription(tc: { name: string; preview: string }): string {
     case "Edit":
     case "editFile":
       return `edit ${tc.preview}`.trim();
+    case "workspaceEdit":
+      return `changed ${tc.preview}`.trim();
     case "Glob":
     case "glob":
       return `find ${tc.preview}`.trim();

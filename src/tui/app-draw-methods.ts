@@ -322,7 +322,7 @@ export function getCommandMatches(app: AppState) {
 export function start(app: AppState): void {
   app.running = true;
   setRuntimeSettings({
-    autocompleteMaxVisible: 5,
+    autocompleteMaxVisible: 8,
     showHardwareCursor: true,
   });
   try { app.gitBranch = execSync("git branch --show-current", { encoding: "utf-8", timeout: 3000 }).trim(); } catch {}

@@ -32,10 +32,7 @@ export function getModelLanePickerEntries(app: AppState): MenuEntry[] {
     const labelCol = isCursor ? `${TXT()}` : T();
     const assignment = option.assignedModelLabel ? ` ${DIM}(${option.assignedModelLabel})${RESET}` : "";
     return {
-      lines: [
-        ` ${arrow}${labelCol}${option.label}${RESET}${assignment}`,
-        `    ${DIM}${option.detail}${RESET}`,
-      ],
+      lines: [` ${arrow}${labelCol}${option.label}${RESET}${assignment}`],
       selectIndex: i,
     };
   });

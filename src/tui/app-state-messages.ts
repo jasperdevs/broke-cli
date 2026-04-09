@@ -22,6 +22,7 @@ function buildActivityLabel(name: string, preview: string): string | null {
       case "readFile": return "reading a file";
       case "writeFile": return "writing a file";
       case "editFile": return "editing a file";
+      case "workspaceEdit": return "observing file changes";
       case "listFiles": return "listing files";
       case "glob": return "finding files";
       case "grep": return "searching the repo";
@@ -34,6 +35,7 @@ function buildActivityLabel(name: string, preview: string): string | null {
     case "readFile": return `reading ${target}`;
     case "writeFile": return `writing ${target}`;
     case "editFile": return `editing ${target}`;
+    case "workspaceEdit": return `changed ${target}`;
     case "listFiles": return `listing ${target}`;
     case "glob": return `finding ${target}`;
     case "grep": return `searching ${target}`;
