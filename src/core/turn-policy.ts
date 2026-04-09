@@ -88,7 +88,11 @@ export function classifyTurnArchetype(userMessage: string, lastToolCalls: string
   if (/^(run|exec|execute|bash|shell|git)\b/i.test(msg)) return "shell";
   if (/\b(fix|bug|broken|error|failing|debug|why\b.*\bnot\b.*\bwork)\b/i.test(msg)) return "bugfix";
   if (/\b(write|edit|change|update|create|make|implement|refactor|add)\b/i.test(msg)) return "edit";
-  if (/^(read|show|open|view|find|list|where|which file|what file|grep)\b/i.test(msg)) return "explore";
+  if (
+    /^(read|show|open|view|find|list|where|which file|what file|grep)\b/i.test(msg)
+    || /\b(which|what)\s+file\s+(?:defines|imports|contains|uses)\b/i.test(msg)
+    || /\bwhere\s+(?:is|are|does|do)\b/i.test(msg)
+  ) return "explore";
   if (lastToolCalls.length >= 3) return "explore";
   return "question";
 }
@@ -109,13 +113,13 @@ function getBuiltInPolicy(archetype: TurnArchetype): TurnPolicy {
     case "question":
       return {
         archetype,
-        allowedTools: READ_ONLY_TOOLS,
-        maxToolSteps: 1,
+        allowedTools: NO_TOOLS,
+        maxToolSteps: 0,
         scaffold: STATIC_SCAFFOLDS[archetype],
         scaffoldSource: "builtin",
         preferSmallExecutor: true,
-        promptProfile: "lean",
-        historyWindow: null,
+        promptProfile: "casual",
+        historyWindow: 4,
       };
     case "explore":
       return {
@@ -266,6 +270,8 @@ function refinePolicyForRequest(policy: TurnPolicy, userMessage: string, repoSta
       ...policy,
       allowedTools: ["readFile"],
       maxToolSteps: 1,
+      promptProfile: "lean",
+      historyWindow: null,
     };
   }
 

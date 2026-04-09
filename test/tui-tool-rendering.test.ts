@@ -19,6 +19,36 @@ function makeApp(width = 96, height = 22) {
 }
 
 describe("tool rendering detail", () => {
+  it("uses terminal-native text states instead of checkmark/icon status glyphs", () => {
+    const app = makeApp();
+    app.addToolCall("readFile", "README.md", { path: "README.md" }, "call_read");
+    let output = app.renderMessages(96).map((line: string) => stripAnsi(line)).join("\n");
+    expect(output).toContain("[run]");
+    expect(output).not.toContain("✔");
+    expect(output).not.toContain("✖");
+
+    app.addToolResult("readFile", "ok", false, "4 lines", "call_read");
+    output = app.renderMessages(96).map((line: string) => stripAnsi(line)).join("\n");
+    expect(output).toContain("[done]");
+    expect(output).not.toContain("✔");
+  });
+
+  it("persists completed tool activity in the turn transcript after the next user starts", () => {
+    const app = makeApp();
+    app.addMessage("user", "read README.md");
+    app.addToolCall("readFile", "README.md", { path: "README.md" }, "call_read");
+    app.addToolResult("readFile", "ok", false, "4 lines", "call_read");
+    app.addMessage("assistant", "Read README.md.");
+
+    app.addMessage("user", "next prompt");
+
+    const output = app.renderMessages(96).map((line: string) => stripAnsi(line)).join("\n");
+    expect(output).toContain("read README.md");
+    expect(output).toContain("[done]");
+    expect(output).toContain("4 lines");
+    expect(output).toContain("next prompt");
+  });
+
   it("shows specific live argument summaries for file writes", () => {
     const app = makeApp();
     app.addToolCall("writeFile", "...", undefined, "call_write");

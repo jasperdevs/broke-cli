@@ -19,6 +19,7 @@ import {
   renderMessages,
   renderSidebar,
   renderStaticMessages,
+  renderActivitySnapshot,
   renderToolCallBlock,
   resolveMascotPathCached,
   shouldShowSidebar,
@@ -32,6 +33,7 @@ type AppState = any;
 export interface AppRenderMethods {
   isToolOutput(content: string): boolean;
   renderStaticMessages(maxWidth: number): string[];
+  renderActivitySnapshot(activity: unknown, maxWidth: number): string[];
   renderToolCallBlock(tc: { name: string; preview: string; args?: unknown; resultDetail?: string; result?: string; error?: boolean; expanded: boolean; streamOutput?: string; status: "starting" | "running" | "done" | "failed"; startedAt?: number; completedAt?: number }, maxWidth: number): string[];
   renderMessages(maxWidth: number): string[];
   renderCompactHeader(): string;
@@ -60,6 +62,7 @@ export interface AppRenderMethods {
 export const appRenderMethods: AppRenderMethods = {
   isToolOutput(this: AppState, content: string) { return isToolOutput(this, content); },
   renderStaticMessages(this: AppState, maxWidth: number) { return renderStaticMessages(this, maxWidth); },
+  renderActivitySnapshot(this: AppState, activity: unknown, maxWidth: number) { return renderActivitySnapshot(this, activity, maxWidth); },
   renderToolCallBlock(this: AppState, tc: typeof this.toolCallGroups[0], maxWidth: number) { return renderToolCallBlock(this, tc, maxWidth); },
   renderMessages(this: AppState, maxWidth: number) { return renderMessages(this, maxWidth); },
   renderCompactHeader(this: AppState) { return renderCompactHeader(this); },

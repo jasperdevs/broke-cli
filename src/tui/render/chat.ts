@@ -99,10 +99,15 @@ export function renderToolCallBlock(options: {
   const done = tc.status === "done" || tc.status === "failed";
   const running = tc.status === "starting" || tc.status === "running";
   const branch = "\u2514";
-  const statusIcon = done
-    ? (tc.status === "failed" ? `${colors.error}✖${reset}` : `${colors.ok}✔${reset}`)
-    : `${colors.accent2}${["◐", "◓", "◑", "◒"][spinnerFrame % 4]}${reset}`;
-  const statusLabel = tc.status;
+  void spinnerFrame;
+  const statusColor = tc.status === "failed"
+    ? colors.error
+    : done
+      ? colors.muted
+      : colors.accent2;
+  const stateText = tc.status === "starting" ? "run" : tc.status === "running" ? "run" : tc.status === "failed" ? "fail" : "done";
+  const statusIcon = `${statusColor}[${stateText}]${reset}`;
+  const statusLabel = tc.status === "starting" ? "starting" : tc.status;
   const elapsedLabel = formatElapsedLabel(tc);
   const statusSuffix = `${colors.muted}${statusLabel}${elapsedLabel ? ` · ${elapsedLabel}` : ""}${reset}`;
   const ordinal = typeof index === "number" ? `${colors.muted}${index + 1}.${reset} ` : "";
@@ -236,11 +241,11 @@ function renderActivityBlock(options: {
   const { currentActivityStep, toolExecutions, maxWidth, spinnerFrame, colors } = options;
   if (!currentActivityStep && toolExecutions.length === 0) return [];
   const lines: string[] = [];
-  lines.push(`  ${colors.accent}${colors.bold}${toolExecutions.length > 0 ? "Actions" : "Activity"}${colors.reset}`);
+  lines.push(`  ${colors.dim}${toolExecutions.length > 0 ? "actions" : "activity"}${colors.reset}`);
   if (currentActivityStep && toolExecutions.length === 0) {
     const icon = currentActivityStep.status === "done"
-      ? `${colors.ok}✔${colors.reset}`
-      : `${colors.accent}${["◐", "◓", "◑", "◒"][spinnerFrame % 4]}${colors.reset}`;
+      ? `${colors.dim}[done]${colors.reset}`
+      : `${colors.accent}[run]${colors.reset}`;
     const elapsed = formatElapsedLabel(currentActivityStep);
     lines.push(`  ${icon} ${colors.text}${currentActivityStep.label}${colors.reset}${elapsed ? ` ${colors.dim}${elapsed}${colors.reset}` : ""}`);
   }
@@ -366,8 +371,6 @@ export function renderMessageOverlays(options: {
     ensureOverlayGap(lines);
     const done = todoItems.filter((item) => item.status === "done").length;
     const total = todoItems.length;
-    const spinChars = ["\u25DC", "\u25DD", "\u25DE", "\u25DF"];
-    const spin = spinChars[spinnerFrame % spinChars.length];
     const allDone = done === total;
 
     if (isStreaming) {
@@ -377,17 +380,17 @@ export function renderMessageOverlays(options: {
       const timeStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
       const inProgress = todoItems.find((item) => item.status === "in_progress");
       const headerText = inProgress ? inProgress.text : (allDone ? "Done" : "Working...");
-      lines.push(`  ${colors.accent}${spin}${colors.reset} ${colors.accent}${headerText}${colors.reset}  ${colors.dim}${timeStr} · ${done}/${total}${colors.reset}`);
+      lines.push(`  ${colors.accent}[run]${colors.reset} ${colors.accent}${headerText}${colors.reset}  ${colors.dim}${timeStr} · ${done}/${total}${colors.reset}`);
     } else {
-      lines.push(`  ${allDone ? colors.ok : colors.accent}✔${colors.reset} ${colors.dim}Tasks ${done}/${total}${colors.reset}`);
+      lines.push(`  ${allDone ? colors.dim : colors.accent}${allDone ? "[done]" : "[run]"}${colors.reset} ${colors.dim}tasks ${done}/${total}${colors.reset}`);
     }
 
     for (let i = 0; i < todoItems.length; i++) {
       const item = todoItems[i];
       const branch = i === todoItems.length - 1 ? "\u2514" : "\u251C";
-      const icon = item.status === "done" ? `${colors.ok}\u25A0${colors.reset}`
-        : item.status === "in_progress" ? `${colors.accent}${spin}${colors.reset}`
-        : `${colors.dim}\u25A1${colors.reset}`;
+      const icon = item.status === "done" ? `${colors.dim}[done]${colors.reset}`
+        : item.status === "in_progress" ? `${colors.accent}[run]${colors.reset}`
+        : `${colors.dim}[wait]${colors.reset}`;
       const textColor = item.status === "done" ? colors.dim : item.status === "in_progress" ? `${colors.text}${colors.bold}` : colors.dim;
       lines.push(`  ${colors.dim}${branch}${colors.reset} ${icon} ${textColor}${item.text.slice(0, maxWidth - 10)}${colors.reset}`);
     }

@@ -185,7 +185,7 @@ export function handleImagePaste(app: AppState, text: string): boolean {
       app.pendingImages.push({ attachmentId, mimeType, data });
       insertInlineImageChip(app, attachmentId);
       syncInlineImageChipLabels(app);
-      app.setStatus?.(`${T()}✓ Image attached (${mimeType})${RESET}`);
+      app.setStatus?.(`${T()}Image attached (${mimeType})${RESET}`);
       return true;
     }
   }

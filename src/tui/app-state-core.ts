@@ -66,6 +66,7 @@ interface CoreAppState {
   mcpConnections: string[];
   updateNotice: UpdateNotice | null;
   invalidateMsgCache(): void;
+  persistCurrentActivityToLastAssistant?(): void;
   collapseToolCalls(): void;
   ensureUiSpinner(): void;
   releaseUiSpinnerIfIdle(): void;
@@ -289,6 +290,7 @@ export function setStreaming(app: CoreAppState, streaming: boolean): void {
     } else if (app.toolExecutions.length === 0) {
       app.currentActivityStep = null;
     }
+    app.persistCurrentActivityToLastAssistant?.();
     if (app.streamStartTime > 0) {
       app.streamStartTime = 0;
     }

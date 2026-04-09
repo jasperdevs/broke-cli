@@ -34,6 +34,7 @@ export function renderStaticMessages(app: AppState, maxWidth: number): string[] 
     maxWidth,
     toolOutputCollapsed: app.toolOutputCollapsed,
     isToolOutput: (content) => app.isToolOutput(content),
+    renderActivity: (activity) => app.renderActivitySnapshot(activity, maxWidth),
     wordWrap,
     colors: {
       imageTagBg: currentTheme().imageTagBg,
@@ -70,6 +71,33 @@ export function renderToolCallBlock(app: AppState, tc: typeof app.toolCallGroups
     },
     reset: RESET,
   });
+}
+
+export function renderActivitySnapshot(app: AppState, activity: any, maxWidth: number): string[] {
+  const tools = Array.isArray(activity?.tools) ? activity.tools : [];
+  const lines: string[] = [];
+  if (tools.length > 0) {
+    lines.push(`  ${DIM}activity${RESET}`);
+    for (const [index, tc] of tools.entries()) {
+      lines.push(...buildToolCallBlock({
+        index,
+        tc,
+        maxWidth,
+        spinnerFrame: app.spinnerFrame,
+        colors: {
+          error: ERR(),
+          ok: OK(),
+          accent2: ACCENT_2(),
+          muted: DIM,
+          text: TXT(),
+          diffRemoveBg: currentTheme().diffRemoveBg,
+          diffAddBg: currentTheme().diffAddBg,
+        },
+        reset: RESET,
+      }));
+    }
+  }
+  return lines;
 }
 
 export function renderMessages(app: AppState, maxWidth: number): string[] {

@@ -288,7 +288,7 @@ ${describeAutonomyPolicy(cwd).join("\n")}
   }
 
   // Caveman mode — reduce output tokens by constraining verbosity
-  if (cavemanLevel && cavemanLevel !== "off") {
+  if (profile !== "casual" && cavemanLevel && cavemanLevel !== "off") {
     parts.push(getCavemanPrompt(cavemanLevel));
   }
 

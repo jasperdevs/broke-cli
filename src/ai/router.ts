@@ -37,6 +37,7 @@ export function routeMessage(
   // First message always goes to main model (needs full context understanding)
   if (messageCount <= 1) return "main";
 
+  if (archetype === "casual") return "small";
   if (archetype === "explore" || archetype === "shell" || archetype === "question") return "small";
   if (archetype === "research" || archetype === "review" || archetype === "planning" || archetype === "bugfix" || archetype === "edit") return "main";
 

@@ -16,6 +16,36 @@ describe("turn policy", () => {
     expect(policy.maxToolSteps).toBe(0);
   });
 
+  it("keeps non-actionable questions off repo tools", () => {
+    for (const text of ["what", "what?", "how are you?"]) {
+      const policy = getTurnPolicy(text);
+      expect(policy.allowedTools).toEqual([]);
+      expect(policy.maxToolSteps).toBe(0);
+      expect(policy.promptProfile).toBe("casual");
+    }
+  });
+
+  it("routes the regression prompt matrix by actionable intent", () => {
+    expect(getTurnPolicy("hey").allowedTools).toEqual([]);
+    expect(getTurnPolicy("what").allowedTools).toEqual([]);
+    expect(getTurnPolicy("what?").allowedTools).toEqual([]);
+
+    expect(getTurnPolicy("read package.json").allowedTools).toEqual(["readFile"]);
+
+    const makeBetter = getTurnPolicy("make index.html better");
+    expect(makeBetter.archetype).toBe("edit");
+    expect(makeBetter.allowedTools.length).toBeGreaterThan(0);
+
+    const simpleEdit = getTurnPolicy("simple edit: update README.md title");
+    expect(simpleEdit.archetype).toBe("edit");
+    expect(simpleEdit.allowedTools).toContain("editFile");
+
+    const multiStep = getTurnPolicy("fix parser crash, add a regression test, and run the test");
+    expect(multiStep.archetype).toBe("bugfix");
+    expect(multiStep.allowedTools).toContain("editFile");
+    expect(multiStep.allowedTools).toContain("bash");
+  });
+
   it("keeps exploration turns on a read-only tool subset with a low step cap", () => {
     const policy = getTurnPolicy("read src/app.ts and tell me what it does");
     expect(policy.allowedTools).toContain("readFile");

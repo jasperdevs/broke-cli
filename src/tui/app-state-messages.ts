@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import type { PendingDelivery, PendingImage, PendingMessage, ResolvedImage, TodoItem } from "./app-types.js";
+import type { ActivityStep, PendingDelivery, PendingImage, PendingMessage, ResolvedImage, TodoItem, ToolExecutionActivity } from "./app-types.js";
 
 type AppState = any;
 
@@ -84,12 +84,42 @@ export function clearMessages(app: AppState): void {
   app.draw();
 }
 
+function cloneActivityStep(step: ActivityStep | null): ActivityStep | null {
+  return step ? { ...step } : null;
+}
+
+function cloneToolExecution(tool: ToolExecutionActivity): ToolExecutionActivity {
+  return { ...tool };
+}
+
+function findLastAssistantMessage(app: AppState): any | null {
+  for (let i = app.messages.length - 1; i >= 0; i--) {
+    const message = app.messages[i];
+    if (message?.role === "assistant") return message;
+  }
+  return null;
+}
+
+function persistCurrentActivityToLastAssistant(app: AppState): void {
+  if (!app.currentActivityStep && app.toolExecutions.length === 0) return;
+  const last = findLastAssistantMessage(app);
+  if (!last) return;
+  last.activity = {
+    step: cloneActivityStep(app.currentActivityStep),
+    tools: app.toolExecutions.map(cloneToolExecution),
+  };
+  app.invalidateMsgCache();
+}
+
 export function setDraft(app: AppState, text: string): void {
   app.input.setText(text);
   app.drawNow();
 }
 
 export function addMessage(app: AppState, role: "user" | "assistant" | "system", content: string, images?: ResolvedImage[]): void {
+  if (role === "user") {
+    persistCurrentActivityToLastAssistant(app);
+  }
   if (role === "user") {
     app.thinkingBuffer = "";
     app.thinkingStartTime = 0;
@@ -98,6 +128,9 @@ export function addMessage(app: AppState, role: "user" | "assistant" | "system",
     app.toolExecutions = [];
   }
   app.messages.push({ role, content, images });
+  if (role === "assistant") {
+    persistCurrentActivityToLastAssistant(app);
+  }
   app.invalidateMsgCache();
   app.scrollToBottom();
   app.draw();
@@ -344,6 +377,7 @@ export function onAbortRequest(app: AppState, handler: () => void): void { app.o
 
 export interface AppStateMessageMethods {
   clearMessages(): void;
+  persistCurrentActivityToLastAssistant(): void;
   setDraft(text: string): void;
   addMessage(role: "user" | "assistant" | "system", content: string, images?: ResolvedImage[]): void;
   appendToLastMessage(text: string): void;
@@ -377,6 +411,7 @@ export interface AppStateMessageMethods {
 
 export const appStateMessageMethods: AppStateMessageMethods = {
   clearMessages(this: AppState) { return clearMessages(this); },
+  persistCurrentActivityToLastAssistant(this: AppState) { return persistCurrentActivityToLastAssistant(this); },
   setDraft(this: AppState, text) { return setDraft(this, text); },
   addMessage(this: AppState, role, content, images) { return addMessage(this, role, content, images); },
   appendToLastMessage(this: AppState, text) { return appendToLastMessage(this, text); },

@@ -11,6 +11,7 @@ export interface ChatMessage {
   content: string;
   thinking?: string;
   thinkingDuration?: number;
+  activity?: TurnActivitySnapshot;
   images?: ResolvedImage[];
 }
 
@@ -117,6 +118,11 @@ export interface ToolExecutionActivity {
   status: "starting" | "running" | "done" | "failed";
   startedAt: number;
   completedAt?: number;
+}
+
+export interface TurnActivitySnapshot {
+  step?: ActivityStep | null;
+  tools: ToolExecutionActivity[];
 }
 
 export interface TreeRow {

@@ -8,6 +8,7 @@ export interface RenderChatMessage {
   content: string;
   thinking?: string;
   thinkingDuration?: number;
+  activity?: unknown;
   images?: Array<{ mimeType: string; data: string }>;
 }
 
@@ -66,6 +67,7 @@ export function renderStaticMessages(options: {
   maxWidth: number;
   toolOutputCollapsed: boolean;
   isToolOutput: (content: string) => boolean;
+  renderActivity?: (activity: unknown) => string[];
   wordWrap: (text: string, width: number) => string[];
   colors: {
     imageTagBg: string;
@@ -79,7 +81,7 @@ export function renderStaticMessages(options: {
   reset: string;
   bold: string;
 }): string[] {
-  const { messages, maxWidth, toolOutputCollapsed, isToolOutput, wordWrap, colors, reset, bold } = options;
+  const { messages, maxWidth, toolOutputCollapsed, isToolOutput, renderActivity, wordWrap, colors, reset, bold } = options;
   const lines: string[] = [];
   let idx = 0;
   while (idx < messages.length) {
@@ -137,8 +139,15 @@ export function renderStaticMessages(options: {
         }
       }
       if (idx + 1 < messages.length && messages[idx + 1].role === "user") {
+        if (msg.activity && renderActivity) {
+          lines.push("");
+          lines.push(...renderActivity(msg.activity));
+        }
         lines.push("");
         lines.push(`${colors.border}  ${"─".repeat(Math.max(1, maxWidth - 4))}${reset}`);
+      } else if (msg.activity && renderActivity) {
+        lines.push("");
+        lines.push(...renderActivity(msg.activity));
       }
     } else if (toolOutputCollapsed && isToolOutput(msg.content)) {
       while (idx + 1 < messages.length && messages[idx + 1].role === "system" && isToolOutput(messages[idx + 1].content)) idx++;

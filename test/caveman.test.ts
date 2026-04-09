@@ -40,6 +40,14 @@ describe("caveman mode resolution", () => {
     expect(prompt).toContain("Code blocks unchanged.");
   });
 
+  it("does not inject verdict-style caveman instructions into casual prompts", () => {
+    const prompt = buildSystemPrompt(process.cwd(), "openai", "build", "ultra", "casual");
+
+    expect(prompt).toContain("Casual turn:");
+    expect(prompt).not.toContain("CAVEMAN ULTRA ACTIVE.");
+    expect(prompt).not.toContain("Use verdict first.");
+  });
+
   it("compresses old context more aggressively in ultra", () => {
     updateSetting("cavemanLevel", "ultra");
     const optimizer = new ContextOptimizer();
