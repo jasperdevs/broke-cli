@@ -28,14 +28,14 @@ describe("mouse reporting mode", () => {
     expect(MOUSE_OFF).toBe("");
   });
 
-  it("captures mouse input once the transcript is active so wheel scrolling stays inside the app", () => {
+  it("keeps passive transcript/chat mode mouse-free so terminal selection stays native", () => {
     const originalHideSidebar = getSettings().hideSidebar;
     updateSetting("hideSidebar", false);
     try {
       const app = new App() as any;
       app.messages = [{ role: "user", content: "hello" }];
       app.screen = { height: 18, width: 100, hasSidebar: true, mainWidth: 73, sidebarWidth: 24, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
-      expect(app.shouldEnableMenuMouse()).toBe(true);
+      expect(app.shouldEnableMenuMouse()).toBe(false);
     } finally {
       updateSetting("hideSidebar", originalHideSidebar);
     }

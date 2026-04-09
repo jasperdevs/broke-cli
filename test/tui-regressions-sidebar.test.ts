@@ -45,17 +45,33 @@ describe("command aliases", () => {
 });
 
 describe("sidebar scrolling", () => {
-  it("keeps mouse tracking enabled for active chats so wheel and clicks stay inside the TUI", () => {
+  it("keeps mouse tracking disabled for active chats so native terminal selection still works", () => {
     const originalHideSidebar = getSettings().hideSidebar;
     updateSetting("hideSidebar", false);
     try {
       const app = new App() as any;
       app.messages = [{ role: "user", content: "hello" }];
       app.screen = { height: 18, width: 100, hasSidebar: true, mainWidth: 73, sidebarWidth: 24, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
-      expect(app.shouldEnableMenuMouse()).toBe(true);
+      expect(app.shouldEnableMenuMouse()).toBe(false);
     } finally {
       updateSetting("hideSidebar", originalHideSidebar);
     }
+  });
+
+  it("enables mouse capture only for genuinely interactive surfaces", () => {
+    const app = new App() as any;
+    expect(app.shouldEnableMenuMouse()).toBe(false);
+
+    app.itemPicker = { title: "Projects", items: [], cursor: 0 };
+    expect(app.shouldEnableMenuMouse()).toBe(true);
+
+    app.itemPicker = null;
+    app.questionView = { title: "Question" };
+    expect(app.shouldEnableMenuMouse()).toBe(true);
+
+    app.questionView = null;
+    app.budgetView = { title: "Budget", reports: {}, scope: "all", section: "usage", scrollOffset: 0 };
+    expect(app.shouldEnableMenuMouse()).toBe(true);
   });
 
   it("keeps long sidebar summaries scrollable", () => {

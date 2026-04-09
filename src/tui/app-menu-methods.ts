@@ -435,10 +435,7 @@ export function scrollTranscript(app: AppState, delta: number): boolean {
 
 export function shouldEnableMenuMouse(app: AppState): boolean {
   return !!(
-    app.messages.length > 0
-    || app.isStreaming
-    || app.isCompacting
-    || app.filePicker
+    app.filePicker
     || app.itemPicker
     || app.settingsPicker
     || app.modelPicker
