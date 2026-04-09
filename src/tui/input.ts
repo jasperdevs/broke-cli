@@ -32,6 +32,10 @@ export class InputWidget {
   private nextElementId = 0;
   private changeListeners: Array<(text: string) => void> = [];
 
+  private normalizeInsertedText(text: string): string {
+    return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  }
+
   getText(): string { return this.text; }
   getCursor(): number { return this.cursor; }
 
@@ -80,10 +84,11 @@ export class InputWidget {
   }
 
   paste(text: string): void {
-    this.insertText(text);
+    this.insertText(this.normalizeInsertedText(text));
   }
 
   insertText(text: string): void {
+    text = this.normalizeInsertedText(text);
     if (!text) return;
     this.clampCursor();
     this.snapCursorOutsideElement();
@@ -215,9 +220,11 @@ export class InputWidget {
     this.clampCursor();
     if (key.ctrl && key.name === "c") return "interrupt";
 
-    if (key.name === "linefeed"
-      || (((key.shift || key.meta) && (key.name === "return" || key.name === "enter" || key.name === "linefeed"))
-      || (key.ctrl && (key.name === "return" || key.name === "enter" || key.name === "linefeed" || key.name === "j")))) {
+    const isModifiedEnter = !key.ctrl && (
+      key.name === "linefeed"
+      || ((key.shift || key.meta) && (key.name === "return" || key.name === "enter" || key.name === "linefeed"))
+    );
+    if (isModifiedEnter) {
       this.insertText("\n");
       return "none";
     }

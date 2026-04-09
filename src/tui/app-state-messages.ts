@@ -78,6 +78,7 @@ export function clearMessages(app: AppState): void {
   app.currentActivityStep = null;
   app.toolExecutions = [];
   app.scrollOffset = 0;
+  app.transcriptAutoFollow = true;
   app.refreshHomeScreenData();
   app.invalidateMsgCache();
   app.screen.forceRedraw([]);
@@ -90,6 +91,10 @@ function cloneActivityStep(step: ActivityStep | null): ActivityStep | null {
 
 function cloneToolExecution(tool: ToolExecutionActivity): ToolExecutionActivity {
   return { ...tool };
+}
+
+function followTranscriptIfAnchored(app: AppState): void {
+  if (app.transcriptAutoFollow) app.scrollToBottom();
 }
 
 function findLastAssistantMessage(app: AppState): any | null {
@@ -135,7 +140,7 @@ export function addMessage(app: AppState, role: "user" | "assistant" | "system",
     persistCurrentActivityToLastAssistant(app);
   }
   app.invalidateMsgCache();
-  app.scrollToBottom();
+  followTranscriptIfAnchored(app);
   app.draw();
 }
 
@@ -151,7 +156,7 @@ export function appendToLastMessage(app: AppState, text: string): void {
   else app.messages.push({ role: "assistant", content: text });
   if (!app.isStreaming) persistCurrentActivityToLastAssistant(app);
   app.invalidateMsgCache();
-  app.scrollToBottom();
+  followTranscriptIfAnchored(app);
   app.draw();
 }
 
@@ -160,7 +165,7 @@ export function replaceLastAssistantMessage(app: AppState, text: string): void {
   if (last && last.role === "assistant") last.content = text;
   else app.messages.push({ role: "assistant", content: text });
   app.invalidateMsgCache();
-  app.scrollToBottom();
+  followTranscriptIfAnchored(app);
   app.draw();
 }
 
@@ -174,7 +179,7 @@ export function appendThinking(app: AppState, delta: string): void {
   }
   last.thinking = `${last.thinking ?? ""}${delta}`;
   app.invalidateMsgCache();
-  app.scrollToBottom();
+  followTranscriptIfAnchored(app);
   app.draw();
 }
 
@@ -197,7 +202,7 @@ export function addToolCall(app: AppState, name: string, preview: string, args?:
   });
   setCurrentActivityFromTool(app, name, preview);
   app.invalidateMsgCache();
-  app.scrollToBottom();
+  followTranscriptIfAnchored(app);
   app.drawNow();
 }
 
@@ -234,7 +239,7 @@ export function addToolResult(app: AppState, name: string, result: string, error
     }
   }
   app.invalidateMsgCache();
-  app.scrollToBottom();
+  followTranscriptIfAnchored(app);
   app.drawNow();
 }
 
@@ -250,7 +255,7 @@ export function setCompacting(app: AppState, compacting: boolean, tokenCount?: n
     app.compactStartTime = Date.now();
     app.compactTokens = tokenCount ?? 0;
     app.invalidateMsgCache();
-    app.scrollToBottom();
+    followTranscriptIfAnchored(app);
     app.ensureUiSpinner();
   } else if (!app.isStreaming) {
     app.releaseUiSpinnerIfIdle();
@@ -267,7 +272,7 @@ export function appendToolOutput(app: AppState, chunk: string): void {
       tc.status = "running";
       setCurrentActivityFromTool(app, tc.name, tc.preview, tc.startedAt);
       app.invalidateMsgCache();
-      app.scrollToBottom();
+      followTranscriptIfAnchored(app);
       app.drawNow();
       return;
     }

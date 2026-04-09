@@ -135,14 +135,11 @@ function buildFrameLines(app: AppState, opts: { height: number; mainW: number; h
   } else {
     const chatH = Math.max(1, mainTopHeight - fixedTopLines.length);
     const messageLines = app.renderMessages(mainW);
-    const previousChatHeight = app.lastChatHeight || chatH;
-    const previousMaxScroll = Math.max(0, messageLines.length - previousChatHeight);
-    const wasBottomAnchored = app.scrollOffset >= Math.max(0, previousMaxScroll - 1);
     const maxScroll = Math.max(0, messageLines.length - chatH);
-    if (wasBottomAnchored) app.scrollOffset = maxScroll;
+    if (app.transcriptAutoFollow) app.scrollOffset = maxScroll;
     if (app.scrollOffset > maxScroll) app.scrollOffset = maxScroll;
     if (app.scrollOffset < 0) app.scrollOffset = 0;
-    app.lastChatHeight = chatH;
+    app.transcriptAutoFollow = app.scrollOffset >= maxScroll;
     const visibleMsgs = messageLines.slice(app.scrollOffset, app.scrollOffset + chatH);
     mainTopLines.push(...fixedTopLines, ...visibleMsgs);
   }
