@@ -125,10 +125,10 @@ export async function executeTurn(options: {
   const simpleFileTask = detectSimpleFileTask(text);
   let effectiveTransientUserContext = transientUserContext;
   let nativeWorkspaceSatisfiedSimpleTask = false;
-  const hasRequiredSimpleTool = (): boolean => !simpleFileTask
-    || simpleFileTask.completeWithRead
-    || nextToolCalls.includes(simpleFileTask.requiredTool)
-    || nativeWorkspaceSatisfiedSimpleTask;
+  const hasEquivalentSimpleToolCall = (): boolean => simpleFileTask
+    ? [simpleFileTask.requiredTool, simpleFileTask.requiredTool.replace(/File$/, "")].some((tool) => nextToolCalls.includes(tool))
+    : false;
+  const hasRequiredSimpleTool = (): boolean => !simpleFileTask || simpleFileTask.completeWithRead || hasEquivalentSimpleToolCall() || nativeWorkspaceSatisfiedSimpleTask;
 
   const appendTransientContext = (block: string): void => {
     effectiveTransientUserContext = [effectiveTransientUserContext, block].filter(Boolean).join("\n\n");

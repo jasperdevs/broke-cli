@@ -115,6 +115,10 @@ export function renderStaticMessages(options: {
         if (msg.content.trim()) lines.push("");
       }
       if (!msg.content.trim()) {
+        if (msg.activity && renderActivity) {
+          lines.push(...renderActivity(msg.activity));
+          lines.push("");
+        }
         idx++;
         continue;
       }

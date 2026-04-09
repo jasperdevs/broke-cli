@@ -102,8 +102,11 @@ function findLastAssistantMessage(app: AppState): any | null {
 
 function persistCurrentActivityToLastAssistant(app: AppState): void {
   if (!app.currentActivityStep && app.toolExecutions.length === 0) return;
-  const last = findLastAssistantMessage(app);
-  if (!last) return;
+  let last = findLastAssistantMessage(app);
+  if (!last) {
+    last = { role: "assistant", content: "" };
+    app.messages.push(last);
+  }
   last.activity = {
     step: cloneActivityStep(app.currentActivityStep),
     tools: app.toolExecutions.map(cloneToolExecution),
