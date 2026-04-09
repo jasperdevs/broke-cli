@@ -3,50 +3,270 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My New Website</title>
+    <title>Broke CLI</title>
     <style>
+        :root {
+            color-scheme: dark;
+            --bg: #07111f;
+            --panel: rgba(9, 19, 34, 0.72);
+            --text: #f4f7fb;
+            --muted: #9db0c7;
+            --accent: #7df9c6;
+            --accent-2: #ff8a5b;
+            --line: rgba(255, 255, 255, 0.09);
+            --shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
         body {
-            font-family: Arial, sans-serif;
             margin: 0;
-            padding: 0;
-            background-color: #f4f4f4;
-            color: #333;
-            text-align: center;
+            min-height: 100vh;
+            font-family: Georgia, "Times New Roman", serif;
+            color: var(--text);
+            background:
+                radial-gradient(circle at top left, rgba(125, 249, 198, 0.18), transparent 32%),
+                radial-gradient(circle at 85% 15%, rgba(255, 138, 91, 0.24), transparent 22%),
+                linear-gradient(135deg, #04070d 0%, var(--bg) 52%, #10243d 100%);
         }
-        header {
-            background-color: #333;
-            color: white;
-            padding: 1em 0;
-            margin-bottom: 20px;
+
+        .noise,
+        .noise::before {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
         }
-        header h1 {
-            margin: 0;
+
+        .noise {
+            background-image:
+                linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 36px 36px;
+            mask-image: radial-gradient(circle at center, black, transparent 85%);
+            opacity: 0.45;
         }
-        .container {
-            padding: 20px;
-            max-width: 800px;
+
+        .noise::before {
+            content: "";
+            background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.04), transparent);
+            animation: drift 8s linear infinite;
+        }
+
+        main {
+            width: min(1100px, calc(100% - 32px));
             margin: 0 auto;
-            background: white;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            padding: 32px 0 48px;
         }
-        footer {
-            margin-top: 50px;
-            padding: 1em 0;
-            background-color: #333;
-            color: white;
+
+        .hero {
+            position: relative;
+            overflow: hidden;
+            padding: 28px;
+            border: 1px solid var(--line);
+            border-radius: 28px;
+            background: var(--panel);
+            backdrop-filter: blur(14px);
+            box-shadow: var(--shadow);
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 14px;
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            font: 700 0.72rem/1.1 Arial, sans-serif;
+            color: var(--accent);
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        h1 {
+            max-width: 9ch;
+            margin: 22px 0 16px;
+            font-size: clamp(3.2rem, 8vw, 6.4rem);
+            line-height: 0.92;
+            letter-spacing: -0.05em;
+        }
+
+        .lede {
+            max-width: 40rem;
+            margin: 0 0 28px;
+            color: var(--muted);
+            font: 400 1.1rem/1.7 Arial, sans-serif;
+        }
+
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+            margin-bottom: 34px;
+        }
+
+        .button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 170px;
+            padding: 14px 20px;
+            border-radius: 999px;
+            text-decoration: none;
+            font: 700 0.95rem/1 Arial, sans-serif;
+            transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease;
+        }
+
+        .button.primary {
+            color: #041019;
+            background: linear-gradient(135deg, var(--accent), #c6ffe8);
+            box-shadow: 0 12px 32px rgba(125, 249, 198, 0.28);
+        }
+
+        .button.secondary {
+            color: var(--text);
+            border: 1px solid var(--line);
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        .button:hover {
+            transform: translateY(-2px);
+        }
+
+        .stats,
+        .grid {
+            display: grid;
+            gap: 16px;
+        }
+
+        .stats {
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            margin-top: 10px;
+        }
+
+        .card {
+            padding: 18px;
+            border: 1px solid var(--line);
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .card strong,
+        .metric {
+            display: block;
+            font: 700 1.9rem/1 Georgia, serif;
+        }
+
+        .card span,
+        .meta {
+            color: var(--muted);
+            font: 400 0.94rem/1.5 Arial, sans-serif;
+        }
+
+        .grid {
+            grid-template-columns: 1.2fr 0.8fr;
+            margin-top: 18px;
+        }
+
+        .panel-title {
+            margin: 0 0 14px;
+            font-size: 1.2rem;
+        }
+
+        ul {
+            margin: 0;
+            padding-left: 18px;
+            color: var(--muted);
+            font: 400 0.98rem/1.7 Arial, sans-serif;
+        }
+
+        .terminal {
+            font-family: "Courier New", monospace;
+            white-space: pre-wrap;
+            color: #d9ffe5;
+            background: #02060c;
+        }
+
+        .orb {
+            position: absolute;
+            right: -70px;
+            top: -70px;
+            width: 220px;
+            height: 220px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(255, 138, 91, 0.8), rgba(255, 138, 91, 0));
+            filter: blur(10px);
+            opacity: 0.7;
+        }
+
+        @keyframes drift {
+            from { transform: translateY(-12%); }
+            to { transform: translateY(112%); }
+        }
+
+        @media (max-width: 780px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+
+            .hero {
+                padding: 22px;
+                border-radius: 24px;
+            }
+
+            h1 {
+                max-width: none;
+            }
         }
     </style>
 </head>
 <body>
-    <header>
-        <h1>Welcome to My Website</h1>
-    </header>
-    <div class="container">
-        <p>This is a basic index.html file created for you.</p>
-        <p>You can start building your content here!</p>
-    </div>
-    <footer>
-        <p>&copy; 2026 My Website</p>
-    </footer>
+    <div class="noise"></div>
+    <main>
+        <section class="hero">
+            <div class="orb"></div>
+            <div class="eyebrow">fast terminal money vibes</div>
+            <h1>Build weird. Ship sharp.</h1>
+            <p class="lede">
+                A one-file splash page with late-night arcade energy, glass panels, and enough attitude to avoid looking like default starter HTML.
+            </p>
+            <div class="actions">
+                <a class="button primary" href="#launch">Launch Something</a>
+                <a class="button secondary" href="#details">See the Stack</a>
+            </div>
+
+            <div class="stats">
+                <div class="card">
+                    <strong>01</strong>
+                    <span>Single file, no build step, ready to remix.</span>
+                </div>
+                <div class="card">
+                    <strong>∞</strong>
+                    <span>Plenty of room for your project pitch or links.</span>
+                </div>
+                <div class="card">
+                    <strong>24/7</strong>
+                    <span>Responsive layout with subtle motion baked in.</span>
+                </div>
+            </div>
+
+            <div class="grid" id="details">
+                <div class="card">
+                    <h2 class="panel-title">Why it feels better</h2>
+                    <ul>
+                        <li>Editorial typography instead of default sans stacks.</li>
+                        <li>Layered gradients and texture instead of flat backgrounds.</li>
+                        <li>Simple, meaningful hover and ambient motion.</li>
+                    </ul>
+                </div>
+                <div class="card terminal" id="launch">$ npm create chaos
+> page ready
+> mood: cool
+> next step: make it yours</div>
+            </div>
+        </section>
+    </main>
 </body>
 </html>
