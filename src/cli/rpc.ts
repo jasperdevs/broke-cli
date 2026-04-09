@@ -182,7 +182,6 @@ export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts:
     if (minimalOutputPolicy) {
       systemPrompt += `\n\n${buildMinimalOutputInstruction({
         archetype: policy.archetype,
-        maxChars: minimalOutputPolicy.maxChars,
       })}`;
     }
     const baseMessages = policy.historyWindow && session.getChatMessages().length > policy.historyWindow
@@ -206,9 +205,7 @@ export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts:
           enableThinking: getSettings().enableThinking,
           thinkingLevel: getSettings().thinkingLevel || "low",
           cwd: process.cwd(),
-          structuredFinalResponse: activeModel.provider.id === "codex" && minimalOutputPolicy
-            ? { maxChars: minimalOutputPolicy.maxChars }
-            : null,
+          structuredFinalResponse: null,
         },
         rpcCallbacks,
       );

@@ -194,7 +194,6 @@ export async function executeTurn(options: {
   if (minimalOutputPolicy) {
     turnSystemPrompt += `\n\n${buildMinimalOutputInstruction({
       archetype: policy.archetype,
-      maxChars: minimalOutputPolicy.maxChars,
     })}`;
   }
 
@@ -423,9 +422,7 @@ export async function executeTurn(options: {
         enableThinking: resolvedRoute === "main" ? getSettings().enableThinking : false,
         thinkingLevel: getSettings().thinkingLevel || "low",
         cwd: process.cwd(),
-        structuredFinalResponse: executionModel.provider.id === "codex" && minimalOutputPolicy
-          ? { maxChars: minimalOutputPolicy.maxChars }
-          : null,
+        structuredFinalResponse: null,
       }, { ...streamCallbacks, ...liveToolCallbacks });
     } else {
       await startStream({

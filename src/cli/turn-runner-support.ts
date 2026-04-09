@@ -18,7 +18,6 @@ const VERBOSE_OUTPUT_PATTERNS = [
 ];
 
 export interface MinimalOutputPolicy {
-  maxChars: number;
   maxOutputTokens: number;
 }
 
@@ -322,27 +321,26 @@ export function getMinimalOutputPolicy(options: {
   if (!shouldForceMinimalResponse({ text, policy })) return null;
   switch (policy.archetype) {
     case "casual":
-      return { maxChars: 32, maxOutputTokens: 24 };
+      return { maxOutputTokens: 24 };
     case "question":
     case "explore":
-      return { maxChars: 72, maxOutputTokens: policy.allowedTools.length > 0 ? 64 : 40 };
+      return { maxOutputTokens: policy.allowedTools.length > 0 ? 64 : 40 };
     case "shell":
-      return { maxChars: 80, maxOutputTokens: 72 };
+      return { maxOutputTokens: 72 };
     case "edit":
     case "bugfix":
-      return { maxChars: 80, maxOutputTokens: 96 };
+      return { maxOutputTokens: 96 };
     default:
-      return { maxChars: 80, maxOutputTokens: 72 };
+      return { maxOutputTokens: 72 };
   }
 }
 
 export function buildMinimalOutputInstruction(options: {
   archetype: string;
-  maxChars: number;
 }): string {
   return options.archetype === "edit" || options.archetype === "bugfix"
-    ? `Final response: plain text only, max ${options.maxChars} chars, no bullets. One or two short sentences max. Start with concrete result, then verification or blocker. No tool names, no protocol syntax, no intent narration.`
-    : `Final response: plain text only, max ${options.maxChars} chars. Answer only what was asked. No explanation.`;
+    ? "Final response: plain text only, no bullets. Keep it concise. Start with the concrete result, then verification or blocker. No tool names, no protocol syntax, no intent narration."
+    : "Final response: plain text only. Answer only what was asked. No explanation.";
 }
 
 export function formatTurnErrorMessage(options: {

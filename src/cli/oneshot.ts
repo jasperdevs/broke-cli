@@ -163,7 +163,6 @@ export async function runOneShotPrompt(options: {
   if (minimalOutputPolicy) {
     systemPrompt += `\n\n${buildMinimalOutputInstruction({
       archetype: policy.archetype,
-      maxChars: minimalOutputPolicy.maxChars,
     })}`;
   }
   const baseMessages = policy.historyWindow && session.getChatMessages().length > policy.historyWindow
@@ -214,9 +213,7 @@ export async function runOneShotPrompt(options: {
         enableThinking: getSettings().enableThinking,
         thinkingLevel: getSettings().thinkingLevel || "low",
         cwd: process.cwd(),
-        structuredFinalResponse: activeModel.provider.id === "codex" && minimalOutputPolicy
-          ? { maxChars: minimalOutputPolicy.maxChars }
-          : null,
+        structuredFinalResponse: null,
       },
       callbacks,
     );

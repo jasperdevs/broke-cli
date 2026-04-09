@@ -94,11 +94,9 @@ describe("turn policy", () => {
     const explorePolicy = getTurnPolicy("Without changing any files, tell me which file defines parseConfig.");
 
     expect(getMinimalOutputPolicy({ text: "fix src/range.js so the bounds are inclusive", policy: editPolicy })).toEqual({
-      maxChars: 80,
       maxOutputTokens: 96,
     });
     expect(getMinimalOutputPolicy({ text: "Without changing any files, tell me which file defines parseConfig.", policy: explorePolicy })).toEqual({
-      maxChars: 72,
       maxOutputTokens: 64,
     });
   });
@@ -110,7 +108,6 @@ describe("turn policy", () => {
       policy: editPolicy,
       modelRuntime: "native-cli",
     })).toEqual({
-      maxChars: 80,
       maxOutputTokens: 96,
     });
   });
