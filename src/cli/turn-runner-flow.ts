@@ -23,6 +23,7 @@ import {
 import { runValidationSuite } from "./auto-validate.js";
 
 type PendingDelivery = "steering" | "followup";
+const LOCAL_EMPTY_RETRY_PROVIDERS = new Set(["ollama", "lmstudio", "llamacpp", "jan", "vllm"]);
 
 export interface TurnRunnerApp {
   addMessage(role: "user" | "assistant" | "system", content: string, images?: Array<{ mimeType: string; data: string }>): void;
@@ -214,10 +215,19 @@ async function runObservedTurn(
   activeModel: ModelHandle,
   session: Session,
   turnOptions: Parameters<typeof executeTurn>[0],
+  executeTurnFn: typeof executeTurn = executeTurn,
 ) {
   void activeModel;
   void session;
-  return executeTurn(turnOptions);
+  return executeTurnFn(turnOptions);
+}
+
+function shouldRetryEmptyLocalMain(result: Awaited<ReturnType<typeof executeTurn>>, forceRoute: "main" | "small" | undefined, activeModel: ModelHandle): boolean {
+  return !forceRoute
+    && result.resolvedRoute === "main"
+    && result.completion === "empty"
+    && !result.toolActivity
+    && LOCAL_EMPTY_RETRY_PROVIDERS.has(activeModel.provider.id);
 }
 
 export async function executeTurnWithRetries(options: {
@@ -238,8 +248,9 @@ export async function executeTurnWithRetries(options: {
   forceRoute?: "main" | "small";
   transientUserContext?: string;
   resolveSpecialistModel?: (role: SpecialistModelRole) => { model: ModelHandle; modelId: string } | null;
+  executeTurnForTests?: typeof executeTurn;
 }): Promise<{ result: Awaited<ReturnType<typeof executeTurn>>; lastActivityTime: number }> {
-  const { app, session, text, activeModel, currentModelId, smallModel, smallModelId, currentMode, policy, effectiveImages, buildTools, hooks, lastToolCalls, prepared, forceRoute, transientUserContext, resolveSpecialistModel } = options;
+  const { app, session, text, activeModel, currentModelId, smallModel, smallModelId, currentMode, policy, effectiveImages, buildTools, hooks, lastToolCalls, prepared, forceRoute, transientUserContext, resolveSpecialistModel, executeTurnForTests } = options;
   const getContextOptimizer = (): ReturnType<Session["getContextOptimizer"]> => session.getContextOptimizer();
   app.setStreamingActivitySummary?.(deriveStreamingActivitySummary(text, policy.archetype));
   app.setStreaming(true);
@@ -265,7 +276,7 @@ export async function executeTurnWithRetries(options: {
     transientUserContext,
     preparedSpend: prepared.spend,
     resolveSpecialistModel,
-  });
+  }, executeTurnForTests);
   let nextActivityTime = result.lastActivityTime;
 
   if (shouldRetryWithToolRequirement(result, forceRoute)) {
@@ -291,7 +302,7 @@ export async function executeTurnWithRetries(options: {
       transientUserContext,
       preparedSpend: prepared.spend,
       resolveSpecialistModel,
-    });
+    }, executeTurnForTests);
     nextActivityTime = result.lastActivityTime;
   }
 
@@ -319,7 +330,34 @@ export async function executeTurnWithRetries(options: {
       forceRoute: "main",
       transientUserContext,
       preparedSpend: prepared.spend,
-    });
+    }, executeTurnForTests);
+    nextActivityTime = result.lastActivityTime;
+  }
+
+  if (shouldRetryEmptyLocalMain(result, forceRoute, activeModel)) {
+    app.setStatus("local model returned no visible text - retrying direct");
+    result = await runObservedTurn(activeModel, session, {
+      app,
+      session,
+      text,
+      activeModel,
+      currentModelId,
+      smallModel,
+      smallModelId,
+      currentMode,
+      policy,
+      effectiveImages,
+      buildTools,
+      hooks,
+      lastToolCalls,
+      contextLimit: prepared.contextLimit,
+      activeSystemPrompt: `${prepared.turnSystemPrompt}\n\nLocal-model empty-output recovery: reply now with final visible answer text only. Do not write private reasoning, analysis, thinking steps, or hidden reasoning. For greetings, return one brief greeting.`,
+      optimizeMessages: (messages) => selectMessagesForTurn(messages, policy, (msgs) => getContextOptimizer().optimizeMessages(msgs)),
+      forceRoute: "main",
+      transientUserContext,
+      preparedSpend: prepared.spend,
+      resolveSpecialistModel,
+    }, executeTurnForTests);
     nextActivityTime = result.lastActivityTime;
   }
 
