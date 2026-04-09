@@ -16,12 +16,12 @@ describe("simple file task contract", () => {
   });
 
   it("detects concrete existing-file edits and requires editFile", () => {
-    const task = detectSimpleFileTask("make index.html better");
-    const policy = applySimpleFileTaskPolicy(getTurnPolicy("make index.html better"), task);
+    const task = detectSimpleFileTask("edit README.md");
+    const policy = applySimpleFileTaskPolicy(getTurnPolicy("edit README.md"), task);
 
     expect(task).toMatchObject({
       kind: "edit",
-      path: "index.html",
+      path: "README.md",
       preRead: true,
       requiredTool: "editFile",
     });

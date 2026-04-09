@@ -220,6 +220,7 @@ export async function runOneShotPrompt(options: {
       {
         model: activeModel.model as LanguageModel,
         modelId,
+        providerId,
         system: systemPrompt,
         messages: turnMessages,
         tools: canUseSdkTools(activeModel) ? tools : undefined,

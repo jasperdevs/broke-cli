@@ -7,6 +7,8 @@ import { resolveThinkingConfig } from "./thinking.js";
 import { getProviderCapabilities } from "./provider-capabilities.js";
 import { getSettings } from "../core/config.js";
 import { buildPromptCacheKey } from "../core/context.js";
+import { getBaseUrl } from "../core/config.js";
+import { startLocalOpenAIStream } from "./local-openai-stream.js";
 
 export interface StreamCallbacks {
   onText: (delta: string) => void;
@@ -43,6 +45,20 @@ export async function startStream(
   process.stderr.write = () => true;
 
   try {
+    if (shouldUseDirectLocalOpenAIStream(opts)) {
+      await startLocalOpenAIStream({
+        baseURL: getBaseUrl(opts.providerId!) ?? defaultLocalBaseURL(opts.providerId!),
+        apiKey: opts.providerId!,
+        modelId: opts.modelId,
+        system: opts.system,
+        messages: opts.messages,
+        maxOutputTokens: Math.max(256, opts.maxOutputTokens ?? 0),
+        abortSignal: opts.abortSignal,
+        providerId: opts.providerId,
+      }, callbacks);
+      return;
+    }
+
     const providerCapabilities = getProviderCapabilities(opts.providerId);
     // Convert messages to AI SDK format with images
     const messages = opts.messages.map((m, index) => {
@@ -109,7 +125,7 @@ export async function startStream(
       messages,
       tools: opts.tools,
       toolChoice: opts.toolChoice,
-      maxOutputTokens: opts.maxOutputTokens,
+      maxOutputTokens: normalizeMaxOutputTokens(opts),
       stopWhen: opts.tools ? stepCountIs(Math.max(2, opts.maxToolSteps ?? 10)) : stepCountIs(1),
       abortSignal: opts.abortSignal,
       providerOptions,
@@ -246,4 +262,27 @@ export async function startStream(
   } finally {
     process.stderr.write = origStderrWrite;
   }
+}
+
+function shouldUseDirectLocalOpenAIStream(opts: StreamOptions): boolean {
+  return (opts.providerId === "llamacpp" || opts.providerId === "lmstudio" || opts.providerId === "jan" || opts.providerId === "vllm")
+    && !opts.tools;
+}
+
+function defaultLocalBaseURL(providerId: string): string {
+  switch (providerId) {
+    case "lmstudio": return "http://127.0.0.1:1234/v1";
+    case "jan": return "http://127.0.0.1:1337/v1";
+    case "vllm": return "http://127.0.0.1:8000/v1";
+    case "llamacpp":
+    default: return "http://127.0.0.1:8080/v1";
+  }
+}
+
+function normalizeMaxOutputTokens(opts: StreamOptions): number | undefined {
+  if (!opts.maxOutputTokens) return undefined;
+  if (opts.providerId === "llamacpp" || opts.providerId === "lmstudio" || opts.providerId === "jan" || opts.providerId === "vllm") {
+    return Math.max(opts.tools ? 1024 : 256, opts.maxOutputTokens);
+  }
+  return opts.maxOutputTokens;
 }
