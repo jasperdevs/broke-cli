@@ -281,15 +281,6 @@ export function setStreaming(app: CoreAppState, streaming: boolean): void {
     } else {
       app.thinkingDuration = 0;
     }
-    if (app.currentActivityStep?.status === "running" && app.toolExecutions.length > 0) {
-      app.currentActivityStep = {
-        ...app.currentActivityStep,
-        status: "done",
-        completedAt: Date.now(),
-      };
-    } else if (app.toolExecutions.length === 0) {
-      app.currentActivityStep = null;
-    }
     app.persistCurrentActivityToLastAssistant?.();
     app.currentActivityStep = null;
     app.toolExecutions = [];
@@ -328,15 +319,6 @@ export function setThinkingRequested(app: CoreAppState, requested: boolean): voi
 
 export function setStreamingActivitySummary(app: CoreAppState, summary: string): void {
   app.streamingActivitySummary = summary.trim();
-  if (app.streamingActivitySummary && app.toolExecutions.length > 0) {
-    if (!app.currentActivityStep || app.currentActivityStep.label !== app.streamingActivitySummary) {
-      app.currentActivityStep = {
-        label: app.streamingActivitySummary,
-        status: "running",
-        startedAt: Date.now(),
-      };
-    }
-  }
   if (app.isStreaming) app.draw();
 }
 

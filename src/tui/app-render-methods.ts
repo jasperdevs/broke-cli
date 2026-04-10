@@ -105,7 +105,7 @@ export function renderMessages(app: AppState, maxWidth: number): string[] {
   return renderMessageOverlays({
     staticLines: app.renderStaticMessages(maxWidth),
     maxWidth,
-    currentActivityStep: app.currentActivityStep,
+    currentActivityStep: app.deriveLiveActivityStep(),
     toolExecutions: app.toolExecutions,
     thinkingBuffer: app.thinkingBuffer,
     thinkingRequested: app.thinkingRequested,

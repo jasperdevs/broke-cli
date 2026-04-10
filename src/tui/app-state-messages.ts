@@ -1,62 +1,14 @@
 import { randomUUID } from "crypto";
 import type { ActivityStep, PendingDelivery, PendingImage, PendingMessage, ResolvedImage, TodoItem, ToolExecutionActivity } from "./app-types.js";
+import { buildActivityLabel, cloneActivityStep, cloneToolExecution, deriveLiveActivityStep } from "./live-activity.js";
 
 type AppState = any;
-
-function normalizeToolName(name: string): string {
-  switch (name) {
-    case "Read": return "readFile";
-    case "Write": return "writeFile";
-    case "Edit": return "editFile";
-    case "LS": return "listFiles";
-    case "Glob": return "glob";
-    default: return name;
-  }
-}
-
-function buildActivityLabel(name: string, preview: string): string | null {
-  const normalized = normalizeToolName(name);
-  const target = preview.trim();
-  if (!target || target === "...") {
-    switch (normalized) {
-      case "readFile": return "reading a file";
-      case "writeFile": return "writing a file";
-      case "editFile": return "editing a file";
-      case "workspaceEdit": return "observing file changes";
-      case "listFiles": return "listing files";
-      case "glob": return "finding files";
-      case "grep": return "searching the repo";
-      case "semSearch": return "running semantic search";
-      case "webSearch": return "searching the web";
-      case "webFetch": return "fetching a webpage";
-      case "bash": return "running a command";
-      default: return null;
-    }
-  }
-  switch (normalized) {
-    case "readFile": return `reading ${target}`;
-    case "writeFile": return `writing ${target}`;
-    case "editFile": return `editing ${target}`;
-    case "workspaceEdit": return `changed ${target}`;
-    case "listFiles": return `listing ${target}`;
-    case "glob": return `finding ${target}`;
-    case "grep": return `searching ${target}`;
-    case "semSearch": return `semantic search: ${target}`;
-    case "webSearch": return `web search: ${target}`;
-    case "webFetch": return `fetching ${target}`;
-    case "bash": return `running ${target}`;
-    default: return null;
-  }
-}
 
 function setCurrentActivityFromTool(app: AppState, name: string, preview: string, startedAt?: number): void {
   const label = buildActivityLabel(name, preview);
   if (!label) return;
-  app.currentActivityStep = {
-    label,
-    status: "running",
-    startedAt: startedAt ?? Date.now(),
-  };
+  void startedAt;
+  if (!app.streamingActivitySummary?.trim()) app.streamingActivitySummary = label;
 }
 
 function findToolExecutionIndex(app: AppState, name: string, callId?: string): number {
@@ -65,10 +17,11 @@ function findToolExecutionIndex(app: AppState, name: string, callId?: string): n
       if (app.toolExecutions[i].callId === callId) return i;
     }
   }
-  const normalized = normalizeToolName(name);
+  const normalized = name === "Read" ? "readFile" : name === "Write" ? "writeFile" : name === "Edit" ? "editFile" : name === "LS" ? "listFiles" : name === "Glob" ? "glob" : name;
   for (let i = app.toolExecutions.length - 1; i >= 0; i--) {
     const tc = app.toolExecutions[i];
-    if (normalizeToolName(tc.name) === normalized && !tc.result) return i;
+    const toolName = tc.name === "Read" ? "readFile" : tc.name === "Write" ? "writeFile" : tc.name === "Edit" ? "editFile" : tc.name === "LS" ? "listFiles" : tc.name === "Glob" ? "glob" : tc.name;
+    if (toolName === normalized && !tc.result) return i;
   }
   return -1;
 }
@@ -77,6 +30,7 @@ export function clearMessages(app: AppState): void {
   app.messages = [];
   app.currentActivityStep = null;
   app.toolExecutions = [];
+  app.streamingActivitySummary = "";
   app.scrollOffset = 0;
   app.transcriptAutoFollow = true;
   app.composerScrollOffset = 0;
@@ -84,14 +38,6 @@ export function clearMessages(app: AppState): void {
   app.invalidateMsgCache();
   app.screen.forceRedraw([]);
   app.draw();
-}
-
-function cloneActivityStep(step: ActivityStep | null): ActivityStep | null {
-  return step ? { ...step } : null;
-}
-
-function cloneToolExecution(tool: ToolExecutionActivity): ToolExecutionActivity {
-  return { ...tool };
 }
 
 function followTranscriptIfAnchored(app: AppState): void {
@@ -107,14 +53,15 @@ function findLastAssistantMessage(app: AppState): any | null {
 }
 
 function persistCurrentActivityToLastAssistant(app: AppState): void {
-  if (!app.currentActivityStep && app.toolExecutions.length === 0) return;
+  const step = deriveLiveActivityStep(app);
+  if (!step && app.toolExecutions.length === 0) return;
   let last = findLastAssistantMessage(app);
   if (!last) {
     last = { role: "assistant", content: "" };
     app.messages.push(last);
   }
   last.activity = {
-    step: cloneActivityStep(app.currentActivityStep),
+    step: cloneActivityStep(step),
     tools: app.toolExecutions.map(cloneToolExecution),
   };
   app.invalidateMsgCache();
@@ -166,6 +113,7 @@ export function addMessage(app: AppState, role: "user" | "assistant" | "system",
     app.thinkingDuration = 0;
     app.currentActivityStep = null;
     app.toolExecutions = [];
+    app.streamingActivitySummary = "";
   }
   app.messages.push({ role, content, images });
   if (role === "assistant") {
@@ -262,13 +210,7 @@ export function addToolResult(app: AppState, name: string, result: string, error
     app.toolExecutions[index].completedAt = Date.now();
     app.toolExecutions[index].status = error ? "failed" : "done";
     const hasRunning = app.toolExecutions.some((tc: any) => tc.status === "starting" || tc.status === "running");
-    if (!hasRunning && app.currentActivityStep?.status === "running") {
-      app.currentActivityStep = {
-        ...app.currentActivityStep,
-        status: "done",
-        completedAt: Date.now(),
-      };
-    }
+    if (!hasRunning && !app.isStreaming && !app.isCompacting) app.streamingActivitySummary = "";
   }
   app.invalidateMsgCache();
   followTranscriptIfAnchored(app);
@@ -299,7 +241,7 @@ export function setCompacting(app: AppState, compacting: boolean, tokenCount?: n
 export function appendToolOutput(app: AppState, chunk: string): void {
   for (let i = app.toolExecutions.length - 1; i >= 0; i--) {
     const tc = app.toolExecutions[i];
-    if (normalizeToolName(tc.name) === "bash" && !tc.result) {
+    if (tc.name === "bash" && !tc.result) {
       tc.streamOutput = (tc.streamOutput ?? "") + chunk;
       tc.status = "running";
       setCurrentActivityFromTool(app, tc.name, tc.preview, tc.startedAt);
@@ -418,6 +360,7 @@ export function onAbortRequest(app: AppState, handler: () => void): void { app.o
 
 export interface AppStateMessageMethods {
   clearMessages(): void;
+  deriveLiveActivityStep(): ActivityStep | null;
   persistCurrentActivityToLastAssistant(): void;
   setDraft(text: string): void;
   appendDraft(text: string): void;
@@ -456,6 +399,7 @@ export interface AppStateMessageMethods {
 
 export const appStateMessageMethods: AppStateMessageMethods = {
   clearMessages(this: AppState) { return clearMessages(this); },
+  deriveLiveActivityStep(this: AppState) { return deriveLiveActivityStep(this); },
   persistCurrentActivityToLastAssistant(this: AppState) { return persistCurrentActivityToLastAssistant(this); },
   setDraft(this: AppState, text) { return setDraft(this, text); },
   appendDraft(this: AppState, text) { return appendDraft(this, text); },
