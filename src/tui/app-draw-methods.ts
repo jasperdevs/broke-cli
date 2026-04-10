@@ -71,7 +71,7 @@ export function drawImmediate(app: AppState): void {
   const inputStartIndex = bottomLines.length;
   bottomLines.push(...inputLayout.lines.map((line: string, index: number) => `${index === 0 ? inputLead : inputContinueLead}${line}`));
   if (totalComposerLines > inputLayout.lines.length) {
-    const composerStatus = `${DIM}${Math.min(totalComposerLines, app.composerScrollOffset + inputLayout.lines.length)}/${totalComposerLines} lines${RESET}`;
+    const composerStatus = `${DIM}${Math.min(totalComposerLines, inputLayout.viewportStart + inputLayout.lines.length)}/${totalComposerLines} lines${RESET}`;
     bottomLines.push(`${" ".repeat(inputLeadWidth)}${composerStatus}`);
   }
   if (statusLines.length > 0) {
@@ -134,11 +134,8 @@ function buildFrameLines(app: AppState, opts: { height: number; mainW: number; h
   } else {
     const chatH = Math.max(1, mainTopHeight - fixedTopLines.length);
     const messageLines = app.renderMessages(app.getTranscriptRenderWidth());
-    const maxScroll = Math.max(0, messageLines.length - chatH);
-    if (app.transcriptAutoFollow) app.scrollOffset = maxScroll;
-    if (app.scrollOffset > maxScroll) app.scrollOffset = maxScroll;
-    if (app.scrollOffset < 0) app.scrollOffset = 0;
-    const visibleMsgs = messageLines.slice(app.scrollOffset, app.scrollOffset + chatH);
+    const viewport = app.syncTranscriptViewport(messageLines, chatH);
+    const visibleMsgs = messageLines.slice(viewport.scrollOffset, viewport.scrollOffset + chatH);
     mainTopLines.push(...fixedTopLines, ...visibleMsgs);
   }
 

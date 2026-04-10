@@ -4,7 +4,7 @@ import { createHash } from "crypto";
 import { calculateCost, type TokenUsage } from "./cost.js";
 import { estimateConversationTokens, estimateTextTokens } from "./tokens.js";
 import { resolveThinkingConfig } from "./thinking.js";
-import { getProviderCapabilities } from "./provider-capabilities.js";
+import { getModelCapabilities } from "./provider-capabilities.js";
 import { getSettings } from "../core/config.js";
 import { buildPromptCacheKey } from "../core/context.js";
 import { getBaseUrl } from "../core/config.js";
@@ -60,10 +60,13 @@ export async function startStream(
       return;
     }
 
-    const providerCapabilities = getProviderCapabilities(opts.providerId);
+    const capabilities = getModelCapabilities({
+      providerId: opts.providerId,
+      modelId: opts.modelId,
+    });
     // Convert messages to AI SDK format with images
     const messages = opts.messages.map((m, index) => {
-      const messageCacheable = providerCapabilities.cacheHints?.messageEphemeral
+      const messageCacheable = capabilities.caching.messageEphemeral
         && index < Math.min(2, Math.max(0, opts.messages.length - 1));
       const messageProviderOptions = messageCacheable
         ? { anthropic: { cacheControl: { type: "ephemeral" } } }
@@ -91,21 +94,21 @@ export async function startStream(
       level: opts.thinkingLevel,
     });
     if (thinking.enabled) {
-      if (providerCapabilities.reasoningProvider === "anthropic") {
+      if (capabilities.reasoning.provider === "anthropic") {
         providerOptions.anthropic = { thinking: { type: "enabled", budgetTokens: thinking.budgetTokens ?? 4096 } };
-      } else if (providerCapabilities.reasoningProvider === "openai") {
+      } else if (capabilities.reasoning.provider === "openai") {
         providerOptions.openai = { reasoningEffort: { value: thinking.effort ?? "low" } };
-      } else if (providerCapabilities.reasoningProvider === "google") {
+      } else if (capabilities.reasoning.provider === "google") {
         providerOptions.google = { thinkingConfig: { thinkingBudget: thinking.budgetTokens ?? 4096 } };
       }
     }
     if (getSettings().enablePromptCaching !== false) {
-      if (providerCapabilities.cacheHints?.topLevelEphemeral) {
+      if (capabilities.caching.topLevelEphemeral) {
         providerOptions.anthropic = {
           ...(providerOptions.anthropic ?? {}),
           cacheControl: { type: "ephemeral" },
         };
-      } else if (providerCapabilities.cacheHints?.promptCacheKey) {
+      } else if (capabilities.caching.promptCacheKey) {
         providerOptions.openai = {
           ...(providerOptions.openai ?? {}),
           promptCacheKey: `${buildPromptCacheKey({

@@ -20,6 +20,6 @@ describe("composer viewport and passive btw dismissal", () => {
 
     expect(layout.lines.length).toBeLessThanOrEqual(12);
     expect(layout.row).toBe(layout.lines.length - 1);
-    expect(app.composerScrollOffset).toBeGreaterThan(0);
+    expect(layout.viewportStart).toBeGreaterThan(0);
   });
 });

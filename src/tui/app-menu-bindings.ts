@@ -4,8 +4,11 @@ import {
   getActiveMenuPromptKind,
   getBottomLineCount,
   getChatHeight,
+  syncTranscriptViewport,
+  getTranscriptViewport,
   getTranscriptRenderWidth,
   getSidebarViewportHeight,
+  getSidebarViewport,
   getFilteredItems,
   getFilteredModels,
   getFilteredSettings,
@@ -51,11 +54,14 @@ type AppState = any;
 export interface AppMenuMethods {
   scrollToBottom(): void;
   getChatHeight(): number;
+  syncTranscriptViewport(messageLines: string[], chatHeight: number): { scrollOffset: number; maxScroll: number };
+  getTranscriptViewport(messageLines: string[], chatHeight: number): { scrollOffset: number; maxScroll: number };
   getTranscriptRenderWidth(): number;
   getSidebarViewportHeight(): number;
+  getSidebarViewport(visibleHeight: number): { scrollOffset: number; maxScroll: number };
   getBottomLineCount(mainW: number, maxHeight: number): number;
   getWrappedInputLines(text: string, width: number): string[];
-  getInputCursorLayout(text: string, cursor: number, width: number): { lines: string[]; row: number; col: number };
+  getInputCursorLayout(text: string, cursor: number, width: number): { lines: string[]; row: number; col: number; viewportStart: number };
   getFilteredModels(): ModelOption[];
   toggleModelScope(): void;
   getFilteredSettings(): SettingEntry[];
@@ -97,8 +103,11 @@ export interface AppMenuMethods {
 export const appMenuMethods: AppMenuMethods = {
   scrollToBottom(this: AppState) { return scrollToBottom(this); },
   getChatHeight(this: AppState) { return getChatHeight(this); },
+  syncTranscriptViewport(this: AppState, messageLines: string[], chatHeight: number) { return syncTranscriptViewport(this, messageLines, chatHeight); },
+  getTranscriptViewport(this: AppState, messageLines: string[], chatHeight: number) { return getTranscriptViewport(this, messageLines, chatHeight); },
   getTranscriptRenderWidth(this: AppState) { return getTranscriptRenderWidth(this); },
   getSidebarViewportHeight(this: AppState) { return getSidebarViewportHeight(this); },
+  getSidebarViewport(this: AppState, visibleHeight: number) { return getSidebarViewport(this, visibleHeight); },
   getBottomLineCount(this: AppState, mainW: number, maxHeight: number) { return getBottomLineCount(this, mainW, maxHeight); },
   getWrappedInputLines(this: AppState, text: string, width: number) { return getWrappedInputLines(this, text, width); },
   getInputCursorLayout(this: AppState, text: string, cursor: number, width: number) { return getInputCursorLayout(this, text, cursor, width); },

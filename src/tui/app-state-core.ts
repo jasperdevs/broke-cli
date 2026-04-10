@@ -6,6 +6,7 @@ import { DIM, setWindowTitle } from "../utils/ansi.js";
 import { MUTED, OK, P, T, TXT } from "./app-shared.js";
 import type { ActivityStep, BtwBubble, ChatMessage, ModelOption, ToolExecutionActivity, UpdateNotice } from "./app-types.js";
 import type { ModelRuntime } from "../ai/providers.js";
+import { recordTurnEvent } from "./turn-activity-state.js";
 
 interface AnimatedValueLike {
   tick(): void;
@@ -282,8 +283,7 @@ export function setStreaming(app: CoreAppState, streaming: boolean): void {
       app.thinkingDuration = 0;
     }
     app.persistCurrentActivityToLastAssistant?.();
-    app.currentActivityStep = null;
-    app.toolExecutions = [];
+    if (typeof (app as any).collapseToolCalls === "function") (app as any).collapseToolCalls();
     if (app.streamStartTime > 0) {
       app.streamStartTime = 0;
     }
@@ -298,8 +298,7 @@ export function setStreaming(app: CoreAppState, streaming: boolean): void {
     app.streamStartTime = Date.now();
     app.streamTokens = 0;
     app.animStreamTokens.reset();
-    app.currentActivityStep = null;
-    app.toolExecutions = [];
+    if (typeof (app as any).collapseToolCalls === "function") (app as any).collapseToolCalls();
     app.ensureUiSpinner();
   } else {
     app.releaseUiSpinnerIfIdle();
@@ -319,6 +318,13 @@ export function setThinkingRequested(app: CoreAppState, requested: boolean): voi
 
 export function setStreamingActivitySummary(app: CoreAppState, summary: string): void {
   app.streamingActivitySummary = summary.trim();
+  if ((app as any).activityState && app.streamingActivitySummary) {
+    recordTurnEvent((app as any).activityState, {
+      type: "activity.summary",
+      summary: app.streamingActivitySummary,
+      timestamp: Date.now(),
+    });
+  }
   if (app.isStreaming) app.draw();
 }
 

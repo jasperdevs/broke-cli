@@ -1,4 +1,5 @@
 import { observeToolResult } from "./turn-tool-observer.js";
+import { createToolInvocationRegistry } from "./tool-invocation-registry.js";
 
 type ToolCallbackApp = {
   addToolCall(name: string, preview: string, args?: unknown, callId?: string): void;
@@ -18,34 +19,34 @@ export function createLiveToolCallbacks(options: {
   buildToolPreview: (name: string, args: unknown) => string;
 }) {
   const { app, hooks, session, nextToolCalls, lastToolArgsByName, onToolActivity, onSteeringInterrupt, buildToolPreview } = options;
+  const registry = createToolInvocationRegistry();
   return {
     onToolCallStart: (name: string, callId?: string) => {
       onToolActivity();
       if (name === "todoWrite") return;
-      if (callId) app.addToolCall(name, "...", undefined, callId);
-      else app.addToolCall(name, "...");
+      const record = registry.start(name, callId);
+      app.addToolCall(record.toolName, "...", undefined, record.invocationId);
     },
     onToolCall: (name: string, args: unknown, callId?: string) => {
       onToolActivity();
       hooks.emit("on_tool_call", { name, args });
       nextToolCalls.push(name);
-      lastToolArgsByName.set(name, args);
+      const record = registry.update(name, args, callId);
+      lastToolArgsByName.set(record.invocationId, args);
       if (name === "todoWrite") return;
-      if (callId) app.updateToolCallArgs(name, buildToolPreview(name, args), args, callId);
-      else app.updateToolCallArgs(name, buildToolPreview(name, args), args);
+      app.updateToolCallArgs(record.toolName, buildToolPreview(name, args), args, record.invocationId);
     },
     onToolResult: (_name: string, result: unknown, callId?: string) => {
       hooks.emit("on_tool_result", { name: _name, result });
       if (_name === "todoWrite") return;
       const r = result as { success?: boolean; output?: string; error?: string; content?: string; matches?: unknown[]; files?: string[] };
-      const toolArgs = lastToolArgsByName.get(_name) as Record<string, unknown> | undefined;
+      const record = registry.finish(_name, callId);
+      const toolArgs = lastToolArgsByName.get(record.invocationId) as Record<string, unknown> | undefined;
       const detail = observeToolResult({ session: session as any, toolName: _name, result: r, toolArgs });
       if (r && typeof r === "object" && r.success === false && typeof r.error === "string") {
-        if (callId) app.addToolResult(_name, r.error.slice(0, 80), true, undefined, callId);
-        else app.addToolResult(_name, r.error.slice(0, 80), true);
+        app.addToolResult(record.toolName, r.error.slice(0, 80), true, undefined, record.invocationId);
       } else {
-        if (callId) app.addToolResult(_name, "ok", false, detail, callId);
-        else app.addToolResult(_name, "ok", false, detail);
+        app.addToolResult(record.toolName, "ok", false, detail, record.invocationId);
       }
     },
     onAfterToolCall: () => {

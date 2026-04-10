@@ -19,6 +19,7 @@ import { renderToolCallBlock as buildToolCallBlock, renderMessageOverlays } from
 import { buildSidebarLines as composeSidebarLines, renderSidebarViewport } from "./render/sidebar-view.js";
 import { fmtTokens, wordWrap } from "./render/formatting.js";
 import { ACCENT_2, APP_DIR, BORDER, ERR, HOME_TIPS, MUTED, OK, T, TXT, USER_BG, USER_TXT, WARN } from "./app-shared.js";
+import { buildTurnActivitySnapshot } from "./turn-activity-state.js";
 
 type AppState = any;
 
@@ -102,14 +103,19 @@ export function renderActivitySnapshot(app: AppState, activity: any, maxWidth: n
 
 export function renderMessages(app: AppState, maxWidth: number): string[] {
   const settings = getSettings();
+  const liveActivity = buildTurnActivitySnapshot(app.activityState, {
+    isCompacting: app.isCompacting,
+    startedAt: app.streamStartTime,
+    compactStartTime: app.compactStartTime,
+  });
   return renderMessageOverlays({
     staticLines: app.renderStaticMessages(maxWidth),
     maxWidth,
-    currentActivityStep: app.deriveLiveActivityStep(),
-    toolExecutions: app.toolExecutions,
+    currentActivityStep: liveActivity?.step ?? null,
+    toolExecutions: liveActivity?.tools ?? [],
     thinkingBuffer: app.thinkingBuffer,
     thinkingRequested: app.thinkingRequested,
-    streamingActivitySummary: app.streamingActivitySummary,
+    streamingActivitySummary: app.activityState.summary,
     hideThinkingBlock: settings.hideThinkingBlock,
     isStreaming: app.isStreaming,
     todoItems: app.todoItems,
@@ -403,15 +409,15 @@ export function buildSidebarLines(app: AppState): string[] {
 }
 
 export function renderSidebar(app: AppState, visibleHeight: number): string[] {
+  const viewportState = app.getSidebarViewport(visibleHeight);
   const viewport = renderSidebarViewport({
     allLines: app.buildSidebarLines(),
     visibleHeight,
-    sidebarScrollOffset: app.sidebarScrollOffset,
+    sidebarScrollOffset: viewportState.scrollOffset,
     sidebarFocused: app.sidebarFocused,
     muted: DIM,
     reset: RESET,
   });
-  app.sidebarScrollOffset = viewport.scrollOffset;
   return viewport.lines;
 }
 

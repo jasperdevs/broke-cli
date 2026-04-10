@@ -235,8 +235,8 @@ describe("stream tool steps", () => {
     });
 
     expect(app.appendToLastMessage).toHaveBeenCalledWith("README.md needs a title fix.");
-    expect(app.addToolCall).toHaveBeenCalledWith("readFile", "...");
-    expect(app.updateToolCallArgs).toHaveBeenCalledWith("readFile", "README.md", { path: "README.md" });
+    expect(app.addToolCall).toHaveBeenCalledWith("readFile", "...", undefined, expect.any(String));
+    expect(app.updateToolCallArgs).toHaveBeenCalledWith("readFile", "README.md", { path: "README.md" }, expect.any(String));
   });
 
   it("escalates a cheap empty turn to the main model once", async () => {
@@ -390,7 +390,7 @@ describe("stream tool steps", () => {
     expect(app.rollbackLastAssistantMessage).not.toHaveBeenCalled();
     expect(app.appendToLastMessage).not.toHaveBeenCalledWith("Added index.html with a modern, dark-themed landing page. Commit/push now.");
     expect(app.setStatus).toHaveBeenCalledWith("model answered without acting - retrying with tool requirement");
-    expect(app.addToolCall).toHaveBeenCalledWith("writeFile", "...");
+    expect(app.addToolCall).toHaveBeenCalledWith("writeFile", "...", undefined, expect.any(String));
     expect(session.addMessage).toHaveBeenCalledWith("assistant", "Created index.html.");
     expect(session.addMessage).not.toHaveBeenCalledWith("assistant", "Added index.html with a modern, dark-themed landing page. Commit/push now.");
   });

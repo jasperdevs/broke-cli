@@ -29,6 +29,7 @@ import type { ModelPreferenceSlot } from "../core/config.js";
 import type { ModelRuntime } from "../ai/providers.js";
 import { createDefaultSessionName } from "../core/session.js";
 import { createAppPickerState, createAppSidebarState, type AppPickerState, type AppSidebarState } from "./app-state-slices.js";
+import { createTurnActivityState, type TurnActivityState } from "./turn-activity-state.js";
 
 export interface App extends AppStateCoreMethods, AppStateMessageMethods, AppStateUiMethods, AppMenuMethods, AppInputMethods, AppRenderMethods, AppDrawMethods {}
 
@@ -104,6 +105,7 @@ export class App {
   private streamTokens = 0;
   private currentActivityStep: ActivityStep | null = null;
   private toolExecutions: ToolExecutionActivity[] = [];
+  private activityState: TurnActivityState = createTurnActivityState();
   private allToolsExpanded = false;
   private isCompacting = false;
   private escPrimed = false;
@@ -124,6 +126,7 @@ export class App {
   private msgCacheWidth = 0;
   private msgCacheLen = 0;
   private msgCacheLines: string[] | null = null;
+  private msgCacheSignature = "";
 
   private animTokens = new AnimCounter();
   private animInputTokens = new AnimCounter();

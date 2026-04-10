@@ -80,6 +80,20 @@ export function scrollToBottom(app: AppState): void {
   app.scrollOffset = Math.max(0, messageLines.length - chatHeight);
   app.transcriptAutoFollow = true;
 }
+
+export function getTranscriptViewport(app: AppState, messageLines: string[], chatHeight: number): { scrollOffset: number; maxScroll: number } {
+  const maxScroll = Math.max(0, messageLines.length - chatHeight);
+  const scrollOffset = app.transcriptAutoFollow
+    ? maxScroll
+    : Math.max(0, Math.min(maxScroll, app.scrollOffset));
+  return { scrollOffset, maxScroll };
+}
+
+export function syncTranscriptViewport(app: AppState, messageLines: string[], chatHeight: number): { scrollOffset: number; maxScroll: number } {
+  const viewport = getTranscriptViewport(app, messageLines, chatHeight);
+  app.scrollOffset = viewport.scrollOffset;
+  return viewport;
+}
 export function getChatHeight(app: AppState): number {
   const hasSidebar = app.shouldShowSidebar();
   const headerLines = !hasSidebar && app.messages.length > 0 && app.modelName !== "none" ? 1 : 0;
@@ -147,23 +161,24 @@ export function getWrappedInputLines(app: AppState, text: string, width: number)
   return wrapComposerLines(app, text, width, true);
 }
 
-export function getInputCursorLayout(app: AppState, text: string, cursor: number, width: number): { lines: string[]; row: number; col: number } {
+export function getInputCursorLayout(app: AppState, text: string, cursor: number, width: number): { lines: string[]; row: number; col: number; viewportStart: number } {
   const lines = app.getWrappedInputLines(text, width);
   const cursorLines = wrapComposerLines(app, text.slice(0, cursor), width, false);
   const currentLine = cursorLines[cursorLines.length - 1] ?? "";
   const absoluteRow = Math.max(0, cursorLines.length - 1);
   const maxVisibleRows = Math.max(1, Math.min(lines.length, getComposerMaxVisibleRows(app)));
   const maxScroll = Math.max(0, lines.length - maxVisibleRows);
-  if (app.composerScrollOffset > maxScroll) app.composerScrollOffset = maxScroll;
-  if (absoluteRow < app.composerScrollOffset) app.composerScrollOffset = absoluteRow;
-  if (absoluteRow >= app.composerScrollOffset + maxVisibleRows) {
-    app.composerScrollOffset = absoluteRow - maxVisibleRows + 1;
-  }
-  const viewportStart = Math.max(0, Math.min(maxScroll, app.composerScrollOffset));
+  const clampedOffset = Math.max(0, Math.min(maxScroll, app.composerScrollOffset));
+  const viewportStart = absoluteRow < clampedOffset
+    ? absoluteRow
+    : absoluteRow >= clampedOffset + maxVisibleRows
+      ? absoluteRow - maxVisibleRows + 1
+      : clampedOffset;
   return {
     lines: lines.slice(viewportStart, viewportStart + maxVisibleRows),
     row: Math.max(0, absoluteRow - viewportStart),
     col: visibleWidth(currentLine),
+    viewportStart,
   };
 }
 export function getFilteredModels(app: AppState): ModelOption[] {
@@ -289,6 +304,14 @@ export function handleMenuPromptKey(app: AppState, key: Keypress): boolean {
 export function getSidebarMaxScroll(app: AppState, visibleHeight: number): number {
   const sidebarLines = app.buildSidebarLines();
   return Math.max(0, sidebarLines.length - visibleHeight);
+}
+
+export function getSidebarViewport(app: AppState, visibleHeight: number): { scrollOffset: number; maxScroll: number } {
+  const maxScroll = app.getSidebarMaxScroll(visibleHeight);
+  return {
+    scrollOffset: Math.max(0, Math.min(maxScroll, app.sidebarScrollOffset)),
+    maxScroll,
+  };
 }
 
 export function clampMenuCursor(_app: AppState, cursor: number, itemCount: number): number {

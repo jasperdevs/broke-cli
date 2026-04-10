@@ -1,6 +1,8 @@
 import { randomUUID } from "crypto";
 import type { ActivityStep, PendingDelivery, PendingImage, PendingMessage, ResolvedImage, TodoItem, ToolExecutionActivity } from "./app-types.js";
 import { buildActivityLabel, cloneActivityStep, cloneToolExecution, deriveLiveActivityStep } from "./live-activity.js";
+import { createTurnTimestamp } from "../core/turn-events.js";
+import { buildTurnActivitySnapshot, clearTurnActivityState, recordTurnEvent } from "./turn-activity-state.js";
 
 type AppState = any;
 
@@ -8,7 +10,14 @@ function setCurrentActivityFromTool(app: AppState, name: string, preview: string
   const label = buildActivityLabel(name, preview);
   if (!label) return;
   void startedAt;
-  if (!app.streamingActivitySummary?.trim()) app.streamingActivitySummary = label;
+  if (!app.streamingActivitySummary?.trim()) {
+    app.streamingActivitySummary = label;
+    recordTurnEvent(app.activityState, {
+      type: "activity.summary",
+      summary: label,
+      timestamp: createTurnTimestamp(),
+    });
+  }
 }
 
 function findToolExecutionIndex(app: AppState, name: string, callId?: string): number {
@@ -26,11 +35,25 @@ function findToolExecutionIndex(app: AppState, name: string, callId?: string): n
   return -1;
 }
 
+function syncLiveActivity(app: AppState): void {
+  app.toolExecutions = app.activityState.tools.map(cloneToolExecution);
+  app.currentActivityStep = null;
+  app.streamingActivitySummary = app.activityState.summary;
+}
+
+function resetLiveActivity(app: AppState): void {
+  clearTurnActivityState(app.activityState);
+  syncLiveActivity(app);
+}
+
+function syncStartedAtFromRenderedTool(app: AppState, toolId: string, startedAt: number): void {
+  const activityTool = app.activityState.tools.find((tool: ToolExecutionActivity) => tool.id === toolId);
+  if (activityTool) activityTool.startedAt = startedAt;
+}
+
 export function clearMessages(app: AppState): void {
   app.messages = [];
-  app.currentActivityStep = null;
-  app.toolExecutions = [];
-  app.streamingActivitySummary = "";
+  resetLiveActivity(app);
   app.scrollOffset = 0;
   app.transcriptAutoFollow = true;
   app.composerScrollOffset = 0;
@@ -53,16 +76,20 @@ function findLastAssistantMessage(app: AppState): any | null {
 }
 
 function persistCurrentActivityToLastAssistant(app: AppState): void {
-  const step = deriveLiveActivityStep(app);
-  if (!step && app.toolExecutions.length === 0) return;
+  const activity = buildTurnActivitySnapshot(app.activityState, {
+    isCompacting: app.isCompacting,
+    startedAt: app.streamStartTime,
+    compactStartTime: app.compactStartTime,
+  });
+  if (!activity) return;
   let last = findLastAssistantMessage(app);
   if (!last) {
     last = { role: "assistant", content: "" };
     app.messages.push(last);
   }
   last.activity = {
-    step: cloneActivityStep(step),
-    tools: app.toolExecutions.map(cloneToolExecution),
+    step: cloneActivityStep(activity.step ?? null),
+    tools: activity.tools.map(cloneToolExecution),
   };
   app.invalidateMsgCache();
 }
@@ -111,9 +138,7 @@ export function addMessage(app: AppState, role: "user" | "assistant" | "system",
     app.thinkingBuffer = "";
     app.thinkingStartTime = 0;
     app.thinkingDuration = 0;
-    app.currentActivityStep = null;
-    app.toolExecutions = [];
-    app.streamingActivitySummary = "";
+    resetLiveActivity(app);
   }
   app.messages.push({ role, content, images });
   if (role === "assistant") {
@@ -152,6 +177,11 @@ export function replaceLastAssistantMessage(app: AppState, text: string): void {
 export function appendThinking(app: AppState, delta: string): void {
   if (!app.thinkingBuffer && delta) app.thinkingStartTime = Date.now();
   app.thinkingBuffer += delta;
+  recordTurnEvent(app.activityState, {
+    type: "thinking.delta",
+    delta,
+    timestamp: createTurnTimestamp(),
+  });
   let last = app.messages[app.messages.length - 1];
   if (!last || last.role !== "assistant") {
     last = { role: "assistant", content: "" };
@@ -170,17 +200,18 @@ export function updateTodo(app: AppState, items: TodoItem[]): void {
 }
 
 export function addToolCall(app: AppState, name: string, preview: string, args?: unknown, callId?: string): void {
-  app.toolExecutions.push({
-    id: randomUUID(),
+  const invocationId = callId ?? randomUUID();
+  recordTurnEvent(app.activityState, {
+    type: "tool.started",
+    invocationId,
     callId,
-    name,
+    toolName: name,
     preview,
     args,
-    expanded: app.allToolsExpanded,
-    startedAt: Date.now(),
-    status: "starting",
-  });
+    timestamp: createTurnTimestamp(),
+  }, { expanded: app.allToolsExpanded });
   setCurrentActivityFromTool(app, name, preview);
+  syncLiveActivity(app);
   app.invalidateMsgCache();
   followTranscriptIfAnchored(app);
   app.drawNow();
@@ -190,10 +221,18 @@ export function updateToolCallArgs(app: AppState, name: string, preview: string,
   const index = findToolExecutionIndex(app, name, callId);
   if (index >= 0) {
     const tc = app.toolExecutions[index];
-    tc.preview = preview;
-    tc.args = args;
-    tc.status = "running";
-    setCurrentActivityFromTool(app, tc.name, tc.preview, tc.startedAt);
+    syncStartedAtFromRenderedTool(app, tc.id, tc.startedAt);
+    recordTurnEvent(app.activityState, {
+      type: "tool.updated",
+      invocationId: tc.id,
+      callId: tc.callId,
+      toolName: tc.name,
+      preview,
+      args,
+      timestamp: createTurnTimestamp(),
+    }, { expanded: tc.expanded });
+    setCurrentActivityFromTool(app, tc.name, preview, tc.startedAt);
+    syncLiveActivity(app);
     app.invalidateMsgCache();
     app.drawNow();
     return;
@@ -204,11 +243,19 @@ export function updateToolCallArgs(app: AppState, name: string, preview: string,
 export function addToolResult(app: AppState, name: string, result: string, error?: boolean, resultDetail?: string, callId?: string): void {
   const index = findToolExecutionIndex(app, name, callId);
   if (index >= 0) {
-    app.toolExecutions[index].result = result;
-    app.toolExecutions[index].error = error;
-    app.toolExecutions[index].resultDetail = resultDetail;
-    app.toolExecutions[index].completedAt = Date.now();
-    app.toolExecutions[index].status = error ? "failed" : "done";
+    const tc = app.toolExecutions[index];
+    syncStartedAtFromRenderedTool(app, tc.id, tc.startedAt);
+    recordTurnEvent(app.activityState, {
+      type: "tool.finished",
+      invocationId: tc.id,
+      callId: tc.callId,
+      toolName: tc.name,
+      result,
+      error,
+      resultDetail,
+      timestamp: createTurnTimestamp(),
+    }, { expanded: tc.expanded });
+    syncLiveActivity(app);
     const hasRunning = app.toolExecutions.some((tc: any) => tc.status === "starting" || tc.status === "running");
     if (!hasRunning && !app.isStreaming && !app.isCompacting) app.streamingActivitySummary = "";
   }
@@ -242,8 +289,13 @@ export function appendToolOutput(app: AppState, chunk: string): void {
   for (let i = app.toolExecutions.length - 1; i >= 0; i--) {
     const tc = app.toolExecutions[i];
     if (tc.name === "bash" && !tc.result) {
-      tc.streamOutput = (tc.streamOutput ?? "") + chunk;
-      tc.status = "running";
+      recordTurnEvent(app.activityState, {
+        type: "tool.output",
+        invocationId: tc.id,
+        chunk,
+        timestamp: createTurnTimestamp(),
+      });
+      syncLiveActivity(app);
       setCurrentActivityFromTool(app, tc.name, tc.preview, tc.startedAt);
       app.invalidateMsgCache();
       followTranscriptIfAnchored(app);
@@ -253,7 +305,9 @@ export function appendToolOutput(app: AppState, chunk: string): void {
   }
 }
 
-export function collapseToolCalls(app: AppState): void { app.toolExecutions = []; }
+export function collapseToolCalls(app: AppState): void {
+  resetLiveActivity(app);
+}
 
 export function getLastAssistantContent(app: AppState): string {
   for (let i = app.messages.length - 1; i >= 0; i--) {

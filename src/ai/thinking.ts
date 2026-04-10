@@ -1,7 +1,7 @@
 import { getSettings } from "../core/config.js";
 import type { ThinkingLevel } from "../core/config.js";
-import { modelSupportsReasoning } from "./model-catalog.js";
 import type { ModelRuntime } from "./providers.js";
+import { getModelCapabilities } from "./provider-capabilities.js";
 
 const THINKING_LEVELS_ALL: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
 const THINKING_LEVELS_EFFORT_ONLY: ThinkingLevel[] = ["off", "low", "medium", "high"];
@@ -32,7 +32,8 @@ export function resolveThinkingConfig(options: {
   budgetTokens?: number;
 } {
   const { providerId, modelId, enabled, level } = options;
-  if (!enabled || !modelSupportsReasoning(modelId, providerId)) {
+  const capabilities = getModelCapabilities({ providerId, modelId });
+  if (!enabled || !capabilities.reasoning.supported) {
     return { enabled: false };
   }
   return {
@@ -54,11 +55,8 @@ export function getAvailableThinkingLevels(options: {
   runtime?: ModelRuntime;
 }): ThinkingLevel[] {
   const { providerId, modelId, runtime } = options;
-  if (!modelId || !providerId || !modelSupportsReasoning(modelId, providerId)) return ["off"];
-  if (runtime === "native-cli") return THINKING_LEVELS_EFFORT_ONLY;
-  if (providerId === "anthropic" || providerId === "google") return THINKING_LEVELS_ALL;
-  if (providerId === "openai") return THINKING_LEVELS_EFFORT_ONLY;
-  return THINKING_LEVELS_EFFORT_ONLY;
+  const capabilities = getModelCapabilities({ providerId, modelId, runtime });
+  return capabilities.reasoning.levels as ThinkingLevel[];
 }
 
 export function clampThinkingLevel(level: ThinkingLevel, availableLevels: ThinkingLevel[]): ThinkingLevel {
