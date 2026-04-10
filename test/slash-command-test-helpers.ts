@@ -24,6 +24,8 @@ export function createAppStub() {
     setModel() {},
     setSessionName() {},
     setDraft() {},
+    appendDraft() {},
+    getDraft() { return ""; },
     setStatus(message: string) {
       this.statusMessage = message;
     },
@@ -51,6 +53,7 @@ export function createAppStub() {
     },
     openBudgetView() {},
     openTreeView() {},
+    dismissBtwBubble() {},
   };
 }
 

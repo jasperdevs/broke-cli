@@ -1,7 +1,7 @@
 import { getContextLimit } from "../ai/cost.js";
 import type { ModelHandle } from "../ai/providers.js";
 import { buildSystemPrompt, resolveCavemanLevel } from "../core/context.js";
-import { COMPACTION_SUMMARY_PREFIX, compactMessages, getTotalContextTokens, splitCompactedMessages } from "../core/compact.js";
+import { buildCompactionContextMessage, COMPACTION_SUMMARY_PREFIX, compactMessages, getTotalContextTokens, splitCompactedMessages, summarizeBranchMessages } from "../core/compact.js";
 import { getModelContextLimitOverride, getSettings, type Mode } from "../core/config.js";
 import { REPO_STATE_CONTEXT_PREFIX } from "../core/session.js";
 import type { TurnPolicy } from "../core/turn-policy.js";
@@ -90,9 +90,9 @@ export async function compactForModel(
   model: ModelHandle,
 ): Promise<Array<{ role: "user" | "assistant"; content: string }>> {
   if (model.runtime === "sdk" && model.model) {
-    return compactMessages(messages, model.model, { tailKeep: 5 });
+    return compactMessages(messages, model.model, { tailKeep: 0 });
   }
-  return messages.slice(-6);
+  return [{ role: "user", content: buildCompactionContextMessage(await summarizeBranchMessages(messages, null)) }];
 }
 
 export function selectMessagesForTurn(

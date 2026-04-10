@@ -210,6 +210,7 @@ export class InputWidget {
   handleKey(key: Keypress): "submit" | "interrupt" | "none" {
     this.clampCursor();
     if (key.ctrl && key.name === "c") return "interrupt";
+    if (key.ctrl && (key.name === "j" || key.char === "\n")) return "none";
 
     const isModifiedEnter = !key.ctrl && !key.meta && (
       key.name === "linefeed"

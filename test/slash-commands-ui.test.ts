@@ -204,6 +204,33 @@ describe("slash command UI surfaces", () => {
     expect((opened.find((entry) => entry.title === "Skills")?.items.length ?? 0) > 0).toBe(true);
   });
 
+  it("appends template content into the current draft instead of replacing it", async () => {
+    mkdirSync(localTemplateDir, { recursive: true });
+    writeFileSync(uiTemplatePath, "Template body", "utf-8");
+
+    const app = createAppStub();
+    let currentDraft = "Existing prompt";
+    let onSelect: ((id: string) => void | Promise<void>) | undefined;
+    app.getDraft = () => currentDraft;
+    app.appendDraft = (value: string) => {
+      currentDraft = `${currentDraft}\n\n${value}`;
+    };
+    app.openItemPicker = (_title: string, _items: Array<{ id: string; label: string; detail?: string }>, nextOnSelect: (id: string) => void | Promise<void>) => {
+      onSelect = nextOnSelect;
+    };
+
+    const result = await handleSlashCommand({
+      text: "/templates",
+      app,
+      session: new Session(`test-templates-append-${Date.now()}`),
+      ...createSlashArgs(),
+    });
+
+    expect(result.handled).toBe(true);
+    await onSelect?.("slash-test-template-ui");
+    expect(currentDraft).toBe("Existing prompt\n\nTemplate body");
+  });
+
   it("explains that /resume is unavailable when session persistence is off", async () => {
     updateSetting("autoSaveSessions", false);
 

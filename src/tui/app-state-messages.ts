@@ -79,6 +79,7 @@ export function clearMessages(app: AppState): void {
   app.toolExecutions = [];
   app.scrollOffset = 0;
   app.transcriptAutoFollow = true;
+  app.composerScrollOffset = 0;
   app.refreshHomeScreenData();
   app.invalidateMsgCache();
   app.screen.forceRedraw([]);
@@ -121,6 +122,37 @@ function persistCurrentActivityToLastAssistant(app: AppState): void {
 
 export function setDraft(app: AppState, text: string): void {
   app.input.setText(text);
+  app.composerScrollOffset = 0;
+  app.drawNow();
+}
+
+export function appendDraft(app: AppState, text: string): void {
+  const insertion = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+  if (!insertion) return;
+  const current = app.input.getText();
+  const joiner = !current
+    ? ""
+    : current.endsWith("\n\n") || insertion.startsWith("\n")
+      ? ""
+      : current.endsWith("\n")
+        ? "\n"
+        : "\n\n";
+  app.input.setText(`${current}${joiner}${insertion}`);
+  app.drawNow();
+}
+
+export function getDraft(app: AppState): string {
+  return app.input.getText();
+}
+
+export function dismissPassiveBtwBubble(app: AppState): boolean {
+  if (!app.btwBubble || app.btwBubble.pending) return false;
+  app.dismissBtwBubble();
+  return true;
+}
+
+export function clearComposerViewport(app: AppState): void {
+  app.composerScrollOffset = 0;
   app.drawNow();
 }
 
@@ -388,6 +420,8 @@ export interface AppStateMessageMethods {
   clearMessages(): void;
   persistCurrentActivityToLastAssistant(): void;
   setDraft(text: string): void;
+  appendDraft(text: string): void;
+  getDraft(): string;
   addMessage(role: "user" | "assistant" | "system", content: string, images?: ResolvedImage[]): void;
   appendToLastMessage(text: string): void;
   replaceLastAssistantMessage(text: string): void;
@@ -416,12 +450,16 @@ export interface AppStateMessageMethods {
   getPendingMessagesCount(delivery?: PendingDelivery): number;
   flushPendingMessages(delivery: PendingDelivery): void;
   onAbortRequest(handler: () => void): void;
+  dismissPassiveBtwBubble(): boolean;
+  clearComposerViewport(): void;
 }
 
 export const appStateMessageMethods: AppStateMessageMethods = {
   clearMessages(this: AppState) { return clearMessages(this); },
   persistCurrentActivityToLastAssistant(this: AppState) { return persistCurrentActivityToLastAssistant(this); },
   setDraft(this: AppState, text) { return setDraft(this, text); },
+  appendDraft(this: AppState, text) { return appendDraft(this, text); },
+  getDraft(this: AppState) { return getDraft(this); },
   addMessage(this: AppState, role, content, images) { return addMessage(this, role, content, images); },
   appendToLastMessage(this: AppState, text) { return appendToLastMessage(this, text); },
   replaceLastAssistantMessage(this: AppState, text) { return replaceLastAssistantMessage(this, text); },
@@ -450,4 +488,6 @@ export const appStateMessageMethods: AppStateMessageMethods = {
   getPendingMessagesCount(this: AppState, delivery) { return getPendingMessagesCount(this, delivery); },
   flushPendingMessages(this: AppState, delivery) { return flushPendingMessages(this, delivery); },
   onAbortRequest(this: AppState, handler) { return onAbortRequest(this, handler); },
+  dismissPassiveBtwBubble(this: AppState) { return dismissPassiveBtwBubble(this); },
+  clearComposerViewport(this: AppState) { return clearComposerViewport(this); },
 };

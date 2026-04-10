@@ -146,7 +146,7 @@ export async function compactMessages(
   const normalized = dedupeConversation(parsed.summary
     ? [{ role: "user" as const, content: `Previously compacted summary:\n${parsed.summary}` }, ...parsed.messages]
     : messages);
-  const tailKeep = Math.max(3, options.tailKeep ?? 6);
+  const tailKeep = Math.max(0, options.tailKeep ?? 0);
   if (normalized.length <= tailKeep) return normalized;
 
   const toSummarize = normalized.slice(0, -tailKeep);

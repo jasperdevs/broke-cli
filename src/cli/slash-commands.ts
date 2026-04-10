@@ -1,5 +1,5 @@
 import { buildSystemPrompt, reloadContext } from "../core/context.js";
-import { compactMessages, getTotalContextTokens, splitCompactedMessages } from "../core/compact.js";
+import { buildCompactionContextMessage, compactMessages, getTotalContextTokens, splitCompactedMessages, summarizeBranchMessages } from "../core/compact.js";
 import { getConfiguredModelPreference, getSettings, updateModelPreference, updateSetting, type Mode, type ModelPreferenceSlot } from "../core/config.js";
 import { createDefaultSessionName } from "../core/session.js";
 import { runConnectFlow } from "./connect-flow.js";
@@ -72,6 +72,7 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
     description: "switch model and assign routing slots",
     hotkey: "ctrl+l",
     run: ({ restText, app, providerRegistry, buildVisibleModelOptions, activeModel, onModelChange, session, onModelRoutingChange }) => {
+      app.dismissBtwBubble?.();
       const allOptions = buildVisibleModelOptions();
       if (allOptions.length === 0) {
         app.setStatus?.("No connected providers found. Run /connect.");
@@ -136,6 +137,7 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
     names: ["btw"],
     description: "ask an ephemeral side question",
     run: ({ restText, app, onBtw }) => {
+      app.dismissBtwBubble?.();
       if (!restText) {
         app.setDraft?.("/btw ");
         app.setStatus?.("Ask a side question after /btw.");
@@ -157,6 +159,7 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
     description: "configure options",
     sortPriority: -1,
     run: ({ app, activeModel, currentMode, onModeChange, onSystemPromptChange }) => {
+      app.dismissBtwBubble?.();
       openSettingsMenu({ app, activeModel, currentMode, onModeChange, onSystemPromptChange });
       return { handled: true };
     },
@@ -165,6 +168,7 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
     names: ["mode"],
     description: "switch build or plan mode",
     run: ({ restText, app, activeModel, onModeChange, onSystemPromptChange }) => {
+      app.dismissBtwBubble?.();
       const setMode = (nextMode: Mode) => {
         updateSetting("mode", nextMode);
         onModeChange(nextMode);
@@ -189,6 +193,7 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
     showInPicker: false,
     description: "manage extension loading",
     run: ({ app, hooks }) => {
+      app.dismissBtwBubble?.();
       openExtensionsMenu(app, hooks);
       return { handled: true };
     },
@@ -197,6 +202,7 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
     names: ["compact"],
     description: "compress context",
     run: async ({ activeModel, hooks, session, systemPrompt, currentModelId, app, restText, waitFor }) => {
+      app.dismissBtwBubble?.();
       if (!activeModel) {
         app.setStatus?.("No model available for compaction.");
         return { handled: true };
@@ -208,8 +214,8 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
         const compactStartedAt = Date.now();
         app.setCompacting?.(true, ctxTokens);
         const compacted = activeModel.runtime === "sdk" && activeModel.model
-          ? await compactMessages(chatMsgs, activeModel.model, { customInstructions: restText || undefined })
-          : chatMsgs.slice(-6);
+          ? await compactMessages(chatMsgs, activeModel.model, { customInstructions: restText || undefined, tailKeep: 0 })
+          : [{ role: "user" as const, content: buildCompactionContextMessage(await summarizeBranchMessages(chatMsgs, null, restText || undefined)) }];
         const parsed = splitCompactedMessages(compacted);
         if (parsed.summary) session.applyCompaction(parsed.summary, parsed.messages, ctxTokens);
         else session.replaceConversation(parsed.messages);
@@ -232,6 +238,7 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
     names: ["fork"],
     description: "branch from current session",
     run: ({ session, activeModel, currentModelId, onSessionReplace, app }) => {
+      app.dismissBtwBubble?.();
       const forked = session.fork();
       if (activeModel) forked.setProviderModel(activeModel.provider.name, currentModelId);
       onSessionReplace(forked);
@@ -245,6 +252,7 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
     description: "cycle token saving",
     hotkey: "ctrl+y",
     run: ({ restText, app, activeModel, currentMode, onSystemPromptChange }) => {
+      app.dismissBtwBubble?.();
       const requested = restText.toLowerCase();
       if (requested === "off" || requested === "lite" || requested === "auto" || requested === "ultra") {
         updateSetting("cavemanLevel", requested);
@@ -263,6 +271,7 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
     description: "cycle thinking",
     hotkey: "ctrl+t",
     run: ({ app }) => {
+      app.dismissBtwBubble?.();
       app.cycleThinkingMode();
       return { handled: true };
     },
@@ -272,6 +281,7 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
     showInPicker: false,
     description: "rename this session",
     run: ({ text, app, session }) => {
+      app.dismissBtwBubble?.();
       const name = text.slice(6).trim();
       if (name) {
         session.setName(name);
@@ -308,6 +318,7 @@ const coreSlashCommands = createSlashCommandRegistry<CoreSlashCommandContext, Sl
 
 export async function handleSlashCommand(options: HandleSlashCommandOptions): Promise<SlashCommandResult> {
   const { text } = options;
+  options.app.dismissBtwBubble?.();
   const [cmd, ...restParts] = text.slice(1).split(" ");
   const restText = restParts.join(" ").trim();
   const waitFor = async (ms: number) => {

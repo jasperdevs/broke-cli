@@ -58,6 +58,10 @@ function wrapComposerLines(app: AppState, text: string, width: number, styled: b
   return wrapped.length > 0 ? wrapped : [" ".repeat(padX)];
 }
 
+function getComposerMaxVisibleRows(app: AppState, maxHeight = app.screen.height): number {
+  return Math.max(3, Math.floor(Math.max(1, maxHeight) * 0.6));
+}
+
 function getMenuVisibleRows(maxHeight: number, baseCount: number, tailReserve: number, chromeLines: number): number {
   return Math.max(1, maxHeight - baseCount - tailReserve - 1 - chromeLines);
 }
@@ -92,7 +96,9 @@ export function getBottomLineCount(app: AppState, mainW: number, maxHeight: numb
   const maxVisibleRows = Math.max(1, getSettings().autocompleteMaxVisible);
   const btwBubbleLineCount = app.renderBtwBubble(mainW).length;
   const pendingMessageLineCount = getPendingMessagePromptLines(app, mainW).length;
-  const inputLineCount = app.getWrappedInputLines(app.input.getText(), mainW).length;
+  const inputLayout = app.getInputCursorLayout(app.input.getText(), app.input.getCursor(), mainW);
+  const totalInputLines = app.getWrappedInputLines(app.input.getText(), mainW).length;
+  const inputLineCount = inputLayout.lines.length + (totalInputLines > inputLayout.lines.length ? 1 : 0);
   const statusLineCount = app.statusMessage ? 2 : 0;
   const footerLineCount = buildFooterLines(app, app.shouldShowSidebar(), mainW).length;
   const detailLineCount = hasActiveBottomMenuDetail(app) ? 1 : 0;
@@ -145,7 +151,20 @@ export function getInputCursorLayout(app: AppState, text: string, cursor: number
   const lines = app.getWrappedInputLines(text, width);
   const cursorLines = wrapComposerLines(app, text.slice(0, cursor), width, false);
   const currentLine = cursorLines[cursorLines.length - 1] ?? "";
-  return { lines, row: Math.max(0, cursorLines.length - 1), col: visibleWidth(currentLine) };
+  const absoluteRow = Math.max(0, cursorLines.length - 1);
+  const maxVisibleRows = Math.max(1, Math.min(lines.length, getComposerMaxVisibleRows(app)));
+  const maxScroll = Math.max(0, lines.length - maxVisibleRows);
+  if (app.composerScrollOffset > maxScroll) app.composerScrollOffset = maxScroll;
+  if (absoluteRow < app.composerScrollOffset) app.composerScrollOffset = absoluteRow;
+  if (absoluteRow >= app.composerScrollOffset + maxVisibleRows) {
+    app.composerScrollOffset = absoluteRow - maxVisibleRows + 1;
+  }
+  const viewportStart = Math.max(0, Math.min(maxScroll, app.composerScrollOffset));
+  return {
+    lines: lines.slice(viewportStart, viewportStart + maxVisibleRows),
+    row: Math.max(0, absoluteRow - viewportStart),
+    col: visibleWidth(currentLine),
+  };
 }
 export function getFilteredModels(app: AppState): ModelOption[] {
   if (!app.modelPicker) return [];

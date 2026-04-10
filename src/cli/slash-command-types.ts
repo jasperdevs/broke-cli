@@ -12,6 +12,8 @@ export interface SlashCommandApp {
   setModel(provider: string, model: string, meta?: { providerId?: string; runtime?: import("../ai/providers.js").ModelRuntime }): void;
   setSessionName?(name: string): void;
   setDraft?(text: string): void;
+  appendDraft?(text: string): void;
+  getDraft?(): string;
   setStatus?(message: string): void;
   updateUsage(cost: number, inputTokens: number, outputTokens: number): void;
   openModelPicker(
@@ -45,6 +47,7 @@ export interface SlashCommandApp {
   setUpdateNotice?(notice: UpdateNotice | null): void;
   clearUpdateNotice?(): void;
   openBudgetView?(title: string, reports: { all: BudgetReport; session: BudgetReport }, scope?: "all" | "session"): void;
+  dismissBtwBubble?(): void;
 }
 
 export interface ExtensionHooks {

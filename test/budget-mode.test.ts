@@ -190,6 +190,16 @@ describe("session budget metrics", () => {
     expect(session.getCompactionSummary()?.tokensBefore).toBe(123);
   });
 
+  it("manual compaction can replace the visible transcript while preserving hidden summary context", () => {
+    const session = new Session(`test-compact-replace-${Date.now()}`);
+    session.addMessage("user", "first");
+    session.addMessage("assistant", "second");
+    session.applyCompaction("task: keep going", [], 123);
+
+    expect(session.getMessages()).toEqual([]);
+    expect(session.getChatMessages()[0]?.content).toContain("<summary>");
+  });
+
   it("injects compact repo state into chat context without polluting visible transcript", () => {
     const session = new Session(`test-repo-state-${Date.now()}`);
     session.addMessage("user", "rename helper");

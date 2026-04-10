@@ -12,7 +12,6 @@ import {
   shouldKeepFilePickerOpen, tryConsumeImageDraft,
 } from "./app-input-routes.js";
 type AppState = any;
-
 function syncComposerAttachmentsFromInput(app: AppState): void {
   for (const file of Array.from(app.fileContexts.keys())) {
     if (!app.input.getText().includes(file)) app.fileContexts.delete(file);
@@ -304,6 +303,7 @@ function handleEscapeAndBindings(app: AppState, key: Keypress): boolean {
 
 export function handleKey(app: AppState, key: Keypress): void {
   ensureInlineChipElements(app);
+  if (key.ctrl && key.name === "j") { app.draw(); return; }
 
   const preText = app.input.getText();
   const preCursor = app.input.getCursor();
@@ -357,20 +357,24 @@ export function handleKey(app: AppState, key: Keypress): void {
   }
 
   if (app.btwBubble) {
-    const dismissWithInputlessKey = app.input.getText().trim().length === 0
-      && !key.ctrl
-      && !key.meta
-      && !key.shift
-      && (key.name === "space" || key.name === "return" || key.name === "enter");
-    if (key.name === "escape" || dismissWithInputlessKey) {
+    if (key.name === "escape") {
       app.dismissBtwBubble();
       return;
+    }
+    if (!app.btwBubble.pending && key.name !== "click" && key.name !== "scrollup" && key.name !== "scrolldown") {
+      app.dismissPassiveBtwBubble();
     }
   }
 
   if (handleEscapeAndBindings(app, key)) return;
   if (scrollTranscriptWithEmptyComposer(app, key)) return;
   if (matchesBinding(getKeybinding("newline"), key)) {
+    app.input.insertText("\n");
+    syncComposerAttachmentsFromInput(app);
+    app.draw();
+    return;
+  }
+  if (key.name === "linefeed" && !key.ctrl && !key.meta) {
     app.input.insertText("\n");
     syncComposerAttachmentsFromInput(app);
     app.draw();

@@ -69,6 +69,7 @@ export class App {
   private ctrlCTimeout: ReturnType<typeof setTimeout> | null = null;
   private scrollOffset = 0;
   private transcriptAutoFollow = true;
+  private composerScrollOffset = 0;
   private onSubmit: ((text: string) => void) | null = null;
   private onAbort: (() => void) | null = null;
   private running = false;

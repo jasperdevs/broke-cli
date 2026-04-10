@@ -46,6 +46,7 @@ export function drawImmediate(app: AppState): void {
   const hasSidebar = app.shouldShowSidebar();
   const mainW = hasSidebar ? app.screen.mainWidth : width;
   const inputLayout = app.getInputCursorLayout(app.input.getText(), app.input.getCursor(), mainW);
+  const totalComposerLines = app.getWrappedInputLines(app.input.getText(), mainW).length;
   const isHome = app.messages.length === 0;
   const separatorColor = app.getModeAccent();
   const inputLead = `${separatorColor}${BOLD}>${RESET} `;
@@ -69,6 +70,10 @@ export function drawImmediate(app: AppState): void {
   bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
   const inputStartIndex = bottomLines.length;
   bottomLines.push(...inputLayout.lines.map((line: string, index: number) => `${index === 0 ? inputLead : inputContinueLead}${line}`));
+  if (totalComposerLines > inputLayout.lines.length) {
+    const composerStatus = `${DIM}${Math.min(totalComposerLines, app.composerScrollOffset + inputLayout.lines.length)}/${totalComposerLines} lines${RESET}`;
+    bottomLines.push(`${" ".repeat(inputLeadWidth)}${composerStatus}`);
+  }
   if (statusLines.length > 0) {
     bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
     bottomLines.push(...statusLines);

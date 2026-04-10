@@ -39,6 +39,18 @@ function reloadSessionIntoUi(app: SlashCommandApp, session: Session, editorText?
   if (editorText) app.setDraft?.(editorText);
 }
 
+function insertPromptAsset(app: SlashCommandApp, text: string): void {
+  const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+  if (!normalized) return;
+  if (app.appendDraft) {
+    app.appendDraft(normalized);
+    return;
+  }
+  const current = app.getDraft?.() ?? "";
+  const joiner = !current ? "" : current.endsWith("\n") ? "\n" : "\n\n";
+  app.setDraft?.(`${current}${joiner}${normalized}`);
+}
+
 async function chooseMenuItem(
   app: SlashCommandApp,
   title: string,
@@ -379,15 +391,15 @@ export const UI_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<UiSlas
   },
   {
     names: ["templates"],
-    description: "browse slash templates",
+    description: "insert reusable prompt templates",
     run: ({ app }) => {
       const templates = listTemplates();
       const items = [
         { id: "__create__", label: "Create template", detail: "make a new slash template now" },
         ...templates.map((template) => ({
-        id: template.name,
-        label: `/${template.name}`,
-        detail: template.description || "prompt template",
+          id: template.name,
+          label: template.name,
+          detail: template.description || "prompt template",
         })),
       ];
       app.openItemPicker("Templates", items, async (id: string) => {
@@ -401,13 +413,18 @@ export const UI_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<UiSlas
           try {
             createTemplate(name);
             app.setStatus?.(`Created template /${name}.`);
-            app.setDraft?.(`/${name} `);
           } catch (error) {
             app.setStatus?.(`Template create failed: ${error instanceof Error ? error.message : String(error)}`);
           }
           return;
         }
-        app.setDraft?.(`/${id} `);
+        const template = loadTemplate(id);
+        if (!template) {
+          app.setStatus?.(`Template not found: ${id}`);
+          return;
+        }
+        insertPromptAsset(app, template);
+        app.setStatus?.(`Inserted template: ${id}`);
       }, { kind: "templates" });
       return { handled: true };
     },

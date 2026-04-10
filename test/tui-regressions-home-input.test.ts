@@ -311,6 +311,7 @@ describe("input editing", () => {
     expect(app.btwBubble).toBeNull();
   });
 
+
   it("keeps shift-enter as a newline while a /btw bubble is visible", () => {
     const app = new App() as any;
     app.openBtwBubble({ question: "status?", answer: "", modelLabel: "Claude Sonnet 4.6", pending: true });
@@ -412,6 +413,7 @@ describe("input editing", () => {
     expect(app.input.getText()).toBe("first");
     expect(app.pendingMessages).toEqual([]);
   });
+
 
 
   it("clears queued messages with Escape when idle and the editor is empty", () => {

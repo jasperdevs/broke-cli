@@ -74,4 +74,11 @@ describe("keybinding regressions", () => {
       reloadKeybindings();
     }
   });
+
+  it("treats raw linefeed as newline in the live composer path even before submit routing", () => {
+    const app = new App() as any;
+    app.handlePaste("hello");
+    app.handleKey({ name: "linefeed", char: "\n", ctrl: false, meta: false, shift: false });
+    expect(app.input.getText()).toBe("hello\n");
+  });
 });
