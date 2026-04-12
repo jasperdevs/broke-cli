@@ -5,10 +5,8 @@
 <p align="center">A terminal-first AI coding CLI with budget-aware model routing.</p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/@jasperdevs/brokecli"><img src="https://img.shields.io/npm/v/%40jasperdevs%2Fbrokecli?color=4c71f2" alt="npm version" /></a>
-  <a href="https://github.com/jasperdevs/broke-cli/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/jasperdevs/broke-cli/ci.yml?branch=main&label=ci" alt="CI status" /></a>
+  <a href="https://github.com/jasperdevs/broke-cli/stargazers"><img src="https://img.shields.io/github/stars/jasperdevs/broke-cli?style=flat&logo=github&label=stars&color=4c71f2" alt="GitHub stars" /></a>
   <img src="https://img.shields.io/badge/macOS%20%7C%20Linux%20%7C%20Windows-supported-555" alt="Supported on macOS, Linux, and Windows" />
-  <img src="https://img.shields.io/badge/node-%3E%3D18.17-555" alt="Node 18.17+" />
 </p>
 
 <p align="center">
@@ -84,3 +82,13 @@ Persist sessions, resume later, self-update, export transcripts, and run built-i
 ## License
 
 MIT
+
+## Star History
+
+<a href="https://star-history.com/#jasperdevs/broke-cli&Date">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=jasperdevs/broke-cli&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=jasperdevs/broke-cli&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=jasperdevs/broke-cli&type=Date" width="600" />
+ </picture>
+</a>
