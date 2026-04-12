@@ -36,11 +36,53 @@ Inside the app:
 
 ## Features
 
-- **Budget-aware routing**: pick providers and models directly, or steer toward cheaper capable options
-- **Caveman mode**: compressed, low-noise assistant output when you want answers fast
-- **Sidebar + workspace state**: model, provider, workspace, and session state stay visible in the TUI
-- **Slash commands + settings**: built-in workflows like `/connect`, `/login`, `/model`, `/settings`, `/btw`, and `/budget`
-- **Provider + session tools**: hosted APIs, local runtimes, native logins, exports, self-update, and benchmark tasks
+<table>
+<tr>
+<td width="40%" valign="middle">
+<h3>Budget-aware routing</h3>
+Pick providers and models directly, or steer toward cheaper capable options.
+</td>
+<td width="60%">
+<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" alt="" width="100%" />
+</td>
+</tr>
+<tr>
+<td width="40%" valign="middle">
+<h3>Caveman mode</h3>
+Compressed, low-noise assistant output when you want answers fast.
+</td>
+<td width="60%">
+<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" alt="" width="100%" />
+</td>
+</tr>
+<tr>
+<td width="40%" valign="middle">
+<h3>Sidebar + workspace state</h3>
+Model, provider, workspace, and session state stay visible in the TUI.
+</td>
+<td width="60%">
+<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" alt="" width="100%" />
+</td>
+</tr>
+<tr>
+<td width="40%" valign="middle">
+<h3>Slash commands + settings</h3>
+Built-in workflows like <code>/connect</code>, <code>/login</code>, <code>/model</code>, <code>/settings</code>, <code>/btw</code>, and <code>/budget</code>.
+</td>
+<td width="60%">
+<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" alt="" width="100%" />
+</td>
+</tr>
+<tr>
+<td width="40%" valign="middle">
+<h3>Provider + session tools</h3>
+Hosted APIs, local runtimes, native logins, exports, self-update, and benchmark tasks in one CLI.
+</td>
+<td width="60%">
+<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" alt="" width="100%" />
+</td>
+</tr>
+</table>
 
 ## License
 
