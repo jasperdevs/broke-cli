@@ -21,7 +21,7 @@ const PACKAGE_JSON = JSON.parse(readFileSync(join(PACKAGE_DIR, "package.json"), 
 };
 
 function normalizeRepositoryUrl(raw: string | undefined): string {
-  if (!raw) return "https://github.com/jasperdevs/brokecli";
+  if (!raw) return "https://github.com/jasperdevs/broke-cli";
   return raw.replace(/^git\+/, "").replace(/\.git$/i, "");
 }
 

@@ -46,7 +46,7 @@ describe("startup home view", () => {
       latestVersion: "0.0.2",
       method: "npm",
       instruction: "Run: npm install -g @jasperdevs/brokecli@latest",
-      releasesUrl: "https://github.com/jasperdevs/brokecli/releases/latest",
+      releasesUrl: "https://github.com/jasperdevs/broke-cli/releases/latest",
       command: {
         command: "npm",
         args: ["install", "-g", "@jasperdevs/brokecli@latest"],

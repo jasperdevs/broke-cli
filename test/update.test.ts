@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildSelfUpdateCommand, compareVersions } from "../src/core/update.js";
+import { RELEASES_URL, REPOSITORY_URL } from "../src/core/app-meta.js";
 
 describe("update helpers", () => {
   it("compares semantic versions in numeric order", () => {
@@ -15,5 +16,10 @@ describe("update helpers", () => {
     expect(buildSelfUpdateCommand("yarn")?.display).toBe("yarn global add @jasperdevs/brokecli@latest");
     expect(buildSelfUpdateCommand("bun")?.display).toBe("bun install -g @jasperdevs/brokecli@latest");
     expect(buildSelfUpdateCommand("unknown")).toBeUndefined();
+  });
+
+  it("normalizes the repository and release URLs from package metadata", () => {
+    expect(REPOSITORY_URL).toBe("https://github.com/jasperdevs/broke-cli");
+    expect(RELEASES_URL).toBe("https://github.com/jasperdevs/broke-cli/releases/latest");
   });
 });

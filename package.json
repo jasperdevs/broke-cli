@@ -1,7 +1,7 @@
 {
   "name": "@jasperdevs/brokecli",
   "version": "0.0.1",
-  "description": "AI coding CLI that doesn't waste your money. Cost-aware model routing, token reduction, budget controls.",
+  "description": "Cost-aware AI coding CLI for developers who want the terminal first and token spend second.",
   "type": "module",
   "exports": {
     ".": "./dist/sdk.mjs"
@@ -21,10 +21,13 @@
     "dev": "tsup --watch",
     "benchmark:tasks": "npm run build && node scripts/benchmark-harness.mjs",
     "test": "vitest run",
+    "test:release": "node scripts/release-smoke.mjs",
     "test:efficiency": "vitest run test/efficiency-benchmarks.test.ts",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit && node scripts/quality-check.mjs",
+    "prepack": "npm run build",
+    "prepare": "npm run build",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
@@ -41,12 +44,16 @@
   ],
   "author": "jasperdevs",
   "license": "MIT",
+  "homepage": "https://github.com/jasperdevs/broke-cli#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jasperdevs/brokecli.git"
+    "url": "git+https://github.com/jasperdevs/broke-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jasperdevs/broke-cli/issues"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=18.17.0"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.66",
