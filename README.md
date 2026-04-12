@@ -43,8 +43,8 @@ Inside the app:
 <table>
 <tr>
 <td width="40%" valign="middle">
-<h3>Budget-aware routing</h3>
-Pick providers and models explicitly, or let brokecli steer toward cheaper capable options.
+<h3>Caveman mode</h3>
+Compresses assistant output hard when you want blunt, low-noise answers without changing code blocks or exact technical terms.
 </td>
 <td width="60%">
 <img src="./assets/readme/routing.svg" alt="Budget-aware routing placeholder" width="100%" />
@@ -52,8 +52,8 @@ Pick providers and models explicitly, or let brokecli steer toward cheaper capab
 </tr>
 <tr>
 <td width="40%" valign="middle">
-<h3>Hosted + local providers</h3>
-Works with hosted APIs and local runtimes including Ollama, LM Studio, llama.cpp, Jan, and vLLM.
+<h3>Sidebar + workspace state</h3>
+The TUI keeps model, provider, workspace, and session state visible instead of hiding everything behind a blank prompt.
 </td>
 <td width="60%">
 <img src="./assets/readme/providers.svg" alt="Provider support placeholder" width="100%" />
@@ -61,8 +61,8 @@ Works with hosted APIs and local runtimes including Ollama, LM Studio, llama.cpp
 </tr>
 <tr>
 <td width="40%" valign="middle">
-<h3>TUI + one-shot modes</h3>
-Run the full terminal UI, print once, emit JSON, or use RPC depending on the workflow.
+<h3>Slash commands + settings</h3>
+Built-in commands like <code>/connect</code>, <code>/login</code>, <code>/model</code>, <code>/settings</code>, <code>/btw</code>, <code>/budget</code>, and more are part of the main workflow.
 </td>
 <td width="60%">
 <img src="./assets/readme/modes.svg" alt="Runtime modes placeholder" width="100%" />
@@ -70,8 +70,8 @@ Run the full terminal UI, print once, emit JSON, or use RPC depending on the wor
 </tr>
 <tr>
 <td width="40%" valign="middle">
-<h3>Sessions and exports</h3>
-Persist sessions, resume later, self-update, export transcripts, and run built-in benchmark tasks.
+<h3>Provider routing + session tools</h3>
+Mix hosted APIs, local runtimes, and supported native logins, then keep sessions, exports, self-update, and benchmark tasks in the same CLI.
 </td>
 <td width="60%">
 <img src="./assets/readme/sessions.svg" alt="Sessions and exports placeholder" width="100%" />
