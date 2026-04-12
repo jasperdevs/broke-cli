@@ -1,6 +1,6 @@
 import { spawnSync } from "child_process";
 import { existsSync } from "fs";
-import { resolve, relative, sep } from "path";
+import { isAbsolute, relative, resolve, sep } from "path";
 import { getSettings, updateSetting } from "./config.js";
 import type { AutonomySettings } from "./config-types.js";
 
@@ -89,7 +89,9 @@ function isWithinRoot(targetPath: string, root: string): boolean {
   const normalizedRoot = resolve(root);
   if (normalizedTarget === normalizedRoot) return true;
   const rel = relative(normalizedRoot, normalizedTarget);
-  return !!rel && !rel.startsWith("..") && !rel.includes(`..${sep}`) && !rel.includes("../");
+  if (!rel) return true;
+  if (isAbsolute(rel)) return false;
+  return !rel.startsWith("..") && !rel.includes(`..${sep}`) && !rel.includes("../");
 }
 
 function buildTrustedRoots(mode: "read" | "write", cwd = process.cwd()): string[] {
