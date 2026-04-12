@@ -4,7 +4,7 @@ import { registerPackageCommands } from "./package-commands.js";
 export function createProgram(appVersion: string): Command {
   const program = new Command()
     .name("brokecli")
-    .description("AI coding CLI that doesn't waste your money")
+    .description("Terminal-first AI coding CLI with budget-aware model routing")
     .version(appVersion)
     .argument("[prompt...]", "Prompt to run in single-shot print/json mode")
     .option("--broke", "Route to cheapest capable model")

@@ -1,7 +1,7 @@
 {
   "name": "@jasperdevs/brokecli",
   "version": "0.0.1",
-  "description": "Cost-aware AI coding CLI for developers who want the terminal first and token spend second.",
+  "description": "Terminal-first AI coding CLI with budget-aware model routing.",
   "type": "module",
   "exports": {
     ".": "./dist/sdk.mjs"

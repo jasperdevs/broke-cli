@@ -1,5 +1,8 @@
 <h1 align="center">brokecli</h1>
-<p align="center">A cost-aware AI coding CLI for developers who want the terminal first and token spend second.</p>
+<p align="center">
+  <img src="./logos/brokecli-full.svg" alt="brokecli" width="280" />
+</p>
+<p align="center">A terminal-first AI coding CLI with budget-aware model routing.</p>
 
 <p align="center">
   <a href="https://www.npmjs.com/package/@jasperdevs/brokecli"><img src="https://img.shields.io/npm/v/%40jasperdevs%2Fbrokecli?color=111111" alt="npm version" /></a>
@@ -17,37 +20,36 @@ npm install -g @jasperdevs/brokecli
 ## Quick Start
 
 ```bash
-# 1) install or sign into a provider
-export OPENAI_API_KEY=your_key_here
-
-# 2) launch the terminal ui
+# launch the terminal ui
 brokecli
-
-# 3) or run a one-shot prompt
-brokecli -p "summarize the repo"
 ```
 
-If you already use native CLIs like Codex or Claude Code, brokecli will prefer those authenticated runtimes when they are available.
+Then, inside the app:
 
-## Why
+- Use `/connect <provider>` for API-key providers such as `openai`, `anthropic`, `google`, `groq`, `mistral`, `xai`, or `openrouter`
+- Use `/login <provider>` for native login flows such as `codex`, `github-copilot`, `google-gemini-cli`, or `google-antigravity`
+- Or stay non-interactive with `brokecli -p "summarize the repo"`
 
-brokecli keeps the terminal front and center while making model choice, token spend, and context pressure visible enough to act on. It is designed for developers who want fast interactive coding without treating cost as an afterthought.
+If a native CLI is already authenticated and available on `PATH`, brokecli will use it when that runtime is supported.
 
-## What You Get
+## What It Actually Ships
 
-- Cost-aware model routing and token visibility
-- Terminal-first TUI plus one-shot print/json/rpc modes
-- Native-runtime support for authenticated local CLIs when available
-- Session persistence, slash commands, benchmarks, and packageable extensions
-- CI-verified support on macOS, Linux, and Windows
+- Terminal UI plus `--print`, `--mode json`, and `--rpc`
+- Budget-aware model routing and token/cost visibility
+- Hosted provider support for OpenAI, Anthropic, Google, Groq, Mistral, xAI, and OpenRouter
+- Local provider support for Ollama, LM Studio, llama.cpp, Jan, and vLLM
+- Native-login support where available for Codex, Claude Code, GitHub Copilot, Google Cloud Code Assist, and Antigravity
+- Session persistence, slash commands, transcript export, self-update, and benchmark tasks
+- CI coverage on macOS, Linux, and Windows
 
 ## Common Commands
 
 ```bash
 brokecli
 brokecli --help
-brokecli -p "explain src/core/update.ts"
 brokecli --list-models
+brokecli --mode json -p "summarize this repo"
+brokecli -p "explain src/core/update.ts"
 brokecli self-update
 brokecli benchmark --suite fixed
 ```
@@ -58,11 +60,12 @@ Global config lives at `~/.brokecli/config.json`.
 
 Project-scoped config lives at `.brokecli/config.json` in the current repo.
 
-## Release Notes
+## Compatibility
 
 - Scoped npm package: `@jasperdevs/brokecli`
 - Node support: `>=18.17`
-- Build output is generated during `prepare`, `prepack`, and CI
+- Verified in CI on `macos-latest`, `ubuntu-latest`, and `windows-latest`
+- Build artifacts are generated during `prepare`, `prepack`, and CI
 
 ## License
 
