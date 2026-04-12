@@ -1,0 +1,11 @@
+<svg width="960" height="540" viewBox="0 0 960 540" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="960" height="540" rx="24" fill="#0D141D"/>
+  <rect x="24" y="24" width="912" height="492" rx="18" fill="#101720" stroke="#273244"/>
+  <text x="56" y="88" fill="#F3F6FB" font-family="Segoe UI, Arial, sans-serif" font-size="30" font-weight="700">Sessions and exports</text>
+  <rect x="56" y="132" width="848" height="332" rx="18" fill="#0B1118" stroke="#273244"/>
+  <text x="88" y="190" fill="#9BA9BC" font-family="Segoe UI, Arial, sans-serif" font-size="18">resume old sessions</text>
+  <text x="88" y="226" fill="#9BA9BC" font-family="Segoe UI, Arial, sans-serif" font-size="18">fork conversations</text>
+  <text x="88" y="262" fill="#9BA9BC" font-family="Segoe UI, Arial, sans-serif" font-size="18">export transcripts</text>
+  <text x="88" y="298" fill="#9BA9BC" font-family="Segoe UI, Arial, sans-serif" font-size="18">benchmark fixed tasks</text>
+  <text x="88" y="334" fill="#9BA9BC" font-family="Segoe UI, Arial, sans-serif" font-size="18">self-update</text>
+</svg>

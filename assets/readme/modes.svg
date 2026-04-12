@@ -1,0 +1,13 @@
+<svg width="960" height="540" viewBox="0 0 960 540" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="960" height="540" rx="24" fill="#0D141D"/>
+  <rect x="24" y="24" width="912" height="492" rx="18" fill="#101720" stroke="#273244"/>
+  <text x="56" y="88" fill="#F3F6FB" font-family="Segoe UI, Arial, sans-serif" font-size="30" font-weight="700">Runtime modes</text>
+  <rect x="56" y="136" width="848" height="96" rx="18" fill="#0B1118" stroke="#273244"/>
+  <text x="88" y="194" fill="#7FE6C1" font-family="Consolas, monospace" font-size="20">brokecli --mode json -p "summarize this repo"</text>
+  <rect x="56" y="268" width="260" height="180" rx="18" fill="#0B1118" stroke="#273244"/>
+  <rect x="350" y="268" width="260" height="180" rx="18" fill="#0B1118" stroke="#273244"/>
+  <rect x="644" y="268" width="260" height="180" rx="18" fill="#0B1118" stroke="#273244"/>
+  <text x="88" y="322" fill="#F3F6FB" font-family="Segoe UI, Arial, sans-serif" font-size="22">TUI</text>
+  <text x="382" y="322" fill="#F3F6FB" font-family="Segoe UI, Arial, sans-serif" font-size="22">JSON</text>
+  <text x="676" y="322" fill="#F3F6FB" font-family="Segoe UI, Arial, sans-serif" font-size="22">RPC</text>
+</svg>
