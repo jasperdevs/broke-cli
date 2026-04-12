@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="./assets/readme/hero.svg" alt="brokecli hero placeholder" width="860" />
+  <img src="./logos/brokecli-square.svg" alt="brokecli" width="120" />
 </p>
 
 ## Install
@@ -40,44 +40,11 @@ Inside the app:
 
 ## Features
 
-<table>
-<tr>
-<td width="40%" valign="middle">
-<h3>Caveman mode</h3>
-Compresses assistant output hard when you want blunt, low-noise answers without changing code blocks or exact technical terms.
-</td>
-<td width="60%">
-<img src="./assets/readme/routing.svg" alt="Budget-aware routing placeholder" width="100%" />
-</td>
-</tr>
-<tr>
-<td width="40%" valign="middle">
-<h3>Sidebar + workspace state</h3>
-The TUI keeps model, provider, workspace, and session state visible instead of hiding everything behind a blank prompt.
-</td>
-<td width="60%">
-<img src="./assets/readme/providers.svg" alt="Provider support placeholder" width="100%" />
-</td>
-</tr>
-<tr>
-<td width="40%" valign="middle">
-<h3>Slash commands + settings</h3>
-Built-in commands like <code>/connect</code>, <code>/login</code>, <code>/model</code>, <code>/settings</code>, <code>/btw</code>, <code>/budget</code>, and more are part of the main workflow.
-</td>
-<td width="60%">
-<img src="./assets/readme/modes.svg" alt="Runtime modes placeholder" width="100%" />
-</td>
-</tr>
-<tr>
-<td width="40%" valign="middle">
-<h3>Provider routing + session tools</h3>
-Mix hosted APIs, local runtimes, and supported native logins, then keep sessions, exports, self-update, and benchmark tasks in the same CLI.
-</td>
-<td width="60%">
-<img src="./assets/readme/sessions.svg" alt="Sessions and exports placeholder" width="100%" />
-</td>
-</tr>
-</table>
+- **Budget-aware routing**: pick providers and models directly, or steer toward cheaper capable options
+- **Caveman mode**: compressed, low-noise assistant output when you want answers fast
+- **Sidebar + workspace state**: model, provider, workspace, and session state stay visible in the TUI
+- **Slash commands + settings**: built-in workflows like `/connect`, `/login`, `/model`, `/settings`, `/btw`, and `/budget`
+- **Provider + session tools**: hosted APIs, local runtimes, native logins, exports, self-update, and benchmark tasks
 
 ## License
 
