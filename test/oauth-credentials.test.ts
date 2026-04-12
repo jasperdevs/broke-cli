@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { rmSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
@@ -6,6 +6,10 @@ import { resetAuthCacheForTests, saveCredentials } from "../src/core/auth.js";
 import { loadConfig, updateProviderConfig } from "../src/core/config.js";
 import { getProviderCredential } from "../src/core/provider-credentials.js";
 import { detectProviders } from "../src/ai/detect.js";
+
+vi.mock("../src/ai/native-cli.js", () => ({
+  hasNativeCommand: vi.fn(() => false),
+}));
 
 const authPath = join(homedir(), ".brokecli", "auth.json");
 
