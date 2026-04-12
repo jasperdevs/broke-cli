@@ -40,46 +40,46 @@ Inside the app:
 <tr>
 <td width="40%" valign="middle">
 <h3>Budget-aware routing</h3>
-Pick providers and models directly, or steer toward cheaper capable options.
+Pick providers and models directly, or use broke mode to bias toward cheaper capable options.
 </td>
 <td width="60%">
-<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" alt="" width="100%" />
+&nbsp;
 </td>
 </tr>
 <tr>
 <td width="40%" valign="middle">
 <h3>Caveman mode</h3>
-Compressed, low-noise assistant output when you want answers fast.
+Ultra, lite, and auto output compression when you want less filler and faster reads.
 </td>
 <td width="60%">
-<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" alt="" width="100%" />
+&nbsp;
 </td>
 </tr>
 <tr>
 <td width="40%" valign="middle">
 <h3>Sidebar + workspace state</h3>
-Model, provider, workspace, and session state stay visible in the TUI.
+The TUI keeps model, provider, workspace, and session state visible instead of hiding everything behind a blank prompt.
 </td>
 <td width="60%">
-<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" alt="" width="100%" />
+&nbsp;
 </td>
 </tr>
 <tr>
 <td width="40%" valign="middle">
-<h3>Slash commands + settings</h3>
-Built-in workflows like <code>/connect</code>, <code>/login</code>, <code>/model</code>, <code>/settings</code>, <code>/btw</code>, and <code>/budget</code>.
+<h3>30+ slash commands + settings</h3>
+Built-in workflows like <code>/connect</code>, <code>/login</code>, <code>/model</code>, <code>/settings</code>, <code>/btw</code>, <code>/budget</code>, <code>/export</code>, and <code>/resume</code>.
 </td>
 <td width="60%">
-<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" alt="" width="100%" />
+&nbsp;
 </td>
 </tr>
 <tr>
 <td width="40%" valign="middle">
 <h3>Provider + session tools</h3>
-Hosted APIs, local runtimes, native logins, exports, self-update, and benchmark tasks in one CLI.
+Hosted APIs, local runtimes, native logins, session persistence, exports, self-update, and benchmark tasks in one CLI.
 </td>
 <td width="60%">
-<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" alt="" width="100%" />
+&nbsp;
 </td>
 </tr>
 </table>
