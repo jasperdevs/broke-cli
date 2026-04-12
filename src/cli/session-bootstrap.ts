@@ -1,4 +1,4 @@
-import { pickDefault, type DetectedProvider } from "../ai/detect.js";
+import { pickCheapestDetectedModel, pickDefault, type DetectedProvider } from "../ai/detect.js";
 import { resolveVisibleProviderModelId, shouldUseNativeProvider, type ModelHandle } from "../ai/providers.js";
 import { loadPricing } from "../ai/cost.js";
 import { getSmallModelId } from "../ai/router.js";
@@ -44,10 +44,10 @@ export async function bootstrapSession(options: {
   }
 
   if (opts.broke) {
-    const def = pickDefault(providers);
-    if (def) {
-      providerId = def.id;
-      modelId = getSmallModelId(def.id);
+    const cheapest = pickCheapestDetectedModel(providers);
+    if (cheapest) {
+      providerId = cheapest.providerId;
+      modelId = cheapest.modelId;
     }
   } else if (opts.model) {
     const modelArg = opts.model.split(":")[0];

@@ -1,12 +1,24 @@
 import { getBaseUrl, loadConfig } from "../core/config.js";
 import { getProviderCredential } from "../core/provider-credentials.js";
 import { hasNativeCommand } from "./native-cli.js";
+import {
+  getModelPricing,
+  getProviderDefaultModelId,
+  getProviderNativeDefaultModelId,
+  getProviderSmallModelId,
+} from "./model-catalog.js";
+import { getProviderInfo } from "./provider-definitions.js";
 
 export interface DetectedProvider {
   id: string;
   name: string;
   available: boolean;
   reason: string;
+}
+
+export interface CheapestDetectedModel {
+  providerId: string;
+  modelId: string;
 }
 
 /** Probe a local HTTP server with a short timeout */
@@ -141,4 +153,36 @@ export function pickDefault(providers: DetectedProvider[]): DetectedProvider | u
     if (p) return p;
   }
   return undefined;
+}
+
+export function pickCheapestDetectedModel(providers: DetectedProvider[]): CheapestDetectedModel | null {
+  const candidates = providers
+    .filter((provider) => provider.available)
+    .map((provider) => {
+      const modelId = getProviderSmallModelId(provider.id)
+        ?? (provider.reason === "native login" ? getProviderNativeDefaultModelId(provider.id) : undefined)
+        ?? getProviderDefaultModelId(provider.id)
+        ?? getProviderInfo(provider.id)?.defaultModel;
+      if (!modelId) return null;
+      const pricing = getModelPricing(modelId, provider.id);
+      return {
+        providerId: provider.id,
+        modelId,
+        input: pricing.input,
+        output: pricing.output,
+      };
+    })
+    .filter((candidate): candidate is { providerId: string; modelId: string; input: number; output: number } => !!candidate);
+
+  if (candidates.length === 0) return null;
+
+  candidates.sort((left, right) =>
+    (left.input + left.output) - (right.input + right.output)
+    || left.input - right.input
+    || left.output - right.output
+    || left.providerId.localeCompare(right.providerId)
+    || left.modelId.localeCompare(right.modelId));
+
+  const cheapest = candidates[0]!;
+  return { providerId: cheapest.providerId, modelId: cheapest.modelId };
 }

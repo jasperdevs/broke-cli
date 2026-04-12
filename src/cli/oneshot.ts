@@ -1,5 +1,5 @@
 import type { LanguageModel, ToolSet } from "ai";
-import { pickDefault, type DetectedProvider } from "../ai/detect.js";
+import { pickCheapestDetectedModel, pickDefault, type DetectedProvider } from "../ai/detect.js";
 import { startNativeStream } from "../ai/native-stream.js";
 import { startStream } from "../ai/stream.js";
 import { buildSystemPrompt, resolveCavemanLevel } from "../core/context.js";
@@ -40,7 +40,7 @@ export interface OneShotStreamCallbacks {
 }
 
 export async function resolveOneShotModel(options: {
-  opts: { model?: string; provider?: string };
+  opts: { model?: string; provider?: string; broke?: boolean };
   providers: DetectedProvider[];
   providerRegistry: ProviderRegistry;
 }): Promise<{ activeModel: ModelHandle; providerId: string; modelId: string }> {
@@ -52,6 +52,14 @@ export async function resolveOneShotModel(options: {
     const [fromProvider, fromModel] = modelId.split("/", 2);
     providerId = fromProvider;
     modelId = fromModel;
+  }
+
+  if (opts.broke) {
+    const cheapest = pickCheapestDetectedModel(providers);
+    if (cheapest) {
+      providerId = cheapest.providerId;
+      modelId = cheapest.modelId;
+    }
   }
 
   if (!providerId) {

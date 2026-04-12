@@ -1,0 +1,42 @@
+import { describe, expect, it } from "vitest";
+import { pickCheapestDetectedModel } from "../src/ai/detect.js";
+import { resolveOneShotModel } from "../src/cli/oneshot.js";
+
+describe("budget-first provider selection", () => {
+  it("picks the cheapest available provider/model pair for broke mode", () => {
+    const resolved = pickCheapestDetectedModel([
+      { id: "anthropic", name: "Anthropic", available: true, reason: "API key" },
+      { id: "openai", name: "OpenAI", available: true, reason: "API key" },
+      { id: "ollama", name: "Ollama", available: true, reason: "running" },
+    ]);
+
+    expect(resolved).toEqual({
+      providerId: "ollama",
+      modelId: "qwen2.5-coder:7b",
+    });
+  });
+
+  it("uses the cheapest detected pair in one-shot broke mode", async () => {
+    const providerRegistry = {
+      createModel: (providerId: string, modelId?: string) => ({
+        provider: { id: providerId, name: providerId, defaultModel: modelId ?? "default", models: [modelId ?? "default"] },
+        modelId: modelId ?? "default",
+        runtime: "sdk",
+        model: {} as any,
+      }),
+    } as any;
+
+    const resolved = await resolveOneShotModel({
+      opts: { broke: true },
+      providers: [
+        { id: "anthropic", name: "Anthropic", available: true, reason: "API key" },
+        { id: "openai", name: "OpenAI", available: true, reason: "API key" },
+        { id: "ollama", name: "Ollama", available: true, reason: "running" },
+      ],
+      providerRegistry,
+    });
+
+    expect(resolved.providerId).toBe("ollama");
+    expect(resolved.modelId).toBe("qwen2.5-coder:7b");
+  });
+});
