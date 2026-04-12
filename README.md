@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/node-%3E%3D18.17-111111" alt="Node 18.17+" />
 </p>
 
-brokecli is a cross-platform terminal app for running AI coding workflows with explicit model, cost, and provider control. It ships as a scoped npm CLI and is verified in CI on macOS, Linux, and Windows.
+brokecli is a cross-platform AI coding CLI for the terminal.
 
 ## Install
 
@@ -25,23 +25,13 @@ npm install -g @jasperdevs/brokecli
 brokecli
 ```
 
-Inside the app:
+Use one of these inside the app:
 
 - Use `/connect <provider>` for API-key providers such as `openai`, `anthropic`, `google`, `groq`, `mistral`, `xai`, or `openrouter`
 - Use `/login <provider>` for native login flows such as `codex`, `github-copilot`, `google-gemini-cli`, or `google-antigravity`
-- Or stay non-interactive with `brokecli -p "summarize the repo"`
+- Or run one-shot mode with `brokecli -p "summarize the repo"`
 
 If a native CLI is already authenticated and available on `PATH`, brokecli will use it when that runtime is supported.
-
-## What Ships Today
-
-- Terminal UI plus `--print`, `--mode json`, and `--rpc`
-- Budget-aware model routing and token/cost visibility
-- Hosted provider support for OpenAI, Anthropic, Google, Groq, Mistral, xAI, and OpenRouter
-- Local provider support for Ollama, LM Studio, llama.cpp, Jan, and vLLM
-- Native-login support where available for Codex, Claude Code, GitHub Copilot, Google Cloud Code Assist, and Antigravity
-- Session persistence, slash commands, transcript export, self-update, and benchmark tasks
-- CI coverage on macOS, Linux, and Windows
 
 ## Common Commands
 
@@ -55,18 +45,15 @@ brokecli self-update
 brokecli benchmark --suite fixed
 ```
 
-## Config
-
-Global config lives at `~/.brokecli/config.json`.
-
-Project-scoped config lives at `.brokecli/config.json` in the current repo.
-
 ## Notes
 
+- Hosted providers: OpenAI, Anthropic, Google, Groq, Mistral, xAI, OpenRouter
+- Local providers: Ollama, LM Studio, llama.cpp, Jan, vLLM
+- Modes: TUI, `--print`, `--mode json`, `--rpc`
+- Config: `~/.brokecli/config.json` and `.brokecli/config.json`
 - Scoped npm package: `@jasperdevs/brokecli`
 - Node support: `>=18.17`
 - Verified in CI on `macos-latest`, `ubuntu-latest`, and `windows-latest`
-- Build artifacts are generated during `prepare`, `prepack`, and CI
 
 ## License
 
