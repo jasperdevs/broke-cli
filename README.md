@@ -11,20 +11,21 @@
   <img src="https://img.shields.io/badge/node-%3E%3D18.17-111111" alt="Node 18.17+" />
 </p>
 
+brokecli is a cross-platform terminal app for running AI coding workflows with explicit model, cost, and provider control. It ships as a scoped npm CLI and is verified in CI on macOS, Linux, and Windows.
+
 ## Install
 
 ```bash
 npm install -g @jasperdevs/brokecli
 ```
 
-## Quick Start
+## Start
 
 ```bash
-# launch the terminal ui
 brokecli
 ```
 
-Then, inside the app:
+Inside the app:
 
 - Use `/connect <provider>` for API-key providers such as `openai`, `anthropic`, `google`, `groq`, `mistral`, `xai`, or `openrouter`
 - Use `/login <provider>` for native login flows such as `codex`, `github-copilot`, `google-gemini-cli`, or `google-antigravity`
@@ -32,7 +33,7 @@ Then, inside the app:
 
 If a native CLI is already authenticated and available on `PATH`, brokecli will use it when that runtime is supported.
 
-## What It Actually Ships
+## What Ships Today
 
 - Terminal UI plus `--print`, `--mode json`, and `--rpc`
 - Budget-aware model routing and token/cost visibility
@@ -60,7 +61,7 @@ Global config lives at `~/.brokecli/config.json`.
 
 Project-scoped config lives at `.brokecli/config.json` in the current repo.
 
-## Compatibility
+## Notes
 
 - Scoped npm package: `@jasperdevs/brokecli`
 - Node support: `>=18.17`
