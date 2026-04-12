@@ -11,6 +11,14 @@ vi.mock("../src/ai/native-cli.js", () => ({
   hasNativeCommand: vi.fn(() => false),
 }));
 
+vi.mock("child_process", async () => {
+  const actual = await vi.importActual<typeof import("child_process")>("child_process");
+  return {
+    ...actual,
+    spawnSync: vi.fn(() => ({ status: 1, stdout: "", error: undefined })),
+  };
+});
+
 const authPath = join(homedir(), ".brokecli", "auth.json");
 
 afterEach(() => {
