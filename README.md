@@ -48,4 +48,4 @@ MIT
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=jasperdevs/broke-cli&type=Date)](https://star-history.com/#jasperdevs/broke-cli&Date)
+[![Star History Chart](https://api.star-history.com/image?repos=jasperdevs/broke-cli&type=Date)](https://star-history.com/#jasperdevs/broke-cli&Date)
