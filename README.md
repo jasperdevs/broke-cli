@@ -19,12 +19,14 @@ npm install -g @jasperdevs/brokecli
 
 ```bash
 brokecli
+brokecli --broke
 ```
 
 Or run one-shot mode:
 
 ```bash
 brokecli -p "summarize this repo"
+brokecli --broke -p "summarize this repo"
 ```
 
 Inside the app:
