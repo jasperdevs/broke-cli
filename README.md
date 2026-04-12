@@ -2,15 +2,11 @@
 <p align="center">
   <img src="./logos/brokecli-full.svg" alt="brokecli" width="280" />
 </p>
-<p align="center">A terminal-first AI coding CLI with budget-aware model routing.</p>
+<p align="center"><em>A terminal-first AI coding CLI with budget-aware model routing.</em></p>
 
 <p align="center">
   <a href="https://github.com/jasperdevs/broke-cli/stargazers"><img src="https://img.shields.io/github/stars/jasperdevs/broke-cli?style=flat&logo=github&label=stars&color=4c71f2" alt="GitHub stars" /></a>
   <img src="https://img.shields.io/badge/macOS%20%7C%20Linux%20%7C%20Windows-supported-555" alt="Supported on macOS, Linux, and Windows" />
-</p>
-
-<p align="center">
-  <img src="./logos/brokecli-square.svg" alt="brokecli" width="120" />
 </p>
 
 ## Install
