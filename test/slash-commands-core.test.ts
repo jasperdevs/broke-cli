@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Session } from "../src/core/session.js";
 import { handleSlashCommand } from "../src/cli/slash-commands.js";
 import { loadConfig, updateProviderConfig, updateSetting } from "../src/core/config.js";
@@ -12,6 +12,10 @@ import {
   rmSync,
   writeFileSync,
 } from "./slash-command-test-helpers.js";
+
+vi.mock("../src/ai/native-cli.js", () => ({
+  resolveNativeCommand: vi.fn((command: string) => command),
+}));
 
 afterEach(() => {
   cleanupSlashCommandFixtures();

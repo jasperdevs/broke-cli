@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { homedir } from "os";
+import { join } from "path";
 import stripAnsi from "strip-ansi";
 import { App } from "../src/tui/app.js";
 import { buildBudgetReport } from "../src/core/budget-insights.js";
@@ -22,7 +24,7 @@ describe("startup home view", () => {
     app.providerName = "openai";
     app.modelName = "gpt-5.4-mini";
     app.appVersion = "1.2.3";
-    app.cwd = "C:\\Users\\bunny\\Downloads\\broke-cli";
+    app.cwd = join(homedir(), "Downloads", "broke-cli");
     app.homeTip = "Use /resume to jump back in without wasting time on manual session hunting.";
     let rendered: string[] = [];
     app.screen = { height: 20, width: 100, hasSidebar: true, mainWidth: 73, sidebarWidth: 24, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
@@ -32,7 +34,7 @@ describe("startup home view", () => {
     expect(stripAnsi(firstCardLine)).toContain("╭");
     expect(output).toContain("Welcome");
     expect(output).toContain("GPT-5.4 mini");
-    expect(output).toContain("~\\Downloads\\broke-cli");
+    expect(output).toContain(`~${process.platform === "win32" ? "\\" : "/"}Downloads${process.platform === "win32" ? "\\" : "/"}broke-cli`);
     expect(output).toContain("Status");
     expect(output).toContain("/resume");
     expect(output).not.toContain("Files");
@@ -319,7 +321,6 @@ describe("input editing", () => {
     app.handleKey({ name: "return", char: "", ctrl: false, meta: false, shift: true });
     expect(app.input.getText()).toBe("line one\n");
   });
-
   it("renders a live pending shimmer state for /btw bubbles", () => {
     const app = new App() as any;
     app.openBtwBubble({ question: "status?", answer: "", modelLabel: "Claude Sonnet 4.6", pending: true });
@@ -413,9 +414,6 @@ describe("input editing", () => {
     expect(app.input.getText()).toBe("first");
     expect(app.pendingMessages).toEqual([]);
   });
-
-
-
   it("clears queued messages with Escape when idle and the editor is empty", () => {
     const app = new App() as any;
     app.addPendingMessage("first", [], "followup");

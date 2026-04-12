@@ -1,9 +1,15 @@
-import { mkdtempSync, rmSync, writeFileSync } from "fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
 import { afterEach, describe, expect, it } from "vitest";
 import { ContextOptimizer } from "../src/core/context-optimizer.js";
 import { grepDirect, readFileDirect, semSearchDirect, writeFileDirect } from "../src/tools/file-ops.js";
 import { setActiveToolContext } from "../src/tools/runtime-context.js";
+
+function makeScratchDir(prefix: string): string {
+  const root = join(process.cwd(), ".tmp");
+  mkdirSync(root, { recursive: true });
+  return mkdtempSync(join(root, prefix));
+}
 
 describe("tool memoization", () => {
   const tempDirs: string[] = [];
@@ -14,7 +20,7 @@ describe("tool memoization", () => {
   });
 
   it("reuses unchanged file reads across turns unless refresh is requested", () => {
-    const dir = mkdtempSync(join(process.cwd(), ".tmp", "brokecli-memo-read-"));
+    const dir = makeScratchDir("brokecli-memo-read-");
     tempDirs.push(dir);
     const file = join(dir, "note.ts");
     writeFileSync(file, "export const value = 1;\n", "utf-8");
@@ -40,7 +46,7 @@ describe("tool memoization", () => {
   });
 
   it("reuses unchanged grep results across adjacent turns", () => {
-    const dir = mkdtempSync(join(process.cwd(), ".tmp", "brokecli-memo-grep-"));
+    const dir = makeScratchDir("brokecli-memo-grep-");
     tempDirs.push(dir);
     writeFileSync(join(dir, "auth.ts"), "export function refreshAuthToken() {\n  return 'ok';\n}\n", "utf-8");
 
@@ -65,7 +71,7 @@ describe("tool memoization", () => {
   });
 
   it("reuses unchanged semantic search results across adjacent turns", () => {
-    const dir = mkdtempSync(join(process.cwd(), ".tmp", "brokecli-memo-sem-"));
+    const dir = makeScratchDir("brokecli-memo-sem-");
     tempDirs.push(dir);
     writeFileSync(join(dir, "auth.ts"), "export function refreshAuthToken() {\n  return 'ok';\n}\n", "utf-8");
 
@@ -88,7 +94,7 @@ describe("tool memoization", () => {
   });
 
   it("invalidates read memoization after writes", () => {
-    const dir = mkdtempSync(join(process.cwd(), ".tmp", "brokecli-memo-write-"));
+    const dir = makeScratchDir("brokecli-memo-write-");
     tempDirs.push(dir);
     const file = join(dir, "note.ts");
     writeFileSync(file, "export const value = 1;\n", "utf-8");
