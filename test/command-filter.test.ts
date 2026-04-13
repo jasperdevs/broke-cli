@@ -31,6 +31,9 @@ describe("command-aware filtering", () => {
     expect(names).toContain("extensions");
     expect(names).toContain("packages");
     expect(names).toContain("providers");
+    expect(names).toContain("projects");
+    expect(names).toContain("skills");
+    expect(names).toContain("export");
   });
 
   it("hides context-sensitive commands when they are not usable", () => {

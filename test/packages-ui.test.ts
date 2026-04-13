@@ -77,6 +77,7 @@ describe("package UI surfaces", () => {
     expect(packageManager.installPackage).toHaveBeenCalledWith("npm:@demo/skill-pack", { local: true });
     expect(reloaded).toBe(1);
     expect(app.statusMessage).toContain("Installed npm:@demo/skill-pack in project scope");
+    expect(opened[2]?.title).toBe("Packages");
   });
 
   it("offers package actions for installed packages", async () => {

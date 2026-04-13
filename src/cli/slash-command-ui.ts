@@ -215,15 +215,21 @@ export const UI_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<UiSlas
       ];
       app.openItemPicker("Session", items, (id: string) => {
         if (id !== "__delete__") return;
-        SessionManager.open(session.getId(), sessionDir || undefined, session.getCwd()).deleteCurrentSession();
-        const fresh = new Session();
-        fresh.setCwd(session.getCwd());
-        if (activeModel) fresh.setProviderModel(activeModel.provider.name, currentModelId || activeModel.modelId);
-        onSessionReplace(fresh);
-        app.clearMessages();
-        app.updateUsage(0, 0, 0);
-        app.setSessionName?.(fresh.getName());
-        app.setStatus?.("Deleted persisted session and started a fresh thread.");
+        void app.showQuestion("Type DELETE to remove this session").then((value: string) => {
+          if (value.trim() !== "DELETE") {
+            app.setStatus?.("Session delete cancelled.");
+            return;
+          }
+          SessionManager.open(session.getId(), sessionDir || undefined, session.getCwd()).deleteCurrentSession();
+          const fresh = new Session();
+          fresh.setCwd(session.getCwd());
+          if (activeModel) fresh.setProviderModel(activeModel.provider.name, currentModelId || activeModel.modelId);
+          onSessionReplace(fresh);
+          app.clearMessages();
+          app.updateUsage(0, 0, 0);
+          app.setSessionName?.(fresh.getName());
+          app.setStatus?.("Deleted persisted session and started a fresh thread.");
+        });
       }, { kind: "session", closeOnSelect: false });
       return { handled: true };
     },
@@ -338,7 +344,6 @@ export const UI_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<UiSlas
   },
   {
     names: ["copy"],
-    showInPicker: false,
     description: "copy last response",
     run: ({ app }) => {
       const lastContent = app.getLastAssistantContent();
@@ -359,7 +364,6 @@ export const UI_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<UiSlas
   },
   {
     names: ["export"],
-    showInPicker: false,
     description: "export or copy transcript",
     run: ({ app, session, activeModel, currentModelId, text }) => {
       openExportMenu({ app, session, activeModel, currentModelId, text });
@@ -377,7 +381,6 @@ export const UI_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<UiSlas
   },
   {
     names: ["projects"],
-    showInPicker: false,
     description: "switch or search recent projects",
     run: ({ app, restText, onProjectChange }) => {
       openProjectsMenu(app, restText, onProjectChange);
@@ -435,7 +438,6 @@ export const UI_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<UiSlas
   },
   {
     names: ["skills"],
-    showInPicker: false,
     description: "list loaded skills",
     run: ({ app }) => {
       const skills = listSkills();
@@ -456,7 +458,6 @@ export const UI_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<UiSlas
   },
   {
     names: ["logout"],
-    showInPicker: false,
     description: "clear stored auth",
     run: async ({ app, restText, activeModel, refreshProviderState }) => {
       await handleLogoutMenu({ app, restText, activeModel, refreshProviderState });

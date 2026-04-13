@@ -306,7 +306,9 @@ export function renderHomeBox(app: AppState, width: number, title: string, body:
 
 export function renderHomeView(app: AppState, mainW: number, topHeight: number): string[] {
   const settings = getSettings();
-  const enabledExtensions = listExtensions().filter((entry) => entry.enabled).length;
+  const extensions = listExtensions();
+  const enabledExtensions = extensions.filter((entry) => entry.enabled).length;
+  const brokenExtensions = extensions.filter((entry) => entry.enabled && !!entry.error).length;
   const promptTemplates = listTemplates().length;
   const skillCount = listSkills().length;
   const packageCount = listInstalledPackages().length;
@@ -317,7 +319,10 @@ export function renderHomeView(app: AppState, mainW: number, topHeight: number):
   const workspaceLabel = app.formatShortCwd(Math.max(10, mainW - 8));
   const summaryDetails = settings.quietStartup ? [] : [
     { label: "Providers", value: app.detectedProviders.length > 0 ? app.detectedProviders.join(", ") : "No providers detected yet" },
-    { label: "Workspace", value: `${existsSync(join(process.cwd(), "AGENTS.md")) ? "AGENTS loaded" : "No AGENTS.md"} · ${enabledExtensions} ext · ${skillCount} skills · ${promptTemplates} prompts · ${packageCount} pkg` },
+    {
+      label: "Workspace",
+      value: `${existsSync(join(process.cwd(), "AGENTS.md")) ? "AGENTS loaded" : "No AGENTS.md"} · ${enabledExtensions} ext${brokenExtensions > 0 ? ` · ${brokenExtensions} broken` : ""} · ${skillCount} skills · ${promptTemplates} prompts · ${packageCount} pkg`,
+    },
   ];
   const quickActions = [
     { label: "Start", value: app.modelName === "none" ? "/model to choose a model" : "Type a prompt and press enter" },

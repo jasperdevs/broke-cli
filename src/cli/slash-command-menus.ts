@@ -261,6 +261,7 @@ export async function openPackagesMenu(app: SlashCommandApp, hooks: ExtensionHoo
         void installPackage(source, { local: targetId === "project" }).then(() => {
           hooks.reload?.();
           app.setStatus?.(`Installed ${source} in ${targetId === "project" ? "project" : "global"} scope.`);
+          void openPackagesMenu(app, hooks);
         }).catch((error: Error) => {
           app.setStatus?.(`Package install failed: ${error.message}`);
         });
