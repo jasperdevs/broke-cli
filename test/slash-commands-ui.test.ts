@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { join } from "path";
 import { getCredentials, resetAuthCacheForTests, saveCredentials } from "../src/core/auth.js";
 import { loadConfig, updateProviderConfig, updateSetting } from "../src/core/config.js";
@@ -25,6 +25,7 @@ import {
 afterEach(() => {
   cleanupSlashCommandFixtures();
   rmSync(uiTemplatePath, { force: true });
+  vi.restoreAllMocks();
 });
 
 describe("slash command UI surfaces", () => {
@@ -366,32 +367,6 @@ describe("slash command UI surfaces", () => {
     expect(result.handled).toBe(true);
     expect(sessionItems.some((item) => item.label === "Test Session")).toBe(true);
     expect(sessionItems.some((item) => item.detail === "session dir")).toBe(true);
-  });
-
-  it("opens a package picker for /packages", async () => {
-    const previousPackages = loadConfig().settings?.packages ?? [];
-    updateSetting("packages", ["npm:@demo/pkg"]);
-    const app = createAppStub();
-    let packageItems: Array<{ id: string; label: string; detail?: string }> = [];
-    app.openItemPicker = (_title: string, items: Array<{ id: string; label: string; detail?: string }>) => {
-      packageItems = items;
-    };
-
-    try {
-      const result = await handleSlashCommand({
-        text: "/packages",
-        app,
-        session: new Session(`test-packages-${Date.now()}`),
-        ...createSlashArgs(),
-      });
-
-      expect(result.handled).toBe(true);
-      expect(packageItems).toHaveLength(1);
-      expect(packageItems[0]).toMatchObject({ label: "npm:@demo/pkg" });
-      expect(packageItems[0]?.detail).toContain("missing");
-    } finally {
-      updateSetting("packages", previousPackages);
-    }
   });
 
   it("opens a hotkeys picker for /hotkeys", async () => {

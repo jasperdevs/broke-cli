@@ -220,9 +220,9 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
     names: ["packages"],
     showInPicker: false,
     description: "inspect configured packages",
-    run: ({ app }) => {
+    run: async ({ app, restText }) => {
       app.dismissBtwBubble?.();
-      openPackagesMenu(app);
+      await openPackagesMenu(app, restText);
       return { handled: true };
     },
   },

@@ -5,7 +5,8 @@ import { getSettings, loadConfig, updateProviderConfig, updateSetting, type Auto
 import { getProviderCredential } from "../core/provider-credentials.js";
 import { listProjects } from "../core/projects.js";
 import { listExtensions } from "../core/extensions.js";
-import { describePackageResources, listInstalledPackages } from "../core/package-manager.js";
+import { describePackageResources, installPackage, listInstalledPackages } from "../core/package-manager.js";
+import { searchPackageRegistry } from "../core/package-search.js";
 import { toggleExtensionEnabled } from "../core/permissions.js";
 import { Session } from "../core/session.js";
 import type { Keypress } from "../utils/keypress-types.js";
@@ -179,7 +180,36 @@ export function openExtensionsMenu(app: SlashCommandApp, hooks: ExtensionHooks):
   return true;
 }
 
-export function openPackagesMenu(app: SlashCommandApp): boolean {
+export async function openPackagesMenu(app: SlashCommandApp, restText = ""): Promise<boolean> {
+  const query = restText.trim();
+  if (query) {
+    const results = await searchPackageRegistry(query, 12);
+    if (results.length === 0) {
+      return openEmptyItemMenu(app, "Package Search", `no npm packages for \"${query}\"`, "packages");
+    }
+    const items = results.map((entry) => {
+      const resourceParts = [
+        entry.resources.extensions ? `${entry.resources.extensions} ext` : "",
+        entry.resources.skills ? `${entry.resources.skills} skill` : "",
+        entry.resources.prompts ? `${entry.resources.prompts} prompt` : "",
+        entry.resources.themes ? `${entry.resources.themes} theme` : "",
+      ].filter(Boolean).join(" · ");
+      return {
+        id: entry.source,
+        label: entry.name,
+        detail: [entry.version, resourceParts || "-", entry.description].filter(Boolean).join(" · "),
+      };
+    });
+    app.openItemPicker("Package Search", items, (source: string) => {
+      void installPackage(source).then(() => {
+        app.setStatus?.(`Installed ${source}`);
+      }).catch((error: Error) => {
+        app.setStatus?.(`Package install failed: ${error.message}`);
+      });
+    }, { kind: "packages" });
+    return true;
+  }
+
   const packages = listInstalledPackages();
   if (packages.length === 0) {
     return openEmptyItemMenu(app, "Packages", "no configured packages", "packages");
