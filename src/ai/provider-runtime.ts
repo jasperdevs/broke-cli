@@ -6,13 +6,28 @@ import { createXai } from "@ai-sdk/xai";
 import { getApiKey, getProviderCredential } from "../core/provider-credentials.js";
 import { getProviderNativeDefaultModelId, getProviderNativePreferredDisplayModelIds } from "./model-catalog.js";
 import { hasNativeCommand } from "./native-cli.js";
-import { type ModelHandle, PROVIDERS } from "./provider-definitions.js";
+import { type ModelHandle, PROVIDERS, type ProviderInfo } from "./provider-definitions.js";
 import {
   getConfiguredProviderAuthHeader,
   getConfiguredProviderBaseUrl,
   getConfiguredProviderHeaders,
 } from "../core/models-config.js";
 import { applyConfiguredProviderOverrides } from "./provider-overrides.js";
+
+export function resolveProviderSdkConfig(providerId: string, info: ProviderInfo): {
+  baseURL?: string;
+  headers?: Record<string, string>;
+  apiKey?: string;
+} {
+  const baseURL = info.baseUrl ?? getConfiguredProviderBaseUrl(providerId);
+  const mergedHeaders = {
+    ...(info.headers ?? {}),
+    ...(getConfiguredProviderHeaders(providerId) ?? {}),
+  };
+  const headers = Object.keys(mergedHeaders).length > 0 ? mergedHeaders : undefined;
+  const apiKey = getApiKey(providerId) ?? (getConfiguredProviderAuthHeader(providerId) ? "" : undefined);
+  return { baseURL, headers, apiKey };
+}
 
 export function shouldUseNativeProvider(providerId: string): boolean {
   if (providerId !== "anthropic" && providerId !== "codex") return false;
@@ -55,25 +70,18 @@ export function createModel(providerId: string, modelId?: string): ModelHandle {
   }
 
   if (info.custom && info.apiType) {
-    const baseURL = info.baseUrl ?? getConfiguredProviderBaseUrl(providerId);
-    const apiKey = getApiKey(providerId);
-    const customHeaders = {
-      ...(info.headers ?? {}),
-      ...(getConfiguredProviderHeaders(providerId) ?? {}),
-    };
-    const headers = Object.keys(customHeaders).length > 0 ? customHeaders : undefined;
-    const resolvedApiKey = apiKey ?? (getConfiguredProviderAuthHeader(providerId) ? "" : undefined);
+    const { baseURL, headers, apiKey } = resolveProviderSdkConfig(providerId, info);
     switch (info.apiType) {
       case "openai-completions": {
-        const openai = createOpenAI({ baseURL, apiKey: resolvedApiKey ?? "configured-provider", headers });
+        const openai = createOpenAI({ baseURL, apiKey: apiKey ?? "configured-provider", headers });
         return { model: openai.chat(model), provider: info, modelId: model, runtime: "sdk" };
       }
       case "anthropic-messages": {
-        const anthropic = createAnthropic({ baseURL, apiKey: resolvedApiKey ?? "configured-provider", headers });
+        const anthropic = createAnthropic({ baseURL, apiKey: apiKey ?? "configured-provider", headers });
         return { model: anthropic(model), provider: info, modelId: model, runtime: "sdk" };
       }
       case "google-generative-ai": {
-        const google = createGoogleGenerativeAI({ baseURL, apiKey: resolvedApiKey ?? "configured-provider", headers });
+        const google = createGoogleGenerativeAI({ baseURL, apiKey: apiKey ?? "configured-provider", headers });
         return { model: google(model), provider: info, modelId: model, runtime: "sdk" };
       }
       default:
@@ -83,15 +91,18 @@ export function createModel(providerId: string, modelId?: string): ModelHandle {
 
   switch (providerId) {
     case "anthropic": {
-      const anthropic = createAnthropic({ apiKey: getApiKey("anthropic") });
+      const { baseURL, headers, apiKey } = resolveProviderSdkConfig(providerId, info);
+      const anthropic = createAnthropic({ apiKey, baseURL, headers });
       return { model: anthropic(model), provider: info, modelId: model, runtime: "sdk" };
     }
     case "openai": {
-      const openai = createOpenAI({ apiKey: getApiKey("openai") });
+      const { baseURL, headers, apiKey } = resolveProviderSdkConfig(providerId, info);
+      const openai = createOpenAI({ apiKey, baseURL, headers });
       return { model: openai.chat(model), provider: info, modelId: model, runtime: "sdk" };
     }
     case "codex": {
-      const openai = createOpenAI({ apiKey: getApiKey("codex") });
+      const { baseURL, headers, apiKey } = resolveProviderSdkConfig(providerId, info);
+      const openai = createOpenAI({ apiKey, baseURL, headers });
       return { model: openai.chat(model), provider: info, modelId: model, runtime: "sdk" };
     }
     case "ollama": {
@@ -130,28 +141,35 @@ export function createModel(providerId: string, modelId?: string): ModelHandle {
       return { model: vllm.chat(model), provider: info, modelId: model, runtime: "sdk" };
     }
     case "google": {
-      const google = createGoogleGenerativeAI({ apiKey: getApiKey("google") });
+      const { baseURL, headers, apiKey } = resolveProviderSdkConfig(providerId, info);
+      const google = createGoogleGenerativeAI({ apiKey, baseURL, headers });
       return { model: google(model), provider: info, modelId: model, runtime: "sdk" };
     }
     case "mistral": {
-      const mistral = createMistral({ apiKey: getApiKey("mistral") });
+      const { baseURL, headers, apiKey } = resolveProviderSdkConfig(providerId, info);
+      const mistral = createMistral({ apiKey, baseURL, headers });
       return { model: mistral(model), provider: info, modelId: model, runtime: "sdk" };
     }
     case "groq": {
+      const { baseURL, headers, apiKey } = resolveProviderSdkConfig(providerId, info);
       const groq = createOpenAI({
-        baseURL: "https://api.groq.com/openai/v1",
-        apiKey: getApiKey("groq"),
+        baseURL: baseURL ?? "https://api.groq.com/openai/v1",
+        apiKey,
+        headers,
       });
       return { model: groq(model), provider: info, modelId: model, runtime: "sdk" };
     }
     case "xai": {
-      const xai = createXai({ apiKey: getApiKey("xai") });
+      const { baseURL, headers, apiKey } = resolveProviderSdkConfig(providerId, info);
+      const xai = createXai({ apiKey, baseURL, headers });
       return { model: xai(model), provider: info, modelId: model, runtime: "sdk" };
     }
     case "openrouter": {
+      const { baseURL, headers, apiKey } = resolveProviderSdkConfig(providerId, info);
       const openrouter = createOpenAI({
-        baseURL: "https://openrouter.ai/api/v1",
-        apiKey: getApiKey("openrouter"),
+        baseURL: baseURL ?? "https://openrouter.ai/api/v1",
+        apiKey,
+        headers,
       });
       return { model: openrouter(model), provider: info, modelId: model, runtime: "sdk" };
     }
