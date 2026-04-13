@@ -64,4 +64,53 @@ describe("session UI actions", () => {
     expect(replaced).toBeNull();
     expect(app.statusMessage).toContain("cancelled");
   });
+
+  it("can rename the current session from /session", async () => {
+    const app = createAppStub();
+    const session = new Session(`session-rename-${Date.now()}`);
+    session.setName("Old Name");
+    app.showQuestion = async () => "New Name";
+
+    let onSelect: ((id: string) => void) | undefined;
+    app.openItemPicker = (_title: string, _items: Array<{ id: string; label: string; detail?: string }>, nextOnSelect: (id: string) => void) => {
+      onSelect = nextOnSelect;
+    };
+
+    await handleSlashCommand({
+      text: "/session",
+      app,
+      session,
+      ...createSlashArgs(),
+    });
+
+    onSelect?.("__rename__");
+    await Promise.resolve();
+    expect(session.getName()).toBe("New Name");
+    expect(app.statusMessage).toContain("Session renamed to New Name");
+  });
+
+  it("drafts /tree from the session action menu", async () => {
+    const app = createAppStub();
+    const session = new Session(`session-tree-${Date.now()}`);
+    let drafted = "";
+    app.setDraft = (value: string) => {
+      drafted = value;
+    };
+
+    let onSelect: ((id: string) => void) | undefined;
+    app.openItemPicker = (_title: string, _items: Array<{ id: string; label: string; detail?: string }>, nextOnSelect: (id: string) => void) => {
+      onSelect = nextOnSelect;
+    };
+
+    await handleSlashCommand({
+      text: "/session",
+      app,
+      session,
+      ...createSlashArgs(),
+    });
+
+    onSelect?.("__tree__");
+    expect(drafted).toBe("/tree");
+    expect(app.statusMessage).toContain("Drafted /tree");
+  });
 });

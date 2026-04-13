@@ -327,7 +327,7 @@ export function getCommandMatches(app: AppState) {
   return findCommandMatches(app.input.getText(), {
     hasMessages: app.messages.length > 0,
     hasAssistantContent: !!app.getLastAssistantContent(),
-    canResume: true,
+    canResume: getSettings().autoSaveSessions,
     hasStoredAuth: configuredAuth || listAuthenticated().length > 0,
   });
 }

@@ -26,6 +26,10 @@ function nextProviderCommand(providerId: string): string {
   return `/connect ${providerId}`;
 }
 
+function providerNeedsLogin(providerId: string): boolean {
+  return providerId === "github-copilot" || providerId === "google-gemini-cli" || providerId === "google-antigravity";
+}
+
 export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<CoreSlashCommandContext, SlashCommandResult>> = [
   {
     names: ["help"],
@@ -238,7 +242,7 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
   {
     names: ["providers"],
     description: "inspect provider availability",
-    run: async ({ app }) => {
+    run: async ({ app, providerRegistry, refreshProviderState, isSkippedPromptAnswer, isValidHttpBaseUrl }) => {
       app.dismissBtwBubble?.();
       const providers = await inspectProviders();
       const items = providers.map((provider) => ({
@@ -249,13 +253,51 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
       app.openItemPicker("Providers", items, (providerId: string) => {
         const provider = providers.find((entry) => entry.id === providerId);
         if (!provider) return;
-        if (provider.available) {
-          app.setStatus?.(`${provider.name}: ${provider.reason}`);
-          return;
-        }
-        const command = nextProviderCommand(provider.id);
-        app.setDraft?.(command);
-        app.setStatus?.(`${provider.name}: ${provider.reason}. Drafted ${command}.`);
+        void (async () => {
+          if (provider.available) {
+            app.setStatus?.(`${provider.name}: ${provider.reason}`);
+            return;
+          }
+          if (provider.reason === "disabled") {
+            app.setStatus?.(`${provider.name} is disabled in config.`);
+            return;
+          }
+          if (provider.reason.startsWith("start http://") || provider.reason.startsWith("start https://")) {
+            app.setStatus?.(`${provider.name}: ${provider.reason}`);
+            return;
+          }
+          if (providerNeedsLogin(provider.id)) {
+            await runLoginFlow({
+              providerId: provider.id,
+              app,
+              providerRegistry,
+              refreshProviderState,
+            });
+            return;
+          }
+          if (provider.id === "anthropic" && provider.reason === "claude CLI missing") {
+            app.setStatus?.("Claude Code login exists, but the claude CLI is not on PATH.");
+            return;
+          }
+          if (provider.id === "codex" && provider.reason === "codex CLI missing") {
+            app.setStatus?.("Codex login exists, but the codex CLI is not on PATH.");
+            return;
+          }
+          await runConnectFlow({
+            providerId: provider.id,
+            app,
+            providerRegistry,
+            refreshProviderState,
+            isSkippedPromptAnswer,
+            isValidHttpBaseUrl,
+          });
+          const nextCommand = nextProviderCommand(provider.id);
+          if (provider.reason.startsWith("run ")) {
+            app.setStatus?.(`${provider.name}: started ${nextCommand}.`);
+          }
+        })().catch((error: Error) => {
+          app.setStatus?.(`${provider.name}: ${(error as Error).message}`);
+        });
       }, { kind: "providers", closeOnSelect: false });
       return { handled: true };
     },

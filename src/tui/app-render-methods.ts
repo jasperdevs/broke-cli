@@ -317,8 +317,13 @@ export function renderHomeView(app: AppState, mainW: number, topHeight: number):
     ? "Pick one with /model, then start chatting."
     : `Ready in ${app.mode} mode with ${app.modelRuntime}.`;
   const workspaceLabel = app.formatShortCwd(Math.max(10, mainW - 8));
+  const providerSummary = app.detectedProviders.length === 0
+    ? "No providers ready · /providers for diagnostics"
+    : app.detectedProviders.length <= 2
+      ? `${app.detectedProviders.join(", ")} · /providers for diagnostics`
+      : `${app.detectedProviders.length} providers ready · /providers for diagnostics`;
   const summaryDetails = settings.quietStartup ? [] : [
-    { label: "Providers", value: app.detectedProviders.length > 0 ? app.detectedProviders.join(", ") : "No providers detected yet" },
+    { label: "Providers", value: providerSummary },
     {
       label: "Workspace",
       value: `${existsSync(join(process.cwd(), "AGENTS.md")) ? "AGENTS loaded" : "No AGENTS.md"} · ${enabledExtensions} ext${brokenExtensions > 0 ? ` · ${brokenExtensions} broken` : ""} · ${skillCount} skills · ${promptTemplates} prompts · ${packageCount} pkg`,

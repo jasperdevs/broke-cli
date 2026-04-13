@@ -18,6 +18,7 @@ import { createSlashCommandRegistry, type RegisteredSlashCommand } from "./slash
 import type { ParsedSlashCommand, SlashCommandApp, SlashCommandResult } from "./slash-command-types.js";
 import type { ModelHandle } from "../ai/providers.js";
 import type { PickerItem } from "../ui-contracts.js";
+import { openSessionMenu } from "./session-menu.js";
 
 async function loadBudgetReports(session: Session): Promise<{ all: BudgetReport; session: BudgetReport }> {
   const sessionDir = getSettings().sessionDir?.trim() || undefined;
@@ -48,6 +49,7 @@ function insertPromptAsset(app: SlashCommandApp, text: string): void {
   const joiner = !current ? "" : current.endsWith("\n") ? "\n" : "\n\n";
   app.setDraft?.(`${current}${joiner}${normalized}`);
 }
+
 async function chooseMenuItem(app: SlashCommandApp, title: string, items: PickerItem[], kind: "tree" | "hotkeys" | "name"): Promise<string> {
   return new Promise((resolve) => {
     let settled = false;
@@ -193,44 +195,7 @@ export const UI_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<UiSlas
     names: ["session"],
     description: "show active session info",
     run: ({ app, session, activeModel, currentModelId, onSessionReplace }) => {
-      const sessionDir = getSettings().sessionDir?.trim();
-      const sessionFile = SessionManager.open(session.getId(), sessionDir || undefined, session.getCwd()).getSessionFile() ?? "in-memory";
-      const items = [
-        { id: "__delete__", label: "Delete session", detail: "remove the persisted session and clear the current thread", tone: "danger" as const },
-        { id: "name", label: session.getName(), detail: "name" },
-        { id: "id", label: session.getId(), detail: "id" },
-        { id: "model", label: `${session.getProvider() || activeModel?.provider.name || "---"}/${session.getModel() || currentModelId || "none"}`, detail: "model" },
-        { id: "cwd", label: session.getCwd(), detail: "directory" },
-        { id: "file", label: sessionFile, detail: "session file" },
-        { id: "created", label: formatRelativeMinutes(session.getCreatedAt()), detail: "created" },
-        { id: "updated", label: formatRelativeMinutes(session.getUpdatedAt()), detail: "updated" },
-        { id: "entries", label: String(session.getEntryCount()), detail: "entries" },
-        { id: "path", label: String(session.getActivePathLength()), detail: "active path" },
-        { id: "tokens", label: String(session.getTotalTokens()), detail: "total tokens" },
-        { id: "input", label: String(session.getTotalInputTokens()), detail: "input tokens" },
-        { id: "output", label: String(session.getTotalOutputTokens()), detail: "output tokens" },
-        { id: "cost", label: session.getTotalCost().toFixed(6), detail: "session cost" },
-        { id: "storage", label: getSettings().sessionDir?.trim() || "default", detail: "session dir" },
-        { id: "persist", label: String(getSettings().autoSaveSessions), detail: "auto-save" },
-      ];
-      app.openItemPicker("Session", items, (id: string) => {
-        if (id !== "__delete__") return;
-        void app.showQuestion("Type DELETE to remove this session").then((value: string) => {
-          if (value.trim() !== "DELETE") {
-            app.setStatus?.("Session delete cancelled.");
-            return;
-          }
-          SessionManager.open(session.getId(), sessionDir || undefined, session.getCwd()).deleteCurrentSession();
-          const fresh = new Session();
-          fresh.setCwd(session.getCwd());
-          if (activeModel) fresh.setProviderModel(activeModel.provider.name, currentModelId || activeModel.modelId);
-          onSessionReplace(fresh);
-          app.clearMessages();
-          app.updateUsage(0, 0, 0);
-          app.setSessionName?.(fresh.getName());
-          app.setStatus?.("Deleted persisted session and started a fresh thread.");
-        });
-      }, { kind: "session", closeOnSelect: false });
+      openSessionMenu({ app, session, activeModel, currentModelId, onSessionReplace });
       return { handled: true };
     },
   },
@@ -330,7 +295,7 @@ export const UI_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<UiSlas
     run: ({ app }) => {
       try {
         const raw = execSync("git log -n 8 --pretty=format:%h%x09%s", { encoding: "utf-8", cwd: process.cwd() }).trim();
-        const items = raw.split(/\r?\n/).filter(Boolean).map((line, index) => {
+        const items = raw.split(/\r?\n/).filter(Boolean).map((line: string, index: number) => {
           const [sha, ...rest] = line.split("\t");
           return { id: `${index}`, label: rest.join(" ").trim(), detail: sha };
         });
