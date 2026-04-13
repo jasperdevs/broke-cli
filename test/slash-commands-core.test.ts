@@ -410,6 +410,42 @@ describe("slash command handling", () => {
     }
   });
 
+  it("filters unsupported native Codex models out of /model", async () => {
+    const app = createAppStub();
+    let pickerOptions: any[] = [];
+    app.openModelPicker = (options: any[]) => {
+      pickerOptions = options;
+    };
+
+    const result = await handleSlashCommand({
+      text: "/model",
+      app,
+      session: new Session(`test-model-native-codex-${Date.now()}`),
+      activeModel: {
+        provider: { id: "codex", name: "Codex", defaultModel: "gpt-5.4-mini", models: ["gpt-5.4-mini"] },
+        modelId: "gpt-5.4-mini",
+        runtime: "native-cli",
+      } as any,
+      ...createSlashArgs({
+        providerRegistry: {
+          getDetectedProviders: () => [{ id: "codex", name: "Codex", available: true, reason: "native login" }],
+          createModel: (providerId: string, modelId: string) => ({
+            provider: { id: providerId, name: "Codex", defaultModel: "gpt-5.4-mini", models: ["gpt-5.4-mini"] },
+            modelId,
+            runtime: "native-cli",
+          }),
+        } as any,
+        buildVisibleModelOptions: () => [
+          { providerId: "codex", providerName: "Codex", modelId: "gpt-5-mini", displayName: "GPT-5 mini", active: false },
+          { providerId: "codex", providerName: "Codex", modelId: "gpt-5.4-mini", displayName: "GPT-5.4 mini", active: true },
+        ] as any,
+      }),
+    });
+
+    expect(result.handled).toBe(true);
+    expect(pickerOptions.map((option) => option.modelId)).toEqual(["__auto__", "gpt-5.4-mini"]);
+  });
+
   it("keeps declarative aliases working for /sessions", async () => {
     updateSetting("autoSaveSessions", false);
     const app = createAppStub();

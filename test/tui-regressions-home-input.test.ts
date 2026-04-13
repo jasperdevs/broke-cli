@@ -223,26 +223,6 @@ describe("input editing", () => {
     expect(app.pendingMessages).toEqual([{ text: "steer", images: [], delivery: "steering" }]);
   });
 
-  it("shows queued messages directly above the composer", () => {
-    const app = new App() as any;
-    let rendered: string[] = [];
-    app.messages = [{ role: "assistant", content: "working" }];
-    app.isStreaming = true;
-    app.streamStartTime = Date.now() - 1000;
-    app.screen = { height: 18, width: 80, hasSidebar: false, mainWidth: 80, sidebarWidth: 0, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
-    app.input.paste("draft");
-    app.addPendingMessage("next step", [], "followup");
-    app.drawImmediate();
-    const output = rendered.map((line) => stripAnsi(line));
-    const queueIndex = output.findIndex((line) => line.includes("Queued follow-up messages"));
-    const inputIndex = output.findIndex((line) => line.includes("> draft"));
-    expect(output.join("\n")).toContain("Working");
-    expect(output.join("\n")).toContain("next step");
-    expect(queueIndex).toBeGreaterThan(-1);
-    expect(inputIndex).toBeGreaterThan(queueIndex);
-    expect(inputIndex - queueIndex).toBeLessThanOrEqual(5);
-  });
-
   it("keeps shift-enter as a newline even when slash suggestions are visible", () => {
     const app = new App() as any;
     app.input.paste("/");

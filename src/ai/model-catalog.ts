@@ -205,7 +205,9 @@ interface ProviderModelProfile {
   defaultModel: string;
   nativeDefaultModel?: string;
   smallModel?: string;
+  nativeSmallModel?: string;
   preferredDisplay: string[];
+  nativePreferredDisplay?: string[];
   maxVisible?: number;
 }
 
@@ -226,7 +228,9 @@ const PROVIDER_MODEL_PROFILES: Record<string, ProviderModelProfile> = {
     defaultModel: "gpt-5-mini",
     nativeDefaultModel: "gpt-5.4-mini",
     smallModel: "gpt-5-mini",
+    nativeSmallModel: "gpt-5.4-mini",
     preferredDisplay: ["gpt-5-mini", "gpt-5.4-mini", "gpt-5.4", "o4-mini", "o3"],
+    nativePreferredDisplay: ["gpt-5.4-mini"],
     maxVisible: 8,
   },
   google: {
@@ -391,8 +395,16 @@ export function getProviderSmallModelId(providerId: string): string | undefined 
   return PROVIDER_MODEL_PROFILES[providerId]?.smallModel;
 }
 
+export function getProviderNativeSmallModelId(providerId: string): string | undefined {
+  return PROVIDER_MODEL_PROFILES[providerId]?.nativeSmallModel ?? PROVIDER_MODEL_PROFILES[providerId]?.nativeDefaultModel;
+}
+
 export function getProviderPreferredDisplayModelIds(providerId: string): string[] {
   return PROVIDER_MODEL_PROFILES[providerId]?.preferredDisplay ?? [];
+}
+
+export function getProviderNativePreferredDisplayModelIds(providerId: string): string[] {
+  return PROVIDER_MODEL_PROFILES[providerId]?.nativePreferredDisplay ?? getProviderPreferredDisplayModelIds(providerId);
 }
 
 export function getProviderMaxVisibleModelCount(providerId: string): number {

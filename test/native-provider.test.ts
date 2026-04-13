@@ -165,6 +165,17 @@ describe("native provider runtime selection", () => {
     expect(model.provider.defaultModel).toBe("gpt-5.4-mini");
   });
 
+  it("falls back to the native-compatible Codex model when an unsupported one is requested", () => {
+    configMocks.getProviderCredential.mockImplementation((providerId: string) => (
+      providerId === "codex" ? { kind: "native_oauth", source: "codex-chatgpt" } : { kind: "none" }
+    ));
+
+    const model = createModel("codex", "gpt-5-mini");
+    expect(model.runtime).toBe("native-cli");
+    expect(model.modelId).toBe("gpt-5.4-mini");
+    expect(model.provider.models).toEqual(["gpt-5.4-mini"]);
+  });
+
   it("propagates the runtime-resolved native Codex default through one-shot resolution", async () => {
     configMocks.getProviderCredential.mockImplementation((providerId: string) => (
       providerId === "codex" ? { kind: "native_oauth", source: "codex-chatgpt" } : { kind: "none" }

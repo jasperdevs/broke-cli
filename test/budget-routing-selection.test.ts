@@ -51,4 +51,15 @@ describe("budget-first provider selection", () => {
       modelId: "claude-haiku-4-5-20251001",
     });
   });
+
+  it("does not pick the unsupported SDK cheap lane for native Codex login", () => {
+    const resolved = pickCheapestDetectedModel([
+      { id: "codex", name: "Codex", available: true, reason: "native login" },
+    ]);
+
+    expect(resolved).toEqual({
+      providerId: "codex",
+      modelId: "gpt-5.4-mini",
+    });
+  });
 });

@@ -135,7 +135,8 @@ describe("provider model filtering", () => {
       const providerIds = new Set(options.map((option) => option.providerId));
       expect(providerIds.has("codex")).toBe(true);
       expect(providerIds.has("llamacpp")).toBe(false);
-      expect(options.some((option) => option.displayName === "GPT-5 mini")).toBe(true);
+      expect(options.some((option) => option.displayName === "GPT-5 mini")).toBe(false);
+      expect(options.some((option) => option.displayName === "GPT-5.4 mini")).toBe(true);
     } finally {
       config.updateModelPreference("review", previousReview ?? null);
       spy.mockRestore();

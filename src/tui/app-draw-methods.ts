@@ -83,6 +83,7 @@ export function drawImmediate(app: AppState): void {
     bottomLines.push(...pendingMessageLines);
     bottomLines.push("");
   }
+  bottomLines.push("");
   bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
   const inputStartIndex = bottomLines.length;
   bottomLines.push(...inputLayout.lines.map((line: string, index: number) => `${index === 0 ? inputLead : inputContinueLead}${line}`));

@@ -5,7 +5,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { createXai } from "@ai-sdk/xai";
 import { getBaseUrl } from "../core/config.js";
 import { getApiKey, getProviderCredential } from "../core/provider-credentials.js";
-import { getProviderNativeDefaultModelId } from "./model-catalog.js";
+import { getProviderNativeDefaultModelId, getProviderNativePreferredDisplayModelIds } from "./model-catalog.js";
 import { hasNativeCommand } from "./native-cli.js";
 import { type ModelHandle, PROVIDERS } from "./provider-definitions.js";
 
@@ -35,9 +35,11 @@ export function createModel(providerId: string, modelId?: string): ModelHandle {
   }
 
   if (providerId === "codex" && useNative) {
+    const supportedNativeModels = getProviderNativePreferredDisplayModelIds(providerId);
+    const resolvedModel = supportedNativeModels.includes(model) ? model : nativeDefaultModel;
     return {
-      provider: { ...info, defaultModel: nativeDefaultModel },
-      modelId: model,
+      provider: { ...info, defaultModel: nativeDefaultModel, models: supportedNativeModels },
+      modelId: resolvedModel,
       runtime: "native-cli",
       nativeCommand: "codex",
     };

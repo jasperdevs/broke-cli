@@ -5,6 +5,8 @@ import {
   getModelPricing,
   getProviderDefaultModelId,
   getProviderNativeDefaultModelId,
+  getProviderNativePreferredDisplayModelIds,
+  getProviderNativeSmallModelId,
   getProviderPreferredDisplayModelIds,
   getProviderSmallModelId,
   getModelSpec,
@@ -24,18 +26,24 @@ export interface CheapestDetectedModel {
 }
 
 function listBudgetCandidateModelIds(provider: DetectedProvider): string[] {
-  const ordered = [
-    getProviderSmallModelId(provider.id),
-    provider.reason === "native login" ? getProviderNativeDefaultModelId(provider.id) : undefined,
-    getProviderDefaultModelId(provider.id),
-    getProviderInfo(provider.id)?.defaultModel,
-    ...(getProviderInfo(provider.id)?.models ?? []),
-    ...getProviderPreferredDisplayModelIds(provider.id),
-  ].filter((modelId): modelId is string => !!modelId);
+  const ordered = provider.reason === "native login"
+    ? [
+      getProviderNativeSmallModelId(provider.id),
+      getProviderNativeDefaultModelId(provider.id),
+      ...getProviderNativePreferredDisplayModelIds(provider.id),
+    ]
+    : [
+      getProviderSmallModelId(provider.id),
+      getProviderDefaultModelId(provider.id),
+      getProviderInfo(provider.id)?.defaultModel,
+      ...(getProviderInfo(provider.id)?.models ?? []),
+      ...getProviderPreferredDisplayModelIds(provider.id),
+    ];
+  const filtered = ordered.filter((modelId): modelId is string => !!modelId);
 
   const deduped: string[] = [];
   const seen = new Set<string>();
-  for (const modelId of ordered) {
+  for (const modelId of filtered) {
     if (seen.has(modelId)) continue;
     seen.add(modelId);
     deduped.push(modelId);

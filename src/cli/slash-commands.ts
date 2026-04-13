@@ -9,7 +9,7 @@ import { createSlashCommandRegistry, type RegisteredSlashCommand } from "./slash
 import type { HandleSlashCommandOptions, ParsedSlashCommand, SlashCommandResult } from "./slash-command-types.js";
 import { handleUiSlashCommand } from "./slash-command-ui.js";
 import { getResolvedModelPreference } from "./model-routing.js";
-import { AUTO_MODEL_ID, AUTO_MODEL_PROVIDER_ID, withAutoModelOption } from "./runtime-models.js";
+import { AUTO_MODEL_ID, AUTO_MODEL_PROVIDER_ID, filterUnsupportedRuntimeModelOptions, withAutoModelOption } from "./runtime-models.js";
 
 interface CoreSlashCommandContext extends ParsedSlashCommand {
   waitFor: (ms: number) => Promise<void>;
@@ -74,7 +74,13 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
     hotkey: "ctrl+l",
     run: ({ restText, app, providerRegistry, buildVisibleModelOptions, activeModel, onModelChange, session, onModelRoutingChange }) => {
       app.dismissBtwBubble?.();
-      const getPickerOptions = () => withAutoModelOption(buildVisibleModelOptions());
+      const getPickerOptions = () => withAutoModelOption(
+        filterUnsupportedRuntimeModelOptions(
+          buildVisibleModelOptions(),
+          activeModel,
+          providerRegistry.getDetectedProviders?.() ?? [],
+        ),
+      );
       const allOptions = getPickerOptions();
       if (allOptions.length === 0) {
         app.setStatus?.("No connected providers found. Run /connect.");
@@ -112,15 +118,17 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
           const key = `${provId}/${modId}`;
           updateSetting("autoRoute", false);
           const nextModel = providerRegistry.createModel(provId, modId);
-          onModelChange(nextModel, modId);
-          app.setModel(nextModel.provider.name, modId, {
+          const resolvedModelId = nextModel.modelId;
+          const resolvedKey = `${nextModel.provider.id}/${resolvedModelId}`;
+          onModelChange(nextModel, resolvedModelId);
+          app.setModel(nextModel.provider.name, resolvedModelId, {
             providerId: nextModel.provider.id,
             runtime: nextModel.runtime,
           });
-          session.setProviderModel(nextModel.provider.name, modId);
-          updateSetting("lastModel", key);
+          session.setProviderModel(nextModel.provider.name, resolvedModelId);
+          updateSetting("lastModel", resolvedKey);
           for (const slot of ["default", "small", "btw", "review", "planning", "ui", "architecture"] as const) {
-            if (!getConfiguredModelPreference(slot)) updateModelPreference(slot, key);
+            if (!getConfiguredModelPreference(slot)) updateModelPreference(slot, resolvedKey);
           }
           onModelRoutingChange?.();
         } catch (err) {
