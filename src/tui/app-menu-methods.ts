@@ -10,7 +10,7 @@ import { TXT } from "./app-shared.js";
 import { wordWrap } from "./render/formatting.js";
 import type { MenuPromptKind, ModelOption, PickerItem, SettingEntry } from "./app-types.js";
 import { moveTreeSelection } from "./tree-view.js";
-import { buildFooterLines, getPendingFilePromptLines, getPendingImagePromptLines, getPendingMessagePromptLines } from "./bottom-ui.js";
+import { buildFooterLines, getMenuDetailLineCount, getPendingFilePromptLines, getPendingImagePromptLines, getPendingMessagePromptLines } from "./bottom-ui.js";
 import { getQuestionMenuLineCount, scrollQuestionMenu } from "./question-menu.js";
 import { getModelLanePickerEntries, openModelLanePicker, selectModelLaneEntry } from "./model-lane-picker.js";
 import {
@@ -115,7 +115,7 @@ export function getBottomLineCount(app: AppState, mainW: number, maxHeight: numb
   const inputLineCount = inputLayout.lines.length + (totalInputLines > inputLayout.lines.length ? 1 : 0);
   const statusLineCount = app.statusMessage ? 2 : 0;
   const footerLineCount = buildFooterLines(app, app.shouldShowSidebar(), mainW).length;
-  const detailLineCount = hasActiveBottomMenuDetail(app) ? 1 : 0;
+  const detailLineCount = hasActiveBottomMenuDetail(app) ? getMenuDetailLineCount(app, mainW) : 0;
   const tailReserve = 2;
   let count = 2 + footerLineCount + inputLineCount + statusLineCount;
   if (btwBubbleLineCount > 0) count += btwBubbleLineCount + 1;
@@ -124,16 +124,16 @@ export function getBottomLineCount(app: AppState, mainW: number, maxHeight: numb
 
   if (app.filePicker) {
     const entries = app.getFilePickerEntries();
-    const visible = entries.length === 0 ? 1 : getVisibleMenuLineCount(app, entries, app.filePicker.cursor, maxHeight, baseCount, tailReserve, 1);
-    count += 2 + visible;
+    const visible = entries.length === 0 ? 1 : getVisibleMenuLineCount(app, entries, app.filePicker.cursor, maxHeight, baseCount, tailReserve, 2);
+    count += 3 + visible;
   } else if (app.itemPicker) {
     const entries = app.getItemPickerEntries();
-    const visible = entries.length === 0 ? 1 : getVisibleMenuLineCount(app, entries, app.itemPicker.cursor, maxHeight, baseCount, tailReserve, 1);
-    count += 2 + visible + detailLineCount;
+    const visible = entries.length === 0 ? 1 : getVisibleMenuLineCount(app, entries, app.itemPicker.cursor, maxHeight, baseCount, tailReserve, 2);
+    count += 3 + visible + detailLineCount;
   } else if (app.settingsPicker) {
     const entries = app.getSettingsPickerEntries();
-    const visible = entries.length === 0 ? 1 : getVisibleMenuLineCount(app, entries, app.settingsPicker.cursor, maxHeight, baseCount, tailReserve, 1);
-    count += 2 + visible + detailLineCount;
+    const visible = entries.length === 0 ? 1 : getVisibleMenuLineCount(app, entries, app.settingsPicker.cursor, maxHeight, baseCount, tailReserve, 2);
+    count += 3 + visible + detailLineCount;
   } else if (app.modelPicker) {
     const entries = app.getModelPickerEntries();
     const visible = entries.length === 0 ? 1 : getVisibleMenuLineCount(app, entries, app.modelPicker.cursor, maxHeight, baseCount, tailReserve, 2);

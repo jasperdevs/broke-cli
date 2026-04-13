@@ -18,14 +18,52 @@ function renderMenuCount(current: number, total: number): string {
 
 type FooterPart = { text: string; plain: string };
 
-function appendMenuDetailLine(app: AppState, bottomLines: string[], mainW: number): void {
+function getWrappedMenuDetailLines(app: AppState, mainW: number): string[] {
   const detail = getActiveMenuDetail(app);
-  if (!detail) return;
+  if (!detail) return [];
   const trimmed = detail.trim();
-  if (!trimmed) return;
+  if (!trimmed) return [];
   const maxWidth = Math.max(12, mainW - 2);
-  const line = trimmed.length <= maxWidth ? trimmed : `${trimmed.slice(0, maxWidth - 1)}…`;
-  bottomLines.push(` ${DIM}${line}${RESET}`);
+  const rawLines = trimmed.split("\n");
+  const lines: string[] = [];
+  for (const rawLine of rawLines) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    if (line.length <= maxWidth) {
+      lines.push(line);
+    } else {
+      const words = line.split(/\s+/u).filter(Boolean);
+      let current = "";
+      for (const word of words) {
+        const candidate = current ? `${current} ${word}` : word;
+        if (candidate.length > maxWidth && current) {
+          lines.push(current);
+          current = word;
+        } else {
+          current = candidate;
+        }
+        if (lines.length >= 2) break;
+      }
+      if (lines.length < 2 && current) lines.push(current);
+    }
+    if (lines.length >= 2) break;
+  }
+  if (lines.length === 0) return [];
+  if (trimmed.length > lines.join(" ").length && lines.length === 2) {
+    const last = lines[1]!;
+    lines[1] = last.length >= maxWidth ? `${last.slice(0, Math.max(0, maxWidth - 1))}…` : `${last}…`;
+  }
+  return lines.slice(0, 2);
+}
+
+function appendMenuDetailLine(app: AppState, bottomLines: string[], mainW: number): void {
+  for (const line of getWrappedMenuDetailLines(app, mainW)) {
+    bottomLines.push(` ${DIM}${line}${RESET}`);
+  }
+}
+
+export function getMenuDetailLineCount(app: AppState, mainW: number): number {
+  return getWrappedMenuDetailLines(app, mainW).length;
 }
 
 export function getPendingImagePromptLines(app: AppState, mainW: number): string[] {
@@ -69,18 +107,18 @@ export function appendBottomMenus(
 
   if (app.filePicker) {
     bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
-    app.appendFilePicker(bottomLines, getAvailableBodyRows(1), bottomMenuClicks);
+    app.appendFilePicker(bottomLines, getAvailableBodyRows(2), bottomMenuClicks);
     return;
   }
   if (app.itemPicker) {
     bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
-    app.appendItemPicker(bottomLines, getAvailableBodyRows(1), bottomMenuClicks);
+    app.appendItemPicker(bottomLines, getAvailableBodyRows(2), bottomMenuClicks);
     appendMenuDetailLine(app, bottomLines, mainW);
     return;
   }
   if (app.settingsPicker) {
     bottomLines.push(`${separatorColor}${"─".repeat(mainW)}${RESET}`);
-    app.appendSettingsPicker(bottomLines, getAvailableBodyRows(1), bottomMenuClicks);
+    app.appendSettingsPicker(bottomLines, getAvailableBodyRows(2), bottomMenuClicks);
     appendMenuDetailLine(app, bottomLines, mainW);
     return;
   }

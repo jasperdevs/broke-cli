@@ -142,6 +142,34 @@ describe("menu layout regressions", () => {
     expect(output.match(/switch to it now and make it the main chat model/g)?.length).toBe(1);
   });
 
+  it("wraps long picker detail copy instead of truncating it away", () => {
+    const app = new App() as any;
+    let rendered: string[] = [];
+    app.messages = [{ role: "assistant", content: "hello" }];
+    app.modelPicker = {
+      cursor: 0,
+      options: [{ providerId: "openai", providerName: "OpenAI", modelId: "gpt-5.4-mini", displayName: "GPT-5.4 mini", active: false }],
+    };
+    app.openModelLanePicker(0);
+    app.screen = {
+      height: 18,
+      width: 46,
+      hasSidebar: false,
+      mainWidth: 46,
+      sidebarWidth: 0,
+      render: (lines: string[]) => { rendered = lines; },
+      setCursor: () => {},
+      hideCursor: () => {},
+      forceRedraw: () => {},
+    };
+
+    app.drawImmediate();
+
+    const output = rendered.map((line) => stripAnsi(line)).join("\n");
+    expect(output).toContain("switch to it now");
+    expect(output).toMatch(/main chat\s+model/);
+  });
+
   it("uses a taller default menu row budget when the interactive app starts", () => {
     const app = new App() as any;
     app.screen = {

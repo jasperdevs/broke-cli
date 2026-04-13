@@ -20,6 +20,22 @@ function renderMenuCount(current: number, total: number): string {
   return `${DIM}(${current}/${total})${RESET}`;
 }
 
+function renderFilterLabel(query: string | undefined): string {
+  if (!query) return "";
+  return `${DIM} · filter ${query}${RESET}`;
+}
+
+function renderMenuHeader(title: string, current: number, filtered: number, total: number, query?: string): string {
+  const countCurrent = filtered === 0 ? 0 : current;
+  const totalLabel = filtered === total ? renderMenuCount(countCurrent, filtered) : `${DIM}(${countCurrent}/${filtered} shown · ${total} total)${RESET}`;
+  return ` ${T()}${BOLD}${title}${RESET} ${totalLabel}${renderFilterLabel(query)}`;
+}
+
+function renderMenuEmptyState(noun: string, query?: string): string {
+  if (query) return ` ${DIM}no ${noun} for ${query}${RESET}`;
+  return ` ${DIM}no ${noun}${RESET}`;
+}
+
 export function draw(app: AppState): void {
   if (app.drawScheduled) return;
   app.drawScheduled = true;
@@ -204,8 +220,9 @@ export function shimmerText(_app: AppState, text: string, frame: number, color =
 export function appendModelPicker(app: AppState, lines: string[], _maxTotal: number, clickTargets: Array<{ lineIndex: number; action: () => void }>): void {
   if (app.modelLanePicker) {
     const total = app.modelLanePicker.options.length;
-    lines.push(` ${T()}${BOLD}Assign selected model${RESET} ${renderMenuCount(app.modelLanePicker.cursor + 1, total)}`);
+    lines.push(renderMenuHeader("Assign selected model", app.modelLanePicker.cursor + 1, total, total));
     lines.push(` ${DIM}${app.modelLanePicker.model.displayName ?? app.modelLanePicker.model.modelId}${RESET}`);
+    lines.push(` ${DIM}enter assign · esc back${RESET}`);
     for (const entry of app.buildMenuView(app.getModelLanePickerEntries(), app.modelLanePicker.cursor, Math.max(1, _maxTotal))) {
       if (entry.selectIndex !== undefined) app.registerMenuClickTarget(clickTargets, lines, () => app.selectModelLaneEntry(entry.selectIndex!));
       lines.push(...entry.lines);
@@ -213,11 +230,13 @@ export function appendModelPicker(app: AppState, lines: string[], _maxTotal: num
     return;
   }
   const picker = app.modelPicker!;
-  const total = app.getFilteredModels().length;
+  const filteredModels = app.getFilteredModels();
+  const total = filteredModels.length;
   const maxItems = Math.max(1, _maxTotal);
-  lines.push(` ${T()}${BOLD}Select model${RESET} ${renderMenuCount(total === 0 ? 0 : picker.cursor + 1, total)}`);
-  if (app.getFilteredModels().length === 0) {
-    lines.push(`  ${DIM}no matches${RESET}`);
+  lines.push(renderMenuHeader("Select model", total === 0 ? 0 : picker.cursor + 1, total, picker.options.length, app.getMenuFilterQuery() || undefined));
+  lines.push(` ${DIM}enter choose use · space favorite · type filter${RESET}`);
+  if (filteredModels.length === 0) {
+    lines.push(renderMenuEmptyState("models", app.getMenuFilterQuery() || undefined));
     return;
   }
   for (const entry of app.buildMenuView(app.getModelPickerEntries(), picker.cursor, maxItems)) {
@@ -237,21 +256,23 @@ export function decorateFrameLine(_app: AppState, line: string, targetWidth: num
 
 export function appendFilePicker(app: AppState, lines: string[], maxTotal: number, clickTargets: Array<{ lineIndex: number; action: () => void }>): void {
   const picker = app.filePicker!;
-  lines.push(` ${T()}${BOLD}Files${RESET} ${renderMenuCount(picker.filtered.length === 0 ? 0 : picker.cursor + 1, picker.filtered.length)}`);
+  lines.push(renderMenuHeader("Files", picker.filtered.length === 0 ? 0 : picker.cursor + 1, picker.filtered.length, picker.files.length, picker.query || undefined));
+  lines.push(` ${DIM}enter attach · tab attach · type filter · esc close${RESET}`);
   const maxItems = Math.max(1, Math.min(getSettings().autocompleteMaxVisible, maxTotal));
   for (const entry of app.buildMenuView(app.getFilePickerEntries(), picker.cursor, maxItems)) {
     if (entry.selectIndex !== undefined) app.registerMenuClickTarget(clickTargets, lines, () => app.selectFileEntry(entry.selectIndex!));
       lines.push(...entry.lines);
   }
-  if (picker.filtered.length === 0) lines.push(` ${DIM}  no matches${RESET}`);
+  if (picker.filtered.length === 0) lines.push(renderMenuEmptyState("files", picker.query || undefined));
 }
 
 export function appendSettingsPicker(app: AppState, lines: string[], _maxTotal: number, clickTargets: Array<{ lineIndex: number; action: () => void }>): void {
   const picker = app.settingsPicker!;
   const filtered = app.getFilteredSettings();
-  lines.push(` ${T()}${BOLD}Settings${RESET} ${renderMenuCount(filtered.length === 0 ? 0 : picker.cursor + 1, filtered.length)}`);
+  lines.push(renderMenuHeader("Settings", filtered.length === 0 ? 0 : picker.cursor + 1, filtered.length, picker.entries.length, app.getMenuFilterQuery() || undefined));
+  lines.push(` ${DIM}enter toggle · type filter · esc close${RESET}`);
   if (filtered.length === 0) {
-    lines.push(`  ${DIM}no matches${RESET}`);
+    lines.push(renderMenuEmptyState("settings", app.getMenuFilterQuery() || undefined));
     return;
   }
   const maxItems = Math.max(1, Math.min(getSettings().autocompleteMaxVisible, _maxTotal));
@@ -264,9 +285,10 @@ export function appendSettingsPicker(app: AppState, lines: string[], _maxTotal: 
 export function appendItemPicker(app: AppState, lines: string[], _maxTotal: number, clickTargets: Array<{ lineIndex: number; action: () => void }>): void {
   const picker = app.itemPicker!;
   const filtered = app.getFilteredItems();
-  lines.push(` ${T()}${BOLD}${picker.title}${RESET} ${renderMenuCount(filtered.length === 0 ? 0 : picker.cursor + 1, filtered.length)}`);
+  lines.push(renderMenuHeader(picker.title, filtered.length === 0 ? 0 : picker.cursor + 1, filtered.length, picker.items.length, app.getMenuFilterQuery() || undefined));
+  lines.push(` ${DIM}enter choose · type filter · esc close${RESET}`);
   if (filtered.length === 0) {
-    lines.push(`  ${DIM}no matches${RESET}`);
+    lines.push(renderMenuEmptyState("items", app.getMenuFilterQuery() || undefined));
     return;
   }
   const maxItems = Math.max(1, Math.min(getSettings().autocompleteMaxVisible, _maxTotal));
@@ -280,10 +302,10 @@ export function appendTreePicker(app: AppState, lines: string[], maxItems: numbe
   const rows = getVisibleTreeRows(app);
   const selectedIndex = Math.max(0, rows.findIndex((row) => row.item.id === app.treeView?.selectedId));
   const total = rows.length;
-  lines.push(` ${T()}${BOLD}${app.treeView!.title}${RESET} ${renderMenuCount(total === 0 ? 0 : selectedIndex + 1, total)}`);
+  lines.push(renderMenuHeader(app.treeView!.title, total === 0 ? 0 : selectedIndex + 1, total, total, app.getMenuFilterQuery() || undefined));
   lines.push(` ${DIM}enter jump · shift+l label · shift+t time · ctrl+u user · ctrl+o all · esc back${RESET}`);
   if (rows.length === 0) {
-    lines.push(`  ${DIM}no matches${RESET}`);
+    lines.push(renderMenuEmptyState("sessions", app.getMenuFilterQuery() || undefined));
     return;
   }
   for (const entry of app.buildMenuView(getTreePickerEntries(app), selectedIndex, Math.max(1, Math.min(getSettings().autocompleteMaxVisible, maxItems)))) {

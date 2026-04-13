@@ -84,7 +84,32 @@ export function buildMenuView(_app: AppState, entries: MenuEntry[], cursor: numb
     }
   }
 
-  return entries.slice(start, end);
+  const shouldShowOverflowMarkers = maxVisibleLines >= 6;
+  while (shouldShowOverflowMarkers && used + (start > 0 ? 1 : 0) + (end < entries.length ? 1 : 0) > maxVisibleLines && end - start > 1) {
+    const linesAbove = cursorEntryIndex - start;
+    const linesBelow = end - cursorEntryIndex - 1;
+    if (linesBelow > linesAbove && end - 1 > cursorEntryIndex) {
+      end--;
+      used -= lineCount(entries[end]!);
+      continue;
+    }
+    if (start < cursorEntryIndex) {
+      used -= lineCount(entries[start]!);
+      start++;
+      continue;
+    }
+    if (end - 1 > cursorEntryIndex) {
+      end--;
+      used -= lineCount(entries[end]!);
+      continue;
+    }
+    break;
+  }
+
+  const visible = entries.slice(start, end);
+  if (shouldShowOverflowMarkers && start > 0) visible.unshift({ lines: [` ${DIM}↑ more${RESET}`] });
+  if (shouldShowOverflowMarkers && end < entries.length) visible.push({ lines: [` ${DIM}↓ more${RESET}`] });
+  return visible;
 }
 
 export function registerMenuClickTarget(_app: AppState, targets: Array<{ lineIndex: number; action: () => void }>, lines: string[], action: () => void): void {
@@ -162,7 +187,6 @@ export function getModelPickerEntries(app: AppState): MenuEntry[] {
   let currentIdx = 0;
   const showProviderHeaders = byProvider.size > 1;
   const width = getMenuBodyWidth(app);
-  entries.push({ lines: [` ${DIM}enter choose use · space favorite · type filter${RESET}`] });
   for (const [provider, opts] of byProvider) {
     if (showProviderHeaders) entries.push({ lines: [` ${DIM}${provider}${RESET}`] });
     for (const opt of opts) {
