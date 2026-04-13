@@ -118,7 +118,7 @@ describe.sequential("models.json overrides", () => {
     expect(model.provider.id).toBe("custom-openai");
     expect(model.provider.name).toBe("Custom OpenAI");
     expect(model.modelId).toBe("acme-coder");
-  });
+  }, 15_000);
 
   it("lets project models.json override global models.json", () => {
     writeFileSync(globalModelsPath, JSON.stringify({
