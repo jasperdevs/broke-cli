@@ -2,6 +2,7 @@ import { buildSystemPrompt, reloadContext } from "../core/context.js";
 import { buildCompactionContextMessage, compactMessages, getTotalContextTokens, splitCompactedMessages, summarizeBranchMessages } from "../core/compact.js";
 import { getConfiguredModelPreference, getSettings, updateModelPreference, updateSetting, type Mode, type ModelPreferenceSlot } from "../core/config.js";
 import { createDefaultSessionName } from "../core/session.js";
+import { inspectProviders } from "../ai/detect.js";
 import { runConnectFlow } from "./connect-flow.js";
 import { runLoginFlow } from "./login-flow.js";
 import { openExtensionsMenu, openPackagesMenu, openSettingsMenu } from "./slash-command-menus.js";
@@ -13,6 +14,16 @@ import { AUTO_MODEL_ID, AUTO_MODEL_PROVIDER_ID, filterUnsupportedRuntimeModelOpt
 
 interface CoreSlashCommandContext extends ParsedSlashCommand {
   waitFor: (ms: number) => Promise<void>;
+}
+
+function nextProviderCommand(providerId: string): string {
+  if (providerId === "github-copilot" || providerId === "google-gemini-cli" || providerId === "google-antigravity") {
+    return `/login ${providerId}`;
+  }
+  if (providerId === "anthropic" || providerId === "codex") {
+    return `/connect ${providerId}`;
+  }
+  return `/connect ${providerId}`;
 }
 
 export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<CoreSlashCommandContext, SlashCommandResult>> = [
@@ -221,6 +232,31 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
     run: async ({ app, restText, hooks }) => {
       app.dismissBtwBubble?.();
       await openPackagesMenu(app, hooks, restText);
+      return { handled: true };
+    },
+  },
+  {
+    names: ["providers"],
+    description: "inspect provider availability",
+    run: async ({ app }) => {
+      app.dismissBtwBubble?.();
+      const providers = await inspectProviders();
+      const items = providers.map((provider) => ({
+        id: provider.id,
+        label: provider.name,
+        detail: `${provider.available ? "ready" : "unavailable"} · ${provider.reason}`,
+      }));
+      app.openItemPicker("Providers", items, (providerId: string) => {
+        const provider = providers.find((entry) => entry.id === providerId);
+        if (!provider) return;
+        if (provider.available) {
+          app.setStatus?.(`${provider.name}: ${provider.reason}`);
+          return;
+        }
+        const command = nextProviderCommand(provider.id);
+        app.setDraft?.(command);
+        app.setStatus?.(`${provider.name}: ${provider.reason}. Drafted ${command}.`);
+      }, { kind: "providers", closeOnSelect: false });
       return { handled: true };
     },
   },

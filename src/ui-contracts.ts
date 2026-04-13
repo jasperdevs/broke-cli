@@ -54,6 +54,7 @@ export type MenuPromptKind =
   | "changelog"
   | "projects"
   | "packages"
+  | "providers"
   | "logout";
 
 export type UpdateNotice = UpdateInfo;

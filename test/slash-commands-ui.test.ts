@@ -125,9 +125,9 @@ describe("slash command UI surfaces", () => {
       const app = createAppStub();
       let reloaded = 0;
       let latestItems: Array<{ id: string; label: string; detail?: string }> = [];
-      let onSelect: ((id: string) => void) | null = null;
-      app.openItemPicker = (_title: string, _items: any[], nextOnSelect: (id: string) => void) => {
-        onSelect = nextOnSelect;
+      const opened: Array<{ title: string; items: Array<{ id: string; label: string; detail?: string }>; onSelect: (id: string) => void }> = [];
+      app.openItemPicker = (title: string, items: any[], nextOnSelect: (id: string) => void) => {
+        opened.push({ title, items, onSelect: nextOnSelect });
       };
       app.updateItemPickerItems = (items: Array<{ id: string; label: string; detail?: string }>) => {
         latestItems = items;
@@ -142,7 +142,9 @@ describe("slash command UI surfaces", () => {
         }),
       });
 
-      onSelect?.(extensionId);
+      opened[0]?.onSelect(extensionId);
+      expect(opened[1]?.title).toContain(`Extension: ${extensionId}`);
+      opened[1]?.onSelect("toggle");
 
       expect(reloaded).toBeGreaterThanOrEqual(0);
       expect(loadConfig().settings?.disabledExtensions).toContain(extensionId);
@@ -219,6 +221,7 @@ describe("slash command UI surfaces", () => {
       updateSetting("extensions", originalExtensions ?? []);
     }
   });
+
 
   it("opens templates and skills in pickers instead of dumping text into chat", async () => {
     mkdirSync(localTemplateDir, { recursive: true });

@@ -245,6 +245,7 @@ export function getMenuPromptPrefix(_app: AppState, kind: MenuPromptKind): strin
     case "changelog": return "/changelog ";
     case "projects": return "/projects ";
     case "packages": return "/packages ";
+    case "providers": return "/providers ";
     case "logout": return "/logout ";
   }
   return "/";

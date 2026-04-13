@@ -28,6 +28,25 @@ export interface DetectedProvider {
   reason: string;
 }
 
+const BUILTIN_PROVIDER_IDS = [
+  "anthropic",
+  "openai",
+  "codex",
+  "github-copilot",
+  "google",
+  "google-gemini-cli",
+  "google-antigravity",
+  "groq",
+  "mistral",
+  "xai",
+  "openrouter",
+  "ollama",
+  "lmstudio",
+  "llamacpp",
+  "jan",
+  "vllm",
+] as const;
+
 export interface CheapestDetectedModel {
   providerId: string;
   modelId: string;
@@ -118,26 +137,36 @@ async function probeAny(baseUrl: string, paths: string[]): Promise<boolean> {
 }
 
 function listCustomConfiguredProviders(): DetectedProvider[] {
-  const knownProviderIds = new Set([
-    "anthropic", "openai", "codex", "github-copilot", "google", "google-gemini-cli", "google-antigravity",
-    "groq", "mistral", "xai", "openrouter", "ollama", "lmstudio", "llamacpp", "jan", "vllm",
-  ]);
+  const knownProviderIds = new Set<string>(BUILTIN_PROVIDER_IDS);
   const configured: DetectedProvider[] = [];
   for (const providerId of listConfiguredProviderIds()) {
     if (knownProviderIds.has(providerId)) continue;
-    if (getConfiguredProviderModels(providerId).length === 0) continue;
-    if (!getConfiguredProviderBaseUrl(providerId) || !getConfiguredProviderApi(providerId)) continue;
+    const models = getConfiguredProviderModels(providerId);
+    const baseUrl = getConfiguredProviderBaseUrl(providerId);
+    const apiType = getConfiguredProviderApi(providerId);
+    const disabled = !!loadConfig().providers?.[providerId]?.disabled;
+    const reason = disabled
+      ? "disabled"
+      : models.length === 0
+        ? "configure models.json models"
+        : !baseUrl
+          ? "set baseUrl in models.json"
+          : !apiType
+            ? "set api in models.json"
+            : getConfiguredProviderApiKey(providerId)
+              ? "API key"
+              : "configured";
     configured.push({
       id: providerId,
       name: getConfiguredProviderName(providerId) ?? providerId,
-      available: true,
-      reason: getConfiguredProviderApiKey(providerId) ? "API key" : "configured",
+      available: !disabled && models.length > 0 && !!baseUrl && !!apiType,
+      reason,
     });
   }
   return configured;
 }
 
-export async function detectProviders(): Promise<DetectedProvider[]> {
+export async function inspectProviders(): Promise<DetectedProvider[]> {
   const results: DetectedProvider[] = [];
   const config = loadConfig();
   const providerDisabled = (providerId: string): boolean => !!config.providers?.[providerId]?.disabled;
@@ -156,43 +185,67 @@ export async function detectProviders(): Promise<DetectedProvider[]> {
   const codexCli = hasNativeCommand("codex");
 
   // Cloud/native providers - only show when a usable auth mode exists
-  if (!providerDisabled("anthropic") && anthropicCredential.kind === "api_key") {
-    results.push({ id: "anthropic", name: "Anthropic", available: true, reason: "API key" });
-  } else if (!providerDisabled("anthropic") && anthropicCredential.kind === "native_oauth" && claudeCli) {
-    results.push({ id: "anthropic", name: "Claude Code", available: true, reason: "native login" });
-  }
-  if (!providerDisabled("openai") && openaiCredential.kind === "api_key") {
-    results.push({ id: "openai", name: "OpenAI", available: true, reason: "API key" });
-  }
-  if (!providerDisabled("codex") && codexCredential.kind === "api_key") {
-    results.push({ id: "codex", name: "Codex", available: true, reason: "API key" });
-  } else if (!providerDisabled("codex") && codexCredential.kind === "native_oauth" && codexCli) {
-    results.push({ id: "codex", name: "Codex", available: true, reason: "native login" });
-  }
-  if (!providerDisabled("github-copilot") && githubCopilotCredential.kind === "native_oauth") {
-    results.push({ id: "github-copilot", name: "GitHub Copilot", available: true, reason: "OAuth login" });
-  }
-  if (!providerDisabled("google") && googleCredential.kind === "api_key") {
-    results.push({ id: "google", name: "Google", available: true, reason: "API key" });
-  }
-  if (!providerDisabled("google-gemini-cli") && googleGeminiCliCredential.kind === "native_oauth") {
-    results.push({ id: "google-gemini-cli", name: "Google Cloud Code Assist", available: true, reason: "OAuth login" });
-  }
-  if (!providerDisabled("google-antigravity") && googleAntigravityCredential.kind === "native_oauth") {
-    results.push({ id: "google-antigravity", name: "Antigravity", available: true, reason: "OAuth login" });
-  }
-  if (!providerDisabled("groq") && groqCredential.kind === "api_key") {
-    results.push({ id: "groq", name: "Groq", available: true, reason: "API key" });
-  }
-  if (!providerDisabled("mistral") && mistralCredential.kind === "api_key") {
-    results.push({ id: "mistral", name: "Mistral", available: true, reason: "API key" });
-  }
-  if (!providerDisabled("xai") && xaiCredential.kind === "api_key") {
-    results.push({ id: "xai", name: "xAI", available: true, reason: "API key" });
-  }
-  if (!providerDisabled("openrouter") && openrouterCredential.kind === "api_key") {
-    results.push({ id: "openrouter", name: "OpenRouter", available: true, reason: "API key" });
-  }
+  results.push(
+    providerDisabled("anthropic")
+      ? { id: "anthropic", name: "Anthropic", available: false, reason: "disabled" }
+      : anthropicCredential.kind === "api_key"
+        ? { id: "anthropic", name: "Anthropic", available: true, reason: "API key" }
+        : anthropicCredential.kind === "native_oauth"
+          ? { id: "anthropic", name: "Claude Code", available: claudeCli, reason: claudeCli ? "native login" : "claude CLI missing" }
+          : { id: "anthropic", name: "Anthropic", available: false, reason: "run /connect or /login anthropic" },
+    providerDisabled("openai")
+      ? { id: "openai", name: "OpenAI", available: false, reason: "disabled" }
+      : openaiCredential.kind === "api_key"
+        ? { id: "openai", name: "OpenAI", available: true, reason: "API key" }
+        : { id: "openai", name: "OpenAI", available: false, reason: "run /connect openai" },
+    providerDisabled("codex")
+      ? { id: "codex", name: "Codex", available: false, reason: "disabled" }
+      : codexCredential.kind === "api_key"
+        ? { id: "codex", name: "Codex", available: true, reason: "API key" }
+        : codexCredential.kind === "native_oauth"
+          ? { id: "codex", name: "Codex", available: codexCli, reason: codexCli ? "native login" : "codex CLI missing" }
+          : { id: "codex", name: "Codex", available: false, reason: "run /connect or /login codex" },
+    providerDisabled("github-copilot")
+      ? { id: "github-copilot", name: "GitHub Copilot", available: false, reason: "disabled" }
+      : githubCopilotCredential.kind === "native_oauth"
+        ? { id: "github-copilot", name: "GitHub Copilot", available: true, reason: "OAuth login" }
+        : { id: "github-copilot", name: "GitHub Copilot", available: false, reason: "run /login github-copilot" },
+    providerDisabled("google")
+      ? { id: "google", name: "Google", available: false, reason: "disabled" }
+      : googleCredential.kind === "api_key"
+        ? { id: "google", name: "Google", available: true, reason: "API key" }
+        : { id: "google", name: "Google", available: false, reason: "run /connect google" },
+    providerDisabled("google-gemini-cli")
+      ? { id: "google-gemini-cli", name: "Google Cloud Code Assist", available: false, reason: "disabled" }
+      : googleGeminiCliCredential.kind === "native_oauth"
+        ? { id: "google-gemini-cli", name: "Google Cloud Code Assist", available: true, reason: "OAuth login" }
+        : { id: "google-gemini-cli", name: "Google Cloud Code Assist", available: false, reason: "run /login google-gemini-cli" },
+    providerDisabled("google-antigravity")
+      ? { id: "google-antigravity", name: "Antigravity", available: false, reason: "disabled" }
+      : googleAntigravityCredential.kind === "native_oauth"
+        ? { id: "google-antigravity", name: "Antigravity", available: true, reason: "OAuth login" }
+        : { id: "google-antigravity", name: "Antigravity", available: false, reason: "run /login google-antigravity" },
+    providerDisabled("groq")
+      ? { id: "groq", name: "Groq", available: false, reason: "disabled" }
+      : groqCredential.kind === "api_key"
+        ? { id: "groq", name: "Groq", available: true, reason: "API key" }
+        : { id: "groq", name: "Groq", available: false, reason: "run /connect groq" },
+    providerDisabled("mistral")
+      ? { id: "mistral", name: "Mistral", available: false, reason: "disabled" }
+      : mistralCredential.kind === "api_key"
+        ? { id: "mistral", name: "Mistral", available: true, reason: "API key" }
+        : { id: "mistral", name: "Mistral", available: false, reason: "run /connect mistral" },
+    providerDisabled("xai")
+      ? { id: "xai", name: "xAI", available: false, reason: "disabled" }
+      : xaiCredential.kind === "api_key"
+        ? { id: "xai", name: "xAI", available: true, reason: "API key" }
+        : { id: "xai", name: "xAI", available: false, reason: "run /connect xai" },
+    providerDisabled("openrouter")
+      ? { id: "openrouter", name: "OpenRouter", available: false, reason: "disabled" }
+      : openrouterCredential.kind === "api_key"
+        ? { id: "openrouter", name: "OpenRouter", available: true, reason: "API key" }
+        : { id: "openrouter", name: "OpenRouter", available: false, reason: "run /connect openrouter" },
+  );
 
   // Local providers — probe in parallel
   const [ollama, lmStudio, llamaCpp, jan, vllm] = await Promise.all([
@@ -213,13 +266,31 @@ export async function detectProviders(): Promise<DetectedProvider[]> {
       : probeBaseUrl(getConfiguredProviderBaseUrl("vllm") ?? "http://127.0.0.1:8000/v1"),
   ]);
 
-  if (ollama) results.push({ id: "ollama", name: "Ollama", available: true, reason: "running" });
-  if (lmStudio) results.push({ id: "lmstudio", name: "LM Studio", available: true, reason: "running" });
-  if (llamaCpp) results.push({ id: "llamacpp", name: "llama.cpp", available: true, reason: "running" });
-  if (jan) results.push({ id: "jan", name: "Jan", available: true, reason: "running" });
-  if (vllm) results.push({ id: "vllm", name: "vLLM", available: true, reason: "running" });
+  results.push(
+    providerDisabled("ollama")
+      ? { id: "ollama", name: "Ollama", available: false, reason: "disabled" }
+      : { id: "ollama", name: "Ollama", available: ollama, reason: ollama ? "running" : `start ${getConfiguredProviderBaseUrl("ollama") ?? "http://127.0.0.1:11434/v1"}` },
+    providerDisabled("lmstudio")
+      ? { id: "lmstudio", name: "LM Studio", available: false, reason: "disabled" }
+      : { id: "lmstudio", name: "LM Studio", available: lmStudio, reason: lmStudio ? "running" : `start ${getConfiguredProviderBaseUrl("lmstudio") ?? "http://127.0.0.1:1234/v1"}` },
+    providerDisabled("llamacpp")
+      ? { id: "llamacpp", name: "llama.cpp", available: false, reason: "disabled" }
+      : { id: "llamacpp", name: "llama.cpp", available: llamaCpp, reason: llamaCpp ? "running" : `start ${getConfiguredProviderBaseUrl("llamacpp") ?? "http://127.0.0.1:8080/v1"}` },
+    providerDisabled("jan")
+      ? { id: "jan", name: "Jan", available: false, reason: "disabled" }
+      : { id: "jan", name: "Jan", available: jan, reason: jan ? "running" : `start ${getConfiguredProviderBaseUrl("jan") ?? "http://127.0.0.1:1337/v1"}` },
+    providerDisabled("vllm")
+      ? { id: "vllm", name: "vLLM", available: false, reason: "disabled" }
+      : { id: "vllm", name: "vLLM", available: vllm, reason: vllm ? "running" : `start ${getConfiguredProviderBaseUrl("vllm") ?? "http://127.0.0.1:8000/v1"}` },
+  );
   results.push(...listCustomConfiguredProviders());
 
+  return results;
+}
+
+export async function detectProviders(): Promise<DetectedProvider[]> {
+  const diagnostics = await inspectProviders();
+  const results = diagnostics.filter((provider) => provider.available);
   return results;
 }
 

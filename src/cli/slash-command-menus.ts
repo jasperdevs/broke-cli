@@ -5,7 +5,7 @@ import { getSettings, loadConfig, updateProviderConfig, updateSetting, type Auto
 import { getProviderCredential } from "../core/provider-credentials.js";
 import { listProjects } from "../core/projects.js";
 import { listExtensions, reloadExtensions } from "../core/extensions.js";
-import { describePackageResources, installPackage, listInstalledPackages } from "../core/package-manager.js";
+import { describePackageResources, guessPackageLabel, installPackage, listInstalledPackages, removePackage, updatePackages, type InstalledPackageInfo } from "../core/package-manager.js";
 import { searchPackageRegistry } from "../core/package-search.js";
 import { toggleExtensionEnabled } from "../core/permissions.js";
 import { Session } from "../core/session.js";
@@ -18,6 +18,11 @@ import type { ModelHandle } from "../ai/providers.js";
 import type { ExtensionHooks, SlashCommandApp } from "./slash-command-types.js";
 
 type EmptyMenuKind = "extensions" | "resume" | "projects" | "packages" | "logout" | "templates" | "skills" | "changelog";
+
+function formatPathTail(value: string | undefined): string {
+  if (!value) return "";
+  return value.length <= 56 ? value : `…${value.slice(-55)}`;
+}
 
 function describeRoots(roots: string[]): string {
   if (roots.length === 0) return "none";
@@ -178,17 +183,53 @@ export function openExtensionsMenu(app: SlashCommandApp, hooks: ExtensionHooks):
     label: entry.id,
     detail: [
       entry.enabled ? "enabled" : "disabled",
-      entry.loaded ? "loaded" : "",
+      entry.loaded ? "loaded" : "not loaded",
       entry.error ? `error: ${entry.error}` : "",
-      entry.source,
+      entry.source ? `src ${entry.source}` : "",
+      formatPathTail(entry.path),
     ].filter(Boolean).join(" · "),
   }));
-  app.openItemPicker("Extensions", buildExtensionItems(), (id: string) => {
-    const enabled = toggleExtensionEnabled(id);
-    hooks.reload?.();
-    app.updateItemPickerItems?.(buildExtensionItems(), id);
-    app.setStatus?.(`${enabled ? "Enabled" : "Disabled"} ${id}.`);
-  }, { closeOnSelect: false, kind: "extensions" });
+  const openExtensionActions = (entryId: string) => {
+    const entry = listExtensions().find((candidate) => candidate.id === entryId);
+    if (!entry) return;
+    const actions = [
+      {
+        id: "toggle",
+        label: entry.enabled ? "Disable extension" : "Enable extension",
+        detail: entry.enabled ? "stop loading it on future runs" : "load it again on future runs",
+      },
+      {
+        id: "reload",
+        label: "Reload extensions",
+        detail: "refresh hooks, commands, and themes now",
+      },
+      {
+        id: "path",
+        label: "Show path",
+        detail: entry.path ?? "no path recorded",
+      },
+    ];
+    app.openItemPicker(`Extension: ${entry.id}`, actions, (actionId: string) => {
+      if (actionId === "toggle") {
+        const enabled = toggleExtensionEnabled(entry.id);
+        hooks.reload?.();
+        app.setStatus?.(`${enabled ? "Enabled" : "Disabled"} ${entry.id}.`);
+        openExtensionsMenu(app, hooks);
+        return;
+      }
+      if (actionId === "reload") {
+        reloadExtensions();
+        hooks.reload?.();
+        app.setStatus?.("Reloaded extensions.");
+        openExtensionsMenu(app, hooks);
+        return;
+      }
+      if (actionId === "path") {
+        app.setStatus?.(entry.path ?? "No path recorded for this extension.");
+      }
+    }, { kind: "extensions", closeOnSelect: true });
+  };
+  app.openItemPicker("Extensions", buildExtensionItems(), openExtensionActions, { closeOnSelect: false, kind: "extensions" });
   return true;
 }
 
@@ -213,13 +254,18 @@ export async function openPackagesMenu(app: SlashCommandApp, hooks: ExtensionHoo
       };
     });
     app.openItemPicker("Package Search", items, (source: string) => {
-      void installPackage(source).then(() => {
-        hooks.reload?.();
-        app.setStatus?.(`Installed ${source} and reloaded extensions.`);
-      }).catch((error: Error) => {
-        app.setStatus?.(`Package install failed: ${error.message}`);
-      });
-    }, { kind: "packages" });
+      app.openItemPicker("Install package", [
+        { id: "global", label: "Install globally", detail: "~/.brokecli package for every repo" },
+        { id: "project", label: "Install in project", detail: "./.brokecli package only for this repo" },
+      ], (targetId: string) => {
+        void installPackage(source, { local: targetId === "project" }).then(() => {
+          hooks.reload?.();
+          app.setStatus?.(`Installed ${source} in ${targetId === "project" ? "project" : "global"} scope.`);
+        }).catch((error: Error) => {
+          app.setStatus?.(`Package install failed: ${error.message}`);
+        });
+      }, { kind: "packages" });
+    }, { kind: "packages", closeOnSelect: false });
     return true;
   }
 
@@ -243,7 +289,79 @@ export async function openPackagesMenu(app: SlashCommandApp, hooks: ExtensionHoo
       detail,
     };
   });
-  app.openItemPicker("Packages", items, () => {}, { kind: "packages", closeOnSelect: false });
+  const openPackageActions = (entry: InstalledPackageInfo) => {
+    const resourceCounts = entry.installed ? describePackageResources(entry.root) : { extensions: [], skills: [], prompts: [], themes: [] };
+    const actionItems = [
+      !entry.installed
+        ? { id: "install", label: "Install package", detail: `${entry.scope} scope · missing on disk` }
+        : { id: "reinstall", label: "Reinstall package", detail: `${entry.scope} scope · refresh package contents` },
+      !entry.pinned
+        ? { id: "update", label: "Update package", detail: "pull the latest unpinned version" }
+        : { id: "update", label: "Package is pinned", detail: "skip updates until the source is unpinned" },
+      { id: "remove", label: "Remove package", detail: "drop it from config and remove managed files", tone: "danger" as const },
+      {
+        id: "root",
+        label: "Show install root",
+        detail: entry.root,
+      },
+      {
+        id: "resources",
+        label: "Show resources",
+        detail: [
+          resourceCounts.extensions.length ? `${resourceCounts.extensions.length} ext` : "",
+          resourceCounts.skills.length ? `${resourceCounts.skills.length} skill` : "",
+          resourceCounts.prompts.length ? `${resourceCounts.prompts.length} prompt` : "",
+          resourceCounts.themes.length ? `${resourceCounts.themes.length} theme` : "",
+        ].filter(Boolean).join(" · ") || "no resources detected",
+      },
+    ];
+    app.openItemPicker(`Package: ${guessPackageLabel(entry.source)}`, actionItems, (actionId: string) => {
+      if (actionId === "root") {
+        app.setStatus?.(entry.root);
+        return;
+      }
+      if (actionId === "resources") {
+        app.setStatus?.(`ext:${resourceCounts.extensions.length} skill:${resourceCounts.skills.length} prompt:${resourceCounts.prompts.length} theme:${resourceCounts.themes.length}`);
+        return;
+      }
+      if (actionId === "update") {
+        if (entry.pinned) {
+          app.setStatus?.("Pinned package sources are not auto-updated.");
+          return;
+        }
+        void updatePackages(entry.source, { scope: entry.scope }).then(() => {
+          hooks.reload?.();
+          app.setStatus?.(`Updated ${entry.source}.`);
+          void openPackagesMenu(app, hooks);
+        }).catch((error: Error) => {
+          app.setStatus?.(`Package update failed: ${error.message}`);
+        });
+        return;
+      }
+      if (actionId === "remove") {
+        void removePackage(entry.source, { local: entry.scope === "project" }).then(() => {
+          hooks.reload?.();
+          app.setStatus?.(`Removed ${entry.source}.`);
+          void openPackagesMenu(app, hooks);
+        }).catch((error: Error) => {
+          app.setStatus?.(`Package remove failed: ${error.message}`);
+        });
+        return;
+      }
+      void installPackage(entry.source, { local: entry.scope === "project" }).then(() => {
+        hooks.reload?.();
+        app.setStatus?.(`${entry.installed ? "Reinstalled" : "Installed"} ${entry.source}.`);
+        void openPackagesMenu(app, hooks);
+      }).catch((error: Error) => {
+        app.setStatus?.(`Package install failed: ${error.message}`);
+      });
+    }, { kind: "packages" });
+  };
+  app.openItemPicker("Packages", items, (id: string) => {
+    const entry = packages.find((candidate) => `${candidate.scope}:${candidate.source}` === id);
+    if (!entry) return;
+    openPackageActions(entry);
+  }, { kind: "packages", closeOnSelect: false });
   return true;
 }
 
