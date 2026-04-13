@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { resolveExecutionTarget } from "../src/cli/turn-runner-support.js";
 import { resolvePreferredMode, resolvePreferredSpecialistRole } from "../src/cli/model-routing.js";
+import { getSettings, updateSetting } from "../src/core/config.js";
 
 const mainModel = {
   provider: { id: "openai", name: "OpenAI", defaultModel: "gpt-5.4-mini", models: ["gpt-5.4-mini"] },
@@ -96,6 +97,8 @@ describe("specialist model routing", () => {
   });
 
   it("keeps concise research on the small lane but lets deep strategy turns stay on main", () => {
+    const previousAutoRoute = getSettings().autoRoute;
+    updateSetting("autoRoute", true);
     const smallModel = {
       provider: { id: "openai", name: "OpenAI", defaultModel: "gpt-4o-mini", models: ["gpt-4o-mini"] },
       runtime: "sdk",
@@ -145,9 +148,13 @@ describe("specialist model routing", () => {
       smallModelId: "gpt-4o-mini",
     });
 
-    expect(concise.resolvedRoute).toBe("small");
-    expect(concise.executionModelId).toBe("gpt-4o-mini");
-    expect(deep.resolvedRoute).toBe("main");
-    expect(deep.executionModelId).toBe("gpt-5.4-mini");
+    try {
+      expect(concise.resolvedRoute).toBe("small");
+      expect(concise.executionModelId).toBe("gpt-4o-mini");
+      expect(deep.resolvedRoute).toBe("main");
+      expect(deep.executionModelId).toBe("gpt-5.4-mini");
+    } finally {
+      updateSetting("autoRoute", previousAutoRoute);
+    }
   });
 });
