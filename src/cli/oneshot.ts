@@ -14,11 +14,13 @@ import { tryCsvToParquetFastPath, tryLostGitRecoveryFastPath } from "./oneshot-f
 import { tryRepoTaskFastPath } from "./repo-fastpath.js";
 import { applyTurnFrame } from "./turn-frame.js";
 import { buildMinimalOutputInstruction, getMinimalOutputPolicy } from "./turn-runner-support.js";
+import { getProviderCompat } from "../ai/provider-compat.js";
 
 function canUseSdkTools(model: ModelHandle): boolean {
   return model.runtime === "sdk"
     && !!model.model
-    && ["anthropic", "openai", "codex", "google", "mistral", "groq", "xai", "openrouter", "ollama", "lmstudio", "llamacpp", "jan", "vllm"].includes(model.provider.id);
+    && ["anthropic", "openai", "codex", "google", "mistral", "groq", "xai", "openrouter", "ollama", "lmstudio", "llamacpp", "jan", "vllm"].includes(model.provider.id)
+    && getProviderCompat(model.provider.id, model.modelId).supportsTools !== false;
 }
 
 export interface OneShotResult {

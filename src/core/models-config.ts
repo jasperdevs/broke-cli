@@ -61,6 +61,7 @@ const compatSchema = z.object({
   supportsDeveloperRole: z.boolean().optional(),
   supportsReasoningEffort: z.boolean().optional(),
   supportsUsageInStreaming: z.boolean().optional(),
+  supportsTools: z.boolean().optional(),
   maxTokensField: z.enum(["max_completion_tokens", "max_tokens"]).optional(),
   thinkingFormat: z.enum(["openai", "qwen"]).optional(),
 });

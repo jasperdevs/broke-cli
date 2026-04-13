@@ -123,7 +123,13 @@ export function closeBudgetView(app: AppState): void {
   app.drawNow();
 }
 
-export function openTreeView(app: AppState, title: string, session: Session, onSelect: (entryId: string) => void | Promise<void>): void {
+export function openTreeView(
+  app: AppState,
+  title: string,
+  session: Session,
+  onSelect: (entryId: string) => void | Promise<void>,
+  onFork?: (entryId: string) => void | Promise<void>,
+): void {
   app.clearPendingMessages?.();
   app.treeView = {
     title,
@@ -135,6 +141,7 @@ export function openTreeView(app: AppState, title: string, session: Session, onS
     showLabelTimestamps: false,
   };
   app.onTreeSelect = onSelect;
+  app.onTreeFork = onFork ?? null;
   app.openMenuPrompt("tree");
   app.drawNow();
 }
@@ -142,6 +149,7 @@ export function openTreeView(app: AppState, title: string, session: Session, onS
 export function closeTreeView(app: AppState): void {
   app.treeView = null;
   app.onTreeSelect = null;
+  app.onTreeFork = null;
   app.input.clear();
   app.drawNow();
 }
@@ -265,7 +273,7 @@ export interface AppStateUiMethods {
   openItemPicker(title: string, items: PickerItem[], onSelect: (id: string) => void, options?: { initialCursor?: number; previewHint?: string; onPreview?: (id: string) => void; onCancel?: () => void; onSecondaryAction?: (id: string) => void; onKey?: (key: Keypress) => boolean; secondaryHint?: string; closeOnSelect?: boolean; kind?: MenuPromptKind }): void;
   openBudgetView(title: string, reports: { all: BudgetReport; session: BudgetReport }, scope?: "all" | "session"): void;
   closeBudgetView(): void;
-  openTreeView(title: string, session: Session, onSelect: (entryId: string) => void | Promise<void>): void;
+  openTreeView(title: string, session: Session, onSelect: (entryId: string) => void | Promise<void>, onFork?: (entryId: string) => void | Promise<void>): void;
   closeTreeView(): void;
   getMode(): Mode;
   setMode(mode: Mode): void;
@@ -295,7 +303,7 @@ export const appStateUiMethods: AppStateUiMethods = {
   openItemPicker(this: AppState, title, items, onSelect, options) { return openItemPicker(this, title, items, onSelect, options); },
   openBudgetView(this: AppState, title, reports, scope) { return openBudgetView(this, title, reports, scope); },
   closeBudgetView(this: AppState) { return closeBudgetView(this); },
-  openTreeView(this: AppState, title, session, onSelect) { return openTreeView(this, title, session, onSelect); },
+  openTreeView(this: AppState, title, session, onSelect, onFork) { return openTreeView(this, title, session, onSelect, onFork); },
   closeTreeView(this: AppState) { return closeTreeView(this); },
   getMode(this: AppState) { return getMode(this); },
   setMode(this: AppState, mode) { return setMode(this, mode); },

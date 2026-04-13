@@ -24,6 +24,10 @@ function asPositiveNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
 }
 
+function asNonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
 function normalizeInputModalities(value: unknown): Array<"text" | "image"> | undefined {
   if (!Array.isArray(value)) return undefined;
   const normalized = value
@@ -51,6 +55,7 @@ async function fetchLocalModels(id: string, baseURL: string): Promise<LocalDisco
         input: normalizeInputModalities(model.input_modalities ?? model.modalities),
         toolCall: typeof model.tool_call === "boolean" ? model.tool_call : undefined,
         reasoning: typeof model.reasoning === "boolean" ? model.reasoning : undefined,
+        source: typeof model.owned_by === "string" ? model.owned_by : undefined,
       });
     }
   }
@@ -74,6 +79,9 @@ async function fetchLocalModels(id: string, baseURL: string): Promise<LocalDisco
       const info = typeof showDetails?.model_info === "object" && showDetails.model_info !== null
         ? showDetails.model_info as Record<string, unknown>
         : {};
+      const details = typeof showDetails?.details === "object" && showDetails.details !== null
+        ? showDetails.details as Record<string, unknown>
+        : {};
       const capabilities = Array.isArray(showDetails?.capabilities)
         ? showDetails.capabilities.filter((entry): entry is string => typeof entry === "string")
         : [];
@@ -86,6 +94,10 @@ async function fetchLocalModels(id: string, baseURL: string): Promise<LocalDisco
         maxTokens: contextWindow ? contextWindow * 10 : meta.maxTokens,
         reasoning: capabilities.includes("thinking") || meta.reasoning,
         toolCall: capabilities.includes("tools") || meta.toolCall,
+        architecture: architecture || meta.architecture,
+        parameterSize: asNonEmptyString(details.parameter_size) ?? meta.parameterSize,
+        quantization: asNonEmptyString(details.quantization_level) ?? meta.quantization,
+        source: "ollama",
       });
     }
   }
@@ -101,6 +113,7 @@ async function fetchLocalModels(id: string, baseURL: string): Promise<LocalDisco
             name,
             contextWindow: asPositiveNumber(model.context_length ?? model.max_context_length),
             maxTokens: asPositiveNumber(model.max_tokens),
+            source: "llama.cpp",
           });
         }
       }
@@ -130,6 +143,10 @@ async function fetchLocalModels(id: string, baseURL: string): Promise<LocalDisco
             reasoning: typeof model.trainedForToolUse === "boolean" ? model.trainedForToolUse : undefined,
             toolCall: typeof model.trainedForToolUse === "boolean" ? model.trainedForToolUse : undefined,
             input: model.vision === true ? ["text", "image"] : ["text"],
+            quantization: asNonEmptyString(model.quantization),
+            parameterSize: asNonEmptyString(model.parameterCount),
+            architecture: asNonEmptyString(model.architecture),
+            source: "lmstudio",
           });
         }
       }

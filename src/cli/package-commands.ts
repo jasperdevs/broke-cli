@@ -18,6 +18,7 @@ import {
   setPackageResourceConfig,
   updatePackages,
 } from "../core/package-manager.js";
+import { searchPackageRegistry } from "../core/package-search.js";
 
 function renderConfigOverview(): string {
   const lines: string[] = [];
@@ -54,6 +55,29 @@ export function registerPackageCommands(program: Command): void {
       }
       if (result.exitCode !== 0) process.exit(result.exitCode);
       process.stdout.write("Updated. Restart to use the new version.\n");
+    });
+
+  program
+    .command("search")
+    .argument("<query>")
+    .option("--limit <n>", "maximum results", "10")
+    .description("Search npm for brokecli/pi-style packages")
+    .action(async (query: string, opts: { limit?: string }) => {
+      const limit = Number.parseInt(opts.limit ?? "10", 10);
+      const results = await searchPackageRegistry(query, Number.isFinite(limit) ? limit : 10);
+      if (results.length === 0) {
+        process.stdout.write(`No package results for ${query}\n`);
+        return;
+      }
+      for (const result of results) {
+        const resources = [
+          result.resources.extensions ? `${result.resources.extensions} ext` : "",
+          result.resources.skills ? `${result.resources.skills} skill` : "",
+          result.resources.prompts ? `${result.resources.prompts} prompt` : "",
+          result.resources.themes ? `${result.resources.themes} theme` : "",
+        ].filter(Boolean).join(" · ") || "-";
+        process.stdout.write(`${result.source}\t${result.version}\t${resources}\t${result.description}\n`);
+      }
     });
 
   program

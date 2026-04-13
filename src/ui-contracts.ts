@@ -53,6 +53,7 @@ export type MenuPromptKind =
   | "skills"
   | "changelog"
   | "projects"
+  | "packages"
   | "logout";
 
 export type UpdateNotice = UpdateInfo;

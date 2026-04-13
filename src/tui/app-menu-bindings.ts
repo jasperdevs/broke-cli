@@ -29,6 +29,7 @@ import {
   selectFileEntry,
   selectItemEntry,
   selectModelEntry,
+  forkTreeEntry,
   selectTreeEntry,
   shouldEnableMenuMouse,
   toggleModelPin,
@@ -92,6 +93,7 @@ export interface AppMenuMethods {
   openModelLanePicker(index: number): void;
   selectModelLaneEntry(index: number): void;
   selectTreeEntry(): void;
+  forkTreeEntry(): void;
   selectFileEntry(index: number): void;
   applyCommandSuggestion(index: number, submitOnReturn?: boolean): void;
   hideCursorBriefly(durationMs?: number): void;
@@ -141,6 +143,7 @@ export const appMenuMethods: AppMenuMethods = {
   openModelLanePicker(this: AppState, index: number) { return openModelLanePicker(this, index); },
   selectModelLaneEntry(this: AppState, index: number) { return selectModelLaneEntry(this, index); },
   selectTreeEntry(this: AppState) { return selectTreeEntry(this); },
+  forkTreeEntry(this: AppState) { return forkTreeEntry(this); },
   selectFileEntry(this: AppState, index: number) { return selectFileEntry(this, index); },
   applyCommandSuggestion(this: AppState, index: number, submitOnReturn?: boolean) { return applyCommandSuggestion(this, index, submitOnReturn); },
   hideCursorBriefly(this: AppState, durationMs?: number) { return hideCursorBriefly(this, durationMs); },

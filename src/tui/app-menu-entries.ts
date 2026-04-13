@@ -1,4 +1,6 @@
 import { currentTheme } from "../core/themes.js";
+import { getModelSpec } from "../ai/model-catalog.js";
+import { getLocalModelMetadata } from "../ai/local-model-metadata.js";
 import { BOLD, DIM, RESET } from "../utils/ansi.js";
 import { truncateVisible, visibleWidth } from "../utils/terminal-width.js";
 import { ERR, MUTED, T, TXT } from "./app-shared.js";
@@ -41,6 +43,20 @@ export function getActiveMenuDetail(app: AppState): string | null {
     if (!opt) return null;
     if (opt.providerId === "__auto__") {
       return "Scores by provider pricing first, then token and context efficiency.";
+    }
+    const localMeta = getLocalModelMetadata(opt.providerId, opt.modelId);
+    const spec = getModelSpec(opt.modelId, opt.providerId);
+    if (localMeta || spec) {
+      const details = [
+        spec?.providerId ? opt.providerName : null,
+        localMeta?.architecture ?? null,
+        localMeta?.parameterSize ?? null,
+        localMeta?.quantization ?? null,
+        spec?.limit.context ? `ctx ${Math.round(spec.limit.context / 1000)}k` : null,
+        (localMeta?.toolCall ?? spec?.toolCall) === true ? "tools" : null,
+        (localMeta?.reasoning ?? spec?.reasoning) === true ? "reasoning" : null,
+      ].filter(Boolean);
+      if (details.length > 0) return details.join(" · ");
     }
     const badges = opt.badges && opt.badges.length > 0 ? opt.badges.join(" · ") : "";
     return badges || opt.providerName || null;

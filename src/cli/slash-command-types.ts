@@ -34,7 +34,12 @@ export interface SlashCommandApp {
     onSelect: (id: string) => void,
     options?: ItemPickerOptions,
   ): void;
-  openTreeView?(title: string, session: Session, onSelect: (entryId: string) => void | Promise<void>): void;
+  openTreeView?(
+    title: string,
+    session: Session,
+    onSelect: (entryId: string) => void | Promise<void>,
+    onFork?: (entryId: string) => void | Promise<void>,
+  ): void;
   stop(): void;
   cycleCavemanMode(): void;
   cycleThinkingMode(): void;

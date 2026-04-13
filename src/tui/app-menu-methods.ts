@@ -244,6 +244,7 @@ export function getMenuPromptPrefix(_app: AppState, kind: MenuPromptKind): strin
     case "skills": return "/skills ";
     case "changelog": return "/changelog ";
     case "projects": return "/projects ";
+    case "packages": return "/packages ";
     case "logout": return "/logout ";
   }
   return "/";
@@ -412,6 +413,14 @@ export function selectTreeEntry(app: AppState): void {
   const onSelect = app.onTreeSelect;
   app.closeTreeView();
   void onSelect(selectedId);
+}
+
+export function forkTreeEntry(app: AppState): void {
+  const selectedId = app.treeView?.selectedId;
+  if (!selectedId || !app.onTreeFork) return;
+  const onFork = app.onTreeFork;
+  app.closeTreeView();
+  void onFork(selectedId);
 }
 
 export function selectFileEntry(app: AppState, index: number): void {

@@ -4,7 +4,7 @@ import { getConfiguredModelPreference, getSettings, updateModelPreference, updat
 import { createDefaultSessionName } from "../core/session.js";
 import { runConnectFlow } from "./connect-flow.js";
 import { runLoginFlow } from "./login-flow.js";
-import { openExtensionsMenu, openSettingsMenu } from "./slash-command-menus.js";
+import { openExtensionsMenu, openPackagesMenu, openSettingsMenu } from "./slash-command-menus.js";
 import { createSlashCommandRegistry, type RegisteredSlashCommand } from "./slash-command-registry.js";
 import type { HandleSlashCommandOptions, ParsedSlashCommand, SlashCommandResult } from "./slash-command-types.js";
 import { handleUiSlashCommand } from "./slash-command-ui.js";
@@ -213,6 +213,16 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
     run: ({ app, hooks }) => {
       app.dismissBtwBubble?.();
       openExtensionsMenu(app, hooks);
+      return { handled: true };
+    },
+  },
+  {
+    names: ["packages"],
+    showInPicker: false,
+    description: "inspect configured packages",
+    run: ({ app }) => {
+      app.dismissBtwBubble?.();
+      openPackagesMenu(app);
       return { handled: true };
     },
   },

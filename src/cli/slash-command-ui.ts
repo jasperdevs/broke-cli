@@ -31,14 +31,12 @@ async function loadBudgetReports(session: Session): Promise<{ all: BudgetReport;
     session: buildBudgetReport(session),
   };
 }
-
 function reloadSessionIntoUi(app: SlashCommandApp, session: Session, editorText?: string): void {
   app.clearMessages();
   for (const msg of session.getMessages()) app.addMessage(msg.role, msg.content);
   app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
   if (editorText) app.setDraft?.(editorText);
 }
-
 function insertPromptAsset(app: SlashCommandApp, text: string): void {
   const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
   if (!normalized) return;
@@ -50,7 +48,6 @@ function insertPromptAsset(app: SlashCommandApp, text: string): void {
   const joiner = !current ? "" : current.endsWith("\n") ? "\n" : "\n\n";
   app.setDraft?.(`${current}${joiner}${normalized}`);
 }
-
 async function chooseMenuItem(
   app: SlashCommandApp,
   title: string,
@@ -70,7 +67,6 @@ async function chooseMenuItem(
     });
   });
 }
-
 function getHotkeyLabels(bindings: Keybindings): Array<{ id: keyof Keybindings; label: string; detail: string }> {
   return [
     { id: "submit", label: "Send message", detail: bindings.submit },
@@ -84,9 +80,7 @@ function getHotkeyLabels(bindings: Keybindings): Array<{ id: keyof Keybindings; 
     { id: "deleteNextWord", label: "Delete next word", detail: bindings.deleteNextWord },
   ];
 }
-
 interface UiSlashCommandContext extends ParsedSlashCommand {}
-
 export const UI_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<UiSlashCommandContext, SlashCommandResult>> = [
   {
     names: ["theme"],
@@ -163,8 +157,8 @@ export const UI_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<UiSlas
   {
     names: ["tree"],
     description: "jump to any point in session history",
-    run: ({ app, session, activeModel }) => {
-      app.openTreeView?.("Session Tree", session, async (entryId: string) => {
+    run: ({ app, session, activeModel, onSessionReplace }) => {
+      const handleTreeJump = async (entryId: string) => {
         const target = session.getTreeEntry(entryId);
         if (!target) return;
         const abandoned = session.getEntriesToSummarizeForNavigation(entryId);
@@ -193,7 +187,14 @@ export const UI_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<UiSlas
         }
         const result = session.navigateTree(entryId, { summary: summaryText, label: labelText });
         reloadSessionIntoUi(app, session, result.editorText);
-      });
+      };
+      const handleTreeFork = async (entryId: string) => {
+        const forked = session.forkTo(entryId);
+        onSessionReplace(forked);
+        reloadSessionIntoUi(app, forked);
+        app.setStatus?.("Forked selected branch.");
+      };
+      app.openTreeView?.("Session Tree", session, handleTreeJump, handleTreeFork);
       return { handled: true };
     },
   },

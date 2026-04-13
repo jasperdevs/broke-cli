@@ -304,7 +304,7 @@ export function appendTreePicker(app: AppState, lines: string[], maxItems: numbe
   const selectedIndex = Math.max(0, rows.findIndex((row) => row.item.id === app.treeView?.selectedId));
   const total = rows.length;
   lines.push(renderMenuHeader(app.treeView!.title, total === 0 ? 0 : selectedIndex + 1, total, total, app.getMenuFilterQuery() || undefined));
-  lines.push(` ${DIM}enter jump · shift+l label · shift+t time · ctrl+u user · ctrl+o all · esc back${RESET}`);
+  lines.push(` ${DIM}enter jump · shift+f fork · shift+l label · shift+t time · ctrl+u user · ctrl+o all · esc back${RESET}`);
   if (rows.length === 0) {
     lines.push(renderMenuEmptyState("sessions", app.getMenuFilterQuery() || undefined));
     return;

@@ -1,4 +1,5 @@
 import { modelSupportsReasoning } from "../ai/model-catalog.js";
+import { getProviderCompat } from "../ai/provider-compat.js";
 import type { ModelHandle } from "../ai/providers.js";
 import { getSettings, type Mode } from "../core/config.js";
 import { shouldPreferSmallExecutor, type TurnPolicy } from "../core/turn-policy.js";
@@ -142,7 +143,10 @@ export function shouldEnforceToolFirstTurn(options: {
 }
 
 export function canUseSdkTools(model: ModelHandle): boolean {
-  return model.runtime === "sdk" && !!model.model && SDK_TOOL_PROVIDER_IDS.has(model.provider.id);
+  return model.runtime === "sdk"
+    && !!model.model
+    && SDK_TOOL_PROVIDER_IDS.has(model.provider.id)
+    && getProviderCompat(model.provider.id, model.modelId).supportsTools !== false;
 }
 
 export function resolveExecutionTarget(options: {

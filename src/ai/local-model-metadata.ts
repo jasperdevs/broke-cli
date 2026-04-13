@@ -5,6 +5,10 @@ export interface LocalModelMetadata {
   reasoning?: boolean;
   toolCall?: boolean;
   input?: Array<"text" | "image">;
+  quantization?: string;
+  parameterSize?: string;
+  architecture?: string;
+  source?: string;
 }
 
 const localModelMetadata = new Map<string, Map<string, LocalModelMetadata>>();

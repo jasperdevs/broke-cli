@@ -44,6 +44,7 @@ export interface AppPickerState {
   onModelAssign: ((providerId: string, modelId: string, slot: ModelPreferenceSlot) => void) | null;
   onSettingToggle: ((key: string) => void) | null;
   onTreeSelect: ((entryId: string) => void | Promise<void>) | null;
+  onTreeFork: ((entryId: string) => void | Promise<void>) | null;
   onItemSelect: ((id: string) => void) | null;
 }
 
@@ -59,6 +60,7 @@ export function createAppPickerState(): AppPickerState {
     onModelAssign: null,
     onSettingToggle: null,
     onTreeSelect: null,
+    onTreeFork: null,
     onItemSelect: null,
   };
 }

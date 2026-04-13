@@ -49,6 +49,7 @@ Built-in runtime/provider safety filters still apply after merge. For example, n
       "compat": {
         "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
+        "supportsTools": true,
         "supportsUsageInStreaming": false,
         "maxTokensField": "max_tokens",
         "thinkingFormat": "qwen"
@@ -105,6 +106,7 @@ Currently supported:
 
 - `supportsDeveloperRole`
 - `supportsReasoningEffort`
+- `supportsTools`
 - `supportsUsageInStreaming`
 - `maxTokensField`
 - `thinkingFormat`
@@ -118,6 +120,7 @@ Example:
       "compat": {
         "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
+        "supportsTools": true,
         "supportsUsageInStreaming": false,
         "maxTokensField": "max_tokens"
       }

@@ -155,6 +155,8 @@ export class App {
   private set itemPicker(value) { this.pickerState.item = value; }
   private get onTreeSelect() { return this.pickerState.onTreeSelect; }
   private set onTreeSelect(value) { this.pickerState.onTreeSelect = value; }
+  private get onTreeFork() { return this.pickerState.onTreeFork; }
+  private set onTreeFork(value) { this.pickerState.onTreeFork = value; }
   private get onItemSelect() { return this.pickerState.onItemSelect; }
   private set onItemSelect(value) { this.pickerState.onItemSelect = value; }
   private get sidebarFileTree() { return this.sidebarState.fileTree; }

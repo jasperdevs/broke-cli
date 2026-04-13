@@ -5,6 +5,7 @@ import { getSettings, loadConfig, updateProviderConfig, updateSetting, type Auto
 import { getProviderCredential } from "../core/provider-credentials.js";
 import { listProjects } from "../core/projects.js";
 import { listExtensions } from "../core/extensions.js";
+import { describePackageResources, listInstalledPackages } from "../core/package-manager.js";
 import { toggleExtensionEnabled } from "../core/permissions.js";
 import { Session } from "../core/session.js";
 import type { Keypress } from "../utils/keypress-types.js";
@@ -15,7 +16,7 @@ import { getAvailableThinkingLevels, getEffectiveThinkingLevel } from "../ai/thi
 import type { ModelHandle } from "../ai/providers.js";
 import type { ExtensionHooks, SlashCommandApp } from "./slash-command-types.js";
 
-type EmptyMenuKind = "extensions" | "resume" | "projects" | "logout" | "templates" | "skills" | "changelog";
+type EmptyMenuKind = "extensions" | "resume" | "projects" | "packages" | "logout" | "templates" | "skills" | "changelog";
 
 function describeRoots(roots: string[]): string {
   if (roots.length === 0) return "none";
@@ -175,6 +176,31 @@ export function openExtensionsMenu(app: SlashCommandApp, hooks: ExtensionHooks):
     hooks.reload?.();
     app.updateItemPickerItems?.(buildExtensionItems(), id);
   }, { closeOnSelect: false, kind: "extensions" });
+  return true;
+}
+
+export function openPackagesMenu(app: SlashCommandApp): boolean {
+  const packages = listInstalledPackages();
+  if (packages.length === 0) {
+    return openEmptyItemMenu(app, "Packages", "no configured packages", "packages");
+  }
+  const items = packages.map((entry) => {
+    const resources = entry.installed ? describePackageResources(entry.root) : { extensions: [], skills: [], prompts: [], themes: [] };
+    const detail = [
+      entry.scope,
+      entry.installed ? "installed" : "missing",
+      resources.extensions.length ? `${resources.extensions.length} ext` : "",
+      resources.skills.length ? `${resources.skills.length} skill` : "",
+      resources.prompts.length ? `${resources.prompts.length} prompt` : "",
+      resources.themes.length ? `${resources.themes.length} theme` : "",
+    ].filter(Boolean).join(" · ");
+    return {
+      id: `${entry.scope}:${entry.source}`,
+      label: entry.source,
+      detail,
+    };
+  });
+  app.openItemPicker("Packages", items, () => {}, { kind: "packages", closeOnSelect: false });
   return true;
 }
 

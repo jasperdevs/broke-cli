@@ -402,9 +402,9 @@ export class Session {
 
   fork(): Session {
     const forked = new Session();
-      forked.entries = structuredClone(this.entries);
-      forked.name = `${this.name} (fork)`;
-      forked.leafId = this.leafId;
+    forked.entries = structuredClone(this.entries);
+    forked.name = `${this.name} (fork)`;
+    forked.leafId = this.leafId;
     forked.compactionSummary = this.compactionSummary ? { ...this.compactionSummary } : null;
     forked.totalInputTokens = this.totalInputTokens;
     forked.totalOutputTokens = this.totalOutputTokens;
@@ -414,6 +414,16 @@ export class Session {
     forked.provider = this.provider;
     forked.model = this.model;
     forked.createdAt = Date.now();
+    forked.save();
+    return forked;
+  }
+
+  forkTo(targetId: string): Session {
+    const forked = this.fork();
+    const navigation = navigateToEntry(forked.entries, targetId);
+    if (!navigation.cancelled) {
+      forked.leafId = navigation.leafId;
+    }
     forked.save();
     return forked;
   }

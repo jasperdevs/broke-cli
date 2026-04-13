@@ -3,8 +3,10 @@ import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { getModelCapabilities } from "../src/ai/provider-capabilities.js";
+import { filterModelIdsForDisplay } from "../src/ai/provider-visibility.js";
 import { setRuntimeModelsConfigPathsForTests } from "../src/core/models-config.js";
 import { startLocalOpenAIStream } from "../src/ai/local-openai-stream.js";
+import { canUseSdkTools } from "../src/cli/turn-runner-support.js";
 
 function sse(chunks: unknown[]): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
@@ -88,5 +90,26 @@ describe.sequential("provider compat overrides", () => {
     expect(body.stream_options).toBeUndefined();
     expect(body.max_completion_tokens).toBe(256);
     expect(fetchMock.mock.calls[0]?.[1]?.headers).toMatchObject({ "x-test": "1" });
+  });
+
+  it("lets compat disable tool usage and hide unsupported models", () => {
+    writeFileSync(globalModelsPath, JSON.stringify({
+      providers: {
+        openai: {
+          models: [
+            { id: "gpt-5.4-mini", compat: { supportsTools: false } },
+            { id: "gpt-4o", compat: { supportsTools: true } },
+          ],
+        },
+      },
+    }), "utf-8");
+
+    expect(filterModelIdsForDisplay("openai", ["gpt-5.4-mini", "gpt-4o"])).toEqual(["gpt-4o"]);
+    expect(canUseSdkTools({
+      runtime: "sdk",
+      model: {} as any,
+      modelId: "gpt-5.4-mini",
+      provider: { id: "openai" } as any,
+    })).toBe(false);
   });
 });

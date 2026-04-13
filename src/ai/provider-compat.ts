@@ -6,6 +6,7 @@ export interface ProviderCompatSettings {
   supportsDeveloperRole?: boolean;
   supportsReasoningEffort?: boolean;
   supportsUsageInStreaming?: boolean;
+  supportsTools?: boolean;
   maxTokensField?: "max_completion_tokens" | "max_tokens";
   thinkingFormat?: ThinkingFormat;
 }
@@ -15,11 +16,13 @@ const BUILTIN_COMPAT: Record<string, ProviderCompatSettings> = {
     supportsDeveloperRole: false,
     supportsReasoningEffort: true,
     supportsUsageInStreaming: true,
+    supportsTools: true,
   },
   openai: {
     supportsDeveloperRole: true,
     supportsReasoningEffort: true,
     supportsUsageInStreaming: true,
+    supportsTools: true,
     maxTokensField: "max_completion_tokens",
     thinkingFormat: "openai",
   },
@@ -27,6 +30,7 @@ const BUILTIN_COMPAT: Record<string, ProviderCompatSettings> = {
     supportsDeveloperRole: true,
     supportsReasoningEffort: true,
     supportsUsageInStreaming: true,
+    supportsTools: true,
     maxTokensField: "max_completion_tokens",
     thinkingFormat: "openai",
   },
@@ -34,6 +38,7 @@ const BUILTIN_COMPAT: Record<string, ProviderCompatSettings> = {
     supportsDeveloperRole: false,
     supportsReasoningEffort: true,
     supportsUsageInStreaming: true,
+    supportsTools: true,
   },
   ollama: {
     supportsDeveloperRole: false,

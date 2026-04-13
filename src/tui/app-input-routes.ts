@@ -134,6 +134,9 @@ export function handleTreeViewKey(app: AppState, key: Keypress): void {
     toggleTreeFold(app, 1);
   } else if (key.shift && key.char?.toLowerCase() === "l") {
     toggleTreeLabel(app);
+  } else if (key.shift && key.char?.toLowerCase() === "f") {
+    app.forkTreeEntry?.();
+    return;
   } else if (key.shift && key.char?.toLowerCase() === "t") {
     toggleTreeTimestampMode(app);
   } else if (key.ctrl && key.name === "u") {

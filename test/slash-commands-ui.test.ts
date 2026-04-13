@@ -311,6 +311,41 @@ describe("slash command UI surfaces", () => {
     expect(opened).toEqual({ title: "Session Tree", sessionId: session.getId() });
   });
 
+  it("forks the selected tree branch from /tree", async () => {
+    const app = createAppStub();
+    const session = new Session(`test-tree-fork-${Date.now()}`);
+    session.addMessage("user", "start");
+    session.addMessage("assistant", "reply");
+    session.addMessage("user", "follow up");
+    session.addMessage("assistant", "second reply");
+
+    let capturedFork: ((entryId: string) => void | Promise<void>) | undefined;
+    let replaced: Session | null = null;
+    app.openTreeView = (_title: string, _session: Session, _onSelect: (entryId: string) => void | Promise<void>, onFork?: (entryId: string) => void | Promise<void>) => {
+      capturedFork = onFork;
+    };
+
+    const result = await handleSlashCommand({
+      text: "/tree",
+      app,
+      session,
+      ...createSlashArgs({
+        onSessionReplace(next: Session) {
+          replaced = next;
+        },
+      }),
+    });
+
+    expect(result.handled).toBe(true);
+    const targetId = session.getTreeItems("all").find((item) => item.content === "reply")?.id;
+    expect(targetId).toBeTruthy();
+    await capturedFork?.(targetId!);
+    expect(replaced).not.toBeNull();
+    expect(replaced?.getId()).not.toBe(session.getId());
+    expect(replaced?.getMessages().map((message) => message.content)).toEqual(["start", "reply"]);
+    expect(app.statusMessage).toContain("Forked selected branch");
+  });
+
   it("opens a session info picker for /session", async () => {
     const app = createAppStub();
     let sessionItems: Array<{ id: string; label: string; detail?: string }> = [];
@@ -331,6 +366,32 @@ describe("slash command UI surfaces", () => {
     expect(result.handled).toBe(true);
     expect(sessionItems.some((item) => item.label === "Test Session")).toBe(true);
     expect(sessionItems.some((item) => item.detail === "session dir")).toBe(true);
+  });
+
+  it("opens a package picker for /packages", async () => {
+    const previousPackages = loadConfig().settings?.packages ?? [];
+    updateSetting("packages", ["npm:@demo/pkg"]);
+    const app = createAppStub();
+    let packageItems: Array<{ id: string; label: string; detail?: string }> = [];
+    app.openItemPicker = (_title: string, items: Array<{ id: string; label: string; detail?: string }>) => {
+      packageItems = items;
+    };
+
+    try {
+      const result = await handleSlashCommand({
+        text: "/packages",
+        app,
+        session: new Session(`test-packages-${Date.now()}`),
+        ...createSlashArgs(),
+      });
+
+      expect(result.handled).toBe(true);
+      expect(packageItems).toHaveLength(1);
+      expect(packageItems[0]).toMatchObject({ label: "npm:@demo/pkg" });
+      expect(packageItems[0]?.detail).toContain("missing");
+    } finally {
+      updateSetting("packages", previousPackages);
+    }
   });
 
   it("opens a hotkeys picker for /hotkeys", async () => {
