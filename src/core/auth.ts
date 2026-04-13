@@ -1,6 +1,7 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
+import { writePrivateTextFile } from "./private-files.js";
 
 export interface AuthCredentials {
   provider: string;
@@ -24,9 +25,8 @@ function readAuthData(): Record<string, AuthCredentials> {
 }
 
 function writeAuthData(data: Record<string, AuthCredentials>): void {
-  mkdirSync(CONFIG_DIR, { recursive: true });
   cachedAuthData = { ...data };
-  writeFileSync(AUTH_FILE, JSON.stringify(data, null, 2), "utf-8");
+  writePrivateTextFile(AUTH_FILE, JSON.stringify(data, null, 2));
 }
 
 export function saveCredentials(provider: string, token: string, expiresAt?: number): void {

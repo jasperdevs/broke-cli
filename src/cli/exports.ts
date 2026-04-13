@@ -1,8 +1,8 @@
-import { marked } from "marked";
+import { Renderer, marked } from "marked";
 import type { Session } from "../core/session.js";
 import { homedir } from "os";
-import { join } from "path";
-import { mkdirSync, writeFileSync } from "fs";
+import { dirname, join } from "path";
+import { ensurePrivateDir, writePrivateTextFile } from "../core/private-files.js";
 
 export function formatRelativeMinutes(updatedAt: number): string {
   const ago = Math.max(0, Math.floor((Date.now() - updatedAt) / 60000));
@@ -19,6 +19,41 @@ function escapeHtml(text: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+function sanitizeUrl(url: string): string | null {
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith("#")) return trimmed;
+  try {
+    const parsed = new URL(trimmed);
+    return ["http:", "https:", "mailto:"].includes(parsed.protocol) ? trimmed : null;
+  } catch {
+    return null;
+  }
+}
+
+function getSafeRoleClass(role: string): "user" | "assistant" | "system" {
+  return role === "assistant" || role === "system" ? role : "user";
+}
+
+function renderSafeMarkdown(markdown: string): string {
+  const renderer = new Renderer();
+  renderer.html = ({ text }) => `<pre>${escapeHtml(text)}</pre>`;
+  renderer.link = ({ href, title, tokens }) => {
+    const safeHref = sanitizeUrl(href);
+    const label = tokens.map((token) => token.raw).join("");
+    if (!safeHref) return escapeHtml(label);
+    const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
+    return `<a href="${escapeHtml(safeHref)}"${titleAttr}>${escapeHtml(label)}</a>`;
+  };
+  renderer.image = ({ href, title, text }) => {
+    const safeHref = sanitizeUrl(href);
+    if (!safeHref) return escapeHtml(text);
+    const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
+    return `<img src="${escapeHtml(safeHref)}" alt="${escapeHtml(text)}"${titleAttr}>`;
+  };
+  return marked.parse(markdown, { renderer }) as string;
 }
 
 function formatTimestamp(timestamp: number): string {
@@ -59,12 +94,13 @@ export function buildHtmlExport(
   cwd: string,
 ): string {
   const cards = msgs.map((m) => {
+    const safeRole = getSafeRoleClass(m.role);
     const rendered = m.role === "assistant"
-      ? marked.parse(m.content) as string
+      ? renderSafeMarkdown(m.content)
       : `<pre>${escapeHtml(m.content)}</pre>`;
-    return `<article class="message ${m.role}">
+    return `<article class="message ${safeRole}">
 <header>
-  <span class="role">${escapeHtml(m.role)}</span>
+  <span class="role">${escapeHtml(safeRole)}</span>
   <time>${escapeHtml(formatTimestamp(m.timestamp))}</time>
 </header>
 <div class="content">${rendered}</div>
@@ -155,7 +191,7 @@ export async function publishTranscriptShare(options: {
     }
   }
 
-  mkdirSync(join(options.filePath, ".."), { recursive: true });
-  writeFileSync(options.filePath, options.html, "utf-8");
+  ensurePrivateDir(dirname(options.filePath));
+  writePrivateTextFile(options.filePath, options.html);
   return { kind: "local", filePath: options.filePath, url: toFileUrl(options.filePath) };
 }

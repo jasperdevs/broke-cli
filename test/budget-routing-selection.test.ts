@@ -39,4 +39,16 @@ describe("budget-first provider selection", () => {
     expect(resolved.providerId).toBe("ollama");
     expect(resolved.modelId).toBe("qwen2.5-coder:7b");
   });
+
+  it("prefers known-priced candidates over unpriced aggregator models", () => {
+    const resolved = pickCheapestDetectedModel([
+      { id: "openrouter", name: "OpenRouter", available: true, reason: "API key" },
+      { id: "anthropic", name: "Anthropic", available: true, reason: "API key" },
+    ]);
+
+    expect(resolved).toEqual({
+      providerId: "anthropic",
+      modelId: "claude-haiku-4-5-20251001",
+    });
+  });
 });

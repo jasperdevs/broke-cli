@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { rmSync } from "fs";
+import { rmSync, statSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import { resetAuthCacheForTests, saveCredentials } from "../src/core/auth.js";
@@ -34,6 +34,9 @@ describe("oauth credential detection", () => {
       value: JSON.stringify({ token: "test-token", projectId: "proj-123" }),
       source: "brokecli-auth",
     });
+    if (process.platform !== "win32") {
+      expect(statSync(authPath).mode & 0o777).toBe(0o600);
+    }
   });
 
   it("includes stored oauth providers in detected provider results", async () => {

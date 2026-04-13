@@ -1,9 +1,9 @@
-import { writeFileSync } from "fs";
 import { buildHtmlExport } from "./exports.js";
 import { SessionManager } from "../core/session-manager.js";
 import { clearRuntimeSettings, setRuntimeSettings } from "../core/config.js";
 import { setRuntimeProviderApiKey } from "../core/provider-credentials.js";
 import type { ThinkingLevel } from "../core/config-types.js";
+import { writePrivateTextFile } from "../core/private-files.js";
 import { TOOL_NAMES, type ToolName } from "../tools/registry.js";
 
 type ParsedModelArg = { provider?: string; model?: string; thinking?: string };
@@ -63,6 +63,6 @@ export function runExportMode(sessionId: string, sessionDir: string | undefined,
   const session = manager.getSession();
   const outputPath = exportOut || `${session.getId()}.html`;
   const content = buildHtmlExport(session.getMessages(), session.getProvider() || "unknown", session.getModel() || "unknown", session.getCwd());
-  writeFileSync(outputPath, content, "utf-8");
+  writePrivateTextFile(outputPath, content);
   process.stdout.write(`${outputPath}\n`);
 }

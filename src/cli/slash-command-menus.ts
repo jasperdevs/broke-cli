@@ -1,5 +1,4 @@
 import { execSync } from "child_process";
-import { writeFileSync } from "fs";
 import { buildSystemPrompt, reloadContext } from "../core/context.js";
 import { clearCredentials, hasStoredCredentials, listAuthenticated } from "../core/auth.js";
 import { getSettings, loadConfig, updateProviderConfig, updateSetting, type AutonomySettings, type Mode, type Settings } from "../core/config.js";
@@ -10,6 +9,7 @@ import { toggleExtensionEnabled } from "../core/permissions.js";
 import { Session } from "../core/session.js";
 import type { Keypress } from "../utils/keypress-types.js";
 import { buildHtmlExport, buildMarkdownExport, formatRelativeMinutes } from "./exports.js";
+import { writePrivateTextFile } from "../core/private-files.js";
 import { SessionManager } from "../core/session-manager.js";
 import { getAvailableThinkingLevels, getEffectiveThinkingLevel } from "../ai/thinking.js";
 import type { ModelHandle } from "../ai/providers.js";
@@ -200,7 +200,7 @@ export function openExportMenu(args: { app: SlashCommandApp; session: Session; a
         else execSync("xclip -selection clipboard", { input: content });
         app.setStatus?.("Transcript copied.");
       } else {
-        writeFileSync(filePath, content, "utf-8");
+        writePrivateTextFile(filePath, content);
         app.setStatus?.(`Exported to ${filePath}`);
       }
     } catch (err) {

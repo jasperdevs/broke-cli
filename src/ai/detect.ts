@@ -5,9 +5,11 @@ import {
   getModelPricing,
   getProviderDefaultModelId,
   getProviderNativeDefaultModelId,
+  getProviderPreferredDisplayModelIds,
   getProviderSmallModelId,
+  getModelSpec,
 } from "./model-catalog.js";
-import { getProviderInfo } from "./provider-definitions.js";
+import { getProviderInfo, LOCAL_PROVIDER_IDS } from "./provider-definitions.js";
 
 export interface DetectedProvider {
   id: string;
@@ -19,6 +21,26 @@ export interface DetectedProvider {
 export interface CheapestDetectedModel {
   providerId: string;
   modelId: string;
+}
+
+function listBudgetCandidateModelIds(provider: DetectedProvider): string[] {
+  const ordered = [
+    getProviderSmallModelId(provider.id),
+    provider.reason === "native login" ? getProviderNativeDefaultModelId(provider.id) : undefined,
+    getProviderDefaultModelId(provider.id),
+    getProviderInfo(provider.id)?.defaultModel,
+    ...(getProviderInfo(provider.id)?.models ?? []),
+    ...getProviderPreferredDisplayModelIds(provider.id),
+  ].filter((modelId): modelId is string => !!modelId);
+
+  const deduped: string[] = [];
+  const seen = new Set<string>();
+  for (const modelId of ordered) {
+    if (seen.has(modelId)) continue;
+    seen.add(modelId);
+    deduped.push(modelId);
+  }
+  return deduped;
 }
 
 /** Probe a local HTTP server with a short timeout */
@@ -158,28 +180,35 @@ export function pickDefault(providers: DetectedProvider[]): DetectedProvider | u
 export function pickCheapestDetectedModel(providers: DetectedProvider[]): CheapestDetectedModel | null {
   const candidates = providers
     .filter((provider) => provider.available)
-    .map((provider) => {
-      const modelId = getProviderSmallModelId(provider.id)
-        ?? (provider.reason === "native login" ? getProviderNativeDefaultModelId(provider.id) : undefined)
-        ?? getProviderDefaultModelId(provider.id)
-        ?? getProviderInfo(provider.id)?.defaultModel;
-      if (!modelId) return null;
-      const pricing = getModelPricing(modelId, provider.id);
-      return {
-        providerId: provider.id,
-        modelId,
-        input: pricing.input,
-        output: pricing.output,
-      };
-    })
-    .filter((candidate): candidate is { providerId: string; modelId: string; input: number; output: number } => !!candidate);
+    .flatMap((provider, providerIndex) =>
+      listBudgetCandidateModelIds(provider).map((modelId, priorityIndex) => {
+        const pricing = getModelPricing(modelId, provider.id);
+        const hasCatalogPricing = !!getModelSpec(modelId, provider.id)?.cost;
+        const isLocal = LOCAL_PROVIDER_IDS.has(provider.id);
+        const priced = isLocal || hasCatalogPricing;
+        return {
+          providerId: provider.id,
+          modelId,
+          input: priced ? pricing.input : 0,
+          output: priced ? pricing.output : 0,
+          priced,
+          isLocal,
+          providerIndex,
+          priorityIndex,
+        };
+      }),
+    );
 
   if (candidates.length === 0) return null;
 
   candidates.sort((left, right) =>
-    (left.input + left.output) - (right.input + right.output)
+    Number(right.priced) - Number(left.priced)
+    || Number(right.isLocal) - Number(left.isLocal)
+    || (left.input + left.output) - (right.input + right.output)
     || left.input - right.input
     || left.output - right.output
+    || left.providerIndex - right.providerIndex
+    || left.priorityIndex - right.priorityIndex
     || left.providerId.localeCompare(right.providerId)
     || left.modelId.localeCompare(right.modelId));
 

@@ -1,8 +1,9 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "fs";
+import { existsSync, readFileSync, readdirSync } from "fs";
 import { homedir } from "os";
 import { isAbsolute, join, resolve } from "path";
 import { getSettings } from "./config.js";
 import type { Message, SessionData, SessionEntry, SessionListItem } from "./session-types.js";
+import { ensurePrivateDir, writePrivateTextFile } from "./private-files.js";
 
 export function resolveSessionsDir(): string {
   const configured = getSettings().sessionDir?.trim();
@@ -40,8 +41,8 @@ export function saveSessionData(data: SessionData): void {
   if (!getSettings().autoSaveSessions) return;
   try {
     const sessionsDir = resolveSessionsDir();
-    mkdirSync(sessionsDir, { recursive: true });
-    writeFileSync(join(sessionsDir, `${data.id}.json`), JSON.stringify(data), "utf-8");
+    ensurePrivateDir(sessionsDir);
+    writePrivateTextFile(join(sessionsDir, `${data.id}.json`), JSON.stringify(data));
   } catch {
     // silently fail - sessions are optional
   }

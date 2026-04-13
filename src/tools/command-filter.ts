@@ -1,6 +1,6 @@
-import { mkdirSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
+import { writePrivateTextFile } from "../core/private-files.js";
 
 export interface CommandFilterResult {
   output: string;
@@ -28,14 +28,13 @@ function saveRawOutput(command: string, content: string): string | undefined {
   if (!content.trim()) return undefined;
   try {
     const dir = join(homedir(), ".brokecli", "tee");
-    mkdirSync(dir, { recursive: true });
     const slug = command
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "")
       .slice(0, 40) || "command";
     const path = join(dir, `${Date.now()}-${slug}.log`);
-    writeFileSync(path, content, "utf-8");
+    writePrivateTextFile(path, content);
     return path;
   } catch {
     return undefined;
