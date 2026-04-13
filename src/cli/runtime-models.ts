@@ -6,8 +6,23 @@ import { getSettings } from "../core/config.js";
 import type { ModelOption } from "../ui-contracts.js";
 import { listResolvedModelPreferences, resolveConfiguredModelHandle, type SpecialistModelRole } from "./model-routing.js";
 
-const AUTO_MODEL_PROVIDER_ID = "__auto__";
-const AUTO_MODEL_ID = "__auto__";
+export const AUTO_MODEL_PROVIDER_ID = "__auto__";
+export const AUTO_MODEL_ID = "__auto__";
+
+export function withAutoModelOption(options: ModelOption[]): ModelOption[] {
+  if (options.length === 0 || options.some((option) => option.providerId === AUTO_MODEL_PROVIDER_ID && option.modelId === AUTO_MODEL_ID)) {
+    return options;
+  }
+  return [{
+    providerId: AUTO_MODEL_PROVIDER_ID,
+    providerName: "Automatic routing",
+    modelId: AUTO_MODEL_ID,
+    displayName: "Auto",
+    active: false,
+    badges: getSettings().autoRoute ? ["now", "auto"] : ["auto"],
+    tone: "auto",
+  }, ...options];
+}
 
 export function rebuildSmallModelState(
   providerRegistry: ProviderRegistry,
@@ -64,14 +79,5 @@ export function buildVisibleRuntimeModelOptions(
         badges,
       };
     });
-  if (options.length === 0) return options;
-  return [{
-    providerId: AUTO_MODEL_PROVIDER_ID,
-    providerName: "Automatic routing",
-    modelId: AUTO_MODEL_ID,
-    displayName: "Auto",
-    active: false,
-    badges: getSettings().autoRoute ? ["now", "auto"] : ["auto"],
-    tone: "auto" as const,
-  }, ...options];
+  return withAutoModelOption(options);
 }

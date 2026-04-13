@@ -9,6 +9,7 @@ import { createSlashCommandRegistry, type RegisteredSlashCommand } from "./slash
 import type { HandleSlashCommandOptions, ParsedSlashCommand, SlashCommandResult } from "./slash-command-types.js";
 import { handleUiSlashCommand } from "./slash-command-ui.js";
 import { getResolvedModelPreference } from "./model-routing.js";
+import { AUTO_MODEL_ID, AUTO_MODEL_PROVIDER_ID, withAutoModelOption } from "./runtime-models.js";
 
 interface CoreSlashCommandContext extends ParsedSlashCommand {
   waitFor: (ms: number) => Promise<void>;
@@ -73,7 +74,8 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
     hotkey: "ctrl+l",
     run: ({ restText, app, providerRegistry, buildVisibleModelOptions, activeModel, onModelChange, session, onModelRoutingChange }) => {
       app.dismissBtwBubble?.();
-      const allOptions = buildVisibleModelOptions();
+      const getPickerOptions = () => withAutoModelOption(buildVisibleModelOptions());
+      const allOptions = getPickerOptions();
       if (allOptions.length === 0) {
         app.setStatus?.("No connected providers found. Run /connect.");
         return { handled: true };
@@ -100,11 +102,11 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
       }
       app.openModelPicker(allOptions, (provId, modId) => {
         try {
-          if (provId === "__auto__" && modId === "__auto__") {
+          if (provId === AUTO_MODEL_PROVIDER_ID && modId === AUTO_MODEL_ID) {
             updateSetting("autoRoute", true);
             app.setStatus?.("Auto routing enabled.");
             onModelRoutingChange?.();
-            app.updateModelPickerOptions?.(buildVisibleModelOptions(), "__auto__/__auto__");
+            app.updateModelPickerOptions?.(getPickerOptions(), `${AUTO_MODEL_PROVIDER_ID}/${AUTO_MODEL_ID}`);
             return;
           }
           const key = `${provId}/${modId}`;
@@ -129,14 +131,14 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
         const scoped = getSettings().scopedModels;
         if (pinned && !scoped.includes(key)) updateSetting("scopedModels", [...scoped, key]);
         else if (!pinned) updateSetting("scopedModels", scoped.filter((entry: string) => entry !== key));
-        app.updateModelPickerOptions?.(buildVisibleModelOptions(), key);
+        app.updateModelPickerOptions?.(getPickerOptions(), key);
       }, (provId, modId, slot: ModelPreferenceSlot) => {
         const key = `${provId}/${modId}`;
         const fallbackProviderId = activeModel?.provider.id ?? provId;
         const current = getResolvedModelPreference(slot, fallbackProviderId);
         updateModelPreference(slot, current?.key === key ? null : key);
         onModelRoutingChange?.();
-        app.updateModelPickerOptions?.(buildVisibleModelOptions(), key);
+        app.updateModelPickerOptions?.(getPickerOptions(), key);
       }, initialCursor >= 0 ? initialCursor : 0, "all", restText);
       return { handled: true };
     },

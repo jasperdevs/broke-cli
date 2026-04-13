@@ -116,6 +116,7 @@ describe("provider model filtering", () => {
   });
 
   it("does not force routed-but-unavailable providers into the model picker", () => {
+    const spy = vi.spyOn(config, "getBaseUrl").mockReturnValue(undefined);
     const registry = new ProviderRegistry() as any;
     registry.providers = [
       { id: "codex", name: "Codex", available: true, reason: "native login" },
@@ -137,6 +138,7 @@ describe("provider model filtering", () => {
       expect(options.some((option) => option.displayName === "GPT-5 mini")).toBe(true);
     } finally {
       config.updateModelPreference("review", previousReview ?? null);
+      spy.mockRestore();
     }
   });
 });
