@@ -18,7 +18,6 @@ export type TurnArchetype =
   | "review"
   | "research"
   | "planning";
-
 export type PromptProfile = "full" | "casual" | "lean" | "edit" | "followup";
 export type ScaffoldSource = "builtin" | "planned";
 export interface PlannerContext {
@@ -26,7 +25,6 @@ export interface PlannerContext {
   modelId: string;
   providerId: string;
 }
-
 export interface TurnPolicy {
   archetype: TurnArchetype;
   allowedTools: ToolName[];
@@ -39,19 +37,16 @@ export interface TurnPolicy {
   promptProfile: PromptProfile;
   historyWindow: number | null;
 }
-
 const PLANNED_SCAFFOLD_CACHE = new Map<string, string>();
 const CACHE_DIR = join(homedir(), ".brokecli");
 const CACHE_FILE = join(CACHE_DIR, "turn-policy-cache.json");
 const MAX_PLANNED_SCAFFOLDS = 128;
 let cacheHydrated = false;
-
 const ALL_EDIT_TOOLS: ToolName[] = ["semSearch", "bash", "readFile", "writeFile", "editFile", "listFiles", "grep", "todoWrite"];
 const NO_TOOLS: ToolName[] = [];
 const READ_ONLY_TOOLS: ToolName[] = ["semSearch", "readFile", "listFiles", "grep"];
 const SHELL_TOOLS: ToolName[] = ["semSearch", "bash", "readFile", "listFiles", "grep"];
 const RESEARCH_TOOLS: ToolName[] = ["semSearch", "readFile", "listFiles", "grep", "webSearch", "webFetch"];
-
 function withExtensionTools(base: ToolName[], archetype: TurnArchetype): ToolName[] {
   const extra = Object.keys(getExtensionTools());
   if (extra.length === 0) return base;
@@ -126,7 +121,7 @@ function getBuiltInPolicy(archetype: TurnArchetype): TurnPolicy {
         scaffoldSource: "builtin",
         preferSmallExecutor: true,
         promptProfile: "casual",
-        historyWindow: 2,
+        historyWindow: 1,
       };
     case "question":
       return {
@@ -137,7 +132,7 @@ function getBuiltInPolicy(archetype: TurnArchetype): TurnPolicy {
         scaffoldSource: "builtin",
         preferSmallExecutor: true,
         promptProfile: "casual",
-        historyWindow: 4,
+        historyWindow: 2,
       };
     case "explore":
       return {
@@ -148,7 +143,7 @@ function getBuiltInPolicy(archetype: TurnArchetype): TurnPolicy {
         scaffoldSource: "builtin",
         preferSmallExecutor: true,
         promptProfile: "lean",
-        historyWindow: null,
+        historyWindow: 2,
       };
     case "shell":
       return {
@@ -159,7 +154,7 @@ function getBuiltInPolicy(archetype: TurnArchetype): TurnPolicy {
         scaffoldSource: "builtin",
         preferSmallExecutor: true,
         promptProfile: "lean",
-        historyWindow: null,
+        historyWindow: 2,
       };
     case "review":
       return {
@@ -170,7 +165,7 @@ function getBuiltInPolicy(archetype: TurnArchetype): TurnPolicy {
         scaffoldSource: "builtin",
         preferSmallExecutor: true,
         promptProfile: "lean",
-        historyWindow: null,
+        historyWindow: 2,
       };
     case "research":
       return {
@@ -181,7 +176,7 @@ function getBuiltInPolicy(archetype: TurnArchetype): TurnPolicy {
         scaffoldSource: "builtin",
         preferSmallExecutor: true,
         promptProfile: "lean",
-        historyWindow: null,
+        historyWindow: 3,
       };
     case "planning":
       return {
@@ -192,7 +187,7 @@ function getBuiltInPolicy(archetype: TurnArchetype): TurnPolicy {
         scaffoldSource: "builtin",
         preferSmallExecutor: true,
         promptProfile: "lean",
-        historyWindow: null,
+        historyWindow: 3,
       };
     case "edit":
       return {
@@ -289,7 +284,7 @@ function refinePolicyForRequest(policy: TurnPolicy, userMessage: string, repoSta
       allowedTools: ["readFile"],
       maxToolSteps: 1,
       promptProfile: "lean",
-      historyWindow: null,
+      historyWindow: 1,
     };
   }
 
@@ -482,13 +477,18 @@ export function shouldPreferSmallExecutor(
   policy: TurnPolicy,
   messageCount: number,
   hasImages = false,
+  userMessage = "",
 ): boolean {
   if (!policy.preferSmallExecutor || hasImages) return false;
   if (policy.archetype === "casual" || policy.archetype === "question" || policy.archetype === "explore" || policy.archetype === "shell") {
     return true;
   }
-  if (policy.scaffoldSource === "planned" && messageCount > 1) {
-    return policy.archetype === "review" || policy.archetype === "research" || policy.archetype === "planning";
+  const normalized = userMessage.trim().toLowerCase();
+  const complexCheapTurn = /\b(architecture|migrat(?:e|ion)|trade-?off|security|benchmark|compare|deep|detailed|thorough|comprehensive|full)\b/i.test(normalized);
+  if ((policy.archetype === "review" || policy.archetype === "research" || policy.archetype === "planning")) {
+    if (complexCheapTurn && messageCount <= 1) return false;
+    if (policy.scaffoldSource === "planned" && messageCount > 1) return true;
+    return normalized.length > 0 && normalized.length <= 160;
   }
   return false;
 }

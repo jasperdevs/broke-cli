@@ -94,4 +94,60 @@ describe("specialist model routing", () => {
     expect(resolved.specialistRole).toBe("planning");
     expect(resolved.executionModelId).toBe("claude-sonnet-4-6");
   });
+
+  it("keeps concise research on the small lane but lets deep strategy turns stay on main", () => {
+    const smallModel = {
+      provider: { id: "openai", name: "OpenAI", defaultModel: "gpt-4o-mini", models: ["gpt-4o-mini"] },
+      runtime: "sdk",
+      model: {} as any,
+      modelId: "gpt-4o-mini",
+    };
+
+    const concise = resolveExecutionTarget({
+      text: "research the latest TypeScript project references docs",
+      policy: {
+        archetype: "research",
+        allowedTools: ["webSearch", "webFetch"],
+        maxToolSteps: 3,
+        scaffold: "lane cheap",
+        scaffoldSource: "builtin",
+        preferSmallExecutor: true,
+        promptProfile: "lean",
+        historyWindow: 3,
+      },
+      currentMode: "build",
+      sessionMessageCount: 1,
+      lastToolCalls: [],
+      activeModel: mainModel as any,
+      currentModelId: "gpt-5.4-mini",
+      smallModel: smallModel as any,
+      smallModelId: "gpt-4o-mini",
+    });
+
+    const deep = resolveExecutionTarget({
+      text: "deep architecture tradeoff analysis for this migration",
+      policy: {
+        archetype: "planning",
+        allowedTools: ["readFile"],
+        maxToolSteps: 2,
+        scaffold: "lane cheap",
+        scaffoldSource: "builtin",
+        preferSmallExecutor: true,
+        promptProfile: "lean",
+        historyWindow: 3,
+      },
+      currentMode: "build",
+      sessionMessageCount: 1,
+      lastToolCalls: [],
+      activeModel: mainModel as any,
+      currentModelId: "gpt-5.4-mini",
+      smallModel: smallModel as any,
+      smallModelId: "gpt-4o-mini",
+    });
+
+    expect(concise.resolvedRoute).toBe("small");
+    expect(concise.executionModelId).toBe("gpt-4o-mini");
+    expect(deep.resolvedRoute).toBe("main");
+    expect(deep.executionModelId).toBe("gpt-5.4-mini");
+  });
 });

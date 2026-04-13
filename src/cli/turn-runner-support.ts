@@ -1,7 +1,7 @@
 import { modelSupportsReasoning } from "../ai/model-catalog.js";
 import type { ModelHandle } from "../ai/providers.js";
 import { getSettings, type Mode } from "../core/config.js";
-import type { TurnPolicy } from "../core/turn-policy.js";
+import { shouldPreferSmallExecutor, type TurnPolicy } from "../core/turn-policy.js";
 import { resolvePreferredSpecialistRole, type SpecialistModelRole } from "./model-routing.js";
 import { routeMessage } from "../ai/router.js";
 import { readFileDirect } from "../tools/file-ops.js";
@@ -189,8 +189,7 @@ export function resolveExecutionTarget(options: {
   const forceSmallExecutor = !forceRoute
     && canAutoRoute
     && !!smallModel
-    && policy.preferSmallExecutor
-    && !effectiveImages?.length;
+    && shouldPreferSmallExecutor(policy, sessionMessageCount, !!effectiveImages?.length, text);
   const resolvedRoute = forceSmallExecutor ? "small" : requestedRoute;
   if (resolvedRoute === "small" && smallModel) {
     const thinkingRequested = settings.enableThinking;

@@ -103,7 +103,7 @@ export function applySimpleFileTaskPolicy(policy: TurnPolicy, task: SimpleFileTa
       "rules: no planning prose; no intent narration; no markdown essay; no alternate files",
       "verify: rely on tool result",
     ].join("\n"),
-    preferSmallExecutor: false,
+    preferSmallExecutor: task.kind === "read",
     promptProfile: task.kind === "read" ? "lean" : "edit",
     historyWindow: task.preRead ? 1 : policy.historyWindow,
   };

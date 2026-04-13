@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getTurnPolicy } from "../src/core/turn-policy.js";
+import { getTurnPolicy, shouldPreferSmallExecutor } from "../src/core/turn-policy.js";
 import { Session } from "../src/core/session.js";
 import { createEmptySessionRepoState } from "../src/core/session-types.js";
 import { buildAggregateBudgetReport, buildBudgetReport, renderBudgetDashboard, summarizeBudgetMetrics } from "../src/core/budget-insights.js";
@@ -12,17 +12,23 @@ describe("turn policy", () => {
     expect(policy.archetype).toBe("casual");
     expect(policy.allowedTools).toEqual([]);
     expect(policy.promptProfile).toBe("casual");
-    expect(policy.historyWindow).toBe(2);
+    expect(policy.historyWindow).toBe(1);
     expect(policy.maxToolSteps).toBe(0);
   });
 
   it("keeps non-actionable questions off repo tools", () => {
-    for (const text of ["what", "what?", "how are you?"]) {
+    for (const text of ["what", "what?"]) {
       const policy = getTurnPolicy(text);
       expect(policy.allowedTools).toEqual([]);
       expect(policy.maxToolSteps).toBe(0);
       expect(policy.promptProfile).toBe("casual");
+      expect(policy.historyWindow).toBe(2);
     }
+    const casual = getTurnPolicy("how are you?");
+    expect(casual.allowedTools).toEqual([]);
+    expect(casual.maxToolSteps).toBe(0);
+    expect(casual.promptProfile).toBe("casual");
+    expect(casual.historyWindow).toBe(1);
   });
 
   it("routes the regression prompt matrix by actionable intent", () => {
@@ -55,6 +61,7 @@ describe("turn policy", () => {
     expect(policy.allowedTools).not.toContain("todoWrite");
     expect(policy.maxToolSteps).toBeLessThanOrEqual(2);
     expect(policy.promptProfile).toBe("lean");
+    expect(policy.historyWindow).toBe(1);
   });
 
   it("keeps edit turns on the broader edit-capable tool set", () => {
@@ -99,6 +106,16 @@ describe("turn policy", () => {
     expect(getMinimalOutputPolicy({ text: "Without changing any files, tell me which file defines parseConfig.", policy: explorePolicy })).toEqual({
       maxOutputTokens: 64,
     });
+  });
+
+  it("keeps short research/planning turns on the cheap executor lane but leaves deep first-turn strategy work on main", () => {
+    const research = getTurnPolicy("research the latest TypeScript project references docs");
+    const planning = getTurnPolicy("plan rollout steps for this release");
+    const architecture = getTurnPolicy("deep architecture tradeoff analysis for this migration");
+
+    expect(shouldPreferSmallExecutor(research, 1, false, "research the latest TypeScript project references docs")).toBe(true);
+    expect(shouldPreferSmallExecutor(planning, 1, false, "plan rollout steps for this release")).toBe(true);
+    expect(shouldPreferSmallExecutor(architecture, 1, false, "deep architecture tradeoff analysis for this migration")).toBe(false);
   });
 
   it("keeps native-cli edit summaries on the same concise contract", () => {

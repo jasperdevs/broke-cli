@@ -30,6 +30,15 @@ describe("simple file task contract", () => {
     expect(policy.scaffold).toContain("lane: simple-file-action");
   });
 
+  it("marks simple read tasks as small-executor friendly", () => {
+    const task = detectSimpleFileTask("show README.md");
+    const policy = applySimpleFileTaskPolicy(getTurnPolicy("show README.md"), task);
+
+    expect(task?.kind).toBe("read");
+    expect(policy.preferSmallExecutor).toBe(true);
+    expect(policy.historyWindow).toBe(1);
+  });
+
   it("keeps the edit/write/read payload contract explicit and structural", () => {
     const task = detectSimpleFileTask("edit README.md");
     expect(task).toBeTruthy();
