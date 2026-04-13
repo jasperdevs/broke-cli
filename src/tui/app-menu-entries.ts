@@ -39,6 +39,9 @@ export function getActiveMenuDetail(app: AppState): string | null {
   if (app.modelPicker) {
     const opt = app.getFilteredModels()[app.modelPicker.cursor];
     if (!opt) return null;
+    if (opt.providerId === "__auto__") {
+      return "Scores by provider pricing first, then token and context efficiency.";
+    }
     const badges = opt.badges && opt.badges.length > 0 ? opt.badges.join(" · ") : "";
     return badges || opt.providerName || null;
   }
@@ -168,6 +171,7 @@ export function getItemPickerEntries(app: AppState): MenuEntry[] {
 export function getModelPickerEntries(app: AppState): MenuEntry[] {
   if (!app.modelPicker) return [];
   const badgeLabels: Record<string, string> = {
+    auto: "auto",
     now: "current",
     default: "chat",
     small: "fast",
@@ -178,8 +182,10 @@ export function getModelPickerEntries(app: AppState): MenuEntry[] {
     arch: "architecture",
   };
   const filtered = app.getFilteredModels();
+  const autoOptions = filtered.filter((opt: ModelOption) => opt.providerId === "__auto__");
   const byProvider = new Map<string, ModelOption[]>();
   for (const opt of filtered) {
+    if (opt.providerId === "__auto__") continue;
     if (!byProvider.has(opt.providerName)) byProvider.set(opt.providerName, []);
     byProvider.get(opt.providerName)!.push(opt);
   }
@@ -187,6 +193,22 @@ export function getModelPickerEntries(app: AppState): MenuEntry[] {
   let currentIdx = 0;
   const showProviderHeaders = byProvider.size > 1;
   const width = getMenuBodyWidth(app);
+  for (const opt of autoOptions) {
+    const isCursor = currentIdx === app.modelPicker.cursor;
+    const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
+    const nameCol = isCursor ? `\x1b[38;2;250;214;91m${BOLD}` : "\x1b[38;2;250;214;91m";
+    entries.push({
+      lines: buildSelectableEntry(
+        `  ${arrow}${nameCol}`,
+        `${opt.displayName ?? opt.modelId}`,
+        opt.providerName,
+        width,
+      ),
+      selectIndex: currentIdx,
+    });
+    currentIdx++;
+  }
+  if (autoOptions.length > 0 && byProvider.size > 0) entries.push({ lines: [""] });
   for (const [provider, opts] of byProvider) {
     if (showProviderHeaders) entries.push({ lines: [` ${DIM}${provider}${RESET}`] });
     for (const opt of opts) {

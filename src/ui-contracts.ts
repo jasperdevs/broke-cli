@@ -9,6 +9,7 @@ export interface ModelOption {
   displayName?: string;
   active: boolean;
   badges?: string[];
+  tone?: "default" | "auto";
   isHeader?: boolean;
 }
 

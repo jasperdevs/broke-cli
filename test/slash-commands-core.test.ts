@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Session } from "../src/core/session.js";
 import { handleSlashCommand } from "../src/cli/slash-commands.js";
-import { loadConfig, updateProviderConfig, updateSetting } from "../src/core/config.js";
+import { getSettings, loadConfig, updateProviderConfig, updateSetting } from "../src/core/config.js";
 import {
   cleanupSlashCommandFixtures,
   coreTemplatePath,
@@ -375,6 +375,37 @@ describe("slash command handling", () => {
     expect(pickerQuery).toBe("haiku");
     expect(pickerCursor).toBe(1);
     expect(app.statusMessage).toBe('Showing 1 match for "haiku".');
+  });
+
+  it("lets the model picker enable auto routing from the synthetic auto entry", async () => {
+    updateSetting("autoRoute", false);
+    const app = createAppStub();
+    let pickerSelect: ((providerId: string, modelId: string) => void) | null = null;
+    app.openModelPicker = (_options: any[], onSelect: any) => {
+      pickerSelect = onSelect;
+    };
+
+    try {
+      const result = await handleSlashCommand({
+        text: "/model",
+        app,
+        session: new Session(`test-model-auto-${Date.now()}`),
+        ...createSlashArgs({
+          buildVisibleModelOptions: () => [
+            { providerId: "__auto__", providerName: "Automatic routing", modelId: "__auto__", displayName: "Auto", active: false, badges: ["auto"], tone: "auto" },
+            { providerId: "openai", providerName: "OpenAI", modelId: "gpt-5.4-mini", displayName: "GPT-5.4 mini", active: true },
+          ] as any,
+        }),
+      });
+
+      expect(result.handled).toBe(true);
+      expect(pickerSelect).toBeTruthy();
+      pickerSelect?.("__auto__", "__auto__");
+      expect(getSettings().autoRoute).toBe(true);
+      expect(app.statusMessage).toBe("Auto routing enabled.");
+    } finally {
+      updateSetting("autoRoute", true);
+    }
   });
 
   it("keeps declarative aliases working for /sessions", async () => {

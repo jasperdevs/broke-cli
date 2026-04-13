@@ -100,7 +100,15 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
       }
       app.openModelPicker(allOptions, (provId, modId) => {
         try {
+          if (provId === "__auto__" && modId === "__auto__") {
+            updateSetting("autoRoute", true);
+            app.setStatus?.("Auto routing enabled.");
+            onModelRoutingChange?.();
+            app.updateModelPickerOptions?.(buildVisibleModelOptions(), "__auto__/__auto__");
+            return;
+          }
           const key = `${provId}/${modId}`;
+          updateSetting("autoRoute", false);
           const nextModel = providerRegistry.createModel(provId, modId);
           onModelChange(nextModel, modId);
           app.setModel(nextModel.provider.name, modId, {

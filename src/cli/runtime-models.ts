@@ -3,7 +3,11 @@ import type { ProviderRegistry } from "../ai/provider-registry.js";
 import type { ModelHandle } from "../ai/providers.js";
 import { getPrettyModelName } from "../ai/model-catalog.js";
 import { getSettings } from "../core/config.js";
+import type { ModelOption } from "../ui-contracts.js";
 import { listResolvedModelPreferences, resolveConfiguredModelHandle, type SpecialistModelRole } from "./model-routing.js";
+
+const AUTO_MODEL_PROVIDER_ID = "__auto__";
+const AUTO_MODEL_ID = "__auto__";
 
 export function rebuildSmallModelState(
   providerRegistry: ProviderRegistry,
@@ -37,11 +41,11 @@ export function buildVisibleRuntimeModelOptions(
   activeModel: ModelHandle | null,
   currentModelId: string,
   providers: DetectedProvider[],
-): Array<{ providerId: string; providerName: string; modelId: string; active: boolean; badges?: string[] }> {
+): ModelOption[] {
   const fallbackProviderId = activeModel?.provider.id ?? providers[0]?.id ?? "openai";
   const preferences = listResolvedModelPreferences(fallbackProviderId);
   const currentKey = activeModel ? `${activeModel.provider.id}/${currentModelId}` : "";
-  return providerRegistry
+  const options = providerRegistry
     .buildVisibleModelOptions(activeModel, currentModelId, getSettings().scopedModels)
     .map((option) => {
       const key = `${option.providerId}/${option.modelId}`;
@@ -60,4 +64,14 @@ export function buildVisibleRuntimeModelOptions(
         badges,
       };
     });
+  if (options.length === 0) return options;
+  return [{
+    providerId: AUTO_MODEL_PROVIDER_ID,
+    providerName: "Automatic routing",
+    modelId: AUTO_MODEL_ID,
+    displayName: "Auto",
+    active: false,
+    badges: getSettings().autoRoute ? ["now", "auto"] : ["auto"],
+    tone: "auto" as const,
+  }, ...options];
 }
