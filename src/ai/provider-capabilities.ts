@@ -1,5 +1,6 @@
 import { modelSupportsReasoning } from "./model-catalog.js";
 import type { ModelRuntime } from "./provider-definitions.js";
+import { getProviderCompat } from "./provider-compat.js";
 
 export interface ProviderCapabilities {
   reasoningProvider?: "anthropic" | "openai" | "google";
@@ -65,10 +66,11 @@ export function getModelCapabilities(options: {
 }): ModelCapabilitySnapshot {
   const { providerId, modelId, runtime } = options;
   const provider = getProviderCapabilities(providerId);
+  const compat = getProviderCompat(providerId, modelId);
   const reasoningSupported = !!modelId && !!providerId && modelSupportsReasoning(modelId, providerId);
   const reasoningLevels: ModelCapabilitySnapshot["reasoning"]["levels"] = !reasoningSupported
     ? ["off"]
-    : runtime === "native-cli" || provider.reasoningProvider === "openai"
+    : runtime === "native-cli" || (provider.reasoningProvider === "openai" && compat.supportsReasoningEffort !== false)
       ? [...EFFORT_ONLY_LEVELS]
       : [...ALL_REASONING_LEVELS];
   return {

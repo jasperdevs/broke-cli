@@ -115,6 +115,8 @@ export function drawTreeView(app: AppState): void {
 
   const filterLabel = view.filterMode === "user-only"
     ? "user"
+    : view.filterMode === "no-tools"
+      ? "no-tools"
     : view.filterMode === "all"
       ? "all"
       : view.filterMode === "labeled-only"
@@ -123,7 +125,7 @@ export function drawTreeView(app: AppState): void {
 
   const frame: string[] = [];
   frame.push(`${separatorColor}${"─".repeat(width)}${RESET}`);
-  frame.push(` ${T()}${BOLD}${view.title}${RESET} ${count}${DIM} · ${filterLabel}${RESET}${DIM} · enter jump · shift+l label · ctrl+u user · ctrl+o all · esc back${RESET}`);
+  frame.push(` ${T()}${BOLD}${view.title}${RESET} ${count}${DIM} · ${filterLabel}${RESET}${DIM} · enter jump · shift+l label · ctrl+u user · ctrl+o cycle · esc back${RESET}`);
   frame.push(` ${DIM}left/right page · ctrl/alt+left/right fold · shift+t timestamps${RESET}`);
   frame.push("");
 
@@ -190,11 +192,20 @@ export function toggleTreeFold(app: AppState, direction: -1 | 1): void {
   if (target) view.selectedId = target.row.item.id;
 }
 
-export function toggleTreeFilter(app: AppState, mode: "user-only" | "all"): void {
+export function toggleTreeFilter(app: AppState, mode?: TreeFilterMode): void {
   const view = app.treeView;
   if (!view) return;
-  if (mode === "user-only") view.filterMode = view.filterMode === "user-only" ? "default" : "user-only";
-  else view.filterMode = view.filterMode === "all" ? "default" : "all";
+  if (!mode) {
+    const order: TreeFilterMode[] = ["default", "no-tools", "user-only", "labeled-only", "all"];
+    const index = Math.max(0, order.indexOf(view.filterMode as TreeFilterMode));
+    view.filterMode = order[(index + 1) % order.length]!;
+  } else if (mode === "user-only") {
+    view.filterMode = view.filterMode === "user-only" ? "default" : "user-only";
+  } else if (mode === "all") {
+    view.filterMode = view.filterMode === "all" ? "default" : "all";
+  } else {
+    view.filterMode = mode;
+  }
   view.scrollOffset = 0;
 }
 

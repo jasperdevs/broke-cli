@@ -5,6 +5,7 @@ import { homedir } from "os";
 import { parse as parseJsonc } from "jsonc-parser";
 import { z } from "zod";
 import { getBaseUrl } from "./config.js";
+import type { ProviderCompatSettings } from "../ai/provider-compat.js";
 
 export type ProviderApiType = "openai-completions" | "anthropic-messages" | "google-generative-ai";
 
@@ -19,6 +20,7 @@ export interface ConfiguredModelDefinition {
   id: string;
   name?: string;
   api?: ProviderApiType;
+  compat?: ProviderCompatSettings;
   reasoning?: boolean;
   input?: Array<"text" | "image">;
   contextWindow?: number;
@@ -32,6 +34,7 @@ export interface ConfiguredProviderDefinition {
   baseUrl?: string;
   api?: ProviderApiType;
   apiKey?: string;
+  compat?: ProviderCompatSettings;
   headers?: Record<string, string>;
   authHeader?: boolean;
   defaultModel?: string;
@@ -54,11 +57,19 @@ const costSchema = z.object({
 });
 
 const apiTypeSchema = z.enum(["openai-completions", "anthropic-messages", "google-generative-ai"]);
+const compatSchema = z.object({
+  supportsDeveloperRole: z.boolean().optional(),
+  supportsReasoningEffort: z.boolean().optional(),
+  supportsUsageInStreaming: z.boolean().optional(),
+  maxTokensField: z.enum(["max_completion_tokens", "max_tokens"]).optional(),
+  thinkingFormat: z.enum(["openai", "qwen"]).optional(),
+});
 
 const modelDefinitionSchema: z.ZodType<ConfiguredModelDefinition> = z.object({
   id: z.string().min(1),
   name: z.string().optional(),
   api: apiTypeSchema.optional(),
+  compat: compatSchema.optional(),
   reasoning: z.boolean().optional(),
   input: z.array(z.enum(["text", "image"])).optional(),
   contextWindow: z.number().int().positive().optional(),
@@ -70,6 +81,7 @@ const modelDefinitionSchema: z.ZodType<ConfiguredModelDefinition> = z.object({
 const modelOverrideSchema = z.object({
   name: z.string().optional(),
   api: apiTypeSchema.optional(),
+  compat: compatSchema.optional(),
   reasoning: z.boolean().optional(),
   input: z.array(z.enum(["text", "image"])).optional(),
   contextWindow: z.number().int().positive().optional(),
@@ -83,6 +95,7 @@ const providerDefinitionSchema: z.ZodType<ConfiguredProviderDefinition> = z.obje
   baseUrl: z.string().optional(),
   api: apiTypeSchema.optional(),
   apiKey: z.string().optional(),
+  compat: compatSchema.optional(),
   headers: z.record(z.string()).optional(),
   authHeader: z.boolean().optional(),
   defaultModel: z.string().optional(),

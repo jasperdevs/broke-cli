@@ -1,9 +1,12 @@
 import { calculateCost, type TokenUsage } from "./cost.js";
 import { estimateConversationTokens, estimateTextTokens } from "./tokens.js";
+import type { ProviderCompatSettings } from "./provider-compat.js";
 
 export interface LocalOpenAIStreamOptions {
   baseURL: string;
   apiKey: string;
+  headers?: Record<string, string>;
+  compat?: ProviderCompatSettings;
   modelId: string;
   system: string;
   messages: Array<{ role: "user" | "assistant"; content: string }>;
@@ -20,8 +23,9 @@ export interface LocalOpenAIStreamCallbacks {
 }
 
 function toLocalMessages(opts: LocalOpenAIStreamOptions): Array<{ role: "system" | "user" | "assistant"; content: string }> {
+  const systemRole = opts.compat?.supportsDeveloperRole === false ? "system" : "system";
   return [
-    { role: "system", content: opts.system },
+    { role: systemRole, content: opts.system },
     ...opts.messages.map((message) => ({ role: message.role, content: message.content })),
   ];
 }
@@ -97,15 +101,19 @@ export async function startLocalOpenAIStream(
       method: "POST",
       headers: {
         "content-type": "application/json",
-        authorization: `Bearer ${opts.apiKey}`,
+        ...(opts.headers ?? {}),
+        ...(opts.apiKey ? { authorization: `Bearer ${opts.apiKey}` } : {}),
       },
       signal: opts.abortSignal,
       body: JSON.stringify({
         model: opts.modelId,
         messages: toLocalMessages(opts),
         stream: true,
-        stream_options: { include_usage: true },
-        max_tokens: opts.maxOutputTokens,
+        ...(opts.compat?.supportsUsageInStreaming === false ? {} : { stream_options: { include_usage: true } }),
+        ...(opts.maxOutputTokens
+          ? { [(opts.compat?.maxTokensField ?? "max_tokens")]: opts.maxOutputTokens }
+          : {}),
+        ...(opts.compat?.thinkingFormat === "qwen" ? { enable_thinking: true } : {}),
       }),
     });
     if (!response.ok || !response.body) {

@@ -5,6 +5,7 @@ import {
 } from "./model-catalog.js";
 import { PROVIDERS } from "./provider-definitions.js";
 import { filterModelIdsForDisplay } from "./provider-visibility.js";
+import { clearLocalModelMetadata, setLocalProviderModelMetadata, type LocalModelMetadata } from "./local-model-metadata.js";
 
 async function fetchUrl(url: string, timeoutMs = 2000): Promise<unknown> {
   try {
@@ -19,53 +20,123 @@ async function fetchUrl(url: string, timeoutMs = 2000): Promise<unknown> {
   }
 }
 
-async function fetchLocalModels(id: string, baseURL: string): Promise<string[]> {
-  const models: string[] = [];
-  const openaiData = await fetchUrl(`${baseURL}/models`) as { data?: Array<{ id: string }> } | null;
+function asPositiveNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+function normalizeInputModalities(value: unknown): Array<"text" | "image"> | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const normalized = value
+    .filter((entry): entry is string => typeof entry === "string")
+    .map((entry) => entry.toLowerCase())
+    .filter((entry): entry is "text" | "image" => entry === "text" || entry === "image");
+  return normalized.length > 0 ? [...new Set(normalized)] : undefined;
+}
+
+interface LocalDiscoveredModel {
+  id: string;
+  meta?: LocalModelMetadata;
+}
+
+async function fetchLocalModels(id: string, baseURL: string): Promise<LocalDiscoveredModel[]> {
+  const models = new Map<string, LocalModelMetadata>();
+  const openaiData = await fetchUrl(`${baseURL}/models`) as { data?: Array<Record<string, unknown>> } | null;
   if (openaiData?.data) {
     for (const model of openaiData.data) {
-      if (model.id && !models.includes(model.id)) models.push(model.id);
+      if (typeof model.id !== "string" || !model.id) continue;
+      models.set(model.id, {
+        name: typeof model.name === "string" ? model.name : undefined,
+        contextWindow: asPositiveNumber(model.context_length ?? model.max_context_length ?? model.max_model_len),
+        maxTokens: asPositiveNumber(model.max_tokens),
+        input: normalizeInputModalities(model.input_modalities ?? model.modalities),
+        toolCall: typeof model.tool_call === "boolean" ? model.tool_call : undefined,
+        reasoning: typeof model.reasoning === "boolean" ? model.reasoning : undefined,
+      });
     }
   }
 
   if (id === "ollama") {
     const host = baseURL.replace("/v1", "");
-    const tagsData = await fetchUrl(`${host}/api/tags`) as { models?: Array<{ name: string }> } | null;
+    const tagsData = await fetchUrl(`${host}/api/tags`) as { models?: Array<Record<string, unknown>> } | null;
     if (tagsData?.models) {
       for (const model of tagsData.models) {
-        if (model.name && !models.includes(model.name)) models.push(model.name);
+        if (typeof model.name === "string" && model.name && !models.has(model.name)) {
+          models.set(model.name, {});
+        }
       }
+    }
+    for (const [modelId, meta] of [...models.entries()]) {
+      const showDetails = await fetch(`${host}/api/show`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: modelId }),
+      }).then(async (res) => res.ok ? await res.json() : null).catch(() => null) as Record<string, unknown> | null;
+      const info = typeof showDetails?.model_info === "object" && showDetails.model_info !== null
+        ? showDetails.model_info as Record<string, unknown>
+        : {};
+      const capabilities = Array.isArray(showDetails?.capabilities)
+        ? showDetails.capabilities.filter((entry): entry is string => typeof entry === "string")
+        : [];
+      const architecture = typeof info["general.architecture"] === "string" ? info["general.architecture"] : "";
+      const contextKey = architecture ? `${architecture}.context_length` : "";
+      const contextWindow = asPositiveNumber(info[contextKey]);
+      models.set(modelId, {
+        ...meta,
+        contextWindow: contextWindow ?? meta.contextWindow,
+        maxTokens: contextWindow ? contextWindow * 10 : meta.maxTokens,
+        reasoning: capabilities.includes("thinking") || meta.reasoning,
+        toolCall: capabilities.includes("tools") || meta.toolCall,
+      });
     }
   }
 
   if (id === "llamacpp") {
-    const host = baseURL.replace("/v1", "");
-    const modelsData = await fetchUrl(`${host}/models`) as { models?: Array<{ name: string; model: string }> } | null;
+    const host = baseURL.replace(/\/v1\/?$/, "");
+    const modelsData = await fetchUrl(`${host}/models`) as { models?: Array<Record<string, unknown>> } | null;
     if (modelsData?.models) {
       for (const model of modelsData.models) {
-        const name = model.model || model.name;
-        if (name && !models.includes(name)) models.push(name);
+        const name = typeof model.model === "string" ? model.model : typeof model.name === "string" ? model.name : undefined;
+        if (name && !models.has(name)) {
+          models.set(name, {
+            name,
+            contextWindow: asPositiveNumber(model.context_length ?? model.max_context_length),
+            maxTokens: asPositiveNumber(model.max_tokens),
+          });
+        }
       }
     }
-    const slotsData = await fetchUrl(`${host}/slots`) as Array<{ model: string }> | null;
+    const slotsData = await fetchUrl(`${host}/slots`) as Array<Record<string, unknown>> | null;
     if (Array.isArray(slotsData)) {
       for (const slot of slotsData) {
-        if (slot.model && !models.includes(slot.model)) models.push(slot.model);
+        if (typeof slot.model === "string" && slot.model && !models.has(slot.model)) {
+          models.set(slot.model, {
+            contextWindow: asPositiveNumber(slot.n_ctx ?? slot.context_length),
+          });
+        }
       }
     }
   }
 
   if (id === "lmstudio") {
     const host = baseURL.replace("/v1", "");
-    const lmsData = await fetchUrl(`${host}/lmstudio/models`) as { data?: Array<{ id: string }> } | null;
+    const lmsData = await fetchUrl(`${host}/lmstudio/models`) as { data?: Array<Record<string, unknown>> } | null;
     if (lmsData?.data) {
       for (const model of lmsData.data) {
-        if (model.id && !models.includes(model.id)) models.push(model.id);
+        if (typeof model.id === "string" && model.id) {
+          models.set(model.id, {
+            name: typeof model.displayName === "string" ? model.displayName : typeof model.name === "string" ? model.name : undefined,
+            contextWindow: asPositiveNumber(model.maxContextLength ?? model.contextLength),
+            maxTokens: asPositiveNumber(model.maxTokens),
+            reasoning: typeof model.trainedForToolUse === "boolean" ? model.trainedForToolUse : undefined,
+            toolCall: typeof model.trainedForToolUse === "boolean" ? model.trainedForToolUse : undefined,
+            input: model.vision === true ? ["text", "image"] : ["text"],
+          });
+        }
       }
     }
   }
 
-  return models;
+  return [...models.entries()].map(([id, meta]) => ({ id, meta }));
 }
 
 export function syncCloudProviderModelsFromCatalog(): void {
@@ -91,6 +162,7 @@ export function syncCloudProviderModelsFromCatalog(): void {
 }
 
 export async function refreshLocalModels(detectedIds: string[]): Promise<void> {
+  clearLocalModelMetadata();
   const localProviders: Record<string, string> = {
     ollama: "http://127.0.0.1:11434/v1",
     lmstudio: "http://127.0.0.1:1234/v1",
@@ -104,8 +176,9 @@ export async function refreshLocalModels(detectedIds: string[]): Promise<void> {
     .map(async (id) => {
       const models = await fetchLocalModels(id, getConfiguredProviderBaseUrl(id) ?? localProviders[id]);
       if (models.length > 0 && PROVIDERS[id]) {
-        PROVIDERS[id].models = models;
-        PROVIDERS[id].defaultModel = models[0];
+        PROVIDERS[id].models = models.map((model) => model.id);
+        PROVIDERS[id].defaultModel = models[0]!.id;
+        setLocalProviderModelMetadata(id, Object.fromEntries(models.map((model) => [model.id, model.meta ?? {}])));
       }
     });
 

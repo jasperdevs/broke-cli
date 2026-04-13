@@ -10,6 +10,8 @@ import { buildPromptCacheKey } from "../core/context.js";
 import { startLocalOpenAIStream } from "./local-openai-stream.js";
 import { parsePossiblyPartialJson } from "./native-tool-events.js";
 import { getConfiguredProviderBaseUrl } from "../core/models-config.js";
+import { getProviderCompat } from "./provider-compat.js";
+import { getConfiguredProviderHeaders } from "../core/models-config.js";
 
 export interface StreamCallbacks {
   onText: (delta: string) => void;
@@ -46,10 +48,13 @@ export async function startStream(
   process.stderr.write = () => true;
 
   try {
+    const compat = getProviderCompat(opts.providerId, opts.modelId);
     if (shouldUseDirectLocalOpenAIStream(opts)) {
       await startLocalOpenAIStream({
         baseURL: getConfiguredProviderBaseUrl(opts.providerId!) ?? defaultLocalBaseURL(opts.providerId!),
-        apiKey: opts.providerId!,
+        apiKey: "",
+        headers: getConfiguredProviderHeaders(opts.providerId!),
+        compat,
         modelId: opts.modelId,
         system: opts.system,
         messages: opts.messages,
@@ -93,10 +98,10 @@ export async function startStream(
       enabled: opts.enableThinking,
       level: opts.thinkingLevel,
     });
-    if (thinking.enabled) {
+      if (thinking.enabled) {
       if (capabilities.reasoning.provider === "anthropic") {
         providerOptions.anthropic = { thinking: { type: "enabled", budgetTokens: thinking.budgetTokens ?? 4096 } };
-      } else if (capabilities.reasoning.provider === "openai") {
+      } else if (capabilities.reasoning.provider === "openai" && compat.supportsReasoningEffort !== false) {
         providerOptions.openai = { reasoningEffort: { value: thinking.effort ?? "low" } };
       } else if (capabilities.reasoning.provider === "google") {
         providerOptions.google = { thinkingConfig: { thinkingBudget: thinking.budgetTokens ?? 4096 } };
@@ -118,6 +123,12 @@ export async function startStream(
           })}:${createHash("sha1").update(opts.system).digest("hex").slice(0, 12)}`,
         };
       }
+    }
+    if (compat.supportsDeveloperRole === false && capabilities.reasoning.provider === "openai" && capabilities.reasoning.supported) {
+      providerOptions.openai = {
+        ...(providerOptions.openai ?? {}),
+        systemMessageMode: "system",
+      };
     }
 
     const normalizeUsageField = (value: unknown): number =>

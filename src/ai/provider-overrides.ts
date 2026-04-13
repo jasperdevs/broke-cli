@@ -2,6 +2,7 @@ import {
   getConfiguredProviderApi,
   getConfiguredProviderAuthHeader,
   getConfiguredProviderBaseUrl,
+  getConfiguredProviderDefinition,
   getConfiguredProviderHeaders,
   getConfiguredProviderModels,
   getConfiguredProviderName,
@@ -21,6 +22,7 @@ function inferProviderDisplayName(providerId: string): string {
 export function applyConfiguredProviderOverrides(): void {
   for (const providerId of listConfiguredProviderIds()) {
     const existing = getProviderInfo(providerId);
+    const configuredProvider = getConfiguredProviderDefinition(providerId);
     const configuredModels = getConfiguredProviderModels(providerId);
     const apiType = getConfiguredProviderApi(providerId) ?? existing?.apiType;
     const baseUrl = getConfiguredProviderBaseUrl(providerId) ?? existing?.baseUrl;
@@ -44,6 +46,7 @@ export function applyConfiguredProviderOverrides(): void {
       defaultModel,
       models: mergedModels,
       apiType,
+      compat: configuredProvider?.compat ?? existing?.compat,
       baseUrl,
       headers: getConfiguredProviderHeaders(providerId) ?? existing?.headers,
       authHeader: getConfiguredProviderAuthHeader(providerId) || existing?.authHeader,

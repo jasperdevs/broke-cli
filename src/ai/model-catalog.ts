@@ -5,6 +5,7 @@ import { join } from "path";
 import { writePrivateTextFile } from "../core/private-files.js";
 import { listConfiguredProviderIds } from "../core/models-config.js";
 import { getConfiguredModelSpec, mergeConfiguredModelOverride } from "./model-spec-overrides.js";
+import { getLocalModelMetadata } from "./local-model-metadata.js";
 
 const MODELS_DEV_API_URL = "https://models.dev/api.json";
 const MODEL_CATALOG_CACHE_PATH = join(homedir(), ".brokecli", "model-catalog-cache.json");
@@ -438,6 +439,28 @@ export function getModelSpec(modelId: string, providerId?: string): ModelSpec | 
   for (const configuredProviderId of listConfiguredProviderIds()) {
     const configuredModel = getConfiguredModelSpec(configuredProviderId, modelId);
     if (configuredModel) return configuredModel;
+  }
+
+  if (providerId) {
+    const localMeta = getLocalModelMetadata(providerId, modelId);
+    if (localMeta) {
+      return {
+        id: modelId,
+        name: localMeta.name ?? modelId,
+        providerId,
+        reasoning: localMeta.reasoning,
+        toolCall: localMeta.toolCall,
+        modalities: {
+          input: localMeta.input,
+          output: ["text"],
+        },
+        cost: { input: 0, output: 0 },
+        limit: {
+          context: localMeta.contextWindow,
+          output: localMeta.maxTokens,
+        },
+      };
+    }
   }
 
   return null;

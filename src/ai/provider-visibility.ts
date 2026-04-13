@@ -4,6 +4,7 @@ import {
   getProviderPreferredDisplayModelIds,
 } from "./model-catalog.js";
 import { LOCAL_PROVIDER_IDS, PROVIDERS } from "./provider-definitions.js";
+import { getLocalModelMetadata } from "./local-model-metadata.js";
 
 function getNormalizedModelGroup(modelId: string): string {
   return modelId
@@ -39,7 +40,21 @@ function modelVisibilityScore(providerId: string, modelId: string): number {
 
 export function filterModelIdsForDisplay(providerId: string, modelIds: string[], preserve: string[] = []): string[] {
   if (LOCAL_PROVIDER_IDS.has(providerId)) {
-    return [...new Set([...preserve, ...modelIds])];
+    const keep = [...new Set([...preserve, ...modelIds])].filter((modelId) => {
+      if (preserve.includes(modelId)) return true;
+      const meta = getLocalModelMetadata(providerId, modelId);
+      if (!meta) return true;
+      if (meta.toolCall === false) return false;
+      return true;
+    });
+    keep.sort((left, right) => {
+      const leftMeta = getLocalModelMetadata(providerId, left);
+      const rightMeta = getLocalModelMetadata(providerId, right);
+      return Number(rightMeta?.toolCall === true) - Number(leftMeta?.toolCall === true)
+        || Number(rightMeta?.reasoning === true) - Number(leftMeta?.reasoning === true)
+        || right.localeCompare(left);
+    });
+    return keep;
   }
 
   const preserveSet = new Set(preserve);

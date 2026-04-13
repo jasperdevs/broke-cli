@@ -4,6 +4,7 @@ import {
   getProviderPreferredDisplayModelIds,
 } from "./model-catalog.js";
 import type { ProviderApiType } from "../core/models-config.js";
+import type { ProviderCompatSettings } from "./provider-compat.js";
 
 export interface ProviderInfo {
   id: string;
@@ -11,6 +12,7 @@ export interface ProviderInfo {
   defaultModel: string;
   models: string[];
   apiType?: ProviderApiType;
+  compat?: ProviderCompatSettings;
   baseUrl?: string;
   headers?: Record<string, string>;
   authHeader?: boolean;

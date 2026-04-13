@@ -155,22 +155,30 @@ describe("slash command UI surfaces", () => {
   });
 
   it("opens an empty extensions picker instead of writing a transcript message", async () => {
+    const originalDiscoverExtensions = loadConfig().settings?.discoverExtensions;
+    const originalExtensions = loadConfig().settings?.extensions;
+    updateSetting("discoverExtensions", false);
+    updateSetting("extensions", []);
     const app = createAppStub();
     let pickerItems: Array<{ id: string; label: string; detail?: string }> = [];
     app.openItemPicker = (_title: string, items: Array<{ id: string; label: string; detail?: string }>) => {
       pickerItems = items;
     };
+    try {
+      const result = await handleSlashCommand({
+        text: "/extensions",
+        app,
+        session: new Session(`test-extensions-empty-${Date.now()}`),
+        ...createSlashArgs(),
+      });
 
-    const result = await handleSlashCommand({
-      text: "/extensions",
-      app,
-      session: new Session(`test-extensions-empty-${Date.now()}`),
-      ...createSlashArgs(),
-    });
-
-    expect(result.handled).toBe(true);
-    expect(app.messages).toEqual([]);
-    expect(pickerItems).toEqual([{ id: "__none__", label: "None", detail: "~/.brokecli/extensions is empty" }]);
+      expect(result.handled).toBe(true);
+      expect(app.messages).toEqual([]);
+      expect(pickerItems).toEqual([{ id: "__none__", label: "None", detail: "~/.brokecli/extensions is empty" }]);
+    } finally {
+      updateSetting("discoverExtensions", originalDiscoverExtensions ?? true);
+      updateSetting("extensions", originalExtensions ?? []);
+    }
   });
 
   it("opens templates and skills in pickers instead of dumping text into chat", async () => {

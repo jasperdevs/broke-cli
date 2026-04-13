@@ -139,7 +139,7 @@ export function handleTreeViewKey(app: AppState, key: Keypress): void {
   } else if (key.ctrl && key.name === "u") {
     toggleTreeFilter(app, "user-only");
   } else if (key.ctrl && key.name === "o") {
-    toggleTreeFilter(app, "all");
+    toggleTreeFilter(app);
   } else if ((key.name === "return" || key.name === "enter") && !key.shift && !key.meta && !key.ctrl) {
     app.selectTreeEntry?.();
     return;
