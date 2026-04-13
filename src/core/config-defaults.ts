@@ -6,7 +6,6 @@ export const DEFAULT_SETTINGS: Settings = {
   enablePlannedScaffolds: false,
   memoizeToolResults: true,
   modelGeneratedSessionNames: false,
-  maxSessionCost: 0,
   showTokens: true,
   showCost: true,
   autoSaveSessions: true,
@@ -43,6 +42,7 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   compaction: {
     enabled: true,
+    triggerPercent: 80,
     reserveTokens: 16384,
     keepRecentTokens: 20000,
   },

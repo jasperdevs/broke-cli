@@ -235,6 +235,26 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
     },
   },
   {
+    names: ["compact-at"],
+    description: "set auto-compact threshold percent",
+    run: ({ app, restText }) => {
+      const current = getSettings().compaction.triggerPercent;
+      if (!restText) {
+        app.setStatus?.(`Auto-compact threshold: ${current}%`);
+        return { handled: true };
+      }
+      const normalized = restText.trim().replace(/%$/, "");
+      const next = Number.parseInt(normalized, 10);
+      if (!Number.isFinite(next) || next < 40 || next > 95) {
+        app.setStatus?.("Use /compact-at <40-95>");
+        return { handled: true };
+      }
+      updateSetting("compaction", { ...getSettings().compaction, triggerPercent: next });
+      app.setStatus?.(`Auto-compact threshold set to ${next}%`);
+      return { handled: true };
+    },
+  },
+  {
     names: ["fork"],
     description: "branch from current session",
     run: ({ session, activeModel, currentModelId, onSessionReplace, app }) => {

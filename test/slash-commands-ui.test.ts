@@ -49,7 +49,7 @@ describe("slash command UI surfaces", () => {
     expect(settingsEntries.some((entry) => entry.key === "autonomy.allowNetwork")).toBe(true);
     expect(settingsEntries.some((entry) => entry.key === "autonomy.allowWriteOutsideWorkspace")).toBe(true);
     expect(settingsEntries.some((entry) => entry.key === "autonomy.additionalReadRoots")).toBe(true);
-    expect(settingsEntries.some((entry) => entry.key === "maxSessionCost")).toBe(true);
+    expect(settingsEntries.some((entry) => entry.key === "maxSessionCost")).toBe(false);
   });
 
   it("toggles autonomy booleans from /settings", async () => {

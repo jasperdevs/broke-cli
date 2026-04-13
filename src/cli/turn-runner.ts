@@ -1,5 +1,4 @@
 import type { ModelHandle } from "../ai/providers.js";
-import { checkBudget } from "../core/budget.js";
 import { getSettings, type Mode } from "../core/config.js";
 import { clearTodo } from "../tools/todo.js";
 import type { Session } from "../core/session.js";
@@ -41,12 +40,6 @@ export async function runModelTurn(options: {
   const getContextOptimizer = (): ReturnType<Session["getContextOptimizer"]> => session.getContextOptimizer();
   const settings = getSettings();
   const effectiveImages = settings.images.blockImages ? undefined : images;
-  const budget = checkBudget(session.getTotalCost());
-  if (!budget.allowed) {
-    app.addMessage("system", budget.warning!);
-    return { lastToolCalls, lastActivityTime: Date.now() };
-  }
-  if (budget.warning) app.setStatus(budget.warning);
   const fastPath = await maybeHandleFastPathTurn({
     app,
     session,

@@ -17,6 +17,7 @@ export type PackageSource = string | PackageFilterSource;
 
 export interface CompactionSettings {
   enabled: boolean;
+  triggerPercent: number;
   reserveTokens: number;
   keepRecentTokens: number;
 }
@@ -57,7 +58,6 @@ export interface Settings {
   enablePlannedScaffolds: boolean;
   memoizeToolResults: boolean;
   modelGeneratedSessionNames: boolean;
-  maxSessionCost: number;
   showTokens: boolean;
   showCost: boolean;
   autoSaveSessions: boolean;
@@ -115,7 +115,7 @@ export interface BrokeConfig {
   defaultPlanningModel?: string;
   defaultUiModel?: string;
   defaultArchitectureModel?: string;
-  budget?: { maxSessionCost?: number; maxMonthlyCost?: number };
+  budget?: { maxMonthlyCost?: number };
   providers?: Record<string, { apiKey?: string; baseUrl?: string; disabled?: boolean }>;
   modelContextLimits?: Record<string, number>;
   settings?: Partial<Settings>;

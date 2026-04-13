@@ -242,6 +242,29 @@ describe("slash command handling", () => {
     expect(opened?.reports.all.sessionCount).toBeGreaterThanOrEqual(1);
   });
 
+  it("updates the auto-compact threshold for /compact-at", async () => {
+    const previous = loadConfig().settings?.compaction?.triggerPercent ?? 80;
+    const app = createAppStub();
+
+    try {
+      const result = await handleSlashCommand({
+        text: "/compact-at 70",
+        app,
+        session: new Session(`test-compact-at-${Date.now()}`),
+        ...createSlashArgs(),
+      });
+
+      expect(result.handled).toBe(true);
+      expect(loadConfig().settings?.compaction?.triggerPercent).toBe(70);
+      expect(app.statusMessage).toBe("Auto-compact threshold set to 70%");
+    } finally {
+      updateSetting("compaction", {
+        ...loadConfig().settings?.compaction,
+        triggerPercent: previous,
+      });
+    }
+  });
+
   it("updates the configured theme for /theme", async () => {
     const app = createAppStub();
     const previousTheme = loadConfig().settings?.theme ?? "brokecli";

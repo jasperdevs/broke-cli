@@ -322,7 +322,12 @@ export async function maybeAutoCompactTurnContext(options: {
   const settings = getSettings();
   let nextPrepared = prepared;
   const chatMsgs = session.getChatMessages();
-  if (!settings.autoCompact || policy.promptProfile === "casual" || prepared.contextPct <= 80 || chatMsgs.length <= 8) {
+  if (
+    !settings.autoCompact
+    || policy.promptProfile === "casual"
+    || prepared.contextPct < settings.compaction.triggerPercent
+    || chatMsgs.length <= 8
+  ) {
     return nextPrepared;
   }
   try {

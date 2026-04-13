@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { updateSetting } from "../src/core/config.js";
-import { checkBudget } from "../src/core/budget.js";
+import { updateSetting, getSettings } from "../src/core/config.js";
 
-describe("budget setting wiring", () => {
-  it("uses settings.maxSessionCost for the live session budget gate", () => {
-    updateSetting("maxSessionCost", 1);
-    expect(checkBudget(0.5).allowed).toBe(true);
-    expect(checkBudget(1).allowed).toBe(false);
-    updateSetting("maxSessionCost", 0);
+describe("compaction threshold wiring", () => {
+  it("persists compaction trigger percent in settings", () => {
+    const previous = getSettings().compaction.triggerPercent;
+    updateSetting("compaction", { ...getSettings().compaction, triggerPercent: 70 });
+    expect(getSettings().compaction.triggerPercent).toBe(70);
+    updateSetting("compaction", { ...getSettings().compaction, triggerPercent: previous });
   });
 });

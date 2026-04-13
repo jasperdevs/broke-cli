@@ -79,7 +79,6 @@ export function openSettingsMenu(args: {
       { key: "autoRoute", label: "Auto-route", value: String(s.autoRoute), description: "Route simple tasks to cheaper model automatically" },
       { key: "showTokens", label: "Show tokens", value: String(s.showTokens), description: "Display token count in status bar" },
       { key: "showCost", label: "Show cost", value: String(s.showCost), description: "Display cost in status bar" },
-      { key: "maxSessionCost", label: "Max session cost", value: s.maxSessionCost === 0 ? "unlimited" : `$${s.maxSessionCost}`, description: "Maximum cost per session (0 = unlimited)" },
       { key: "notifyOnResponse", label: "Notify on response", value: String(s.notifyOnResponse), description: "Show a desktop notification when a response completes" },
       { key: "quietStartup", label: "Quiet startup", value: String(s.quietStartup), description: "Hide startup inventory details" },
       { key: "hideThinkingBlock", label: "Hide thinking block", value: String(s.hideThinkingBlock), description: "Hide streamed reasoning blocks in chat" },
@@ -135,9 +134,6 @@ export function openSettingsMenu(args: {
       updateSetting("enableThinking", next !== "off");
     } else if (typeof val === "boolean") {
       updateSetting(key as keyof Settings, !val);
-    } else if (key === "maxSessionCost") {
-      const next = s.maxSessionCost === 0 ? 1 : s.maxSessionCost === 1 ? 5 : s.maxSessionCost === 5 ? 10 : 0;
-      updateSetting("maxSessionCost", next);
     } else if (key === "cavemanLevel") {
       const levels = ["off", "lite", "auto", "ultra"] as const;
       const current = s.cavemanLevel ?? "auto";
