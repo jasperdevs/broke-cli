@@ -28,6 +28,8 @@ describe("command-aware filtering", () => {
     expect(names).toContain("fork");
     expect(names).toContain("mode");
     expect(names).toContain("templates");
+    expect(names).toContain("extensions");
+    expect(names).toContain("packages");
   });
 
   it("hides context-sensitive commands when they are not usable", () => {

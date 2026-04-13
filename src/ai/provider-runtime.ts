@@ -106,37 +106,47 @@ export function createModel(providerId: string, modelId?: string): ModelHandle {
       return { model: openai.chat(model), provider: info, modelId: model, runtime: "sdk" };
     }
     case "ollama": {
+      const { baseURL, headers, apiKey } = resolveProviderSdkConfig(providerId, info);
       const ollama = createOpenAI({
-        baseURL: getConfiguredProviderBaseUrl("ollama") ?? "http://127.0.0.1:11434/v1",
-        apiKey: "ollama",
+        baseURL: baseURL ?? "http://127.0.0.1:11434/v1",
+        apiKey: apiKey ?? "ollama",
+        headers,
       });
       return { model: ollama.chat(model), provider: info, modelId: model, runtime: "sdk" };
     }
     case "lmstudio": {
+      const { baseURL, headers, apiKey } = resolveProviderSdkConfig(providerId, info);
       const lms = createOpenAI({
-        baseURL: getConfiguredProviderBaseUrl("lmstudio") ?? "http://127.0.0.1:1234/v1",
-        apiKey: "lmstudio",
+        baseURL: baseURL ?? "http://127.0.0.1:1234/v1",
+        apiKey: apiKey ?? "lmstudio",
+        headers,
       });
       return { model: lms.chat(model), provider: info, modelId: model, runtime: "sdk" };
     }
     case "llamacpp": {
+      const { baseURL, headers, apiKey } = resolveProviderSdkConfig(providerId, info);
       const llama = createOpenAI({
-        baseURL: getConfiguredProviderBaseUrl("llamacpp") ?? "http://127.0.0.1:8080/v1",
-        apiKey: "llamacpp",
+        baseURL: baseURL ?? "http://127.0.0.1:8080/v1",
+        apiKey: apiKey ?? "llamacpp",
+        headers,
       });
       return { model: llama.chat(model), provider: info, modelId: model, runtime: "sdk" };
     }
     case "jan": {
+      const { baseURL, headers, apiKey } = resolveProviderSdkConfig(providerId, info);
       const jan = createOpenAI({
-        baseURL: getConfiguredProviderBaseUrl("jan") ?? "http://127.0.0.1:1337/v1",
-        apiKey: "jan",
+        baseURL: baseURL ?? "http://127.0.0.1:1337/v1",
+        apiKey: apiKey ?? "jan",
+        headers,
       });
       return { model: jan.chat(model), provider: info, modelId: model, runtime: "sdk" };
     }
     case "vllm": {
+      const { baseURL, headers, apiKey } = resolveProviderSdkConfig(providerId, info);
       const vllm = createOpenAI({
-        baseURL: getConfiguredProviderBaseUrl("vllm") ?? "http://127.0.0.1:8000/v1",
-        apiKey: "vllm",
+        baseURL: baseURL ?? "http://127.0.0.1:8000/v1",
+        apiKey: apiKey ?? "vllm",
+        headers,
       });
       return { model: vllm.chat(model), provider: info, modelId: model, runtime: "sdk" };
     }

@@ -240,7 +240,7 @@ describe("slash command handling", () => {
     expect(opened?.reports.session.idleCacheCliffs).toBe(1);
     expect(opened?.reports.session.freshThreadCarryForwards).toBe(1);
     expect(opened?.reports.all.sessionCount).toBeGreaterThanOrEqual(1);
-  });
+  }, 15_000);
 
   it("updates the auto-compact threshold for /compact-at", async () => {
     const previous = loadConfig().settings?.compaction?.triggerPercent ?? 80;

@@ -48,19 +48,10 @@ function insertPromptAsset(app: SlashCommandApp, text: string): void {
   const joiner = !current ? "" : current.endsWith("\n") ? "\n" : "\n\n";
   app.setDraft?.(`${current}${joiner}${normalized}`);
 }
-async function chooseMenuItem(
-  app: SlashCommandApp,
-  title: string,
-  items: PickerItem[],
-  kind: "tree" | "hotkeys" | "name",
-): Promise<string> {
+async function chooseMenuItem(app: SlashCommandApp, title: string, items: PickerItem[], kind: "tree" | "hotkeys" | "name"): Promise<string> {
   return new Promise((resolve) => {
     let settled = false;
-    const finish = (value: string) => {
-      if (settled) return;
-      settled = true;
-      resolve(value);
-    };
+    const finish = (value: string) => { if (!settled) { settled = true; resolve(value); } };
     app.openItemPicker(title, items, (id: string) => finish(id), {
       kind,
       onCancel: () => finish(""),
@@ -201,10 +192,11 @@ export const UI_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<UiSlas
   {
     names: ["session"],
     description: "show active session info",
-    run: ({ app, session, activeModel, currentModelId }) => {
+    run: ({ app, session, activeModel, currentModelId, onSessionReplace }) => {
       const sessionDir = getSettings().sessionDir?.trim();
       const sessionFile = SessionManager.open(session.getId(), sessionDir || undefined, session.getCwd()).getSessionFile() ?? "in-memory";
       const items = [
+        { id: "__delete__", label: "Delete session", detail: "remove the persisted session and clear the current thread", tone: "danger" as const },
         { id: "name", label: session.getName(), detail: "name" },
         { id: "id", label: session.getId(), detail: "id" },
         { id: "model", label: `${session.getProvider() || activeModel?.provider.name || "---"}/${session.getModel() || currentModelId || "none"}`, detail: "model" },
@@ -221,7 +213,18 @@ export const UI_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<UiSlas
         { id: "storage", label: getSettings().sessionDir?.trim() || "default", detail: "session dir" },
         { id: "persist", label: String(getSettings().autoSaveSessions), detail: "auto-save" },
       ];
-      app.openItemPicker("Session", items, () => {}, { kind: "session" });
+      app.openItemPicker("Session", items, (id: string) => {
+        if (id !== "__delete__") return;
+        SessionManager.open(session.getId(), sessionDir || undefined, session.getCwd()).deleteCurrentSession();
+        const fresh = new Session();
+        fresh.setCwd(session.getCwd());
+        if (activeModel) fresh.setProviderModel(activeModel.provider.name, currentModelId || activeModel.modelId);
+        onSessionReplace(fresh);
+        app.clearMessages();
+        app.updateUsage(0, 0, 0);
+        app.setSessionName?.(fresh.getName());
+        app.setStatus?.("Deleted persisted session and started a fresh thread.");
+      }, { kind: "session", closeOnSelect: false });
       return { handled: true };
     },
   },
@@ -476,23 +479,16 @@ export async function handleUiSlashCommand(options: UiSlashCommandContext): Prom
   const { cmd, text, app, session } = options;
   const command = uiSlashCommands.get(cmd);
   if (command) return await command(options);
-  {
-      const skillName = cmd.startsWith("skill:") ? cmd.slice("skill:".length) : cmd;
-      const template = loadTemplate(cmd);
-      const skill = (cmd.startsWith("skill:") || getSettings().enableSkillCommands) ? loadSkillPrompt(skillName) : null;
-      if (!template && !skill) return null;
-      let content = template ?? skill ?? "";
-      const fileContexts = app.getFileContexts();
-      if (fileContexts.size > 0) {
-        const contextBlock = [...fileContexts.entries()]
-          .map(([path, fc]) => `--- @${path} ---\n${fc}`)
-          .join("\n\n");
-        content = content.replace(/\{\{file\}\}/g, contextBlock);
-      }
-      const rest = text.slice(1 + cmd.length).trim();
-      if (rest) content = `${content}\n\n${rest}`;
-      app.addMessage("user", `/${cmd}${rest ? ` ${rest}` : ""}`);
-      session.addMessage("user", content);
-      return { handled: false, templateLoaded: true };
-  }
+  const skillName = cmd.startsWith("skill:") ? cmd.slice("skill:".length) : cmd;
+  const template = loadTemplate(cmd);
+  const skill = (cmd.startsWith("skill:") || getSettings().enableSkillCommands) ? loadSkillPrompt(skillName) : null;
+  if (!template && !skill) return null;
+  let content = template ?? skill ?? "";
+  const fileContexts = app.getFileContexts();
+  if (fileContexts.size > 0) content = content.replace(/\{\{file\}\}/g, [...fileContexts.entries()].map(([path, fc]) => `--- @${path} ---\n${fc}`).join("\n\n"));
+  const rest = text.slice(1 + cmd.length).trim();
+  if (rest) content = `${content}\n\n${rest}`;
+  app.addMessage("user", `/${cmd}${rest ? ` ${rest}` : ""}`);
+  session.addMessage("user", content);
+  return { handled: false, templateLoaded: true };
 }

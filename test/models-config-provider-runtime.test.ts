@@ -71,4 +71,28 @@ describe.sequential("provider runtime config overrides", () => {
     expect(config.baseURL).toBe("https://example.com/v1");
     expect(config.headers).toEqual({ "x-custom": "beta" });
   });
+
+  it("applies local-provider headers and baseUrl overrides through the shared SDK config path", () => {
+    writeFileSync(globalModelsPath, JSON.stringify({
+      providers: {
+        ollama: {
+          baseUrl: "http://127.0.0.1:2244/v1",
+          headers: {
+            "x-local-route": "edge",
+          },
+        },
+      },
+    }), "utf-8");
+
+    const info: ProviderInfo = {
+      id: "ollama",
+      name: "Ollama",
+      defaultModel: "qwen2.5-coder:7b",
+      models: ["qwen2.5-coder:7b"],
+    };
+
+    const config = resolveProviderSdkConfig("ollama", info);
+    expect(config.baseURL).toBe("http://127.0.0.1:2244/v1");
+    expect(config.headers).toEqual({ "x-local-route": "edge" });
+  });
 });

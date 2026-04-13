@@ -43,9 +43,12 @@ describe("efficiency caps", () => {
   });
 
   it("truncates fetched web content at the lower cap", async () => {
+    setRuntimeSettings({ autonomy: { allowNetwork: true } as any });
     vi.stubGlobal("fetch", vi.fn(async () => ({
       ok: true,
-      headers: { get: () => "text/html" },
+      headers: {
+        get: (name: string) => name.toLowerCase() === "content-type" ? "text/html" : null,
+      },
       text: async () => `<html><body>${"z".repeat(7000)}</body></html>`,
       arrayBuffer: async () => new TextEncoder().encode(`<html><body>${"z".repeat(7000)}</body></html>`).buffer,
     })));

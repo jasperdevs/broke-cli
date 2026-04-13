@@ -34,6 +34,7 @@ Inside the app:
 - `/connect <provider>` for API-key providers
 - `/login <provider>` for supported native login flows
 - `/model` to switch models
+- `/packages` to inspect installed packages or search/install from npm
 - `/settings` to change runtime behavior
 - custom providers and model overrides via [`docs/models.md`](./docs/models.md)
 
@@ -70,7 +71,7 @@ The TUI keeps model, provider, workspace, and session state visible instead of h
 <tr>
 <td width="40%" valign="middle">
 <h3>30+ slash commands + settings</h3>
-Built-in workflows like <code>/connect</code>, <code>/login</code>, <code>/model</code>, <code>/settings</code>, <code>/btw</code>, <code>/budget</code>, <code>/export</code>, and <code>/resume</code>.
+Built-in workflows like <code>/connect</code>, <code>/login</code>, <code>/model</code>, <code>/settings</code>, <code>/packages</code>, <code>/btw</code>, <code>/budget</code>, <code>/export</code>, and <code>/resume</code>.
 </td>
 <td width="60%">
 &nbsp;
@@ -79,7 +80,7 @@ Built-in workflows like <code>/connect</code>, <code>/login</code>, <code>/model
 <tr>
 <td width="40%" valign="middle">
 <h3>Provider + session tools</h3>
-Hosted APIs, local runtimes, native logins, session persistence, exports, self-update, and benchmark tasks in one CLI.
+Hosted APIs, local runtimes, native logins, session persistence, branch forking in the session tree, exports, self-update, and benchmark tasks in one CLI.
 </td>
 <td width="60%">
 &nbsp;

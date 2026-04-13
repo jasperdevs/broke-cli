@@ -89,7 +89,8 @@ describe("session tree", () => {
     const output = rendered.map((line) => stripAnsi(line)).join("\n");
     expect(output).toContain("Session Tree");
     expect(output).toContain("/tree");
-    expect(output).toContain("shift+l label");
+    expect(output).toContain("shift+f fork");
+    expect(output).toContain("shift+r rename");
     expect(output).toContain("Review the failing t");
     expect(output).toContain("continueRecent");
   });

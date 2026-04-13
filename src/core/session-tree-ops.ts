@@ -71,15 +71,51 @@ export function getEntriesToSummarizeForNavigation(
 export function toggleEntryLabel(entries: SessionEntry[], entryId: string, label?: string): { labeled: boolean; value?: string } {
   const entry = entries.find((candidate) => candidate.id === entryId);
   if (!entry) return { labeled: false };
+  if (typeof label === "string") {
+    const trimmed = label.trim();
+    if (!trimmed) {
+      delete entry.label;
+      delete entry.labelTimestamp;
+      return { labeled: false };
+    }
+    entry.label = trimmed;
+    entry.labelTimestamp = Date.now();
+    return { labeled: true, value: entry.label };
+  }
   if (entry.label) {
     delete entry.label;
     delete entry.labelTimestamp;
     return { labeled: false };
   }
   const fallback = entry.content.split(/\r?\n/)[0]?.trim().slice(0, 80) || entry.role;
-  entry.label = (label?.trim() || fallback).trim();
+  entry.label = fallback.trim();
   entry.labelTimestamp = Date.now();
   return { labeled: true, value: entry.label };
+}
+
+export function pruneEntryBranch(
+  entries: SessionEntry[],
+  leafId: string | null,
+  entryId: string,
+): { entries: SessionEntry[]; leafId: string | null; removed: number } {
+  const children = buildChildrenMap(entries);
+  const toRemove = new Set<string>();
+  const stack = [entryId];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    if (toRemove.has(current)) continue;
+    toRemove.add(current);
+    for (const child of children.get(current) ?? []) stack.push(child.id);
+  }
+  if (toRemove.size === 0) return { entries, leafId, removed: 0 };
+  const entry = entries.find((candidate) => candidate.id === entryId);
+  const nextEntries = entries.filter((candidate) => !toRemove.has(candidate.id));
+  const nextLeafId = leafId && toRemove.has(leafId) ? (entry?.parentId ?? null) : leafId;
+  return {
+    entries: nextEntries,
+    leafId: nextLeafId,
+    removed: toRemove.size,
+  };
 }
 
 export function navigateToEntry(entries: SessionEntry[], targetId: string): { leafId: string | null; editorText?: string; cancelled: boolean } {

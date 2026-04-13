@@ -22,6 +22,7 @@ export interface HookRegistry {
   getSlashCommands(): ExtensionSlashCommand[];
   registerThemes(themes: ThemePalette[]): void;
   getThemes(): ThemePalette[];
+  getLoadErrors(): Record<string, string>;
   reload(): void;
 }
 
@@ -30,13 +31,20 @@ export interface ExtensionInfo {
   enabled: boolean;
   path?: string;
   source?: string;
+  loaded?: boolean;
+  error?: string;
 }
+
+let lastExtensionLoadErrors = new Map<string, string>();
+let lastLoadedExtensions = new Set<string>();
 
 function createHookRegistry(): HookRegistry {
   const hooks = new Map<string, ExtensionHook[]>();
   const tools: ToolSet[] = [];
   const slashCommands: ExtensionSlashCommand[] = [];
   const themes: ThemePalette[] = [];
+  const loadErrors = new Map<string, string>();
+  const loadedExtensions = new Set<string>();
   const require = createRequire(import.meta.url);
 
   function resetHooks(): void {
@@ -44,6 +52,8 @@ function createHookRegistry(): HookRegistry {
     tools.length = 0;
     slashCommands.length = 0;
     themes.length = 0;
+    loadErrors.clear();
+    loadedExtensions.clear();
     clearRegisteredThemes();
   }
 
@@ -57,11 +67,14 @@ function createHookRegistry(): HookRegistry {
         const ext = require(modulePath);
         if (typeof ext.register === "function") {
           ext.register(registry);
+          loadedExtensions.add(extension.id);
         }
-      } catch {
-        // Skip broken extensions silently
+      } catch (error) {
+        loadErrors.set(extension.id, error instanceof Error ? error.message : String(error));
       }
     }
+    lastExtensionLoadErrors = new Map(loadErrors);
+    lastLoadedExtensions = new Set(loadedExtensions);
   }
 
   const registry: HookRegistry = {
@@ -108,6 +121,10 @@ function createHookRegistry(): HookRegistry {
       return [...themes];
     },
 
+    getLoadErrors(): Record<string, string> {
+      return Object.fromEntries(loadErrors.entries());
+    },
+
     reload(): void {
       resetHooks();
       registerExtensions();
@@ -148,5 +165,7 @@ export function listExtensions(): ExtensionInfo[] {
     enabled: entry.enabled,
     path: entry.path,
     source: entry.source,
+    loaded: lastLoadedExtensions.has(entry.id),
+    error: lastExtensionLoadErrors.get(entry.id),
   }));
 }

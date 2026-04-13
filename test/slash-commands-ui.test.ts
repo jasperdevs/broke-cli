@@ -155,6 +155,44 @@ describe("slash command UI surfaces", () => {
     }
   });
 
+  it("surfaces extension load errors in the picker detail", async () => {
+    mkdirSync(extDir, { recursive: true });
+    const extensionId = `slash-test-extension-broken-${Date.now()}`;
+    const extensionPath = join(extDir, `${extensionId}.js`);
+    writeFileSync(extensionPath, "throw new Error('broken extension');", "utf-8");
+    const originalDiscoverExtensions = loadConfig().settings?.discoverExtensions;
+    const originalExtensions = loadConfig().settings?.extensions;
+    updateSetting("discoverExtensions", true);
+    updateSetting("extensions", [extDir]);
+
+    try {
+      const app = createAppStub();
+      let pickerItems: Array<{ id: string; label: string; detail?: string }> = [];
+      app.openItemPicker = (_title: string, items: Array<{ id: string; label: string; detail?: string }>) => {
+        pickerItems = items;
+      };
+
+      await handleSlashCommand({
+        text: "/extensions",
+        app,
+        session: new Session(`test-extensions-broken-${Date.now()}`),
+        ...createSlashArgs({
+          hooks: {
+            emit() {},
+            reload() {},
+          },
+        }),
+      });
+
+      const broken = pickerItems.find((item) => item.id === extensionId);
+      expect(broken?.detail).toContain("error:");
+    } finally {
+      rmSync(extensionPath, { force: true });
+      updateSetting("discoverExtensions", originalDiscoverExtensions ?? true);
+      updateSetting("extensions", originalExtensions ?? []);
+    }
+  });
+
   it("opens an empty extensions picker instead of writing a transcript message", async () => {
     const originalDiscoverExtensions = loadConfig().settings?.discoverExtensions;
     const originalExtensions = loadConfig().settings?.extensions;

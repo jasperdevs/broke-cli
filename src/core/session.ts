@@ -30,6 +30,7 @@ import {
   getEntriesToSummarizeForNavigation,
   getSessionTreeItems,
   navigateToEntry,
+  pruneEntryBranch,
   toggleEntryLabel,
 } from "./session-tree-ops.js";
 import {
@@ -158,6 +159,12 @@ export class Session {
   }
 
   toggleLabel(entryId: string, label?: string): { labeled: boolean; value?: string } {
+    const result = toggleEntryLabel(this.entries, entryId, label);
+    this.save();
+    return result;
+  }
+
+  setEntryLabel(entryId: string, label: string): { labeled: boolean; value?: string } {
     const result = toggleEntryLabel(this.entries, entryId, label);
     this.save();
     return result;
@@ -426,6 +433,14 @@ export class Session {
     }
     forked.save();
     return forked;
+  }
+
+  pruneBranch(entryId: string): { removed: number } {
+    const next = pruneEntryBranch(this.entries, this.leafId, entryId);
+    this.entries = next.entries;
+    this.leafId = next.leafId;
+    this.save();
+    return { removed: next.removed };
   }
 
   static listRecent(limit = 10, query = "", cwd?: string): SessionListItem[] {

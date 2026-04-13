@@ -62,4 +62,16 @@ describe("budget-first provider selection", () => {
       modelId: "gpt-5.4-mini",
     });
   });
+
+  it("leans token-first across priced hosted candidates before using lower cost as a tie-breaker", () => {
+    const resolved = pickCheapestDetectedModel([
+      { id: "google", name: "Google", available: true, reason: "API key" },
+      { id: "openai", name: "OpenAI", available: true, reason: "API key" },
+    ]);
+
+    expect(resolved).toEqual({
+      providerId: "openai",
+      modelId: "gpt-4o-mini",
+    });
+  });
 });

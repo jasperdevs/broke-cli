@@ -15,6 +15,7 @@ type RuntimeProgramOptions = {
   extensions?: boolean;
   skills?: boolean;
   promptTemplates?: boolean;
+  themes?: boolean;
   extension?: string[];
   skill?: string[];
   promptTemplate?: string[];
@@ -34,6 +35,7 @@ export function applyProgramRuntimeSettings(opts: RuntimeProgramOptions, parsedM
   if (opts.extensions === false) setRuntimeSettings({ discoverExtensions: false });
   if (opts.skills === false) setRuntimeSettings({ discoverSkills: false });
   if (opts.promptTemplates === false) setRuntimeSettings({ discoverPrompts: false });
+  if (opts.themes === false) setRuntimeSettings({ discoverThemes: false });
   if (opts.extension?.length) setRuntimeSettings({ extensions: opts.extension });
   if (opts.skill?.length) setRuntimeSettings({ skills: opts.skill });
   if (opts.promptTemplate?.length) setRuntimeSettings({ prompts: opts.promptTemplate });

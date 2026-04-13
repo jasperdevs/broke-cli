@@ -208,7 +208,6 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
   },
   {
     names: ["extensions"],
-    showInPicker: false,
     description: "manage extension loading",
     run: ({ app, hooks }) => {
       app.dismissBtwBubble?.();
@@ -218,11 +217,10 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
   },
   {
     names: ["packages"],
-    showInPicker: false,
     description: "inspect configured packages",
-    run: async ({ app, restText }) => {
+    run: async ({ app, restText, hooks }) => {
       app.dismissBtwBubble?.();
-      await openPackagesMenu(app, restText);
+      await openPackagesMenu(app, hooks, restText);
       return { handled: true };
     },
   },

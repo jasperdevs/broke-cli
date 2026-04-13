@@ -1,3 +1,4 @@
+import { execSync } from "child_process";
 import { renderBudgetDashboard } from "../core/budget-insights.js";
 import { filterFiles } from "./file-picker.js";
 import type { Keypress } from "./keypress.js";
@@ -15,6 +16,12 @@ type AppState = any;
 
 function isPlainBackspace(key: Keypress): boolean {
   return key.name === "backspace" && !key.ctrl && !key.meta && !key.shift;
+}
+
+function copyToClipboard(text: string): void {
+  if (process.platform === "win32") execSync("clip", { input: text });
+  else if (process.platform === "darwin") execSync("pbcopy", { input: text });
+  else execSync("xclip -selection clipboard", { input: text });
 }
 
 function getActiveFileMention(app: AppState): { query: string } | null {
@@ -136,6 +143,40 @@ export function handleTreeViewKey(app: AppState, key: Keypress): void {
     toggleTreeLabel(app);
   } else if (key.shift && key.char?.toLowerCase() === "f") {
     app.forkTreeEntry?.();
+    return;
+  } else if (key.shift && key.char?.toLowerCase() === "r") {
+    const selected = app.getSelectedTreeItem?.();
+    if (selected) {
+      void app.showQuestion("Label").then((value: string) => {
+        app.treeView?.session.setEntryLabel(selected.id, value);
+        app.drawNow();
+      });
+    }
+    return;
+  } else if (key.shift && key.char?.toLowerCase() === "d") {
+    const selected = app.getSelectedTreeItem?.();
+    if (selected) {
+      void app.showQuestion("Type DELETE to prune this branch").then((value: string) => {
+        if (value.trim() !== "DELETE") return;
+        const removed = app.treeView?.session.pruneBranch(selected.id).removed ?? 0;
+        app.setStatus?.(removed > 0 ? `Pruned ${removed} tree entr${removed === 1 ? "y" : "ies"}.` : "Nothing pruned.");
+        const rows = getVisibleTreeRows(app);
+        app.treeView.selectedId = rows.find((row) => row.item.active)?.item.id ?? rows[0]?.item.id ?? null;
+        app.drawNow();
+      });
+    }
+    return;
+  } else if (key.shift && key.char?.toLowerCase() === "c") {
+    const selected = app.getSelectedTreeItem?.();
+    if (selected) {
+      try {
+        copyToClipboard(selected.content);
+        app.setStatus?.("Copied selected tree entry.");
+      } catch {
+        app.setStatus?.("Copy failed.");
+      }
+      app.draw();
+    }
     return;
   } else if (key.shift && key.char?.toLowerCase() === "t") {
     toggleTreeTimestampMode(app);

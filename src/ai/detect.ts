@@ -33,6 +33,26 @@ export interface CheapestDetectedModel {
   modelId: string;
 }
 
+function tokenEfficiencyScore(providerId: string, modelId: string): number {
+  const spec = getModelSpec(modelId, providerId);
+  const normalized = modelId.toLowerCase();
+  const family = spec?.family?.toLowerCase() ?? "";
+  const limit = spec?.limit.context ?? 0;
+  let score = 0;
+
+  if (/\b(mini|haiku|flash|lite|instant|small)\b/.test(normalized) || /\b(mini|haiku|flash|lite|small)\b/.test(family)) score += 120;
+  if (/\b(coder|code|codestral)\b/.test(normalized) || /\bcode\b/.test(family)) score += 40;
+  if (/\b(opus|large|pro)\b/.test(normalized) || /\b(large|pro)\b/.test(family)) score -= 60;
+  if (spec?.reasoning) score -= 25;
+  if (limit > 0 && limit <= 128_000) score += 80;
+  else if (limit <= 200_000) score += 60;
+  else if (limit <= 400_000) score += 35;
+  else if (limit >= 1_000_000) score -= 20;
+  if ((spec?.limit.output ?? 0) > 0 && (spec?.limit.output ?? 0) <= 16_384) score += 10;
+
+  return score;
+}
+
 function listBudgetCandidateModelIds(provider: DetectedProvider): string[] {
   const ordered = provider.reason === "native login"
     ? [
@@ -241,6 +261,7 @@ export function pickCheapestDetectedModel(providers: DetectedProvider[]): Cheape
   candidates.sort((left, right) =>
     Number(right.priced) - Number(left.priced)
     || Number(right.isLocal) - Number(left.isLocal)
+    || tokenEfficiencyScore(right.providerId, right.modelId) - tokenEfficiencyScore(left.providerId, left.modelId)
     || (left.input + left.output) - (right.input + right.output)
     || left.input - right.input
     || left.output - right.output

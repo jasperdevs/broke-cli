@@ -4,7 +4,7 @@ import { clearCredentials, hasStoredCredentials, listAuthenticated } from "../co
 import { getSettings, loadConfig, updateProviderConfig, updateSetting, type AutonomySettings, type Mode, type Settings } from "../core/config.js";
 import { getProviderCredential } from "../core/provider-credentials.js";
 import { listProjects } from "../core/projects.js";
-import { listExtensions } from "../core/extensions.js";
+import { listExtensions, reloadExtensions } from "../core/extensions.js";
 import { describePackageResources, installPackage, listInstalledPackages } from "../core/package-manager.js";
 import { searchPackageRegistry } from "../core/package-search.js";
 import { toggleExtensionEnabled } from "../core/permissions.js";
@@ -167,20 +167,32 @@ export function openSettingsMenu(args: {
 }
 
 export function openExtensionsMenu(app: SlashCommandApp, hooks: ExtensionHooks): boolean {
+  reloadExtensions();
+  hooks.reload?.();
   const extensions = listExtensions();
   if (extensions.length === 0) {
     return openEmptyItemMenu(app, "Extensions", "~/.brokecli/extensions is empty", "extensions");
   }
-  const buildExtensionItems = () => listExtensions().map((entry) => ({ id: entry.id, label: entry.id, detail: entry.enabled ? "enabled" : "disabled" }));
+  const buildExtensionItems = () => listExtensions().map((entry) => ({
+    id: entry.id,
+    label: entry.id,
+    detail: [
+      entry.enabled ? "enabled" : "disabled",
+      entry.loaded ? "loaded" : "",
+      entry.error ? `error: ${entry.error}` : "",
+      entry.source,
+    ].filter(Boolean).join(" · "),
+  }));
   app.openItemPicker("Extensions", buildExtensionItems(), (id: string) => {
-    toggleExtensionEnabled(id);
+    const enabled = toggleExtensionEnabled(id);
     hooks.reload?.();
     app.updateItemPickerItems?.(buildExtensionItems(), id);
+    app.setStatus?.(`${enabled ? "Enabled" : "Disabled"} ${id}.`);
   }, { closeOnSelect: false, kind: "extensions" });
   return true;
 }
 
-export async function openPackagesMenu(app: SlashCommandApp, restText = ""): Promise<boolean> {
+export async function openPackagesMenu(app: SlashCommandApp, hooks: ExtensionHooks, restText = ""): Promise<boolean> {
   const query = restText.trim();
   if (query) {
     const results = await searchPackageRegistry(query, 12);
@@ -202,7 +214,8 @@ export async function openPackagesMenu(app: SlashCommandApp, restText = ""): Pro
     });
     app.openItemPicker("Package Search", items, (source: string) => {
       void installPackage(source).then(() => {
-        app.setStatus?.(`Installed ${source}`);
+        hooks.reload?.();
+        app.setStatus?.(`Installed ${source} and reloaded extensions.`);
       }).catch((error: Error) => {
         app.setStatus?.(`Package install failed: ${error.message}`);
       });

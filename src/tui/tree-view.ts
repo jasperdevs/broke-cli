@@ -125,8 +125,8 @@ export function drawTreeView(app: AppState): void {
 
   const frame: string[] = [];
   frame.push(`${separatorColor}${"─".repeat(width)}${RESET}`);
-  frame.push(` ${T()}${BOLD}${view.title}${RESET} ${count}${DIM} · ${filterLabel}${RESET}${DIM} · enter jump · shift+f fork · shift+l label · ctrl+u user · ctrl+o cycle · esc back${RESET}`);
-  frame.push(` ${DIM}left/right page · ctrl/alt+left/right fold · shift+t timestamps${RESET}`);
+  frame.push(` ${T()}${BOLD}${view.title}${RESET} ${count}${DIM} · ${filterLabel}${RESET}${DIM} · enter jump · shift+f fork · shift+r rename · shift+d prune · esc back${RESET}`);
+  frame.push(` ${DIM}shift+l quick-label · shift+c copy · shift+t timestamps · ctrl+u user · ctrl+o cycle${RESET}`);
   frame.push("");
 
   for (let i = 0; i < bodyRows; i++) {

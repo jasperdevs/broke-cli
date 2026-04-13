@@ -43,6 +43,7 @@ describe("package UI surfaces", () => {
     let packageItems: Array<{ id: string; label: string; detail?: string }> = [];
     let onSelect: ((id: string) => void) | undefined;
     vi.spyOn(packageManager, "installPackage").mockResolvedValue();
+    let reloaded = 0;
     vi.spyOn(packageSearch, "searchPackageRegistry").mockResolvedValue([
       {
         source: "npm:@demo/skill-pack",
@@ -61,7 +62,9 @@ describe("package UI surfaces", () => {
       text: "/packages demo",
       app,
       session: new Session(`test-packages-search-${Date.now()}`),
-      ...createSlashArgs(),
+      ...createSlashArgs({
+        hooks: { emit() {}, reload() { reloaded += 1; } },
+      }),
     });
 
     expect(result.handled).toBe(true);
@@ -71,5 +74,7 @@ describe("package UI surfaces", () => {
     });
     await onSelect?.("npm:@demo/skill-pack");
     expect(packageManager.installPackage).toHaveBeenCalledWith("npm:@demo/skill-pack");
+    expect(reloaded).toBe(1);
+    expect(app.statusMessage).toContain("Installed npm:@demo/skill-pack");
   });
 });

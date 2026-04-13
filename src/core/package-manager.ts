@@ -219,8 +219,11 @@ export async function removePackage(source: string, options?: { local?: boolean 
   if (parsed.kind !== "path") rmSync(managedPackageRoot(source, scope), { recursive: true, force: true });
 }
 
-export async function updatePackages(source?: string): Promise<void> {
-  const targets = listInstalledPackages().filter((entry) => !source || entry.source === source).filter((entry) => !entry.pinned);
+export async function updatePackages(source?: string, options?: { scope?: "global" | "project" }): Promise<void> {
+  const targets = listInstalledPackages()
+    .filter((entry) => !source || entry.source === source)
+    .filter((entry) => !options?.scope || entry.scope === options.scope)
+    .filter((entry) => !entry.pinned);
   for (const entry of targets) {
     if (entry.kind === "npm") installNpmPackage(entry.source, entry.scope);
     else if (entry.kind === "git" || entry.kind === "url") installGitPackage(entry.source, entry.scope);

@@ -30,6 +30,7 @@ export function createProgram(appVersion: string): Command {
     .option("--no-extensions", "Disable extension discovery for this run")
     .option("--no-skills", "Disable skill discovery for this run")
     .option("--no-prompt-templates", "Disable prompt-template discovery for this run")
+    .option("--no-themes", "Disable theme discovery for this run")
     .option("--export <session>", "Export a saved session to HTML")
     .option("--export-out <path>", "Output path for --export")
     .option("--verbose", "Force verbose startup")

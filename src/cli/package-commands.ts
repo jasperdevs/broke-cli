@@ -127,10 +127,11 @@ export function registerPackageCommands(program: Command): void {
   program
     .command("update")
     .argument("[source]")
+    .option("-l, --local", "update only project-scoped packages")
     .description("Update unpinned installed packages")
-    .action(async (source?: string) => {
-      await updatePackages(source);
-      process.stdout.write(source ? `Updated ${source}\n` : "Updated packages\n");
+    .action(async (source: string | undefined, opts: { local?: boolean }) => {
+      await updatePackages(source, { scope: opts.local ? "project" : undefined });
+      process.stdout.write(source ? `Updated ${source}\n` : `Updated ${opts.local ? "project " : ""}packages\n`);
     });
 
   program
