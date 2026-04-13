@@ -1,6 +1,11 @@
 import { z } from "zod";
+import { existsSync, readFileSync } from "fs";
+import { homedir } from "os";
+import { join } from "path";
+import { writePrivateTextFile } from "../core/private-files.js";
 
 const MODELS_DEV_API_URL = "https://models.dev/api.json";
+const MODEL_CATALOG_CACHE_PATH = join(homedir(), ".brokecli", "model-catalog-cache.json");
 
 export interface ModelPricing {
   input: number;
@@ -325,6 +330,23 @@ function getCatalog(): Catalog {
   return catalogCache ?? buildFallbackCatalog();
 }
 
+function readCachedCatalog(): Catalog | null {
+  if (!existsSync(MODEL_CATALOG_CACHE_PATH)) return null;
+  try {
+    return catalogSchema.parse(JSON.parse(readFileSync(MODEL_CATALOG_CACHE_PATH, "utf-8")));
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedCatalog(catalog: Catalog): void {
+  try {
+    writePrivateTextFile(MODEL_CATALOG_CACHE_PATH, JSON.stringify(catalog));
+  } catch {
+    // Cache writes are best effort only.
+  }
+}
+
 export async function loadModelCatalog(): Promise<void> {
   if (catalogCache) return;
   try {
@@ -335,9 +357,18 @@ export async function loadModelCatalog(): Promise<void> {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const parsed = catalogSchema.parse(await res.json());
     catalogCache = parsed;
+    writeCachedCatalog(parsed);
   } catch {
-    catalogCache = buildFallbackCatalog();
+    catalogCache = readCachedCatalog() ?? buildFallbackCatalog();
   }
+}
+
+export function resetModelCatalogForTests(): void {
+  catalogCache = null;
+}
+
+export function getModelCatalogCachePathForTests(): string {
+  return MODEL_CATALOG_CACHE_PATH;
 }
 
 export function getCatalogModelIds(providerId: string): string[] | null {
