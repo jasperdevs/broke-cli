@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -31,6 +31,7 @@ describe.sequential("models.json overrides", () => {
     setRuntimeModelsConfigPathsForTests(null);
     resetRuntimeProviders();
     rmSync(root, { recursive: true, force: true });
+    vi.restoreAllMocks();
   });
 
   it("applies model overrides on top of built-in catalog metadata", () => {
@@ -77,6 +78,14 @@ describe.sequential("models.json overrides", () => {
 
   it("detects and creates custom configured providers", async () => {
     process.env.CUSTOM_PROVIDER_KEY = "test-custom-key";
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      return {
+        ok: url === "https://example.com/v1/models",
+        status: url === "https://example.com/v1/models" ? 200 : 404,
+        json: async () => ({ data: [] }),
+      } as Response;
+    });
     writeFileSync(globalModelsPath, JSON.stringify({
       providers: {
         "custom-openai": {
