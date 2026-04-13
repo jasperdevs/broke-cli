@@ -1,4 +1,4 @@
-import { getBaseUrl } from "../core/config.js";
+import { getConfiguredProviderBaseUrl } from "../core/models-config.js";
 import {
   getCatalogModelIds,
   getProviderPreferredDisplayModelIds,
@@ -102,7 +102,7 @@ export async function refreshLocalModels(detectedIds: string[]): Promise<void> {
   const fetches = detectedIds
     .filter((id) => id in localProviders)
     .map(async (id) => {
-      const models = await fetchLocalModels(id, getBaseUrl(id) ?? localProviders[id]);
+      const models = await fetchLocalModels(id, getConfiguredProviderBaseUrl(id) ?? localProviders[id]);
       if (models.length > 0 && PROVIDERS[id]) {
         PROVIDERS[id].models = models;
         PROVIDERS[id].defaultModel = models[0];

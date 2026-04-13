@@ -7,9 +7,9 @@ import { resolveThinkingConfig } from "./thinking.js";
 import { getModelCapabilities } from "./provider-capabilities.js";
 import { getSettings } from "../core/config.js";
 import { buildPromptCacheKey } from "../core/context.js";
-import { getBaseUrl } from "../core/config.js";
 import { startLocalOpenAIStream } from "./local-openai-stream.js";
 import { parsePossiblyPartialJson } from "./native-tool-events.js";
+import { getConfiguredProviderBaseUrl } from "../core/models-config.js";
 
 export interface StreamCallbacks {
   onText: (delta: string) => void;
@@ -48,7 +48,7 @@ export async function startStream(
   try {
     if (shouldUseDirectLocalOpenAIStream(opts)) {
       await startLocalOpenAIStream({
-        baseURL: getBaseUrl(opts.providerId!) ?? defaultLocalBaseURL(opts.providerId!),
+        baseURL: getConfiguredProviderBaseUrl(opts.providerId!) ?? defaultLocalBaseURL(opts.providerId!),
         apiKey: opts.providerId!,
         modelId: opts.modelId,
         system: opts.system,

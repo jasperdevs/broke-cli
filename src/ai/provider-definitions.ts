@@ -3,12 +3,18 @@ import {
   getProviderDefaultModelId,
   getProviderPreferredDisplayModelIds,
 } from "./model-catalog.js";
+import type { ProviderApiType } from "../core/models-config.js";
 
 export interface ProviderInfo {
   id: string;
   name: string;
   defaultModel: string;
   models: string[];
+  apiType?: ProviderApiType;
+  baseUrl?: string;
+  headers?: Record<string, string>;
+  authHeader?: boolean;
+  custom?: boolean;
 }
 
 export type ModelRuntime = "sdk" | "native-cli";
@@ -39,7 +45,7 @@ export const PROVIDER_POPULARITY: Record<string, number> = {
 
 export const LOCAL_PROVIDER_IDS = new Set(["ollama", "lmstudio", "llamacpp", "jan", "vllm"]);
 
-export const PROVIDERS: Record<string, ProviderInfo> = {
+export const BUILTIN_PROVIDERS: Record<string, ProviderInfo> = {
   anthropic: {
     id: "anthropic",
     name: "Anthropic",
@@ -123,6 +129,26 @@ export const PROVIDERS: Record<string, ProviderInfo> = {
     models: [...getProviderPreferredDisplayModelIds("openrouter")],
   },
 };
+
+export let PROVIDERS: Record<string, ProviderInfo> = cloneProviders(BUILTIN_PROVIDERS);
+
+function cloneProviders(source: Record<string, ProviderInfo>): Record<string, ProviderInfo> {
+  return Object.fromEntries(
+    Object.entries(source).map(([providerId, info]) => [providerId, { ...info, models: [...info.models], headers: info.headers ? { ...info.headers } : undefined }]),
+  );
+}
+
+export function resetRuntimeProviders(): void {
+  PROVIDERS = cloneProviders(BUILTIN_PROVIDERS);
+}
+
+export function setRuntimeProviderInfo(provider: ProviderInfo): void {
+  PROVIDERS[provider.id] = {
+    ...provider,
+    models: [...provider.models],
+    headers: provider.headers ? { ...provider.headers } : undefined,
+  };
+}
 
 export function getProviderInfo(id: string): ProviderInfo | undefined {
   return PROVIDERS[id];

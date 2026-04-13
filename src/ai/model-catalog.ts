@@ -3,6 +3,8 @@ import { existsSync, readFileSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 import { writePrivateTextFile } from "../core/private-files.js";
+import { listConfiguredProviderIds } from "../core/models-config.js";
+import { getConfiguredModelSpec, mergeConfiguredModelOverride } from "./model-spec-overrides.js";
 
 const MODELS_DEV_API_URL = "https://models.dev/api.json";
 const MODEL_CATALOG_CACHE_PATH = join(homedir(), ".brokecli", "model-catalog-cache.json");
@@ -418,19 +420,24 @@ export function getModelSpec(modelId: string, providerId?: string): ModelSpec | 
 
   for (const candidate of providerCandidates) {
     const provider = catalog[candidate];
-    if (provider?.models[modelId]) return asModelSpec(provider.id, provider.models[modelId]);
+    if (provider?.models[modelId]) return mergeConfiguredModelOverride(asModelSpec(provider.id, provider.models[modelId]), candidate, modelId);
   }
 
   for (const provider of Object.values(catalog)) {
-    if (provider.models[modelId]) return asModelSpec(provider.id, provider.models[modelId]);
+    if (provider.models[modelId]) return mergeConfiguredModelOverride(asModelSpec(provider.id, provider.models[modelId]), provider.id, modelId);
   }
 
   for (const provider of Object.values(catalog)) {
     for (const [key, model] of Object.entries(provider.models)) {
       if (key === modelId || key.endsWith(`/${modelId}`) || model.id === modelId) {
-        return asModelSpec(provider.id, model);
+        return mergeConfiguredModelOverride(asModelSpec(provider.id, model), provider.id, modelId);
       }
     }
+  }
+
+  for (const configuredProviderId of listConfiguredProviderIds()) {
+    const configuredModel = getConfiguredModelSpec(configuredProviderId, modelId);
+    if (configuredModel) return configuredModel;
   }
 
   return null;

@@ -10,8 +10,10 @@ import {
   syncCloudProviderModelsFromCatalog,
   type ModelHandle,
 } from "./providers.js";
-import { getBaseUrl } from "../core/config.js";
+import { getConfiguredProviderBaseUrl, listConfiguredProviderIds } from "../core/models-config.js";
 import { getProviderCredential } from "../core/provider-credentials.js";
+import { applyConfiguredProviderOverrides } from "./provider-overrides.js";
+import { resetRuntimeProviders } from "./provider-definitions.js";
 
 const LOCAL_PROVIDER_DEFAULTS: Record<string, string> = {
   ollama: "http://127.0.0.1:11434/v1",
@@ -58,9 +60,11 @@ export class ProviderRegistry {
       return this.refreshInFlight;
     }
     const refreshPromise = (async () => {
-      this.providers = await detectProviders();
+      resetRuntimeProviders();
       syncCloudProviderModelsFromCatalog();
+      this.providers = await detectProviders();
       await refreshLocalModels(this.providers.map((provider) => provider.id));
+      applyConfiguredProviderOverrides();
       this.refreshCacheAt = Date.now();
       this.visibleModelOptionsCacheKey = "";
       return this.providers;
@@ -109,8 +113,9 @@ export class ProviderRegistry {
 
     const visibleProviderIds = new Set(this.providers.map((provider) => provider.id));
     for (const localProviderId of Object.keys(LOCAL_PROVIDER_DEFAULTS)) {
-      if (getBaseUrl(localProviderId)) visibleProviderIds.add(localProviderId);
+      if (getConfiguredProviderBaseUrl(localProviderId)) visibleProviderIds.add(localProviderId);
     }
+    for (const providerId of listConfiguredProviderIds()) visibleProviderIds.add(providerId);
     if (activeModel?.provider.id) visibleProviderIds.add(activeModel.provider.id);
     for (const pinnedModel of pinnedModels) {
       const slashIndex = pinnedModel.indexOf("/");
@@ -164,7 +169,7 @@ export class ProviderRegistry {
   }
 
   getSavedBaseUrl(providerId: string): string | undefined {
-    return getBaseUrl(providerId);
+    return getConfiguredProviderBaseUrl(providerId);
   }
 
   getProviderInfo(providerId: string) {

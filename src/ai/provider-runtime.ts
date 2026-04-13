@@ -3,11 +3,16 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createMistral } from "@ai-sdk/mistral";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createXai } from "@ai-sdk/xai";
-import { getBaseUrl } from "../core/config.js";
 import { getApiKey, getProviderCredential } from "../core/provider-credentials.js";
 import { getProviderNativeDefaultModelId, getProviderNativePreferredDisplayModelIds } from "./model-catalog.js";
 import { hasNativeCommand } from "./native-cli.js";
 import { type ModelHandle, PROVIDERS } from "./provider-definitions.js";
+import {
+  getConfiguredProviderAuthHeader,
+  getConfiguredProviderBaseUrl,
+  getConfiguredProviderHeaders,
+} from "../core/models-config.js";
+import { applyConfiguredProviderOverrides } from "./provider-overrides.js";
 
 export function shouldUseNativeProvider(providerId: string): boolean {
   if (providerId !== "anthropic" && providerId !== "codex") return false;
@@ -16,7 +21,11 @@ export function shouldUseNativeProvider(providerId: string): boolean {
 }
 
 export function createModel(providerId: string, modelId?: string): ModelHandle {
-  const info = PROVIDERS[providerId];
+  let info = PROVIDERS[providerId];
+  if (!info) {
+    applyConfiguredProviderOverrides();
+    info = PROVIDERS[providerId];
+  }
   if (!info) throw new Error(`Unknown provider: ${providerId}`);
 
   const useNative = shouldUseNativeProvider(providerId);
@@ -45,6 +54,33 @@ export function createModel(providerId: string, modelId?: string): ModelHandle {
     };
   }
 
+  if (info.custom && info.apiType) {
+    const baseURL = info.baseUrl ?? getConfiguredProviderBaseUrl(providerId);
+    const apiKey = getApiKey(providerId);
+    const customHeaders = {
+      ...(info.headers ?? {}),
+      ...(getConfiguredProviderHeaders(providerId) ?? {}),
+    };
+    const headers = Object.keys(customHeaders).length > 0 ? customHeaders : undefined;
+    const resolvedApiKey = apiKey ?? (getConfiguredProviderAuthHeader(providerId) ? "" : undefined);
+    switch (info.apiType) {
+      case "openai-completions": {
+        const openai = createOpenAI({ baseURL, apiKey: resolvedApiKey ?? "configured-provider", headers });
+        return { model: openai.chat(model), provider: info, modelId: model, runtime: "sdk" };
+      }
+      case "anthropic-messages": {
+        const anthropic = createAnthropic({ baseURL, apiKey: resolvedApiKey ?? "configured-provider", headers });
+        return { model: anthropic(model), provider: info, modelId: model, runtime: "sdk" };
+      }
+      case "google-generative-ai": {
+        const google = createGoogleGenerativeAI({ baseURL, apiKey: resolvedApiKey ?? "configured-provider", headers });
+        return { model: google(model), provider: info, modelId: model, runtime: "sdk" };
+      }
+      default:
+        throw new Error(`Unsupported custom provider API: ${info.apiType}`);
+    }
+  }
+
   switch (providerId) {
     case "anthropic": {
       const anthropic = createAnthropic({ apiKey: getApiKey("anthropic") });
@@ -60,35 +96,35 @@ export function createModel(providerId: string, modelId?: string): ModelHandle {
     }
     case "ollama": {
       const ollama = createOpenAI({
-        baseURL: getBaseUrl("ollama") ?? "http://127.0.0.1:11434/v1",
+        baseURL: getConfiguredProviderBaseUrl("ollama") ?? "http://127.0.0.1:11434/v1",
         apiKey: "ollama",
       });
       return { model: ollama.chat(model), provider: info, modelId: model, runtime: "sdk" };
     }
     case "lmstudio": {
       const lms = createOpenAI({
-        baseURL: getBaseUrl("lmstudio") ?? "http://127.0.0.1:1234/v1",
+        baseURL: getConfiguredProviderBaseUrl("lmstudio") ?? "http://127.0.0.1:1234/v1",
         apiKey: "lmstudio",
       });
       return { model: lms.chat(model), provider: info, modelId: model, runtime: "sdk" };
     }
     case "llamacpp": {
       const llama = createOpenAI({
-        baseURL: getBaseUrl("llamacpp") ?? "http://127.0.0.1:8080/v1",
+        baseURL: getConfiguredProviderBaseUrl("llamacpp") ?? "http://127.0.0.1:8080/v1",
         apiKey: "llamacpp",
       });
       return { model: llama.chat(model), provider: info, modelId: model, runtime: "sdk" };
     }
     case "jan": {
       const jan = createOpenAI({
-        baseURL: getBaseUrl("jan") ?? "http://127.0.0.1:1337/v1",
+        baseURL: getConfiguredProviderBaseUrl("jan") ?? "http://127.0.0.1:1337/v1",
         apiKey: "jan",
       });
       return { model: jan.chat(model), provider: info, modelId: model, runtime: "sdk" };
     }
     case "vllm": {
       const vllm = createOpenAI({
-        baseURL: getBaseUrl("vllm") ?? "http://127.0.0.1:8000/v1",
+        baseURL: getConfiguredProviderBaseUrl("vllm") ?? "http://127.0.0.1:8000/v1",
         apiKey: "vllm",
       });
       return { model: vllm.chat(model), provider: info, modelId: model, runtime: "sdk" };

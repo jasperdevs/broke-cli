@@ -6,6 +6,7 @@ import { getCredentials } from "./auth.js";
 import { loadConfig } from "./config.js";
 import type { ProviderCredential } from "./config-types.js";
 import { clearRuntimeProviderApiKeys, getRuntimeProviderApiKey, setRuntimeProviderApiKey } from "./provider-runtime-overrides.js";
+import { getConfiguredProviderApiKey } from "./models-config.js";
 
 function readJsonFile(path: string): unknown {
   return JSON.parse(readFileSync(path, "utf-8"));
@@ -125,6 +126,8 @@ export function getProviderCredential(provider: string): ProviderCredential {
   const config = loadConfig();
   const fromConfig = config.providers?.[provider]?.apiKey;
   if (fromConfig) return { kind: "api_key", value: fromConfig, source: "config" };
+  const fromModelsConfig = getConfiguredProviderApiKey(provider);
+  if (fromModelsConfig) return { kind: "api_key", value: fromModelsConfig, source: "models-config" };
 
   switch (provider) {
     case "anthropic":

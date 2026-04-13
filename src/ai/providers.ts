@@ -3,7 +3,9 @@ export {
   getProviderInfo,
   getProviderPopularity,
   listProviders,
+  resetRuntimeProviders,
   resolveVisibleProviderModelId,
+  setRuntimeProviderInfo,
   supportsProviderModel,
 } from "./provider-definitions.js";
 export { refreshLocalModels, syncCloudProviderModelsFromCatalog } from "./provider-local-models.js";

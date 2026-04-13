@@ -35,6 +35,7 @@ Inside the app:
 - `/login <provider>` for supported native login flows
 - `/model` to switch models
 - `/settings` to change runtime behavior
+- custom providers and model overrides via [`docs/models.md`](./docs/models.md)
 
 ## Features
 

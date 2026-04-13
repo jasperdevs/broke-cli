@@ -1,4 +1,12 @@
-import { getBaseUrl, loadConfig } from "../core/config.js";
+import { loadConfig } from "../core/config.js";
+import {
+  getConfiguredProviderApi,
+  getConfiguredProviderApiKey,
+  getConfiguredProviderBaseUrl,
+  getConfiguredProviderModels,
+  getConfiguredProviderName,
+  listConfiguredProviderIds,
+} from "../core/models-config.js";
 import { getProviderCredential } from "../core/provider-credentials.js";
 import { hasNativeCommand } from "./native-cli.js";
 import {
@@ -89,6 +97,26 @@ async function probeAny(baseUrl: string, paths: string[]): Promise<boolean> {
   return false;
 }
 
+function listCustomConfiguredProviders(): DetectedProvider[] {
+  const knownProviderIds = new Set([
+    "anthropic", "openai", "codex", "github-copilot", "google", "google-gemini-cli", "google-antigravity",
+    "groq", "mistral", "xai", "openrouter", "ollama", "lmstudio", "llamacpp", "jan", "vllm",
+  ]);
+  const configured: DetectedProvider[] = [];
+  for (const providerId of listConfiguredProviderIds()) {
+    if (knownProviderIds.has(providerId)) continue;
+    if (getConfiguredProviderModels(providerId).length === 0) continue;
+    if (!getConfiguredProviderBaseUrl(providerId) || !getConfiguredProviderApi(providerId)) continue;
+    configured.push({
+      id: providerId,
+      name: getConfiguredProviderName(providerId) ?? providerId,
+      available: true,
+      reason: getConfiguredProviderApiKey(providerId) ? "API key" : "configured",
+    });
+  }
+  return configured;
+}
+
 export async function detectProviders(): Promise<DetectedProvider[]> {
   const results: DetectedProvider[] = [];
   const config = loadConfig();
@@ -150,19 +178,19 @@ export async function detectProviders(): Promise<DetectedProvider[]> {
   const [ollama, lmStudio, llamaCpp, jan, vllm] = await Promise.all([
     providerDisabled("ollama")
       ? Promise.resolve(false)
-      : probeBaseUrl(getBaseUrl("ollama") ?? "http://127.0.0.1:11434/v1", "/models").then((ok) => ok || probeLocal(11434, "/api/tags")),
+      : probeBaseUrl(getConfiguredProviderBaseUrl("ollama") ?? "http://127.0.0.1:11434/v1", "/models").then((ok) => ok || probeLocal(11434, "/api/tags")),
     providerDisabled("lmstudio")
       ? Promise.resolve(false)
-      : probeAny(getBaseUrl("lmstudio") ?? "http://127.0.0.1:1234/v1", ["/models", "/lmstudio/models"]),
+      : probeAny(getConfiguredProviderBaseUrl("lmstudio") ?? "http://127.0.0.1:1234/v1", ["/models", "/lmstudio/models"]),
     providerDisabled("llamacpp")
       ? Promise.resolve(false)
-      : probeAny(getBaseUrl("llamacpp") ?? "http://127.0.0.1:8080/v1", ["/models"]).then((ok) => ok || probeAny((getBaseUrl("llamacpp") ?? "http://127.0.0.1:8080/v1").replace(/\/v1\/?$/, ""), ["/models", "/slots"])),
+      : probeAny(getConfiguredProviderBaseUrl("llamacpp") ?? "http://127.0.0.1:8080/v1", ["/models"]).then((ok) => ok || probeAny((getConfiguredProviderBaseUrl("llamacpp") ?? "http://127.0.0.1:8080/v1").replace(/\/v1\/?$/, ""), ["/models", "/slots"])),
     providerDisabled("jan")
       ? Promise.resolve(false)
-      : probeBaseUrl(getBaseUrl("jan") ?? "http://127.0.0.1:1337/v1"),
+      : probeBaseUrl(getConfiguredProviderBaseUrl("jan") ?? "http://127.0.0.1:1337/v1"),
     providerDisabled("vllm")
       ? Promise.resolve(false)
-      : probeBaseUrl(getBaseUrl("vllm") ?? "http://127.0.0.1:8000/v1"),
+      : probeBaseUrl(getConfiguredProviderBaseUrl("vllm") ?? "http://127.0.0.1:8000/v1"),
   ]);
 
   if (ollama) results.push({ id: "ollama", name: "Ollama", available: true, reason: "running" });
@@ -170,6 +198,7 @@ export async function detectProviders(): Promise<DetectedProvider[]> {
   if (llamaCpp) results.push({ id: "llamacpp", name: "llama.cpp", available: true, reason: "running" });
   if (jan) results.push({ id: "jan", name: "Jan", available: true, reason: "running" });
   if (vllm) results.push({ id: "vllm", name: "vLLM", available: true, reason: "running" });
+  results.push(...listCustomConfiguredProviders());
 
   return results;
 }
