@@ -71,6 +71,30 @@ describe("tool routing", () => {
     }
   });
 
+  it("supports pi-style bash operations and spawn hooks", async () => {
+    const calls: Array<{ command: string; cwd: string; env?: NodeJS.ProcessEnv }> = [];
+    const scopedBash = createBashTool("/workspace", {
+      commandPrefix: "setup",
+      spawnHook: (context) => ({ ...context, command: `${context.command}\necho hooked`, cwd: "/sandbox", env: { ...context.env, BROKECLI_TEST: "1" } }),
+      operations: {
+        exec: async (command, cwd, { onData, env }) => {
+          calls.push({ command, cwd, env });
+          onData(Buffer.from("operation output\n"));
+          return { exitCode: 0 };
+        },
+      },
+    });
+
+    const result = await (scopedBash as any).execute({ command: "echo run" });
+
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("operation output");
+    expect(calls[0]?.command).toContain("setup");
+    expect(calls[0]?.command).toContain("echo hooked");
+    expect(calls[0]?.cwd).toBe("/sandbox");
+    expect(calls[0]?.env?.BROKECLI_TEST).toBe("1");
+  });
+
   it("normalizes at-prefixed paths against the scoped cwd", () => {
     const dir = mkdtempSync(join(tmpdir(), "brokecli-path-"));
     tempDirs.push(dir);
