@@ -20,6 +20,7 @@ import {
   getModelSpec,
 } from "./model-catalog.js";
 import { getProviderInfo, LOCAL_PROVIDER_IDS } from "./provider-definitions.js";
+import { isProviderRuntimeSelectable } from "./provider-runtime.js";
 
 export interface DetectedProvider {
   id: string;
@@ -50,6 +51,13 @@ const BUILTIN_PROVIDER_IDS = [
 export interface CheapestDetectedModel {
   providerId: string;
   modelId: string;
+}
+
+function isSelectableDetectedProvider(provider: DetectedProvider): boolean {
+  if (LOCAL_PROVIDER_IDS.has(provider.id)) return true;
+  if ((provider.id === "anthropic" || provider.id === "codex") && provider.reason === "native login") return true;
+  if (provider.id === "github-copilot" && provider.reason === "OAuth login") return true;
+  return isProviderRuntimeSelectable(provider.id);
 }
 
 function tokenEfficiencyScore(providerId: string, modelId: string): number {
@@ -222,14 +230,15 @@ export function pickDefault(providers: DetectedProvider[]): DetectedProvider | u
   const priority = ["codex", "anthropic", "github-copilot", "google-gemini-cli", "google-antigravity", "openai", "google", "groq", "mistral", "xai", "openrouter", "ollama", "lmstudio", "llamacpp", "jan", "vllm"];
   for (const id of priority) {
     const p = providers.find((x) => x.id === id && x.available);
-    if (p) return p;
+    if (p && isSelectableDetectedProvider(p)) return p;
   }
   return undefined;
 }
 
 export function pickCheapestDetectedModel(providers: DetectedProvider[]): CheapestDetectedModel | null {
-  const candidates = providers
-    .filter((provider) => provider.available)
+  const available = providers.filter((provider) => provider.available);
+  const selectable = available.filter(isSelectableDetectedProvider);
+  const candidates = (selectable.length > 0 ? selectable : available)
     .flatMap((provider, providerIndex) =>
       listBudgetCandidateModelIds(provider).map((modelId, priorityIndex) => {
         const pricing = getModelPricing(modelId, provider.id);

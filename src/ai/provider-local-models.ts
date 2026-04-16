@@ -160,7 +160,10 @@ export function syncCloudProviderModelsFromCatalog(): void {
   const mappings: Array<{ providerId: string; catalogProviderId?: string }> = [
     { providerId: "anthropic" },
     { providerId: "openai" },
+    { providerId: "github-copilot" },
     { providerId: "google" },
+    { providerId: "google-gemini-cli" },
+    { providerId: "google-antigravity" },
     { providerId: "mistral" },
     { providerId: "groq" },
     { providerId: "xai" },
@@ -169,7 +172,7 @@ export function syncCloudProviderModelsFromCatalog(): void {
 
   for (const { providerId, catalogProviderId } of mappings) {
     const modelIds = getCatalogModelIds(catalogProviderId ?? providerId);
-    if (!modelIds || modelIds.length === 0) continue;
+    if (!modelIds || modelIds.length === 0 || !PROVIDERS[providerId]) continue;
     const preferred = [...getProviderPreferredDisplayModelIds(providerId), ...PROVIDERS[providerId].models];
     PROVIDERS[providerId].models = filterModelIdsForDisplay(providerId, modelIds, preferred);
     if (!PROVIDERS[providerId].models.includes(PROVIDERS[providerId].defaultModel)) {

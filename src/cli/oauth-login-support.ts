@@ -12,6 +12,12 @@ function setLoginStatus(app: LoginApp, message: string): void {
 }
 
 const COPILOT_GITHUB_ENV_KEYS = ["COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"] as const;
+const COPILOT_HEADERS = {
+  "User-Agent": "GitHubCopilotChat/0.35.0",
+  "Editor-Version": "vscode/1.107.0",
+  "Editor-Plugin-Version": "copilot-chat/0.35.0",
+  "Copilot-Integration-Id": "vscode-chat",
+} as const;
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -378,6 +384,28 @@ function readGitHubCliToken(hostname: string): string | null {
   }
 }
 
+async function fetchGitHubCopilotToken(githubToken: string, hostname: string): Promise<{ access: string; expiresAt?: number }> {
+  const endpoint = hostname === "github.com"
+    ? "https://api.github.com/copilot_internal/v2/token"
+    : `https://api.${hostname}/copilot_internal/v2/token`;
+  const response = await fetch(endpoint, {
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${githubToken}`,
+      ...COPILOT_HEADERS,
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`Copilot token request failed: ${response.status} ${await response.text()}`);
+  }
+  const payload = await response.json() as { token?: string; expires_at?: number };
+  if (!payload.token) throw new Error("GitHub did not return a Copilot API token.");
+  return {
+    access: payload.token,
+    expiresAt: payload.expires_at ? payload.expires_at * 1000 - 5 * 60 * 1000 : undefined,
+  };
+}
+
 export async function runGitHubCopilotLogin(app: LoginApp): Promise<void> {
   const hostChoice = await app.showQuestion("GitHub host", ["github.com", "custom"]);
   if (hostChoice === "[user skipped]") {
@@ -412,7 +440,12 @@ export async function runGitHubCopilotLogin(app: LoginApp): Promise<void> {
     setLoginStatus(app, "GitHub auth succeeded, but no GitHub token could be read from gh.");
     return;
   }
-  saveCredentials("github-copilot", token);
+  const copilot = await fetchGitHubCopilotToken(token, hostname);
+  saveCredentials("github-copilot", JSON.stringify({
+    access: copilot.access,
+    refresh: token,
+    hostname,
+  }), copilot.expiresAt);
 }
 
 export async function runOAuthProviderLogin(options: {

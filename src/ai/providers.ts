@@ -9,5 +9,5 @@ export {
   supportsProviderModel,
 } from "./provider-definitions.js";
 export { refreshLocalModels, syncCloudProviderModelsFromCatalog } from "./provider-local-models.js";
-export { createModel, shouldUseNativeProvider } from "./provider-runtime.js";
+export { createModel, isProviderRuntimeSelectable, shouldUseNativeProvider } from "./provider-runtime.js";
 export { filterModelIdsForDisplay, getDisplayModels } from "./provider-visibility.js";

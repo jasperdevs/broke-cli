@@ -48,6 +48,8 @@ const catalogSchema = z.record(providerSchema);
 
 type Catalog = z.infer<typeof catalogSchema>;
 
+const modelIdOnly = (providerId: string, id: string): ModelSpec => ({ providerId, id, name: id, limit: {} });
+
 const FALLBACK_SPECS: ModelSpec[] = [
   {
     providerId: "anthropic",
@@ -171,11 +173,25 @@ const FALLBACK_SPECS: ModelSpec[] = [
     cost: { input: 0.1, output: 0.4, cacheRead: 0.025 },
     limit: { context: 1_048_576, output: 8_192 },
   },
+  modelIdOnly("github-copilot", "gpt-4o"),
+  modelIdOnly("github-copilot", "gpt-5.4"),
+  modelIdOnly("github-copilot", "gpt-5.4-mini"),
+  modelIdOnly("github-copilot", "gpt-5.3-codex"),
+  modelIdOnly("github-copilot", "gpt-5.2-codex"),
+  modelIdOnly("github-copilot", "claude-sonnet-4.6"),
+  modelIdOnly("github-copilot", "claude-opus-4.6"),
+  modelIdOnly("github-copilot", "gemini-2.5-pro"),
+  modelIdOnly("github-copilot", "grok-code-fast-1"),
+  modelIdOnly("google-gemini-cli", "gemini-2.5-pro"),
+  modelIdOnly("google-gemini-cli", "gemini-2.5-flash"),
+  modelIdOnly("google-gemini-cli", "gemini-2.0-flash"),
+  modelIdOnly("google-antigravity", "gemini-3.1-pro-high"),
+  modelIdOnly("google-antigravity", "gemini-3.1-pro-low"),
+  modelIdOnly("google-antigravity", "gemini-3-flash"),
+  modelIdOnly("google-antigravity", "claude-sonnet-4-6"),
 ];
 
-const providerAliases: Record<string, string> = {
-  codex: "openai",
-};
+const providerAliases: Record<string, string> = { codex: "openai" };
 
 interface ProviderModelProfile {
   defaultModel: string;
@@ -191,7 +207,7 @@ const PROVIDER_MODEL_PROFILES: Record<string, ProviderModelProfile> = {
   anthropic: {
     defaultModel: "claude-sonnet-4-6",
     smallModel: "claude-haiku-4-5-20251001",
-    preferredDisplay: ["claude-sonnet-4-6", "claude-haiku-4-5-20251001", "claude-opus-4-6"],
+    preferredDisplay: ["claude-sonnet-4-6", "claude-opus-4-6", "claude-haiku-4-5-20251001", "claude-sonnet-4-5", "claude-opus-4-1"],
     maxVisible: 6,
   },
   openai: {
@@ -209,10 +225,28 @@ const PROVIDER_MODEL_PROFILES: Record<string, ProviderModelProfile> = {
     nativePreferredDisplay: ["gpt-5.4", "gpt-5.3-codex", "gpt-5.2-codex", "gpt-5.1-codex-max", "gpt-5.1-codex", "gpt-5.2", "gpt-5.1", "gpt-5-codex", "gpt-5", "gpt-5.4-mini"],
     maxVisible: 10,
   },
+  "github-copilot": {
+    defaultModel: "gpt-4o",
+    smallModel: "gpt-4o",
+    preferredDisplay: ["gpt-4o", "gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex", "gpt-5.2-codex", "claude-sonnet-4.6", "claude-opus-4.6", "gemini-2.5-pro", "grok-code-fast-1"],
+    maxVisible: 10,
+  },
   google: {
     defaultModel: "gemini-2.5-flash",
     smallModel: "gemini-2.0-flash",
     preferredDisplay: ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"],
+    maxVisible: 8,
+  },
+  "google-gemini-cli": {
+    defaultModel: "gemini-2.5-pro",
+    smallModel: "gemini-2.0-flash",
+    preferredDisplay: ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-3.1-pro-preview", "gemini-3-pro-preview", "gemini-3-flash-preview"],
+    maxVisible: 8,
+  },
+  "google-antigravity": {
+    defaultModel: "gemini-3.1-pro-high",
+    smallModel: "gemini-3-flash",
+    preferredDisplay: ["gemini-3.1-pro-high", "gemini-3.1-pro-low", "gemini-3-flash", "claude-sonnet-4-6", "claude-opus-4-6-thinking", "gpt-oss-120b-medium"],
     maxVisible: 8,
   },
   mistral: {
@@ -240,8 +274,7 @@ const PROVIDER_MODEL_PROFILES: Record<string, ProviderModelProfile> = {
   },
 };
 
-let catalogCache: Catalog | null = null;
-let fallbackCatalog: Catalog | null = null;
+let catalogCache: Catalog | null = null, fallbackCatalog: Catalog | null = null;
 
 function buildFallbackCatalog(): Catalog {
   if (fallbackCatalog) return fallbackCatalog;
@@ -306,9 +339,7 @@ function asModelSpec(providerId: string, model: z.infer<typeof modelSchema>): Mo
   };
 }
 
-function getCatalog(): Catalog {
-  return catalogCache ?? buildFallbackCatalog();
-}
+function getCatalog(): Catalog { return catalogCache ?? buildFallbackCatalog(); }
 
 function readCachedCatalog(): Catalog | null {
   if (!existsSync(MODEL_CATALOG_CACHE_PATH)) return null;
@@ -343,13 +374,9 @@ export async function loadModelCatalog(): Promise<void> {
   }
 }
 
-export function resetModelCatalogForTests(): void {
-  catalogCache = null;
-}
+export function resetModelCatalogForTests(): void { catalogCache = null; }
 
-export function getModelCatalogCachePathForTests(): string {
-  return MODEL_CATALOG_CACHE_PATH;
-}
+export function getModelCatalogCachePathForTests(): string { return MODEL_CATALOG_CACHE_PATH; }
 
 export function getCatalogModelIds(providerId: string): string[] | null {
   const resolvedProviderId = normalizeProviderId(providerId);

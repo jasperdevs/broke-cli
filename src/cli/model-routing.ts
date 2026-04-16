@@ -1,7 +1,8 @@
 import type { ProviderRegistry } from "../ai/provider-registry.js";
 import type { ModelHandle } from "../ai/providers.js";
+import { resolveModelReferencePattern } from "../ai/model-reference.js";
 import { getSmallModelId } from "../ai/router.js";
-import { getConfiguredModelPreference, type Mode, type ModelPreferenceSlot } from "../core/config.js";
+import { getConfiguredModelPreference, getSettings, type Mode, type ModelPreferenceSlot } from "../core/config.js";
 import type { TurnArchetype } from "../core/turn-policy.js";
 
 export type SpecialistModelRole = Exclude<ModelPreferenceSlot, "default" | "small" | "btw">;
@@ -91,7 +92,22 @@ export function resolveConfiguredModelHandle(
   currentModelId: string,
   slot: ModelPreferenceSlot,
 ): { model: ModelHandle; modelId: string; key: string } | null {
-  const resolved = getResolvedModelPreference(slot, activeModel.provider.id);
+  const configured = getConfiguredModelPreference(slot);
+  const raw = slot === "small" && !configured
+    ? getSmallModelId(activeModel.provider.id)
+    : configured;
+  if (!raw) return null;
+
+  const visibleOptions = providerRegistry.buildVisibleModelOptions(
+    activeModel,
+    currentModelId,
+    getSettings().scopedModels,
+    [`${activeModel.provider.id}/${currentModelId}`],
+  );
+  const matched = resolveModelReferencePattern(raw, visibleOptions);
+  const resolved = matched
+    ? { providerId: matched.providerId, modelId: matched.modelId, key: `${matched.providerId}/${matched.modelId}` }
+    : normalizeModelRef(raw, activeModel.provider.id);
   if (!resolved) return null;
   if (resolved.providerId === activeModel.provider.id && resolved.modelId === currentModelId) {
     return { model: activeModel, modelId: currentModelId, key: resolved.key };

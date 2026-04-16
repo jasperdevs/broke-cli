@@ -6,13 +6,20 @@ import { createXai } from "@ai-sdk/xai";
 import { getApiKey, getProviderCredential } from "../core/provider-credentials.js";
 import { getProviderNativeDefaultModelId, getProviderNativePreferredDisplayModelIds } from "./model-catalog.js";
 import { hasNativeCommand } from "./native-cli.js";
-import { type ModelHandle, PROVIDERS, type ProviderInfo } from "./provider-definitions.js";
+import { LOCAL_PROVIDER_IDS, type ModelHandle, PROVIDERS, type ProviderInfo } from "./provider-definitions.js";
 import {
   getConfiguredProviderAuthHeader,
   getConfiguredProviderBaseUrl,
   getConfiguredProviderHeaders,
 } from "../core/models-config.js";
 import { applyConfiguredProviderOverrides } from "./provider-overrides.js";
+
+const COPILOT_HEADERS = {
+  "User-Agent": "GitHubCopilotChat/0.35.0",
+  "Editor-Version": "vscode/1.107.0",
+  "Editor-Plugin-Version": "copilot-chat/0.35.0",
+  "Copilot-Integration-Id": "vscode-chat",
+} as const;
 
 export function resolveProviderSdkConfig(providerId: string, info: ProviderInfo): {
   baseURL?: string;
@@ -35,6 +42,37 @@ export function shouldUseNativeProvider(providerId: string): boolean {
   return getProviderCredential(providerId).kind === "native_oauth" && hasNativeCommand(command);
 }
 
+export function isProviderRuntimeSelectable(providerId: string): boolean {
+  if (LOCAL_PROVIDER_IDS.has(providerId)) return true;
+  if (providerId === "anthropic" || providerId === "codex") return shouldUseNativeProvider(providerId);
+  return providerId === "github-copilot" && getProviderCredential(providerId).kind === "native_oauth";
+}
+
+function parseCredentialValue(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("{")) return trimmed;
+  try {
+    const parsed = JSON.parse(trimmed) as { access?: string; token?: string };
+    return parsed.access?.trim() || parsed.token?.trim() || trimmed;
+  } catch {
+    return trimmed;
+  }
+}
+
+function getOAuthAccessToken(providerId: string): string {
+  const credential = getProviderCredential(providerId);
+  if (credential.kind !== "native_oauth" || !credential.value) {
+    throw new Error(`${providerId} OAuth login is missing. Run /login ${providerId}.`);
+  }
+  return parseCredentialValue(credential.value);
+}
+
+function getGitHubCopilotBaseUrl(token: string): string {
+  const proxyMatch = token.match(/proxy-ep=([^;]+)/);
+  if (!proxyMatch) return "https://api.individual.githubcopilot.com";
+  return `https://${proxyMatch[1]!.replace(/^proxy\./, "api.")}`;
+}
+
 export function createModel(providerId: string, modelId?: string): ModelHandle {
   let info = PROVIDERS[providerId];
   if (!info) {
@@ -50,7 +88,9 @@ export function createModel(providerId: string, modelId?: string): ModelHandle {
     throw new Error(`${info.name} login found, but the ${command} CLI is not on PATH.`);
   }
   if (!useNative) {
-    throw new Error(`${info.name} API-key runtime is disabled. Use /login with an OAuth provider.`);
+    if (providerId !== "github-copilot") {
+      throw new Error(`${info.name} API-key runtime is disabled. Use /login with an OAuth provider.`);
+    }
   }
   const nativeDefaultModel = useNative
     ? getProviderNativeDefaultModelId(providerId) ?? info.defaultModel
@@ -75,6 +115,24 @@ export function createModel(providerId: string, modelId?: string): ModelHandle {
       runtime: "native-cli",
       nativeCommand: "codex",
     };
+  }
+
+  if (providerId === "github-copilot") {
+    const token = getOAuthAccessToken(providerId);
+    if (!token.includes("proxy-ep=") && !token.startsWith("ghu_") && !token.startsWith("gho_")) {
+      throw new Error("GitHub Copilot OAuth token is invalid. Run /login github-copilot again.");
+    }
+    if (!token.includes("proxy-ep=")) {
+      throw new Error("GitHub login found, but no Copilot API token is stored. Run /login github-copilot again.");
+    }
+    const baseURL = getGitHubCopilotBaseUrl(token);
+    const provider = { ...info, baseUrl: baseURL, headers: { ...COPILOT_HEADERS } };
+    if (model.startsWith("claude-")) {
+      const anthropic = createAnthropic({ apiKey: token, baseURL, headers: { ...COPILOT_HEADERS } });
+      return { model: anthropic(model), provider, modelId: model, runtime: "sdk" };
+    }
+    const copilot = createOpenAI({ apiKey: token, baseURL, headers: { ...COPILOT_HEADERS } });
+    return { model: copilot.chat(model), provider, modelId: model, runtime: "sdk" };
   }
 
   if (info.custom && info.apiType) {

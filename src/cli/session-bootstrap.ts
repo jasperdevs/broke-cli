@@ -1,4 +1,5 @@
 import { pickCheapestDetectedModel, pickDefault, type DetectedProvider } from "../ai/detect.js";
+import { resolveModelReferencePattern } from "../ai/model-reference.js";
 import { resolveVisibleProviderModelId, shouldUseNativeProvider, type ModelHandle } from "../ai/providers.js";
 import { loadPricing } from "../ai/cost.js";
 import { getSmallModelId } from "../ai/router.js";
@@ -38,6 +39,8 @@ export async function bootstrapSession(options: {
   let providerId: string | undefined;
   let modelId: string | undefined;
   const explicitModelRequest = !!opts.model;
+  const explicitProviderRequest = !!opts.provider;
+  let providerInModelRequest = false;
 
   if (opts.provider) {
     providerId = opts.provider;
@@ -55,6 +58,7 @@ export async function bootstrapSession(options: {
     if (!providerId && slashIdx > 0) {
       providerId = modelArg.slice(0, slashIdx);
       modelId = modelArg.slice(slashIdx + 1);
+      providerInModelRequest = true;
     } else if (providerId) {
       modelId = modelArg;
     } else {
@@ -77,7 +81,7 @@ export async function bootstrapSession(options: {
     if (!providerId) {
       const def = pickDefault(providers);
       if (!def) {
-        app.addMessage("system", "No OAuth providers found. Run /login codex, /login anthropic, or another OAuth login.");
+        app.addMessage("system", "No runnable OAuth model runtime found. Run /login codex, /login anthropic, or /login github-copilot.");
         return {
           providers,
           activeModel: null,
@@ -93,6 +97,14 @@ export async function bootstrapSession(options: {
 
   try {
     let resolvedModelId = modelId;
+    if (explicitModelRequest && modelId) {
+      const visibleOptions = providerRegistry.buildVisibleModelOptions(null, "", getSettings().scopedModels);
+      const matched = resolveModelReferencePattern((explicitProviderRequest || providerInModelRequest) && providerId ? `${providerId}/${modelId}` : modelId, visibleOptions);
+      if (matched) {
+        providerId = matched.providerId;
+        resolvedModelId = matched.modelId;
+      }
+    }
     if (!explicitModelRequest && providerId && modelId) {
       resolvedModelId = resolveVisibleProviderModelId(providerId, modelId);
     }

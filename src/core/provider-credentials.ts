@@ -1,5 +1,4 @@
 import { readFileSync, existsSync } from "fs";
-import { spawnSync } from "child_process";
 import { join } from "path";
 import { homedir } from "os";
 import { getCredentials } from "./auth.js";
@@ -74,25 +73,13 @@ function readCodexCredential(): ProviderCredential {
 }
 
 function readGitHubCopilotCredential(): ProviderCredential {
-  const envToken = process.env.COPILOT_GITHUB_TOKEN || process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
+  const envToken = process.env.COPILOT_API_TOKEN;
   if (envToken?.trim()) {
     return { kind: "native_oauth", value: envToken.trim(), source: "env" };
   }
   const stored = getCredentials("github-copilot");
   if (stored) {
     return { kind: "native_oauth", value: stored, source: "brokecli-auth" };
-  }
-  try {
-    const result = spawnSync("gh", ["auth", "token", "--hostname", "github.com"], {
-      encoding: "utf-8",
-      stdio: ["ignore", "pipe", "ignore"],
-    });
-    if (result.status === 0 && !result.error) {
-      const token = result.stdout.trim();
-      if (token) return { kind: "native_oauth", value: token, source: "gh-auth" };
-    }
-  } catch {
-    // ignore
   }
   return { kind: "none" };
 }

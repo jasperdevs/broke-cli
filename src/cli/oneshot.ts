@@ -15,11 +15,12 @@ import { tryRepoTaskFastPath } from "./repo-fastpath.js";
 import { applyTurnFrame } from "./turn-frame.js";
 import { buildMinimalOutputInstruction, getMinimalOutputPolicy } from "./turn-runner-support.js";
 import { getProviderCompat } from "../ai/provider-compat.js";
+import { resolveModelReferencePattern } from "../ai/model-reference.js";
 
 function canUseSdkTools(model: ModelHandle): boolean {
   return model.runtime === "sdk"
     && !!model.model
-    && ["anthropic", "openai", "codex", "google", "mistral", "groq", "xai", "openrouter", "ollama", "lmstudio", "llamacpp", "jan", "vllm"].includes(model.provider.id)
+    && ["anthropic", "openai", "codex", "github-copilot", "google", "mistral", "groq", "xai", "openrouter", "ollama", "lmstudio", "llamacpp", "jan", "vllm"].includes(model.provider.id)
     && getProviderCompat(model.provider.id, model.modelId).supportsTools !== false;
 }
 
@@ -49,11 +50,13 @@ export async function resolveOneShotModel(options: {
   const { opts, providers, providerRegistry } = options;
   let providerId = opts.provider;
   let modelId = opts.model;
+  let providerInModelRequest = false;
 
   if (!providerId && modelId?.includes("/")) {
     const [fromProvider, fromModel] = modelId.split("/", 2);
     providerId = fromProvider;
     modelId = fromModel;
+    providerInModelRequest = true;
   }
 
   if (opts.broke) {
@@ -68,6 +71,19 @@ export async function resolveOneShotModel(options: {
     providerId = pickDefault(providers)?.id
       ?? opts.provider
       ?? "openai";
+  }
+
+  if (modelId) {
+    const visibleOptions = typeof providerRegistry.buildVisibleModelOptions === "function"
+      ? providerRegistry.buildVisibleModelOptions(null, "", getSettings().scopedModels)
+      : [];
+    const matched = visibleOptions.length > 0
+      ? resolveModelReferencePattern((opts.provider || providerInModelRequest) && providerId ? `${providerId}/${modelId}` : modelId, visibleOptions)
+      : undefined;
+    if (matched) {
+      providerId = matched.providerId;
+      modelId = matched.modelId;
+    }
   }
 
   const activeModel = providerRegistry.createModel(providerId, modelId);

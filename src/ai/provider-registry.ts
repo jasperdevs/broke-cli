@@ -4,6 +4,7 @@ import {
   getDisplayModels,
   getProviderInfo,
   getProviderPopularity,
+  isProviderRuntimeSelectable,
   listProviders,
   refreshLocalModels,
   supportsProviderModel,
@@ -14,6 +15,7 @@ import { getConfiguredProviderBaseUrl } from "../core/models-config.js";
 import { getProviderCredential } from "../core/provider-credentials.js";
 import { applyConfiguredProviderOverrides } from "./provider-overrides.js";
 import { resetRuntimeProviders } from "./provider-definitions.js";
+import { loadModelCatalog } from "./model-catalog.js";
 
 const LOCAL_PROVIDER_DEFAULTS: Record<string, string> = {
   ollama: "http://127.0.0.1:11434/v1",
@@ -61,6 +63,7 @@ export class ProviderRegistry {
     }
     const refreshPromise = (async () => {
       resetRuntimeProviders();
+      await loadModelCatalog();
       syncCloudProviderModelsFromCatalog();
       this.providers = await detectProviders();
       await refreshLocalModels(this.providers.map((provider) => provider.id));
@@ -108,7 +111,11 @@ export class ProviderRegistry {
       return this.visibleModelOptionsCache;
     }
 
-    const visibleProviderIds = new Set(this.providers.map((provider) => provider.id));
+    const visibleProviderIds = new Set(
+      this.providers
+        .filter((provider) => isProviderRuntimeSelectable(provider.id))
+        .map((provider) => provider.id),
+    );
     const currentKey = activeModel ? `${activeModel.provider.id}/${currentModelId}` : "";
     const options: VisibleModelOption[] = [];
 
