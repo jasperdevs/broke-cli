@@ -19,7 +19,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
           registry-url: https://registry.npmjs.org
 
@@ -30,7 +30,7 @@ jobs:
         run: npm run verify
 
       - name: Publish
-        run: npm publish --access public --provenance
+        run: npm publish --access public
 
       - name: Tag release
         run: |
