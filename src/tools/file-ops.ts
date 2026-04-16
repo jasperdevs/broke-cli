@@ -2,6 +2,7 @@ import { basename, dirname, join, relative } from "path";
 import { createCheckpoint } from "../core/git.js";
 import { checkFilesystemPathAccess, ensureNetworkAllowed } from "../core/permissions.js";
 import { resolveReadPath, resolveToCwd } from "../core/path-utils.js";
+import { getActiveToolContext } from "./runtime-context.js";
 import { localFileOperations, type EditOperations, type ListOperations, type ReadOperations, type SearchOperations, type WriteOperations } from "./file-operations.js";
 import { fetchRemoteGitHubFile, listRemoteGitHubTree, tryParseRemoteGitHubTarget } from "./file-ops-remote.js";
 import { truncation } from "./tool-metadata.js";
@@ -15,13 +16,9 @@ import {
   type ReadMode,
 } from "./file-ops-support.js";
 
-/** Max chars to return from file reads (~1500 tokens) */
 const MAX_READ_CHARS = 6000;
-/** Max lines from grep matches */
 const MAX_GREP_MATCHES = 18;
-/** Max file entries from listFiles */
 const MAX_LIST_FILES = 120;
-/** Max semantic search results */
 const MAX_SEM_SEARCH_RESULTS = 8;
 const SKIP_DIRS = new Set([".git", "node_modules", "dist", "coverage", ".omx", ".tmp"]);
 
@@ -32,6 +29,7 @@ interface ReadFileDirectOptions {
 interface WalkFileOptions { dir: string; cwd: string; maxDepth: number; include?: string; operations: ListOperations; onFile: (fullPath: string) => boolean | void; }
 
 function bufferToUtf8(value: Buffer | string): string { return typeof value === "string" ? value : value.toString("utf-8"); }
+function emitProgress(toolName: string, message: string): void { getActiveToolContext()?.onToolProgress?.(toolName, message.endsWith("\n") ? message : `${message}\n`); }
 
 function escapeRegex(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -172,6 +170,7 @@ export function readFileDirect({ path, cwd = process.cwd(), offset, limit, mode,
     }
 
     const raw = bufferToUtf8(operations.readFile(filePath));
+    emitProgress("readFile", `read ${path}`);
     let content = raw;
     const lines = raw.split("\n");
 
@@ -240,6 +239,7 @@ export function listFilesDirect({ path: dir = ".", cwd = process.cwd(), maxDepth
         if (stat.isDirectory()) {
           totalEntries += 1;
           if (files.length < MAX_LIST_FILES) files.push(rel.replace(/\\/g, "/") + "/");
+          if (totalEntries % 25 === 0) emitProgress("listFiles", `listed ${totalEntries} entries`);
           if (totalEntries >= MAX_LIST_FILES) {
             capped = true;
             return true;
@@ -250,6 +250,7 @@ export function listFilesDirect({ path: dir = ".", cwd = process.cwd(), maxDepth
         if (!matchesInclude(rel, include)) continue;
         totalEntries += 1;
         if (files.length < MAX_LIST_FILES) files.push(rel.replace(/\\/g, "/"));
+        if (totalEntries % 25 === 0) emitProgress("listFiles", `listed ${totalEntries} entries`);
         if (totalEntries >= MAX_LIST_FILES) {
           capped = true;
           return true;
@@ -262,8 +263,7 @@ export function listFilesDirect({ path: dir = ".", cwd = process.cwd(), maxDepth
   };
   visit(root, 0);
   const result = { files, totalEntries, truncated: capped, details: capped ? truncation("entries", files.length, MAX_LIST_FILES, totalEntries) : undefined };
-  memoContext?.rememberToolResult(memoKey, workspaceFingerprint, result);
-  return result;
+  memoContext?.rememberToolResult(memoKey, workspaceFingerprint, result); return result;
 }
 
 export function grepDirect({ pattern, path: dir = ".", cwd = process.cwd(), include, operations = localFileOperations }: { pattern: string; path?: string; cwd?: string; include?: string; operations?: SearchOperations }) {
@@ -316,6 +316,7 @@ export function grepDirect({ pattern, path: dir = ".", cwd = process.cwd(), incl
               line: i + 1,
               text: lines[i].trim().slice(0, 150),
             });
+            if (matches.length % 5 === 0) emitProgress("grep", `found ${matches.length} matches`);
             if (matches.length >= MAX_GREP_MATCHES) return true;
           }
         }
@@ -326,13 +327,7 @@ export function grepDirect({ pattern, path: dir = ".", cwd = process.cwd(), incl
     },
   });
 
-  const result = {
-    matches,
-    summary: buildGrepSummary(matches),
-    totalMatches: matches.length,
-    capped: matches.length >= MAX_GREP_MATCHES,
-    details: matches.length >= MAX_GREP_MATCHES ? truncation("matches", matches.length, MAX_GREP_MATCHES) : undefined,
-  };
+  const result = { matches, summary: buildGrepSummary(matches), totalMatches: matches.length, capped: matches.length >= MAX_GREP_MATCHES, details: matches.length >= MAX_GREP_MATCHES ? truncation("matches", matches.length, MAX_GREP_MATCHES) : undefined };
   memoContext?.rememberToolResult(memoKey, workspaceFingerprint, {
     summary: result.summary,
     totalMatches: result.totalMatches,
@@ -409,6 +404,7 @@ export function semSearchDirect({
           excerpt: match?.text ?? content.split("\n").find(Boolean)?.trim().slice(0, 180) ?? "",
           score,
         });
+        if (results.length % 5 === 0) emitProgress("semSearch", `ranked ${results.length} candidates`);
       } catch {
         return false;
       }

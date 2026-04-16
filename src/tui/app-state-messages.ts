@@ -331,10 +331,10 @@ export function setCompacting(app: AppState, compacting: boolean, tokenCount?: n
   app.draw();
 }
 
-export function appendToolOutput(app: AppState, chunk: string): void {
+export function appendToolOutput(app: AppState, chunk: string, toolName = "bash"): void {
   for (let i = app.toolExecutions.length - 1; i >= 0; i--) {
     const tc = app.toolExecutions[i];
-    if (tc.name === "bash" && !tc.result) {
+    if (tc.name === toolName && !tc.result) {
       recordTurnEvent(app.activityState, {
         type: "tool.output",
         invocationId: tc.id,
@@ -426,7 +426,7 @@ export interface AppStateMessageMethods {
   addToolResult(name: string, result: string, error?: boolean, resultDetail?: string, callId?: string): void;
   setStreamTokens(tokens: number): void;
   setCompacting(compacting: boolean, tokenCount?: number): void;
-  appendToolOutput(chunk: string): void;
+  appendToolOutput(chunk: string, toolName?: string): void;
   collapseToolCalls(): void;
   getLastAssistantContent(): string;
   rollbackLastAssistantMessage(): void;
@@ -465,7 +465,7 @@ export const appStateMessageMethods: AppStateMessageMethods = {
   addToolResult(this: AppState, name, result, error, resultDetail, callId) { return addToolResult(this, name, result, error, resultDetail, callId); },
   setStreamTokens(this: AppState, tokens) { return setStreamTokens(this, tokens); },
   setCompacting(this: AppState, compacting, tokenCount) { return setCompacting(this, compacting, tokenCount); },
-  appendToolOutput(this: AppState, chunk) { return appendToolOutput(this, chunk); },
+  appendToolOutput(this: AppState, chunk, toolName?: string) { return appendToolOutput(this, chunk, toolName); },
   collapseToolCalls(this: AppState) { return collapseToolCalls(this); },
   getLastAssistantContent(this: AppState) { return getLastAssistantContent(this); },
   rollbackLastAssistantMessage(this: AppState) { return rollbackLastAssistantMessage(this); },

@@ -3,6 +3,7 @@ import type { ContextOptimizer } from "../core/context-optimizer.js";
 export interface ActiveToolContext {
   contextOptimizer: ContextOptimizer | null;
   memoizedToolResults: boolean;
+  onToolProgress?: (toolName: string, chunk: string) => void;
 }
 
 let activeToolContext: ActiveToolContext | null = null;

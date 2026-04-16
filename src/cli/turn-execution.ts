@@ -51,6 +51,7 @@ interface TurnExecutionApp {
   addToolCall(name: string, preview: string, args?: unknown, callId?: string): void;
   updateToolCallArgs(name: string, preview: string, args?: unknown, callId?: string): void;
   addToolResult(name: string, result: string, error?: boolean, detail?: string, callId?: string): void;
+  appendToolOutput?(chunk: string, toolName?: string): void;
   onAbortRequest(callback: () => void): void;
   hasPendingMessages(delivery?: PendingDelivery): boolean;
   flushPendingMessages(delivery: PendingDelivery): void;
@@ -229,6 +230,7 @@ export async function executeTurn(options: {
   setActiveToolContext({
     contextOptimizer: session.getContextOptimizer(),
     memoizedToolResults: getSettings().memoizeToolResults !== false,
+    onToolProgress: (toolName, chunk) => app.appendToolOutput?.(chunk, toolName),
   });
 
   const streamCallbacks = {

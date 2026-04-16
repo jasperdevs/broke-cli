@@ -145,7 +145,7 @@ export function renderToolCallBlock(options: {
     }
   }
 
-  if (tc.name === "bash" && running && tc.streamOutput) {
+  if (running && tc.streamOutput) {
     const outLines = tc.streamOutput.split("\n").filter((line) => line.trim());
     const tail = outLines.slice(-5);
     for (const line of tail) {
@@ -184,7 +184,7 @@ export function renderToolCallBlock(options: {
         lines.push(`  ${colors.diffAddBg} ${text}${" ".repeat(pad)} ${reset}`);
       }
       if (newLines.length > 6) lines.push(`${colors.muted}      ... +${newLines.length - 6} more${reset}`);
-    } else if (tc.name === "bash" && tc.streamOutput) {
+    } else if (tc.streamOutput) {
       const outLines = tc.streamOutput.split("\n").filter((line) => line.trim());
       if (tc.expanded) {
         const showLines = outLines.slice(-20);

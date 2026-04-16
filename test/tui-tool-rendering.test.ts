@@ -73,6 +73,16 @@ describe("tool rendering detail", () => {
     expect(output).toContain("pattern: todo");
   });
 
+  it("renders live progress output for non-bash tools", () => {
+    const app = makeApp();
+    app.addToolCall("grep", "...", undefined, "call_grep");
+    app.updateToolCallArgs("grep", "todo in src", { pattern: "todo", path: "src" }, "call_grep");
+    app.appendToolOutput("found 5 matches\n", "grep");
+
+    const output = app.renderMessages(96).map((line: string) => stripAnsi(line)).join("\n");
+    expect(output).toContain("found 5 matches");
+  });
+
   it("shows specific result summaries for writes and edits", () => {
     const app = makeApp();
     app.addToolCall("writeFile", "index.html", undefined, "call_write");
