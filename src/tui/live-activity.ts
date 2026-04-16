@@ -2,7 +2,7 @@ import type { ActivityStep, ToolExecutionActivity } from "./app-types.js";
 
 type AppState = any;
 
-function normalizeToolName(name: string): string {
+export function normalizeToolName(name: string): string {
   switch (name) {
     case "Read": return "readFile";
     case "Write": return "writeFile";
@@ -56,26 +56,43 @@ export function cloneToolExecution(tool: ToolExecutionActivity): ToolExecutionAc
   return { ...tool };
 }
 
-export function deriveLiveActivityStep(app: AppState): ActivityStep | null {
-  const label = app.streamingActivitySummary?.trim();
-  const tools = app.toolExecutions as ToolExecutionActivity[];
+export function deriveActivityStep(options: {
+  summary?: string;
+  tools: ToolExecutionActivity[];
+  isCompacting: boolean;
+  startedAt?: number;
+  compactStartTime?: number;
+  fallbackToolLabel?: (tool: ToolExecutionActivity) => string | null;
+}): ActivityStep | null {
+  const label = options.summary?.trim();
+  const tools = options.tools;
   if (tools.length > 0) {
-    const startedAt = tools[0]?.startedAt ?? app.streamStartTime ?? Date.now();
+    const startedAt = tools[0]?.startedAt ?? options.startedAt ?? Date.now();
     const done = tools.every((tool) => tool.status === "done" || tool.status === "failed");
+    const latest = tools[tools.length - 1]!;
     return {
-      label: label || buildActivityLabel(tools[tools.length - 1]!.name, tools[tools.length - 1]!.preview) || "working",
+      label: label || options.fallbackToolLabel?.(latest) || latest.preview || latest.name || "working",
       status: done ? "done" : "running",
       startedAt,
       completedAt: done ? Date.now() : undefined,
     };
   }
   if (!label) return null;
-  if (!app.isCompacting) return null;
-  const running = true;
+  if (!options.isCompacting) return null;
   return {
     label,
-    status: running ? "running" : "done",
-    startedAt: app.streamStartTime || app.compactStartTime || Date.now(),
-    completedAt: running ? undefined : Date.now(),
+    status: "running",
+    startedAt: options.startedAt || options.compactStartTime || Date.now(),
   };
+}
+
+export function deriveLiveActivityStep(app: AppState): ActivityStep | null {
+  return deriveActivityStep({
+    summary: app.streamingActivitySummary,
+    tools: app.toolExecutions as ToolExecutionActivity[],
+    isCompacting: app.isCompacting,
+    startedAt: app.streamStartTime,
+    compactStartTime: app.compactStartTime,
+    fallbackToolLabel: (tool) => buildActivityLabel(tool.name, tool.preview) || "working",
+  });
 }

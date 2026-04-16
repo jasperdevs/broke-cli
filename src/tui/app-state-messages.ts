@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import type { ActivityStep, PendingDelivery, PendingImage, PendingMessage, ResolvedImage, TodoItem, ToolExecutionActivity } from "./app-types.js";
-import { buildActivityLabel, cloneActivityStep, cloneToolExecution, deriveLiveActivityStep } from "./live-activity.js";
+import { buildActivityLabel, cloneActivityStep, cloneToolExecution, deriveLiveActivityStep, normalizeToolName } from "./live-activity.js";
 import { createTurnTimestamp } from "../core/turn-events.js";
 import { buildTurnActivitySnapshot, clearTurnActivityState, recordTurnEvent } from "./turn-activity-state.js";
 
@@ -26,10 +26,10 @@ function findToolExecutionIndex(app: AppState, name: string, callId?: string): n
       if (app.toolExecutions[i].callId === callId) return i;
     }
   }
-  const normalized = name === "Read" ? "readFile" : name === "Write" ? "writeFile" : name === "Edit" ? "editFile" : name === "LS" ? "listFiles" : name === "Glob" ? "glob" : name;
+  const normalized = normalizeToolName(name);
   for (let i = app.toolExecutions.length - 1; i >= 0; i--) {
     const tc = app.toolExecutions[i];
-    const toolName = tc.name === "Read" ? "readFile" : tc.name === "Write" ? "writeFile" : tc.name === "Edit" ? "editFile" : tc.name === "LS" ? "listFiles" : tc.name === "Glob" ? "glob" : tc.name;
+    const toolName = normalizeToolName(tc.name);
     if (toolName === normalized && !tc.result) return i;
   }
   return -1;

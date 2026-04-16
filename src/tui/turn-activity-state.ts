@@ -1,14 +1,11 @@
-import type { ActivityStep, ToolExecutionActivity, TurnActivitySnapshot } from "./app-types.js";
+import type { ToolExecutionActivity, TurnActivitySnapshot } from "./app-types.js";
 import type { TurnEvent } from "../core/turn-events.js";
+import { cloneToolExecution, deriveActivityStep } from "./live-activity.js";
 
 export interface TurnActivityState {
   events: TurnEvent[];
   summary: string;
   tools: ToolExecutionActivity[];
-}
-
-function cloneTool(tool: ToolExecutionActivity): ToolExecutionActivity {
-  return { ...tool };
 }
 
 function findToolIndex(state: TurnActivityState, invocationId: string): number {
@@ -105,28 +102,17 @@ export function buildTurnActivitySnapshot(
   state: TurnActivityState,
   options: { isCompacting: boolean; startedAt?: number; compactStartTime?: number },
 ): TurnActivitySnapshot | null {
-  let step: ActivityStep | null = null;
-  if (state.tools.length > 0) {
-    const startedAt = state.tools[0]?.startedAt ?? options.startedAt ?? Date.now();
-    const done = state.tools.every((tool) => tool.status === "done" || tool.status === "failed");
-    const latest = state.tools[state.tools.length - 1];
-    step = {
-      label: state.summary || latest?.preview || latest?.name || "working",
-      status: done ? "done" : "running",
-      startedAt,
-      completedAt: done ? Date.now() : undefined,
-    };
-  } else if (state.summary && options.isCompacting) {
-    step = {
-      label: state.summary,
-      status: "running",
-      startedAt: options.startedAt || options.compactStartTime || Date.now(),
-    };
-  }
+  const step = deriveActivityStep({
+    summary: state.summary,
+    tools: state.tools,
+    isCompacting: options.isCompacting,
+    startedAt: options.startedAt,
+    compactStartTime: options.compactStartTime,
+  });
 
   if (!step && state.tools.length === 0) return null;
   return {
     step,
-    tools: state.tools.map(cloneTool),
+    tools: state.tools.map(cloneToolExecution),
   };
 }
