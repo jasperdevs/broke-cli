@@ -28,6 +28,7 @@
     "lint": "tsc --noEmit && node scripts/quality-check.mjs",
     "check:cycles": "madge --circular --extensions ts src bin test",
     "check:unused-files": "npx --yes knip@6.4.1 --include files",
+    "verify": "npm run lint && npm run check:cycles && npm run check:unused-files && npm test",
     "prepack": "npm run build",
     "prepare": "npm run build",
     "prepublishOnly": "npm run build"
