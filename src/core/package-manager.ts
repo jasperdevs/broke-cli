@@ -1,6 +1,6 @@
 import { execFileSync } from "child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
-import { basename, dirname, isAbsolute, join, resolve } from "path";
+import { basename, dirname, isAbsolute, join, resolve, win32 } from "path";
 import { homedir } from "os";
 import { getGlobalConfigPath, getProjectConfigPath, loadGlobalConfig, loadProjectConfig, type PackageFilterSource, type PackageSource, updateSettingsPatch } from "./config.js";
 
@@ -121,7 +121,8 @@ export function resolveNpmCommand(configured: string[], options?: { platform?: N
 
   const execPath = options?.execPath ?? process.execPath;
   const exists = options?.exists ?? existsSync;
-  const bundledNpmCli = join(dirname(execPath), "node_modules", "npm", "bin", "npm-cli.js");
+  const nodeDir = options?.platform === "win32" ? win32.dirname(execPath) : dirname(execPath);
+  const bundledNpmCli = win32.join(nodeDir, "node_modules", "npm", "bin", "npm-cli.js");
   return exists(bundledNpmCli) ? [execPath, bundledNpmCli] : ["npm.cmd"];
 }
 
