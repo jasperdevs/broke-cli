@@ -84,7 +84,7 @@ export function openSettingsMenu(args: {
       { key: "autoSaveSessions", label: "Auto-save sessions", value: String(s.autoSaveSessions), description: "Save conversation history to disk" },
       { key: "thinkingLevel", label: "Thinking mode", value: effectiveThinking, description: `${thinkingLevels.join(" / ")} (ctrl+t to cycle)` },
       { key: "hideSidebar", label: "Hide sidebar", value: String(s.hideSidebar), description: "Hide the right sidebar panel" },
-      { key: "autoRoute", label: "Auto-route", value: String(s.autoRoute), description: "Route simple tasks to cheaper model automatically" },
+      { key: "autoRoute", label: "Auto-route", value: String(s.autoRoute), description: "Route simple tasks and retry failed turns on another model" },
       { key: "showTokens", label: "Show tokens", value: String(s.showTokens), description: "Display token count in status bar" },
       { key: "showCost", label: "Show cost", value: String(s.showCost), description: "Display cost in status bar" },
       { key: "notifyOnResponse", label: "Notify on response", value: String(s.notifyOnResponse), description: "Show a desktop notification when a response completes" },

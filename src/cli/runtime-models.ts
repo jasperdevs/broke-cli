@@ -64,6 +64,43 @@ export function resolveSpecialistRuntimeModel(
   return resolved ? { model: resolved.model, modelId: resolved.modelId } : null;
 }
 
+export interface AutoFallbackModel {
+  key: string;
+  model: ModelHandle;
+  modelId: string;
+  providerName: string;
+}
+
+export function resolveAutoFallbackModels(
+  providerRegistry: ProviderRegistry,
+  activeModel: ModelHandle,
+  currentModelId: string,
+  providers: DetectedProvider[],
+  attemptedKeys: ReadonlySet<string>,
+): AutoFallbackModel[] {
+  const currentKey = `${activeModel.provider.id}/${currentModelId}`;
+  const options = buildVisibleRuntimeModelOptions(providerRegistry, activeModel, currentModelId, providers)
+    .filter((option) => option.providerId !== AUTO_MODEL_PROVIDER_ID && option.modelId !== AUTO_MODEL_ID);
+  const currentIndex = options.findIndex((option) => `${option.providerId}/${option.modelId}` === currentKey);
+  const ordered = currentIndex >= 0
+    ? [...options.slice(currentIndex + 1), ...options.slice(0, currentIndex)]
+    : options;
+  const fallbacks: AutoFallbackModel[] = [];
+  for (const option of ordered) {
+    const requestedKey = `${option.providerId}/${option.modelId}`;
+    if (attemptedKeys.has(requestedKey)) continue;
+    try {
+      const model = providerRegistry.createModel(option.providerId, option.modelId);
+      const key = `${model.provider.id}/${model.modelId}`;
+      if (attemptedKeys.has(key) || key === currentKey) continue;
+      fallbacks.push({ key, model, modelId: model.modelId, providerName: model.provider.name });
+    } catch {
+      // Ignore stale visible options; auto fallback should continue to the next viable model.
+    }
+  }
+  return fallbacks;
+}
+
 export function buildVisibleRuntimeModelOptions(
   providerRegistry: ProviderRegistry,
   activeModel: ModelHandle | null,

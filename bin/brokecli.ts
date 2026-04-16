@@ -16,19 +16,19 @@ import { loadExtensions } from "../src/core/extensions.js";
 import { APP_VERSION } from "../src/core/app-meta.js";
 import { ProviderRegistry } from "../src/ai/provider-registry.js";
 import { runRpcMode } from "../src/cli/rpc.js";
-import { resolveOneShotModel, runOneShotPrompt } from "../src/cli/oneshot.js";
 import { bootstrapSession } from "../src/cli/session-bootstrap.js";
 import { runModelTurn } from "../src/cli/turn-runner.js";
 import { handleSlashCommand } from "../src/cli/slash-commands.js";
 import { createProgram } from "../src/cli/program.js";
 import { ensureConfiguredPackagesInstalledWithOptions, type PackageInstallFailure } from "../src/core/package-manager.js";
 import { checkForNewVersion } from "../src/core/update.js";
-import { isSkippedPromptAnswer, isValidHttpBaseUrl, normalizeThinkingLevel, normalizeProgramArgv, readPromptArg, splitModelArg } from "../src/cli/cli-helpers.js";
+import { isSkippedPromptAnswer, isValidHttpBaseUrl, normalizeThinkingLevel, normalizeProgramArgv, splitModelArg } from "../src/cli/cli-helpers.js";
 import { resolveConfiguredModelHandle, resolvePreferredMode, type SpecialistModelRole } from "../src/cli/model-routing.js";
-import { buildVisibleRuntimeModelOptions, rebuildSmallModelState as computeSmallModelState, resolveSpecialistRuntimeModel } from "../src/cli/runtime-models.js";
+import { buildVisibleRuntimeModelOptions, rebuildSmallModelState as computeSmallModelState, resolveAutoFallbackModels, resolveSpecialistRuntimeModel } from "../src/cli/runtime-models.js";
 import { getTurnPolicy } from "../src/core/turn-policy.js";
 import { runBtwQuestion as runBtwQuestionRuntime } from "../src/cli/btw-runtime.js";
 import { applyProgramRuntimeSettings, applyRuntimeToolSelection, runExportMode } from "../src/cli/program-runtime.js";
+import { runCliPrintOrJsonMode } from "../src/cli/print-mode.js";
 const program = createProgram(APP_VERSION);
 function formatPackageInstallWarning(failure: PackageInstallFailure): string {
   const error = failure.error as { stderr?: Buffer | string; stdout?: Buffer | string; message?: string };
@@ -79,55 +79,7 @@ program.action(async (promptParts, opts) => {
   if (opts.mode === "text") opts.print = true;
   applyRuntimeToolSelection(opts.tools, toolsDisabled);
 
-  if (opts.print || opts.mode === "json") {
-    reportPackageInstallWarnings();
-    const prompt = await readPromptArg(promptParts);
-    if (!prompt) {
-      console.error("No prompt provided for single-shot mode.");
-      process.exit(1);
-      return;
-    }
-    const jsonMode = opts.mode === "json";
-    const result = await runOneShotPrompt({
-      prompt,
-      mode: getSettings().mode,
-      providers: detectedProvidersOnce,
-      providerRegistry,
-      opts: {
-        ...opts,
-        provider: opts.provider ?? parsedModel.provider,
-        model: opts.provider ? opts.model : (parsedModel.model ?? opts.model),
-        systemPrompt: opts.systemPrompt,
-        appendSystemPrompt: opts.appendSystemPrompt,
-      },
-      extraTools: hooks.getTools(),
-      streamCallbacks: jsonMode ? {
-        onStart: ({ providerId, modelId }) => process.stdout.write(JSON.stringify({ type: "start", provider: providerId, model: modelId }) + "\n"),
-        onText: (delta) => process.stdout.write(JSON.stringify({ type: "text", delta }) + "\n"),
-        onReasoning: (delta) => process.stdout.write(JSON.stringify({ type: "reasoning", delta }) + "\n"),
-        onToolCall: ({ name, args }) => process.stdout.write(JSON.stringify({ type: "tool_call", name, args }) + "\n"),
-        onToolResult: ({ name, result }) => process.stdout.write(JSON.stringify({ type: "tool_result", name, result }) + "\n"),
-      } : undefined,
-    });
-    if (jsonMode) {
-      process.stdout.write(JSON.stringify({
-        type: "done",
-        provider: result.providerId,
-        model: result.modelId,
-        usage: result.usage,
-        session: {
-          totalTokens: result.session.getTotalTokens(),
-          inputTokens: result.session.getTotalInputTokens(),
-          outputTokens: result.session.getTotalOutputTokens(),
-          cost: result.session.getTotalCost(),
-        },
-        toolCalls: result.toolCalls,
-      }) + "\n");
-    } else {
-      process.stdout.write(`${result.content}\n`);
-    }
-    return;
-  }
+  if (await runCliPrintOrJsonMode({ promptParts, opts, parsedModel, providers: detectedProvidersOnce, providerRegistry, hooks, reportPackageInstallWarnings })) return;
   const app = new App();
   app.setVersion(program.version() ?? APP_VERSION);
   let currentMode: Mode = getSettings().mode;
@@ -250,6 +202,23 @@ program.action(async (promptParts, opts) => {
     return buildVisibleRuntimeModelOptions(providerRegistry, activeModel, currentModelId, providers);
   }
 
+  function switchActiveModel(nextModel: ModelHandle, nextModelId: string): void {
+    activeModel = nextModel;
+    currentModelId = nextModelId;
+    rebuildSmallModelState();
+    systemPrompt = buildRuntimeSystemPrompt(nextModel.provider.id);
+    app.setModel(nextModel.provider.name, currentModelId, {
+      providerId: nextModel.provider.id,
+      runtime: nextModel.runtime,
+    });
+    session.setProviderModel(nextModel.provider.name, currentModelId);
+    updateSetting("lastModel", `${nextModel.provider.id}/${currentModelId}`);
+  }
+
+  function canAutoFallbackModels(): boolean {
+    return getSettings().autoRoute && !opts.provider && !opts.model && !parsedModel.provider && !parsedModel.model;
+  }
+
   async function runBtwQuestion(question: string): Promise<void> {
     if (!activeModel) {
       app.setStatus("No provider configured. Run /connect.");
@@ -370,10 +339,7 @@ program.action(async (promptParts, opts) => {
           app.setSessionName(nextSession.getName());
         },
         onModelChange: (nextModel, nextModelId) => {
-          activeModel = nextModel;
-          currentModelId = nextModelId;
-          rebuildSmallModelState();
-          systemPrompt = buildRuntimeSystemPrompt(nextModel.provider.id);
+          switchActiveModel(nextModel, nextModelId);
         },
         onModeChange: (nextMode) => {
           applyMode(nextMode);
@@ -470,7 +436,8 @@ program.action(async (promptParts, opts) => {
       }
     }
     touchProject(process.cwd(), session.getId(), text);
-    const turnResult = await runModelTurn({
+    const attemptedModelKeys = new Set<string>(activeModel ? [`${activeModel.provider.id}/${currentModelId}`] : []);
+    let turnResult = await runModelTurn({
       app,
       session,
       text,
@@ -488,6 +455,31 @@ program.action(async (promptParts, opts) => {
       alreadyAddedUserMessage: templateLoaded,
       resolveSpecialistModel,
     });
+    while (activeModel && canAutoFallbackModels() && turnResult.completion !== "success") {
+      const fallback = resolveAutoFallbackModels(providerRegistry, activeModel, currentModelId, providers, attemptedModelKeys)[0];
+      if (!fallback) break;
+      attemptedModelKeys.add(fallback.key);
+      app.setStatus(`Auto-route: trying ${fallback.providerName}/${fallback.modelId}`);
+      switchActiveModel(fallback.model, fallback.modelId);
+      turnResult = await runModelTurn({
+        app,
+        session,
+        text,
+        images,
+        activeModel,
+        currentModelId,
+        smallModel,
+        smallModelId,
+        currentMode,
+        systemPrompt,
+        buildTools,
+        hooks,
+        lastToolCalls: turnResult.lastToolCalls,
+        lastActivityTime: turnResult.lastActivityTime,
+        alreadyAddedUserMessage: true,
+        resolveSpecialistModel,
+      });
+    }
     lastToolCalls = turnResult.lastToolCalls;
     lastActivityTime = turnResult.lastActivityTime;
   }

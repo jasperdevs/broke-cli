@@ -35,7 +35,13 @@ export async function runModelTurn(options: {
   repairDepth?: number;
   forceRoute?: "main" | "small";
   resolveSpecialistModel?: (role: SpecialistModelRole) => { model: ModelHandle; modelId: string } | null;
-}): Promise<{ lastToolCalls: string[]; lastActivityTime: number }> {
+}): Promise<{
+  lastToolCalls: string[];
+  lastActivityTime: number;
+  completion: "success" | "empty" | "error" | "insufficient";
+  errorMessage?: string;
+  toolActivity: boolean;
+}> {
   const { app, session, text, images, activeModel, currentModelId, smallModel, smallModelId, currentMode, systemPrompt, buildTools, hooks, lastToolCalls, lastActivityTime, alreadyAddedUserMessage, repairDepth = 0, forceRoute, resolveSpecialistModel } = options;
   const getContextOptimizer = (): ReturnType<Session["getContextOptimizer"]> => session.getContextOptimizer();
   const settings = getSettings();
@@ -52,7 +58,7 @@ export async function runModelTurn(options: {
     alreadyAddedUserMessage,
   });
   if (fastPath.handled) {
-    return { lastToolCalls, lastActivityTime: fastPath.lastActivityTime };
+    return { lastToolCalls, lastActivityTime: fastPath.lastActivityTime, completion: "success", toolActivity: false };
   }
   const { policy, prepared } = await prepareTurnExecution({
     app,
@@ -94,7 +100,13 @@ export async function runModelTurn(options: {
   });
   if (!executed.result.toolActivity && executed.result.completion === "insufficient") {
     app.addMessage("system", "Model answered without using tools. Try a stronger model with /model.");
-    return { lastToolCalls: executed.result.nextToolCalls, lastActivityTime: executed.lastActivityTime };
+    return {
+      lastToolCalls: executed.result.nextToolCalls,
+      lastActivityTime: executed.lastActivityTime,
+      completion: executed.result.completion,
+      errorMessage: executed.result.errorMessage,
+      toolActivity: executed.result.toolActivity,
+    };
   }
 
   const repair = maybeRepairValidationFailure({
@@ -129,5 +141,8 @@ export async function runModelTurn(options: {
   return {
     lastToolCalls: executed.result.nextToolCalls,
     lastActivityTime: executed.result.steeringInterrupted ? Date.now() : executed.lastActivityTime,
+    completion: executed.result.completion,
+    errorMessage: executed.result.errorMessage,
+    toolActivity: executed.result.toolActivity,
   };
 }

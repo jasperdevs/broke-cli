@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { resolveExecutionTarget } from "../src/cli/turn-runner-support.js";
 import { resolvePreferredMode, resolvePreferredSpecialistRole } from "../src/cli/model-routing.js";
+import { resolveAutoFallbackModels } from "../src/cli/runtime-models.js";
 import { getSettings, updateSetting } from "../src/core/config.js";
 
 const mainModel = {
@@ -156,5 +157,31 @@ describe("specialist model routing", () => {
     } finally {
       updateSetting("autoRoute", previousAutoRoute);
     }
+  });
+
+  it("orders auto fallback models after the failed active model and skips attempted models", () => {
+    const providerRegistry = {
+      buildVisibleModelOptions: () => [
+        { providerId: "openai", providerName: "OpenAI", modelId: "gpt-5.4-mini", active: false },
+        { providerId: "anthropic", providerName: "Anthropic", modelId: "claude-sonnet-4-6", active: false },
+        { providerId: "google", providerName: "Google", modelId: "gemini-3-pro", active: false },
+      ],
+      createModel: (providerId: string, modelId: string) => ({
+        provider: { id: providerId, name: providerId, defaultModel: modelId, models: [modelId] },
+        runtime: "sdk",
+        model: {},
+        modelId,
+      }),
+    };
+
+    const fallbacks = resolveAutoFallbackModels(
+      providerRegistry as any,
+      mainModel as any,
+      "gpt-5.4-mini",
+      [],
+      new Set(["openai/gpt-5.4-mini", "anthropic/claude-sonnet-4-6"]),
+    );
+
+    expect(fallbacks.map((entry) => entry.key)).toEqual(["google/gemini-3-pro"]);
   });
 });
