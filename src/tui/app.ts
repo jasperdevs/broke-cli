@@ -24,7 +24,7 @@ import type { AppStateUiMethods } from "./app-state-ui.js";
 import { appStateUiMethods } from "./app-state-ui.js";
 import { AnimCounter, HOME_TIPS } from "./app-shared.js";
 import { APP_VERSION } from "../core/app-meta.js";
-import type { ActivityStep, BtwBubble, BudgetView, ChatMessage, ModelLaneOption, ModelOption, PendingImage, PendingMessage, PickerItem, QuestionView, SettingEntry, TodoItem, ToolExecutionActivity, TreeView, UpdateNotice } from "./app-types.js";
+import type { ActivityStep, BtwBubble, BudgetView, ChatMessage, ModelLaneOption, ModelOption, PendingDelivery, PendingImage, PendingMessage, PickerItem, QuestionView, SettingEntry, TodoItem, ToolExecutionActivity, TreeView, UpdateNotice } from "./app-types.js";
 import type { ModelPreferenceSlot } from "../core/config.js";
 import type { ModelRuntime } from "../ai/providers.js";
 import { createDefaultSessionName } from "../core/session.js";
@@ -100,7 +100,7 @@ export class App {
   private onThinkingChange: ((level: ThinkingLevel) => void) | null = null;
   private onCavemanChange: ((level: CavemanLevel) => void) | null = null;
   private pendingMessages: PendingMessage[] = [];
-  private onPendingMessagesReady: ((delivery: "steering" | "followup") => void) | null = null;
+  private onPendingMessagesReady: ((delivery: PendingDelivery) => void) | null = null;
   private streamStartTime = 0;
   private streamTokens = 0;
   private currentActivityStep: ActivityStep | null = null;

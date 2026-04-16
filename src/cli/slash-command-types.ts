@@ -4,6 +4,7 @@ import type { BudgetReport } from "../core/budget-insights.js";
 import type { Mode, ModelPreferenceSlot, Settings } from "../core/config.js";
 import type { Session } from "../core/session.js";
 import type { ModelOption, PickerItem, SettingEntry, UpdateNotice, ItemPickerOptions } from "../ui-contracts.js";
+import type { CliExtensionHooks } from "./extension-hooks.js";
 
 export interface SlashCommandApp {
   addMessage(role: "user" | "assistant" | "system", content: string): void;
@@ -55,10 +56,8 @@ export interface SlashCommandApp {
   dismissBtwBubble?(): void;
 }
 
-export interface ExtensionHooks {
-  emit(event: string, payload: Record<string, unknown>): void | Promise<void>;
+export interface ExtensionHooks extends CliExtensionHooks {
   reload?(): void;
-  getTools?(): Record<string, unknown>;
   getSlashCommands?: () => Array<import("./slash-command-registry.js").RegisteredSlashCommand<any, SlashCommandResult>>;
 }
 

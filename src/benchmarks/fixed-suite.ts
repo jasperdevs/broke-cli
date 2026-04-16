@@ -12,6 +12,7 @@ import { runModelTurn } from "../cli/turn-runner.js";
 import { resolveOneShotModel } from "../cli/oneshot.js";
 import { rebuildSmallModelState } from "../cli/runtime-models.js";
 import { resolveTurnPolicy } from "../core/turn-policy.js";
+import type { PendingDelivery } from "../ui-contracts.js";
 import {
   getExtendedBenchmarkTasks,
   getFixedBenchmarkTasks,
@@ -160,8 +161,8 @@ class BenchmarkTurnApp {
   updateToolCallArgs(_name: string, _preview: string, _args?: unknown): void {}
   addToolResult(_name: string, _result: string, _error?: boolean, _detail?: string): void {}
   onAbortRequest(_callback: () => void): void {}
-  hasPendingMessages(_delivery?: "steering" | "followup"): boolean { return false; }
-  flushPendingMessages(_delivery: "steering" | "followup"): void {}
+  hasPendingMessages(_delivery?: PendingDelivery): boolean { return false; }
+  flushPendingMessages(_delivery: PendingDelivery): void {}
   rollbackLastAssistantMessage(): void {
     for (let i = this.messages.length - 1; i >= 0; i--) {
       if (this.messages[i]?.role === "assistant") {

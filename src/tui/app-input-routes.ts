@@ -4,6 +4,7 @@ import { filterFiles } from "./file-picker.js";
 import type { Keypress } from "./keypress.js";
 import { stripInlineChipLabels, syncInlineImageChipLabels } from "./inline-chip-utils.js";
 import { canonicalizeSlashInput } from "./command-surface.js";
+import type { PendingDelivery } from "../ui-contracts.js";
 import {
   handleImagePaste,
   resolvePendingImagesBeforeSubmit,
@@ -340,7 +341,7 @@ export function submitInput(app: AppState): void {
   submitQueuedInput(app, "steering");
 }
 
-export function queueCurrentInput(app: AppState, delivery: "steering" | "followup"): void {
+export function queueCurrentInput(app: AppState, delivery: PendingDelivery): void {
   submitQueuedInput(app, delivery);
 }
 
@@ -382,7 +383,7 @@ export function handlePaste(app: AppState, text: string): void {
 
 export { scheduleDeferredImageDraftConsume, tryConsumeImageDraft } from "./composer-image-attachments.js";
 
-function submitQueuedInput(app: AppState, delivery: "steering" | "followup"): void {
+function submitQueuedInput(app: AppState, delivery: PendingDelivery): void {
   const text = canonicalizeSlashInput(stripInlineChipLabels(app), {
     hasMessages: app.messages.length > 0,
     hasAssistantContent: !!app.getLastAssistantContent?.(),

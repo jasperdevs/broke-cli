@@ -4,6 +4,7 @@ import { buildToolPreview, canUseSdkTools } from "./turn-runner-support.js";
 import { parseToolCallsFromText } from "../utils/parse-tool-calls.js";
 import { observeToolResult } from "./turn-tool-observer.js";
 import type { Session } from "../core/session.js";
+import type { CliExtensionHooks } from "./extension-hooks.js";
 
 function inferExplicitPathFromText(text: string): string | undefined {
   return text.match(/[A-Za-z0-9_./-]+\.[A-Za-z0-9]+/g)?.[0];
@@ -33,7 +34,7 @@ export async function executeRawToolPayloadFallback(options: {
     updateToolCallArgs(name: string, preview: string, args?: unknown, callId?: string): void;
     addToolResult(name: string, result: string, error?: boolean, detail?: string, callId?: string): void;
   };
-  hooks: { emit(event: string, payload: Record<string, unknown>): void };
+  hooks: Pick<CliExtensionHooks, "emit">;
   session: Session;
   nextToolCalls: string[];
   abortSignal?: AbortSignal;

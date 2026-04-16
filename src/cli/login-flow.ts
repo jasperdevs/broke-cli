@@ -5,16 +5,11 @@ import type { DetectedProvider } from "../ai/detect.js";
 import type { ProviderRegistry } from "../ai/provider-registry.js";
 import { runOAuthProviderLogin } from "./oauth-login-support.js";
 import { OAUTH_PROVIDERS, getOAuthProviderSpec } from "./oauth-providers.js";
-
-interface LoginFlowItem {
-  id: string;
-  label: string;
-  detail?: string;
-}
+import type { PickerItem } from "../ui-contracts.js";
 
 interface LoginFlowApp {
   showQuestion(prompt: string, options?: string[]): Promise<string>;
-  openItemPicker(title: string, items: LoginFlowItem[], onSelect: (id: string) => void, options?: { kind?: "login" }): void;
+  openItemPicker(title: string, items: PickerItem[], onSelect: (id: string) => void, options?: { kind?: "login" }): void;
   runExternalCommand?: (title: string, command: string, args: string[]) => number;
   setStatus?(message: string): void;
   clearStatus?(): void;

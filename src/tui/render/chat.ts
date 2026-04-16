@@ -1,15 +1,13 @@
 import { renderPrefixedWrappedLines, toolArgumentSummary, toolDescription, wrapVisibleText } from "./tool-render.js";
 import { visibleWidth } from "../../utils/terminal-width.js";
+import type { PendingDelivery } from "../../ui-contracts.js";
+import type { TodoItem } from "../../tools/todo.js";
 
-export interface TodoRenderItem {
-  id: string;
-  text: string;
-  status: "pending" | "in_progress" | "done";
-}
+export type TodoRenderItem = TodoItem;
 
 export interface PendingRenderMessage {
   text: string;
-  delivery: "steering" | "followup";
+  delivery: PendingDelivery;
 }
 
 export function renderPendingMessagesBlock(options: {

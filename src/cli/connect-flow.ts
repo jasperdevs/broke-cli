@@ -2,12 +2,7 @@ import type { DetectedProvider } from "../ai/detect.js";
 import { updateProviderConfig } from "../core/config.js";
 import { getProviderCredential } from "../core/provider-credentials.js";
 import { LOCAL_PROVIDER_DEFAULTS, type ProviderRegistry } from "../ai/provider-registry.js";
-
-interface ConnectFlowItem {
-  id: string;
-  label: string;
-  detail?: string;
-}
+import type { PickerItem } from "../ui-contracts.js";
 
 interface ConnectFlowApp {
   addMessage(role: "user" | "assistant" | "system", content: string): void;
@@ -15,7 +10,7 @@ interface ConnectFlowApp {
   showQuestion(prompt: string, options?: string[]): Promise<string>;
   openItemPicker(
     title: string,
-    items: ConnectFlowItem[],
+    items: PickerItem[],
     onSelect: (id: string) => void,
     options?: { kind?: "connect" },
   ): void;

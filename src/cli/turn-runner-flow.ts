@@ -10,6 +10,8 @@ import { tryRepoTaskFastPath } from "./repo-fastpath.js";
 import { readFileDirect } from "../tools/file-ops.js";
 import { observeToolResult } from "./turn-tool-observer.js";
 import type { SpecialistModelRole } from "./model-routing.js";
+import type { PendingDelivery } from "../ui-contracts.js";
+import type { CliExtensionHooks } from "./extension-hooks.js";
 import {
   addUserTurnToSession,
   maybeAutoCompactTurnContext,
@@ -22,7 +24,6 @@ import {
 } from "./turn-runner-stages.js";
 import { runValidationSuite } from "./auto-validate.js";
 
-type PendingDelivery = "steering" | "followup";
 const LOCAL_EMPTY_RETRY_PROVIDERS = new Set(["ollama", "lmstudio", "llamacpp", "jan", "vllm"]);
 
 export interface TurnRunnerApp {
@@ -50,10 +51,7 @@ export interface TurnRunnerApp {
   setSessionName?(name: string): void;
 }
 
-export interface ExtensionHooks {
-  emit(event: string, payload: Record<string, unknown>): void | Promise<void>;
-  getTools?(): Record<string, unknown>;
-}
+export type ExtensionHooks = CliExtensionHooks;
 
 function deriveStreamingActivitySummary(text: string, archetype: string): string {
   const normalized = text.replace(/\s+/g, " ").trim();

@@ -3,8 +3,10 @@ import type { BudgetReport } from "../core/budget-insights.js";
 import type { InputWidget } from "./input.js";
 import type { Session, SessionTreeItem } from "../core/session.js";
 import type { TreeFilterMode } from "../core/config.js";
-import type { ModelLaneOption, ModelOption, PickerItem, SettingEntry, UpdateNotice, MenuPromptKind } from "../ui-contracts.js";
-export type { ModelLaneOption, ModelOption, PickerItem, SettingEntry, UpdateNotice, MenuPromptKind } from "../ui-contracts.js";
+import type { ModelLaneOption, ModelOption, PendingDelivery, PickerItem, SettingEntry, UpdateNotice, MenuPromptKind } from "../ui-contracts.js";
+import type { TodoItem } from "../tools/todo.js";
+export type { ModelLaneOption, ModelOption, PendingDelivery, PickerItem, SettingEntry, UpdateNotice, MenuPromptKind } from "../ui-contracts.js";
+export type { TodoItem } from "../tools/todo.js";
 
 export interface ChatMessage {
   role: "user" | "assistant" | "system";
@@ -94,8 +96,6 @@ export interface QuestionView {
   resolve: (result: QuestionResult) => void;
 }
 
-export type PendingDelivery = "steering" | "followup";
-
 export interface ActivityStep {
   label: string;
   detail?: string;
@@ -143,5 +143,4 @@ export type PendingImage =
   | (ResolvedImage & { attachmentId?: string; resolvedPath?: string; pendingPath?: undefined })
   | { attachmentId?: string; pendingPath: string; resolvedPath?: undefined; mimeType?: undefined; data?: undefined };
 export type PendingMessage = { text: string; images?: ResolvedImage[]; delivery: PendingDelivery };
-export type TodoItem = { id: string; text: string; status: "pending" | "in_progress" | "done" };
 export type MascotGrid = Array<Array<RgbColor | null>>;

@@ -59,6 +59,8 @@ export type MenuPromptKind =
 
 export type UpdateNotice = UpdateInfo;
 
+export type PendingDelivery = "steering" | "followup";
+
 export interface ItemPickerOptions {
   initialCursor?: number;
   previewHint?: string;

@@ -32,7 +32,8 @@ import { createStreamTokenTracker } from "./stream-token-tracker.js";
 import { executeRawToolPayloadFallback } from "./raw-tool-fallback.js";
 import { captureNativeWorkspaceBaseline, recordNativeWorkspaceDelta, shouldExposeOpaqueNativeWorkspaceEdits } from "./native-workspace-observer.js";
 import { resolveTurnExecution } from "./turn-execution-setup.js";
-type PendingDelivery = "steering" | "followup";
+import type { PendingDelivery } from "../ui-contracts.js";
+import type { CliExtensionHooks } from "./extension-hooks.js";
 interface TurnExecutionApp {
   addMessage(role: "user" | "assistant" | "system", content: string, images?: Array<{ mimeType: string; data: string }>): void;
   appendToLastMessage(delta: string): void;
@@ -54,7 +55,6 @@ interface TurnExecutionApp {
   rollbackLastAssistantMessage(): void;
 }
 
-interface ExtensionHooks { emit(event: string, payload: Record<string, unknown>): void; }
 export async function executeTurn(options: {
   app: TurnExecutionApp;
   session: Session;
@@ -67,7 +67,7 @@ export async function executeTurn(options: {
   policy: TurnPolicy;
   effectiveImages?: Array<{ mimeType: string; data: string }>;
   buildTools: (allowedTools: readonly ToolName[]) => Record<string, unknown>;
-  hooks: ExtensionHooks;
+  hooks: Pick<CliExtensionHooks, "emit">;
   lastToolCalls: string[];
   contextLimit: number;
   activeSystemPrompt: string;

@@ -1,16 +1,18 @@
 import { observeToolResult } from "./turn-tool-observer.js";
 import { createToolInvocationRegistry } from "./tool-invocation-registry.js";
+import type { PendingDelivery } from "../ui-contracts.js";
+import type { CliExtensionHooks } from "./extension-hooks.js";
 
 type ToolCallbackApp = {
   addToolCall(name: string, preview: string, args?: unknown, callId?: string): void;
   updateToolCallArgs(name: string, preview: string, args?: unknown, callId?: string): void;
   addToolResult(name: string, result: string, error?: boolean, detail?: string, callId?: string): void;
-  hasPendingMessages(delivery?: "steering" | "followup"): boolean;
+  hasPendingMessages(delivery?: PendingDelivery): boolean;
 };
 
 export function createLiveToolCallbacks(options: {
   app: ToolCallbackApp;
-  hooks: { emit(event: string, payload: Record<string, unknown>): void };
+  hooks: Pick<CliExtensionHooks, "emit">;
   session: unknown;
   nextToolCalls: string[];
   lastToolArgsByName: Map<string, unknown>;
