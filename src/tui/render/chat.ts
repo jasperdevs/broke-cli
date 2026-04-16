@@ -158,23 +158,25 @@ export function renderToolCallBlock(options: {
 
   if (done) {
     if (tc.name === "editFile" && a && (a.old_string || Array.isArray((a as any).edits))) {
-      const firstEdit = Array.isArray((a as any).edits) ? (a as any).edits[0] : null;
-      const oldLines = String(a.old_string ?? firstEdit?.oldText ?? "").split("\n");
-      const newLines = String(a.new_string ?? firstEdit?.newText ?? "").split("\n");
+      const editPairs = Array.isArray((a as any).edits) && (a as any).edits.length > 0
+        ? (a as any).edits.map((edit: any) => ({ oldText: String(edit.oldText ?? ""), newText: String(edit.newText ?? "") }))
+        : [{ oldText: String(a.old_string ?? ""), newText: String(a.new_string ?? "") }];
       const diffW = maxWidth - 6;
+      const oldLines = editPairs.flatMap((edit: { oldText: string }) => edit.oldText.split("\n"));
+      const newLines = editPairs.flatMap((edit: { newText: string }) => edit.newText.split("\n"));
       lines.push(`${colors.muted}  ${branch} ${tc.resultDetail || `+${newLines.length} -${oldLines.length} lines`}${reset}`);
-      for (const line of oldLines.slice(0, 4)) {
-        const text = `- ${line}`.slice(0, diffW - 2);
-        const pad = Math.max(0, diffW - 2 - text.length);
-        lines.push(`  ${colors.diffRemoveBg} ${text}${" ".repeat(pad)} ${reset}`);
+      for (const [editIndex, edit] of editPairs.slice(0, 3).entries()) {
+        if (editPairs.length > 1) lines.push(`${colors.muted}      hunk ${editIndex + 1}${reset}`);
+        for (const line of edit.oldText.split("\n").slice(0, 3)) {
+          const text = `- ${line}`.slice(0, diffW - 2);
+          lines.push(`  ${colors.diffRemoveBg} ${text}${" ".repeat(Math.max(0, diffW - 2 - text.length))} ${reset}`);
+        }
+        for (const line of edit.newText.split("\n").slice(0, 3)) {
+          const text = `+ ${line}`.slice(0, diffW - 2);
+          lines.push(`  ${colors.diffAddBg} ${text}${" ".repeat(Math.max(0, diffW - 2 - text.length))} ${reset}`);
+        }
       }
-      if (oldLines.length > 4) lines.push(`${colors.muted}      ... +${oldLines.length - 4} more${reset}`);
-      for (const line of newLines.slice(0, 4)) {
-        const text = `+ ${line}`.slice(0, diffW - 2);
-        const pad = Math.max(0, diffW - 2 - text.length);
-        lines.push(`  ${colors.diffAddBg} ${text}${" ".repeat(pad)} ${reset}`);
-      }
-      if (newLines.length > 4) lines.push(`${colors.muted}      ... +${newLines.length - 4} more${reset}`);
+      if (editPairs.length > 3) lines.push(`${colors.muted}      ... +${editPairs.length - 3} more hunks${reset}`);
     } else if (tc.name === "writeFile" && a?.content) {
       const newLines = a.content.split("\n");
       const diffW = maxWidth - 6;

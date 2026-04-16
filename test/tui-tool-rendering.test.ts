@@ -104,6 +104,12 @@ describe("tool rendering detail", () => {
     const output = app.renderMessages(96).map((line: string) => stripAnsi(line)).join("\n");
     expect(output).toContain("edit src/app.ts");
     expect(output).toContain("2 edits · 2 -> 2 lines replaced");
+    expect(output).toContain("hunk 1");
+    expect(output).toContain("- one");
+    expect(output).toContain("+ two");
+    expect(output).toContain("hunk 2");
+    expect(output).toContain("- three");
+    expect(output).toContain("+ four");
   });
 
   it("labels opaque native file deltas as observed workspace changes", () => {
