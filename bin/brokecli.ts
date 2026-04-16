@@ -27,7 +27,7 @@ import { resolveConfiguredModelHandle, resolvePreferredMode, type SpecialistMode
 import { buildVisibleRuntimeModelOptions, rebuildSmallModelState as computeSmallModelState, resolveAutoFallbackModels, resolveSpecialistRuntimeModel } from "../src/cli/runtime-models.js";
 import { getTurnPolicy } from "../src/core/turn-policy.js";
 import { runBtwQuestion as runBtwQuestionRuntime } from "../src/cli/btw-runtime.js";
-import { applyProgramRuntimeSettings, applyRuntimeToolSelection, runExportMode } from "../src/cli/program-runtime.js";
+import { applyProgramRuntimeSettings, applyRuntimeToolSelection, reportStartupUpdateNotice, runExportMode } from "../src/cli/program-runtime.js";
 import { runCliPrintOrJsonMode } from "../src/cli/print-mode.js";
 const program = createProgram(APP_VERSION);
 function formatPackageInstallWarning(failure: PackageInstallFailure): string {
@@ -139,7 +139,7 @@ program.action(async (promptParts, opts) => {
   app.setSessionName(session.getName());
   hooks.emit("on_session_start", { cwd: process.cwd() });
   app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
-  void checkForNewVersion(APP_VERSION).then((update) => update && app.setStatus(`Update available: v${update.latestVersion}. ${update.command ? "Run /update to install it." : update.instruction}`)).catch(() => {});
+  void checkForNewVersion(APP_VERSION).then((update) => reportStartupUpdateNotice(app, update)).catch(() => {});
 
   let scopedModelIndex = -1;
   app.onModeToggle((newMode) => {

@@ -1,25 +1,9 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import * as extensions from "../src/core/extensions.js";
-import * as skills from "../src/core/skills.js";
-import * as templates from "../src/core/templates.js";
-import * as packageManager from "../src/core/package-manager.js";
+import { describe, expect, it } from "vitest";
 import { renderHomeBox, renderHomeView, wrapHomeDetail } from "../src/tui/app-render-methods.js";
 import stripAnsi from "strip-ansi";
 
-afterEach(() => {
-  vi.restoreAllMocks();
-});
-
 describe("home summary", () => {
-  it("surfaces broken enabled extensions in the workspace summary", () => {
-    vi.spyOn(extensions, "listExtensions").mockReturnValue([
-      { id: "ok", enabled: true, loaded: true },
-      { id: "broken", enabled: true, loaded: false, error: "boom" },
-    ] as any);
-    vi.spyOn(skills, "listSkills").mockReturnValue([]);
-    vi.spyOn(templates, "listTemplates").mockReturnValue([]);
-    vi.spyOn(packageManager, "listInstalledPackages").mockReturnValue([]);
-
+  it("keeps startup focused on a single randomized tip instead of diagnostics", () => {
     const app = {
       modelName: "none",
       modelProviderId: "openai",
@@ -27,6 +11,7 @@ describe("home summary", () => {
       modelRuntime: "sdk",
       appVersion: "0.0.1",
       detectedProviders: [],
+      homeTip: "Use /update when the banner appears.",
       renderMascotInline: () => [],
       formatShortCwd: () => "~\\repo",
       wrapHomeDetail: (label: string, value: string, width: number) => wrapHomeDetail({} as any, label, value, width),
@@ -37,6 +22,10 @@ describe("home summary", () => {
     app.renderHomeBox = (width: number, title: string, body: string[]) => renderHomeBox(app, width, title, body);
 
     const rendered = renderHomeView(app, 90, 18).map((line) => stripAnsi(line)).join("\n");
-    expect(rendered).toContain("2 ext · 1 broken");
+    expect(rendered).toContain("Tip:");
+    expect(rendered).toContain("Use /update when the banner appears.");
+    expect(rendered).not.toContain("Providers");
+    expect(rendered).not.toContain("Workspace");
+    expect(rendered).not.toContain("Status");
   });
 });

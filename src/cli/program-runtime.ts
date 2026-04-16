@@ -2,11 +2,17 @@ import { buildHtmlExport } from "./exports.js";
 import { SessionManager } from "../core/session-manager.js";
 import { clearRuntimeSettings, setRuntimeSettings } from "../core/config.js";
 import { setRuntimeProviderApiKey } from "../core/provider-credentials.js";
+import type { UpdateInfo } from "../core/update.js";
 import type { ThinkingLevel } from "../core/config-types.js";
 import { writePrivateTextFile } from "../core/private-files.js";
 import { TOOL_NAMES, type ToolName } from "../tools/registry.js";
 
 type ParsedModelArg = { provider?: string; model?: string; thinking?: string };
+
+interface StartupUpdateApp {
+  setUpdateNotice?(notice: UpdateInfo): void;
+  setStatus?(message: string): void;
+}
 
 type RuntimeProgramOptions = {
   sessionDir?: string;
@@ -63,4 +69,10 @@ export function runExportMode(sessionId: string, sessionDir: string | undefined,
   const content = buildHtmlExport(session.getMessages(), session.getProvider() || "unknown", session.getModel() || "unknown", session.getCwd());
   writePrivateTextFile(outputPath, content);
   process.stdout.write(`${outputPath}\n`);
+}
+
+export function reportStartupUpdateNotice(app: StartupUpdateApp, update: UpdateInfo | null): void {
+  if (!update) return;
+  app.setUpdateNotice?.(update);
+  app.setStatus?.(`Update available: v${update.latestVersion}. ${update.command ? "Run /update to install it." : update.instruction}`);
 }

@@ -26,11 +26,9 @@ export function renderHomeView(options: {
   topHeight: number;
   fullMascot: string[];
   modelLabel: string;
-  modelStatus: string;
   appVersion: string;
   workspaceLabel: string;
-  summaryDetails: Array<{ label: string; value: string }>;
-  quickActions: Array<{ label: string; value: string }>;
+  tip: string;
   formatShortCwd: (maxWidth: number) => string;
   wrapHomeDetail: (label: string, value: string, width: number) => string[];
   renderHomeBox: (width: number, title: string, body: string[]) => string[];
@@ -44,11 +42,9 @@ export function renderHomeView(options: {
     topHeight,
     fullMascot,
     modelLabel,
-    modelStatus,
     appVersion,
     workspaceLabel,
-    summaryDetails,
-    quickActions,
+    tip,
     formatShortCwd,
     wrapHomeDetail,
     renderHomeBox: buildHomeBox,
@@ -65,9 +61,8 @@ export function renderHomeView(options: {
     const compactBody = [
       `  ${titleColor}${bold}Welcome${reset} ${textColor}v${appVersion}${reset}`,
       ...wrapHomeDetail("Model", modelLabel, Math.max(10, compactWidth - 6)),
-      ...wrapHomeDetail("Status", modelStatus, Math.max(10, compactWidth - 6)),
       ...wrapHomeDetail("Dir", workspaceLabel, Math.max(10, compactWidth - 6)),
-      ...quickActions.slice(0, 1).flatMap((detail) => wrapHomeDetail(detail.label, detail.value, Math.max(10, compactWidth - 6))),
+      ...wrapHomeDetail("Tip:", tip, Math.max(10, compactWidth - 6)),
     ].slice(0, Math.max(2, topHeight - 2));
     const compact = buildHomeBox(compactWidth, "", compactBody);
     return compact.slice(0, topHeight);
@@ -88,15 +83,13 @@ export function renderHomeView(options: {
   const titleWithVersion = `${headerText}  ${versionText}`;
   const titleText = titleWithVersion.length <= rightWidth ? titleWithVersion : headerText;
   const locationText = titleWithVersion.length <= rightWidth ? locationBase : `${locationBase}  ${versionText}`;
-  const quickActionDetails = quickActions.flatMap((detail) => wrapHomeDetail(detail.label, detail.value, rightWidth));
   const heroText = [
     `${titleColor}${bold}${titleText}${reset}`,
     `${textColor}${locationText}${reset}`,
     "",
     ...wrapHomeDetail("Model", modelLabel, rightWidth),
-    ...wrapHomeDetail("Status", modelStatus, rightWidth),
-    ...summaryDetails.flatMap((detail) => wrapHomeDetail(detail.label, detail.value, rightWidth)),
-    ...(quickActionDetails.length > 0 ? ["", ...quickActionDetails] : []),
+    "",
+    ...wrapHomeDetail("Tip:", tip, rightWidth),
   ];
   const heroHeight = Math.max(mascotInline.length, heroText.length);
   const heroLines = Array.from({ length: heroHeight }, (_, index) => {

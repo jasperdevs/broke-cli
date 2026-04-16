@@ -38,8 +38,13 @@ describe("startup home view", () => {
     expect(output).toContain("Welcome");
     expect(output).toContain("GPT-5.4 mini");
     expect(output).toContain(`~${process.platform === "win32" ? "\\" : "/"}Downloads${process.platform === "win32" ? "\\" : "/"}broke-cli`);
-    expect(output).toContain("Status");
+    expect(output).toContain("Tip:");
     expect(output).toContain("/resume");
+    expect(output).not.toContain("Status");
+    expect(output).not.toContain("Providers");
+    expect(output).not.toContain("Workspace");
+    expect(output).not.toContain("Start");
+    expect(output).not.toContain("Tune");
     expect(output).not.toContain("Files");
     expect(output).not.toContain("Recent Sessions");
   });

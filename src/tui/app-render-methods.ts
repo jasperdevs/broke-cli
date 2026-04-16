@@ -1,14 +1,8 @@
-import { existsSync } from "fs";
-import { join } from "path";
 import stripAnsi from "strip-ansi";
 import { BOX, BOLD, DIM, RESET } from "../utils/ansi.js";
 import { padVisible, visibleWidth } from "../utils/terminal-width.js";
 import { currentTheme } from "../core/themes.js";
 import { getConfiguredModelPreference, getSettings } from "../core/config.js";
-import { listExtensions } from "../core/extensions.js";
-import { listSkills } from "../core/skills.js";
-import { listTemplates } from "../core/templates.js";
-import { listInstalledPackages } from "../core/package-manager.js";
 import { getPrettyModelName } from "../ai/model-catalog.js";
 import { getEffectiveThinkingLevel } from "../ai/thinking.js";
 import { supportsProviderModel } from "../ai/providers.js";
@@ -196,10 +190,8 @@ export function shouldShowSidebar(app: AppState): boolean {
 }
 
 export function pickHomeTipIndex(app: AppState): number {
-  const seed = `${process.cwd()}|${process.platform}|${app.appVersion}`;
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
-  return hash % HOME_TIPS.length;
+  void app;
+  return Math.floor(Math.random() * HOME_TIPS.length);
 }
 
 export function refreshHomeScreenData(app: AppState): void {
@@ -307,45 +299,16 @@ export function renderHomeBox(app: AppState, width: number, title: string, body:
 }
 
 export function renderHomeView(app: AppState, mainW: number, topHeight: number): string[] {
-  const settings = getSettings();
-  const extensions = listExtensions();
-  const enabledExtensions = extensions.filter((entry) => entry.enabled).length;
-  const brokenExtensions = extensions.filter((entry) => entry.enabled && !!entry.error).length;
-  const promptTemplates = listTemplates().length;
-  const skillCount = listSkills().length;
-  const packageCount = listInstalledPackages().length;
   const modelLabel = app.modelName === "none" ? "No model selected" : getPrettyModelName(app.modelName, app.modelProviderId);
-  const modelStatus = app.modelName === "none"
-    ? "Pick one with /model, then start chatting."
-    : `Ready in ${app.mode} mode with ${app.modelRuntime}.`;
   const workspaceLabel = app.formatShortCwd(Math.max(10, mainW - 8));
-  const providerSummary = app.detectedProviders.length === 0
-    ? "No providers ready · /providers for diagnostics"
-    : app.detectedProviders.length <= 2
-      ? `${app.detectedProviders.join(", ")} · /providers for diagnostics`
-      : `${app.detectedProviders.length} providers ready · /providers for diagnostics`;
-  const summaryDetails = settings.quietStartup ? [] : [
-    { label: "Providers", value: providerSummary },
-    {
-      label: "Workspace",
-      value: `${existsSync(join(process.cwd(), "AGENTS.md")) ? "AGENTS loaded" : "No AGENTS.md"} · ${enabledExtensions} ext${brokenExtensions > 0 ? ` · ${brokenExtensions} broken` : ""} · ${skillCount} skills · ${promptTemplates} prompts · ${packageCount} pkg`,
-    },
-  ];
-  const quickActions = [
-    { label: "Start", value: app.modelName === "none" ? "/model to choose a model" : "Type a prompt and press enter" },
-    { label: "Resume", value: "/resume to reopen an older session" },
-    { label: "Tune", value: "/settings to adjust the TUI and workflow" },
-  ];
   return buildRenderHomeView({
     mainW,
     topHeight,
     fullMascot: app.renderMascotInline(),
     modelLabel,
-    modelStatus,
     appVersion: app.appVersion,
     workspaceLabel,
-    summaryDetails,
-    quickActions: settings.quietStartup ? quickActions.slice(0, 1) : quickActions,
+    tip: app.homeTip,
     formatShortCwd: (maxWidth) => app.formatShortCwd(maxWidth),
     wrapHomeDetail: (label, value, width) => app.wrapHomeDetail(label, value, width),
     renderHomeBox: (width, title, body) => app.renderHomeBox(width, title, body),
