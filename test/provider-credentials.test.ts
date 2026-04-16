@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { parseClaudeCliAuthToken, parseCodexCliAuthToken } from "../src/core/auth.js";
 import { parseClaudeCredentialsData, parseCodexAuthData } from "../src/core/provider-credentials.js";
 
 describe("provider credential parsing", () => {
@@ -30,5 +31,31 @@ describe("provider credential parsing", () => {
     });
 
     expect(parsed.kind).toBe("none");
+  });
+
+  it("does not treat Codex API-key auth as a stored login", () => {
+    expect(parseCodexCliAuthToken({
+      auth_mode: "ApiKey",
+      OPENAI_API_KEY: "sk-test-key-that-should-not-count",
+    })).toBeNull();
+    expect(parseCodexCliAuthToken({
+      auth_mode: "ChatGPT",
+      tokens: {
+        access_token: "chatgpt-access-token-value-that-counts",
+      },
+    })).toBe("chatgpt-access-token-value-that-counts");
+  });
+
+  it("does not treat Claude API-key auth as a stored login", () => {
+    expect(parseClaudeCliAuthToken({
+      ANTHROPIC_API_KEY: "sk-ant-test-key-that-should-not-count",
+      anthropic_api_key: "sk-ant-test-key-that-should-not-count",
+      api_key: "sk-ant-test-key-that-should-not-count",
+    })).toBeNull();
+    expect(parseClaudeCliAuthToken({
+      claudeAiOauth: {
+        accessToken: "claude-oauth-token-value-that-counts",
+      },
+    })).toBe("claude-oauth-token-value-that-counts");
   });
 });
