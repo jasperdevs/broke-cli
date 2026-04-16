@@ -4,6 +4,7 @@ import { padVisible, visibleWidth } from "../utils/terminal-width.js";
 import { currentTheme } from "../core/themes.js";
 import { getConfiguredModelPreference, getSettings } from "../core/config.js";
 import { getPrettyModelName } from "../ai/model-catalog.js";
+import { getProviderModelLabel } from "../ai/model-display.js";
 import { getEffectiveThinkingLevel } from "../ai/thinking.js";
 import { supportsProviderModel } from "../ai/providers.js";
 import { renderAnsiColorGrid, parseMascotSvgGrid, resolveMascotPath, type RgbColor } from "./render/mascot.js";
@@ -142,9 +143,7 @@ export function renderMessages(app: AppState, maxWidth: number): string[] {
 export function renderCompactHeader(app: AppState): string {
   const settings = getSettings();
   const parts: string[] = [];
-  const modelLabel = getPrettyModelName(app.modelName, app.modelProviderId);
-  const providerLabel = app.providerName && app.providerName !== "---" ? `${app.providerName} / ` : "";
-  parts.push(`${T()}${providerLabel}${modelLabel}${RESET}`);
+  parts.push(`${T()}${getProviderModelLabel(app.modelName, app.modelProviderId, app.providerName)}${RESET}`);
   parts.push(`${DIM}${app.formatShortCwd(Math.max(8, Math.floor(process.stdout.columns / 5) || 16))}${RESET}`);
   if (app.gitBranch) parts.push(`${MUTED()}${app.gitBranch}${app.gitDirty ? "*" : ""}${RESET}`);
   if (app.isStreaming) parts.push(`${DIM}esc stop${RESET}`);
@@ -344,6 +343,7 @@ export function renderUpdateBanner(app: AppState, width: number): string[] {
 
 export function buildSidebarLines(app: AppState): string[] {
   const chatModelLabel = getPrettyModelName(app.modelName, app.modelProviderId);
+  const chatFullModelLabel = getProviderModelLabel(app.modelName, app.modelProviderId, app.providerName);
   const chatModelKey = `${app.modelProviderId}/${app.modelName}`;
   const resolveSlotModel = (slot: "default" | "small" | "btw" | "review" | "planning" | "ui" | "architecture"): { value: string; key: string } => {
     const configured = getConfiguredModelPreference(slot);
@@ -352,10 +352,10 @@ export function buildSidebarLines(app: AppState): string[] {
     const providerId = slashIndex > 0 ? configured.slice(0, slashIndex) : app.modelProviderId;
     const modelId = slashIndex > 0 ? configured.slice(slashIndex + 1) : configured;
     if (!supportsProviderModel(providerId, modelId)) return { value: "unset", key: "unset" };
-    return { value: getPrettyModelName(modelId, providerId), key: `${providerId}/${modelId}` };
+    return { value: getProviderModelLabel(modelId, providerId), key: `${providerId}/${modelId}` };
   };
   const roleModels = [
-    { label: "Chat", value: chatModelLabel, key: chatModelKey },
+    { label: "Chat", value: chatFullModelLabel, key: chatModelKey },
     { label: "Fast", ...resolveSlotModel("small") },
     { label: "BTW", ...resolveSlotModel("btw") },
     { label: "Review", ...resolveSlotModel("review") },
@@ -371,7 +371,7 @@ export function buildSidebarLines(app: AppState): string[] {
     sessionName: app.sessionName,
     appVersion: app.appVersion,
     sessionDetails: [
-      { label: "Current model", value: chatModelLabel },
+      { label: "Current model", value: chatFullModelLabel },
     ],
     roleModels: visibleRoleModels,
     mcpConnections: app.mcpConnections,

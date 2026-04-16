@@ -44,4 +44,22 @@ describe("model picker auto routing", () => {
     expect(pickerText).toContain("filter gpt-4");
     expect(pickerText).toContain("GPT-4o");
   });
+
+  it("disambiguates duplicate model display names across providers", () => {
+    const app = new App() as any;
+    app.openModelPicker(
+      [
+        { providerId: "openai", providerName: "OpenAI", modelId: "gpt-5.4-mini", displayName: "GPT-5.4 mini", active: true },
+        { providerId: "codex", providerName: "Codex", modelId: "gpt-5.4-mini", displayName: "GPT-5.4 mini", active: false },
+      ],
+      () => {},
+      () => {},
+    );
+    let rendered: string[] = [];
+    app.screen = { height: 16, width: 80, hasSidebar: false, mainWidth: 80, sidebarWidth: 20, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
+    app.drawImmediate();
+    const pickerText = rendered.map((line) => stripAnsi(line)).join("\n");
+    expect(pickerText).toContain("OpenAI / GPT-5.4 mini");
+    expect(pickerText).toContain("Codex / GPT-5.4 mini");
+  });
 });

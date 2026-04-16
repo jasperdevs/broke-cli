@@ -1,6 +1,6 @@
 {
   "name": "@jasperdevs/brokecli",
-  "version": "0.0.19",
+  "version": "0.0.20",
   "description": "Terminal-first AI coding CLI with budget-aware model routing.",
   "type": "module",
   "exports": {

@@ -1,5 +1,6 @@
 import { currentTheme } from "../core/themes.js";
 import { getModelSpec } from "../ai/model-catalog.js";
+import { getProviderModelLabel } from "../ai/model-display.js";
 import { getLocalModelMetadata } from "../ai/local-model-metadata.js";
 import { BOLD, DIM, RESET } from "../utils/ansi.js";
 import { truncateVisible, visibleWidth } from "../utils/terminal-width.js";
@@ -182,6 +183,12 @@ export function getModelPickerEntries(app: AppState): MenuEntry[] {
   if (!app.modelPicker) return [];
   const filtered = app.getFilteredModels();
   const autoOptions = filtered.filter((opt: ModelOption) => opt.providerId === "__auto__");
+  const labelCounts = new Map<string, number>();
+  for (const opt of filtered) {
+    if (opt.providerId === "__auto__") continue;
+    const label = opt.displayName ?? opt.modelId;
+    labelCounts.set(label, (labelCounts.get(label) ?? 0) + 1);
+  }
   const byProvider = new Map<string, ModelOption[]>();
   for (const opt of filtered) {
     if (opt.providerId === "__auto__") continue;
@@ -217,7 +224,7 @@ export function getModelPickerEntries(app: AppState): MenuEntry[] {
       entries.push({
         lines: buildSelectableEntry(
           `  ${arrow}${nameCol}`,
-          `${opt.displayName ?? opt.modelId}${pin}`,
+          `${labelCounts.get(opt.displayName ?? opt.modelId)! > 1 ? getProviderModelLabel(opt.modelId, opt.providerId, opt.providerName) : opt.displayName ?? opt.modelId}${pin}`,
           width,
         ),
         selectIndex: currentIdx,

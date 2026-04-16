@@ -1,4 +1,5 @@
 import { getPrettyModelName } from "../ai/model-catalog.js";
+import { getProviderModelLabel } from "../ai/model-display.js";
 import { getResolvedModelPreference } from "../cli/model-routing.js";
 import { DIM, RESET } from "../utils/ansi.js";
 import { T, TXT } from "./app-shared.js";
@@ -21,7 +22,7 @@ function getAssignedModelLabel(app: AppState, slot: Exclude<ModelLaneOption["slo
   const resolved = getResolvedModelPreference(slot, app.modelProviderId || selected.providerId);
   if (!resolved) return undefined;
   if (resolved.providerId === selected.providerId && resolved.modelId === selected.modelId) return "already selected";
-  return getPrettyModelName(resolved.modelId);
+  return getProviderModelLabel(resolved.modelId, resolved.providerId);
 }
 
 export function getModelLanePickerEntries(app: AppState): MenuEntry[] {
@@ -45,7 +46,7 @@ export function openModelLanePicker(app: AppState, index: number): void {
   if (!selected) return;
   app.modelPicker.cursor = index;
   app.modelLanePicker = {
-    model: { ...selected, displayName: selected.displayName ?? getPrettyModelName(selected.modelId) },
+    model: { ...selected, displayName: selected.displayName ?? getPrettyModelName(selected.modelId, selected.providerId) },
     cursor: 1,
     options: MODEL_LANE_OPTIONS.map((option) => {
       if (option.slot === "all") return { ...option };
