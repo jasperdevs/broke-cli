@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, describe, expect, it } from "vitest";
-import { bashTool } from "../src/tools/bash.js";
+import { bashTool, createBashTool } from "../src/tools/bash.js";
 import { listFilesDirect, semSearchDirect } from "../src/tools/file-ops.js";
 
 describe("tool routing", () => {
@@ -46,6 +46,26 @@ describe("tool routing", () => {
       expect(result.reroutedTo).toBe("listFiles");
       expect(result.output).toContain("a.ts");
       expect(result.output).toContain("b.ts");
+    } finally {
+      process.chdir(previous);
+    }
+  });
+
+  it("scopes factory-created bash tools to their configured cwd", async () => {
+    const scopedDir = mkdtempSync(join(tmpdir(), "brokecli-scoped-tool-"));
+    const otherDir = mkdtempSync(join(tmpdir(), "brokecli-other-tool-"));
+    tempDirs.push(scopedDir, otherDir);
+    writeFileSync(join(scopedDir, "README.md"), "# Scoped\n", "utf-8");
+    writeFileSync(join(otherDir, "README.md"), "# Other\n", "utf-8");
+
+    const previous = process.cwd();
+    process.chdir(otherDir);
+    try {
+      const scopedBash = createBashTool(scopedDir);
+      const result = await (scopedBash as any).execute({ command: "cat README.md" });
+      expect(result.success).toBe(true);
+      expect(result.output).toContain("# Scoped");
+      expect(result.output).not.toContain("# Other");
     } finally {
       process.chdir(previous);
     }

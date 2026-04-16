@@ -138,6 +138,7 @@ export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts:
       ? getTools({
           include: policy.allowedTools as readonly ToolName[],
           extraTools: hooks.getTools() as any,
+          cwd: process.cwd(),
         })
       : undefined;
 

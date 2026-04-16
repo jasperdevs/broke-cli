@@ -173,9 +173,10 @@ export async function runOneShotPrompt(options: {
     session.addUsage(policy.plannerUsage.inputTokens, policy.plannerUsage.outputTokens, policy.plannerUsage.cost);
   }
   const tools = policy.allowedTools.length > 0
-    ? getTools({
+      ? getTools({
         include: policy.allowedTools as readonly ToolName[],
         extraTools,
+        cwd: process.cwd(),
       })
     : undefined;
   const baseSystemPrompt = buildSystemPrompt(

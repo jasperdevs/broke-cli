@@ -8,6 +8,12 @@ import { filterCommandOutput, rewriteCommand } from "./command-filter.js";
 import { grepDirect, listFilesDirect, readFileDirect } from "./file-ops.js";
 import { checkShellCommandAccess } from "../core/permissions.js";
 
+type CwdProvider = string | (() => string);
+
+function resolveCwd(cwd: CwdProvider): string {
+  return typeof cwd === "function" ? cwd() : cwd;
+}
+
 /** Max chars sent back to LLM context (~1500 tokens) */
 const MAX_OUTPUT_CHARS = 6000;
 /** Max chars kept in memory for UI display */
@@ -40,14 +46,14 @@ function renderGrepSummary(summary: Array<{ file: string; count: number; example
     .join("\n");
 }
 
-function rerouteSimpleShellCommand(command: string) {
+function rerouteSimpleShellCommand(command: string, cwd: string) {
   const trimmed = command.trim();
   if (!trimmed || hasShellMetacharacters(trimmed)) return null;
 
   const catMatch = trimmed.match(/^cat\s+(.+)$/i);
   if (catMatch) {
     const path = unquote(catMatch[1].trim());
-    const result = readFileDirect({ path, mode: "full" });
+    const result = readFileDirect({ path, cwd, mode: "full" });
     return result.success
       ? { ...result, output: result.content, rerouted: true as const, reroutedTo: "readFile" }
       : { ...result, output: "", rerouted: true as const, reroutedTo: "readFile" };
@@ -56,7 +62,7 @@ function rerouteSimpleShellCommand(command: string) {
   const headMatch = trimmed.match(/^head\s+-n\s+(\d+)\s+(.+)$/i);
   if (headMatch) {
     const [, count, rawPath] = headMatch;
-    const result = readFileDirect({ path: unquote(rawPath.trim()), limit: Number(count), mode: "full" });
+    const result = readFileDirect({ path: unquote(rawPath.trim()), cwd, limit: Number(count), mode: "full" });
     return result.success
       ? { ...result, output: result.content, rerouted: true as const, reroutedTo: "readFile" }
       : { ...result, output: "", rerouted: true as const, reroutedTo: "readFile" };
@@ -65,7 +71,7 @@ function rerouteSimpleShellCommand(command: string) {
   const tailMatch = trimmed.match(/^tail\s+-n\s+(\d+)\s+(.+)$/i);
   if (tailMatch) {
     const [, count, rawPath] = tailMatch;
-    const result = readFileDirect({ path: unquote(rawPath.trim()), tail: Number(count), mode: "full" });
+    const result = readFileDirect({ path: unquote(rawPath.trim()), cwd, tail: Number(count), mode: "full" });
     return result.success
       ? { ...result, output: result.content, rerouted: true as const, reroutedTo: "readFile" }
       : { ...result, output: "", rerouted: true as const, reroutedTo: "readFile" };
@@ -76,6 +82,7 @@ function rerouteSimpleShellCommand(command: string) {
     const [, rawDir, rawPattern] = findMatch;
     const result = listFilesDirect({
       path: unquote(rawDir.trim()),
+      cwd,
       maxDepth: 12,
       include: unquote(rawPattern.trim()),
     });
@@ -105,6 +112,7 @@ function rerouteSimpleShellCommand(command: string) {
     const result = grepDirect({
       pattern: unquote(rawPattern),
       path,
+      cwd,
       include,
     });
     return {
@@ -130,17 +138,19 @@ function truncateOutput(output: string): string {
   return headLines.join("\n") + `\n\n[... ${omitted} lines omitted ...]\n\n` + tailLines.join("\n");
 }
 
-export const bashTool = tool({
+export function createBashTool(cwd: CwdProvider = process.cwd()) {
+  return tool({
   description: "Run a shell command and return stdout/stderr. Use for: builds, tests, git, installs, system commands. Do NOT use for file reads (use readFile), file writes (use writeFile), or search (use grep). Commands run in the project's working directory.",
   inputSchema: z.object({
     command: z.string().describe("Shell command to execute"),
     timeout: z.number().optional().describe("Timeout in ms (default 30000)"),
   }),
   execute: async ({ command, timeout }, options) => {
-    const rerouted = rerouteSimpleShellCommand(command);
+    const workingDirectory = resolveCwd(cwd);
+    const rerouted = rerouteSimpleShellCommand(command, workingDirectory);
     if (rerouted) return rerouted;
 
-    const permission = checkShellCommandAccess(command);
+    const permission = checkShellCommandAccess(command, workingDirectory);
     if (!permission.allowed) {
       return { success: false as const, output: "", error: permission.reason ?? "Shell command blocked by autonomy policy." };
     }
@@ -156,7 +166,7 @@ export const bashTool = tool({
       // Use shell to support pipes, redirects, etc.
       const isWin = process.platform === "win32";
       const proc = spawn(isWin ? "cmd" : "bash", isWin ? ["/c", filteredCommand] : ["-c", filteredCommand], {
-        cwd: process.cwd(),
+        cwd: workingDirectory,
         stdio: ["pipe", "pipe", "pipe"],
         env: process.env,
       });
@@ -243,4 +253,7 @@ export const bashTool = tool({
       });
     });
   },
-});
+  });
+}
+
+export const bashTool = createBashTool(() => process.cwd());

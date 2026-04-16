@@ -267,6 +267,7 @@ program.action(async (promptParts, opts) => {
     ...getTools({
       include: allowedTools,
       extraTools: hooks.getTools(),
+      cwd: process.cwd(),
     }),
   });
 
