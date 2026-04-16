@@ -20,6 +20,18 @@ function pickStringArray(value) {
   return items.length > 0 ? items : undefined;
 }
 
+function isUsableCodingModel(modelId, raw) {
+  const model = raw && typeof raw === "object" ? raw : {};
+  if (model.tool_call !== true) return false;
+  const lower = modelId.toLowerCase();
+  if (/(^|[-_/])(audio|embedding|image|moderation|realtime|speech|tts|transcribe|whisper)([-_/]|$)/.test(lower)) return false;
+  const input = pickStringArray(model.modalities?.input);
+  const output = pickStringArray(model.modalities?.output);
+  if (input && !input.includes("text")) return false;
+  if (output && !output.includes("text")) return false;
+  return true;
+}
+
 function normalizeModel(modelId, raw) {
   const model = raw && typeof raw === "object" ? raw : {};
   const cost = model.cost && typeof model.cost === "object" ? model.cost : undefined;
@@ -66,8 +78,10 @@ function normalizeCatalog(rawCatalog) {
     if (!rawProvider || typeof rawProvider !== "object" || !rawProvider.models) continue;
     const models = {};
     for (const modelId of Object.keys(rawProvider.models).sort()) {
+      if (!isUsableCodingModel(modelId, rawProvider.models[modelId])) continue;
       models[modelId] = normalizeModel(modelId, rawProvider.models[modelId]);
     }
+    if (Object.keys(models).length === 0) continue;
     catalog[providerId] = {
       id: typeof rawProvider.id === "string" ? rawProvider.id : providerId,
       name: typeof rawProvider.name === "string" ? rawProvider.name : providerId,
