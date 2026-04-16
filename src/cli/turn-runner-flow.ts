@@ -76,6 +76,11 @@ function deriveStreamingActivitySummary(text: string, archetype: string): string
   }
 }
 
+function shouldAutoNameSession(session: Session): boolean {
+  const maybeSession = session as { getName?: unknown };
+  return typeof maybeSession.getName !== "function" || isDefaultSessionName(maybeSession.getName());
+}
+
 export function buildTouchedFilesEvidence(touched: string[]): string | null {
   const files = touched.filter(Boolean).slice(0, 4);
   if (files.length === 0) return null;
@@ -134,7 +139,7 @@ export async function maybeHandleFastPathTurn(options: {
     hiddenOutputTokens: 0,
   });
   app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
-  if (typeof (session as any).getName !== "function" || isDefaultSessionName(session.getName())) {
+  if (shouldAutoNameSession(session)) {
     void maybeAutoNameSession({
       app,
       session,
@@ -467,7 +472,7 @@ export function finalizeTurnLifecycle(options: {
 
   if (app.hasPendingMessages("followup")) app.flushPendingMessages("followup");
 
-  if (typeof (session as any).getName !== "function" || isDefaultSessionName(session.getName())) {
+  if (shouldAutoNameSession(session)) {
     const assistantText = result.assistantText.trim();
     if (assistantText) {
       void maybeAutoNameSession({

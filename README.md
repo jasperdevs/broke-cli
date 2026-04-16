@@ -38,6 +38,18 @@ Inside the app:
 - `/settings` to change runtime behavior
 - custom providers and model overrides via [`docs/models.md`](./docs/models.md)
 
+## Verify
+
+Run the local quality gate before sending changes:
+
+```bash
+npm run verify
+```
+
+That is the canonical CI-level gate: build, typecheck, quality checks, circular-dependency checks, unused-file checks, the test suite, pack dry run, CLI help smoke test, and release smoke test.
+
+CI runs `npm run verify` on Node 20 across macOS, Linux, and Windows, plus a separate minimum Node 18 build/test smoke.
+
 ## Features
 
 <table>

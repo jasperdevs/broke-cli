@@ -131,7 +131,7 @@ program.action(async (promptParts, opts) => {
   const app = new App();
   app.setVersion(program.version() ?? APP_VERSION);
   let currentMode: Mode = getSettings().mode;
-  let lastActivityTime = Date.now(); // Track for cache expiry warning
+  let lastActivityTime = Date.now();
 
   const buildRuntimeSystemPrompt = (providerId?: string, cavemanLevel = getSettings().cavemanLevel ?? "off"): string => {
     const base = buildSystemPrompt(process.cwd(), providerId, currentMode, cavemanLevel);

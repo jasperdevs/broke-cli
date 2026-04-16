@@ -25,10 +25,11 @@
     "test:efficiency": "vitest run test/efficiency-benchmarks.test.ts",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "lint": "tsc --noEmit && node scripts/quality-check.mjs",
+    "quality": "node scripts/quality-check.mjs",
+    "lint": "npm run typecheck && npm run quality",
     "check:cycles": "madge --circular --extensions ts src bin test",
     "check:unused-files": "npx --yes knip@6.4.1 --include files",
-    "verify": "npm run lint && npm run check:cycles && npm run check:unused-files && npm test",
+    "verify": "npm run build && npm run typecheck && npm run quality && npm run check:cycles && npm run check:unused-files && npm test && npm pack --dry-run && node dist/brokecli.mjs --help && npm run test:release",
     "prepack": "npm run build",
     "prepare": "npm run build",
     "prepublishOnly": "npm run build"

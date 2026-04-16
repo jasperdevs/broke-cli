@@ -20,6 +20,7 @@ import { buildSidebarLines as composeSidebarLines, renderSidebarViewport } from 
 import { fmtTokens, wordWrap } from "./render/formatting.js";
 import { ACCENT_2, APP_DIR, BORDER, ERR, HOME_TIPS, MUTED, OK, T, TXT, USER_BG, USER_TXT, WARN } from "./app-shared.js";
 import { buildTurnActivitySnapshot } from "./turn-activity-state.js";
+import type { ToolExecutionActivity } from "./app-types.js";
 
 type AppState = any;
 
@@ -74,8 +75,9 @@ export function renderToolCallBlock(app: AppState, tc: typeof app.toolCallGroups
   });
 }
 
-export function renderActivitySnapshot(app: AppState, activity: any, maxWidth: number): string[] {
-  const tools = Array.isArray(activity?.tools) ? activity.tools : [];
+export function renderActivitySnapshot(app: AppState, activity: unknown, maxWidth: number): string[] {
+  const snapshot = activity as { tools?: ToolExecutionActivity[] } | null | undefined;
+  const tools = Array.isArray(snapshot?.tools) ? snapshot.tools : [];
   const lines: string[] = [];
   if (tools.length > 0) {
     lines.push(`  ${DIM}actions${RESET}`);

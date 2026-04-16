@@ -6,6 +6,7 @@ import { truncateVisible, visibleWidth } from "../utils/terminal-width.js";
 import { ERR, MUTED, T, TXT } from "./app-shared.js";
 import { wordWrap } from "./render/formatting.js";
 import type { MenuEntry, ModelOption, PickerItem, SettingEntry } from "./app-types.js";
+import type { CommandEntry } from "./command-surface.js";
 
 type AppState = any;
 
@@ -17,9 +18,7 @@ function getMenuBodyWidth(app: AppState): number {
   return Math.max(18, app.screen.mainWidth - 6);
 }
 
-function buildSelectableEntry(prefix: string, primary: string, detail: string | undefined, width: number, detailColor = DIM): string[] {
-  void detail;
-  void detailColor;
+function buildSelectableEntry(prefix: string, primary: string, width: number): string[] {
   if (visibleWidth(`${prefix}${primary}`) <= width + visibleWidth(prefix)) return [`${prefix}${primary}${RESET}`];
   const truncated = truncateVisible(primary, Math.max(10, width - visibleWidth(prefix)));
   return [`${prefix}${truncated}${RESET}`];
@@ -159,7 +158,6 @@ export function getSettingsPickerEntries(app: AppState): MenuEntry[] {
       lines: buildSelectableEntry(
         ` ${arrow}${nameCol}`,
         `${entry.label}${DIM} · ${valColor}${entry.value}`,
-        entry.description,
         width,
       ),
       selectIndex: i,
@@ -178,7 +176,7 @@ export function getItemPickerEntries(app: AppState): MenuEntry[] {
       ? ERR()
       : isCursor ? `${TXT()}${BOLD}` : T();
     return {
-      lines: buildSelectableEntry(` ${arrow}${labelCol}`, item.label, item.detail, width, item.tone === "danger" ? ERR() : MUTED()),
+      lines: buildSelectableEntry(` ${arrow}${labelCol}`, item.label, width),
       selectIndex: i,
     };
   });
@@ -186,17 +184,6 @@ export function getItemPickerEntries(app: AppState): MenuEntry[] {
 
 export function getModelPickerEntries(app: AppState): MenuEntry[] {
   if (!app.modelPicker) return [];
-  const badgeLabels: Record<string, string> = {
-    auto: "auto",
-    now: "current",
-    default: "chat",
-    small: "fast",
-    btw: "btw",
-    review: "review",
-    plan: "planning",
-    ui: "design/UI",
-    arch: "architecture",
-  };
   const filtered = app.getFilteredModels();
   const autoOptions = filtered.filter((opt: ModelOption) => opt.providerId === "__auto__");
   const byProvider = new Map<string, ModelOption[]>();
@@ -217,7 +204,6 @@ export function getModelPickerEntries(app: AppState): MenuEntry[] {
       lines: buildSelectableEntry(
         `  ${arrow}${nameCol}`,
         `${opt.displayName ?? opt.modelId}`,
-        opt.providerName,
         width,
       ),
       selectIndex: currentIdx,
@@ -232,15 +218,10 @@ export function getModelPickerEntries(app: AppState): MenuEntry[] {
       const pin = opt.active ? ` ${T()}*${RESET}` : "";
       const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
       const nameCol = isCursor ? `${TXT()}${BOLD}` : T();
-      const badges = opt.badges && opt.badges.length > 0
-        ? opt.badges.map((badge) => badgeLabels[badge] ?? badge).join(" · ")
-        : undefined;
-      const detail = [showProviderHeaders ? undefined : opt.providerName, badges].filter(Boolean).join(" · ") || undefined;
       entries.push({
         lines: buildSelectableEntry(
           `  ${arrow}${nameCol}`,
           `${opt.displayName ?? opt.modelId}${pin}`,
-          detail,
           width,
         ),
         selectIndex: currentIdx,
@@ -256,12 +237,11 @@ export function getCommandSuggestionEntries(app: AppState): MenuEntry[] {
   if (matches.length === 0) return [];
   const cursor = Math.min(app.cmdSuggestionCursor, matches.length - 1);
   const width = getMenuBodyWidth(app);
-  return matches.map((entry: any, i: number) => {
+  return matches.map((entry: CommandEntry, i: number) => {
     const arrow = i === cursor ? `${T()}> ${RESET}` : "  ";
     const nameColor = i === cursor ? `${TXT()}${BOLD}` : T();
-    const detail = entry.hotkey ? `${entry.hotkey} · ${entry.desc}` : entry.desc;
     return {
-      lines: buildSelectableEntry(` ${arrow}${nameColor}`, `/${entry.name}`, detail, width),
+      lines: buildSelectableEntry(` ${arrow}${nameColor}`, `/${entry.name}`, width),
       selectIndex: i,
     };
   });
