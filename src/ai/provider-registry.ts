@@ -14,7 +14,7 @@ import {
 import { getConfiguredProviderBaseUrl } from "../core/models-config.js";
 import { getProviderCredential } from "../core/provider-credentials.js";
 import { applyConfiguredProviderOverrides } from "./provider-overrides.js";
-import { resetRuntimeProviders } from "./provider-definitions.js";
+import { LOCAL_PROVIDER_IDS, resetRuntimeProviders } from "./provider-definitions.js";
 import { loadModelCatalog } from "./model-catalog.js";
 
 const LOCAL_PROVIDER_DEFAULTS: Record<string, string> = {
@@ -39,6 +39,13 @@ function getNativeCliLabel(providerId: string): string {
   if (providerId === "google-gemini-cli") return "Google Cloud Code Assist";
   if (providerId === "google-antigravity") return "Antigravity";
   return "native provider";
+}
+
+function isDetectedProviderRuntimeSelectable(provider: { id: string; reason: string }): boolean {
+  if (LOCAL_PROVIDER_IDS.has(provider.id)) return true;
+  if ((provider.id === "anthropic" || provider.id === "codex") && provider.reason === "native login") return true;
+  if (provider.id === "github-copilot" && provider.reason === "OAuth login") return true;
+  return isProviderRuntimeSelectable(provider.id);
 }
 
 export class ProviderRegistry {
@@ -113,7 +120,7 @@ export class ProviderRegistry {
 
     const visibleProviderIds = new Set(
       this.providers
-        .filter((provider) => isProviderRuntimeSelectable(provider.id))
+        .filter((provider) => isDetectedProviderRuntimeSelectable(provider))
         .map((provider) => provider.id),
     );
     const currentKey = activeModel ? `${activeModel.provider.id}/${currentModelId}` : "";
