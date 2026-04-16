@@ -12,6 +12,37 @@ function uniqueFileCount(entries: Array<string | undefined>): number {
   return new Set(entries.filter((entry): entry is string => !!entry)).size;
 }
 
+type ToolResultRecord = {
+  success?: boolean;
+  output?: string;
+  error?: string;
+  content?: string;
+  matches?: unknown[];
+  files?: string[];
+  rerouted?: boolean;
+  reroutedTo?: string;
+  totalLines?: number;
+  path?: string;
+  fileCount?: number;
+  matchCount?: number;
+  mode?: string;
+  truncated?: boolean;
+  capped?: boolean;
+  totalEntries?: number;
+  results?: string | unknown[];
+  backend?: string;
+  contentType?: string;
+  bytesWritten?: number;
+};
+
+function fileNamesFromEntries(entries: unknown[] | undefined): string[] {
+  return (entries ?? [])
+    .map((entry) => typeof entry === "object" && entry !== null && typeof (entry as { file?: unknown }).file === "string"
+      ? (entry as { file: string }).file
+      : undefined)
+    .filter((entry): entry is string => !!entry);
+}
+
 export function estimateToolResultTokens(result: unknown): number {
   try {
     const serialized = JSON.stringify(result);
@@ -28,23 +59,16 @@ export function estimateToolResultTokens(result: unknown): number {
 function inferToolResultDetail(
   session: Session,
   toolName: string,
-  result: {
-    success?: boolean;
-    output?: string;
-    error?: string;
-    content?: string;
-    matches?: unknown[];
-    files?: string[];
-  },
+  result: ToolResultRecord,
   toolArgs: Record<string, unknown> | undefined,
 ): string | undefined {
   if (toolName === "bash") {
-    const reroutedTo = (result as any)?.reroutedTo as string | undefined;
-    if ((result as any)?.rerouted) session.recordShellRecovery();
+    const reroutedTo = result.reroutedTo;
+    if (result.rerouted) session.recordShellRecovery();
     const commandText = typeof toolArgs?.command === "string" ? toolArgs.command : "";
     if (reroutedTo === "readFile") {
-      const totalLines = (result as any)?.totalLines;
-      const readPath = typeof (result as any)?.path === "string" ? (result as any).path : "";
+      const totalLines = result.totalLines;
+      const readPath = result.path ?? "";
       if (readPath) session.recordRepoRead(readPath, totalLines ?? 0);
       if (commandText && /\b(test|lint|build|verify|check)\b/i.test(commandText)) {
         session.recordVerification(commandText, result.success === false ? "fail" : "pass", result.error ?? "");
@@ -52,16 +76,16 @@ function inferToolResultDetail(
       return totalLines ? `via readFile · ${totalLines} lines` : "via readFile";
     }
     if (reroutedTo === "listFiles") {
-      const fileCount = (result as any)?.fileCount;
-      session.recordRepoSearch("listFiles", commandText || "list", ((result as any)?.files as string[] | undefined) ?? []);
+      const fileCount = result.fileCount;
+      session.recordRepoSearch("listFiles", commandText || "list", result.files ?? []);
       if (commandText && /\b(test|lint|build|verify|check)\b/i.test(commandText)) {
         session.recordVerification(commandText, result.success === false ? "fail" : "pass", result.error ?? "");
       }
       return fileCount ? `via listFiles · ${fileCount} files` : "via listFiles";
     }
     if (reroutedTo === "grep") {
-      const matchCount = (result as any)?.matchCount;
-      session.recordRepoSearch("grep", commandText || "grep", ((result as any)?.matches as Array<{ file: string }> | undefined)?.map((entry) => entry.file) ?? []);
+      const matchCount = result.matchCount;
+      session.recordRepoSearch("grep", commandText || "grep", fileNamesFromEntries(result.matches));
       if (commandText && /\b(test|lint|build|verify|check)\b/i.test(commandText)) {
         session.recordVerification(commandText, result.success === false ? "fail" : "pass", result.error ?? "");
       }
@@ -80,19 +104,19 @@ function inferToolResultDetail(
 
   if (toolName === "readFile" && result.content) {
     const lineCount = result.content.split("\n").length;
-    const readPath = (result as any)?.path ?? "";
+    const readPath = result.path ?? "";
     if (readPath) {
       session.getContextOptimizer().trackFileRead(readPath, lineCount);
       session.recordRepoRead(readPath, lineCount);
     }
-    const mode = typeof (result as any)?.mode === "string" ? (result as any).mode : "";
-    const truncated = (result as any)?.truncated ? " · truncated" : "";
+    const mode = result.mode ?? "";
+    const truncated = result.truncated ? " · truncated" : "";
     return `${lineCount} lines${mode ? ` · ${mode}` : ""}${truncated}`;
   }
 
   if (toolName === "grep" && result.matches) {
-    const capped = (result as any)?.capped;
-    const files = (result.matches as Array<{ file?: string }>).map((entry) => entry.file);
+    const capped = result.capped;
+    const files = fileNamesFromEntries(result.matches);
     session.recordRepoSearch(
       "grep",
       typeof toolArgs?.pattern === "string" ? toolArgs.pattern : "grep",
@@ -103,7 +127,7 @@ function inferToolResultDetail(
   }
 
   if (toolName === "listFiles" && result.files) {
-    const totalEntries = (result as any)?.totalEntries;
+    const totalEntries = result.totalEntries;
     const shown = result.files.length;
     session.recordRepoSearch(
       "listFiles",
@@ -115,9 +139,7 @@ function inferToolResultDetail(
   }
 
   if (toolName === "semSearch") {
-    const hits = (((result as any)?.results as Array<{ file?: string }> | undefined) ?? [])
-      .map((entry) => entry.file)
-      .filter((entry): entry is string => !!entry);
+    const hits = fileNamesFromEntries(Array.isArray(result.results) ? result.results : undefined);
     session.recordRepoSearch(
       "semSearch",
       typeof toolArgs?.query === "string" ? toolArgs.query : "semantic",
@@ -127,8 +149,8 @@ function inferToolResultDetail(
   }
 
   if (toolName === "webSearch") {
-    const results = typeof (result as any)?.results === "string" ? (result as any).results : "";
-    const backend = typeof (result as any)?.backend === "string" ? ` · ${(result as any).backend}` : "";
+    const results = typeof result.results === "string" ? result.results : "";
+    const backend = result.backend ? ` · ${result.backend}` : "";
     const resultCount = results
       ? results.split(/\n{2,}/).filter((entry: string) => entry.trim()).length
       : 0;
@@ -137,10 +159,10 @@ function inferToolResultDetail(
 
   if (toolName === "webFetch") {
     const content = typeof result.content === "string" ? result.content : "";
-    const contentType = typeof (result as any)?.contentType === "string" && (result as any).contentType
-      ? ` · ${(result as any).contentType.split(";")[0]}`
+    const contentType = result.contentType
+      ? ` · ${result.contentType.split(";")[0]}`
       : "";
-    const truncated = (result as any)?.truncated ? " · truncated" : "";
+    const truncated = result.truncated ? " · truncated" : "";
     return `${lineCount(content)} lines fetched${contentType}${truncated}`;
   }
 
@@ -149,7 +171,7 @@ function inferToolResultDetail(
     if (path) session.recordRepoEdit(path, "write");
     const content = typeof toolArgs?.content === "string" ? toolArgs.content : "";
     const lines = lineCount(content);
-    const bytes = typeof (result as any)?.bytesWritten === "number" ? (result as any).bytesWritten : content.length;
+    const bytes = result.bytesWritten ?? content.length;
     return `${lines} line${lines === 1 ? "" : "s"} · ${bytes} bytes written`;
   }
 
@@ -169,19 +191,12 @@ function inferToolResultDetail(
 export function observeToolResult(options: {
   session: Session;
   toolName: string;
-  result: {
-    success?: boolean;
-    output?: string;
-    error?: string;
-    content?: string;
-    matches?: unknown[];
-    files?: string[];
-  };
+  result: ToolResultRecord;
   toolArgs?: Record<string, unknown>;
 }): string | undefined {
   const { session, toolName, result, toolArgs } = options;
   session.recordToolResult(toolName, estimateToolResultTokens(result));
-  if (toolName === "bash" && !(result as any)?.rerouted) {
+  if (toolName === "bash" && !result.rerouted) {
     session.getContextOptimizer().invalidateToolResults();
   }
   return inferToolResultDetail(session, toolName, result, toolArgs);

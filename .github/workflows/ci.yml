@@ -44,6 +44,12 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Check circular dependencies
+        run: npm run check:cycles
+
+      - name: Check unused files
+        run: npm run check:unused-files
+
       - name: Test
         run: npm test
 

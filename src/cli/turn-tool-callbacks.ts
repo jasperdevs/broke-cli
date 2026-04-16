@@ -2,6 +2,7 @@ import { observeToolResult } from "./turn-tool-observer.js";
 import { createToolInvocationRegistry } from "./tool-invocation-registry.js";
 import type { PendingDelivery } from "../ui-contracts.js";
 import type { CliExtensionHooks } from "./extension-hooks.js";
+import type { Session } from "../core/session.js";
 
 type ToolCallbackApp = {
   addToolCall(name: string, preview: string, args?: unknown, callId?: string): void;
@@ -13,7 +14,7 @@ type ToolCallbackApp = {
 export function createLiveToolCallbacks(options: {
   app: ToolCallbackApp;
   hooks: Pick<CliExtensionHooks, "emit">;
-  session: unknown;
+  session: Session;
   nextToolCalls: string[];
   lastToolArgsByName: Map<string, unknown>;
   onToolActivity: () => void;
@@ -44,7 +45,7 @@ export function createLiveToolCallbacks(options: {
       const r = result as { success?: boolean; output?: string; error?: string; content?: string; matches?: unknown[]; files?: string[] };
       const record = registry.finish(_name, callId);
       const toolArgs = lastToolArgsByName.get(record.invocationId) as Record<string, unknown> | undefined;
-      const detail = observeToolResult({ session: session as any, toolName: _name, result: r, toolArgs });
+      const detail = observeToolResult({ session, toolName: _name, result: r, toolArgs });
       if (r && typeof r === "object" && r.success === false && typeof r.error === "string") {
         app.addToolResult(record.toolName, r.error.slice(0, 80), true, undefined, record.invocationId);
       } else {

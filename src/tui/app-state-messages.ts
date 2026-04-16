@@ -4,7 +4,17 @@ import { buildActivityLabel, cloneActivityStep, cloneToolExecution, deriveLiveAc
 import { createTurnTimestamp } from "../core/turn-events.js";
 import { buildTurnActivitySnapshot, clearTurnActivityState, recordTurnEvent, type TurnActivityState } from "./turn-activity-state.js";
 import type { InputWidget } from "./input.js";
-
+import {
+  addPendingMessage,
+  clearPendingMessages,
+  flushPendingMessages,
+  getPendingMessagesCount,
+  hasPendingMessages,
+  onPendingMessagesReadyHandler,
+  takeLastPendingMessage,
+  takePendingImages,
+  takePendingMessages,
+} from "./app-pending-messages.js";
 interface AnimatedCounterLike {
   set(value: number): void;
   sync(): void;
@@ -53,7 +63,6 @@ interface AppState {
   addToolCall(name: string, preview: string, args?: unknown, callId?: string): void;
   dismissBtwBubble(): void;
 }
-
 function setCurrentActivityFromTool(app: AppState, name: string, preview: string, startedAt?: number): void {
   const label = buildActivityLabel(name, preview);
   if (!label) return;
@@ -82,7 +91,6 @@ function findToolExecutionIndex(app: AppState, name: string, callId?: string): n
   }
   return -1;
 }
-
 function syncLiveActivity(app: AppState): void {
   app.toolExecutions = app.activityState.tools.map(cloneToolExecution);
   app.currentActivityStep = null;
@@ -407,55 +415,6 @@ export function clearStatus(app: AppState): void {
 
 export function onInput(app: AppState, handler: (text: string, images?: ResolvedImage[]) => void): void {
   app.onSubmit = handler as (text: string) => void;
-}
-
-export function onPendingMessagesReadyHandler(app: AppState, handler: (delivery: PendingDelivery) => void): void {
-  app.onPendingMessagesReady = handler;
-}
-
-export function takePendingImages(app: AppState): PendingImage[] {
-  const images = app.pendingImages;
-  app.pendingImages = [];
-  return images;
-}
-
-export function addPendingMessage(app: AppState, text: string, images?: ResolvedImage[], delivery: PendingDelivery = "followup"): void {
-  app.pendingMessages.push({ text, images, delivery });
-  app.draw();
-}
-
-export function takePendingMessages(app: AppState, delivery?: PendingDelivery): PendingMessage[] {
-  if (!delivery) {
-    const messages = app.pendingMessages;
-    app.pendingMessages = [];
-    return messages;
-  }
-  const messages = app.pendingMessages.filter((entry: PendingMessage) => entry.delivery === delivery);
-  app.pendingMessages = app.pendingMessages.filter((entry: PendingMessage) => entry.delivery !== delivery);
-  return messages;
-}
-
-export function takeLastPendingMessage(app: AppState): PendingMessage | undefined {
-  if (app.pendingMessages.length === 0) return undefined;
-  return app.pendingMessages.pop();
-}
-
-export function clearPendingMessages(app: AppState, delivery?: PendingDelivery): void {
-  if (!delivery) app.pendingMessages = [];
-  else app.pendingMessages = app.pendingMessages.filter((entry: PendingMessage) => entry.delivery !== delivery);
-  app.draw();
-}
-
-export function hasPendingMessages(app: AppState, delivery?: PendingDelivery): boolean {
-  return delivery ? app.pendingMessages.some((entry: PendingMessage) => entry.delivery === delivery) : app.pendingMessages.length > 0;
-}
-
-export function getPendingMessagesCount(app: AppState, delivery?: PendingDelivery): number {
-  return delivery ? app.pendingMessages.filter((entry: PendingMessage) => entry.delivery === delivery).length : app.pendingMessages.length;
-}
-
-export function flushPendingMessages(app: AppState, delivery: PendingDelivery): void {
-  if (app.onPendingMessagesReady) app.onPendingMessagesReady(delivery);
 }
 
 export function onAbortRequest(app: AppState, handler: () => void): void { app.onAbort = handler; }

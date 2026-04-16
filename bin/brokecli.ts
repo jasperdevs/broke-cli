@@ -30,7 +30,6 @@ import { getTurnPolicy } from "../src/core/turn-policy.js";
 import { runBtwQuestion as runBtwQuestionRuntime } from "../src/cli/btw-runtime.js";
 import { applyProgramRuntimeSettings, applyRuntimeToolSelection, runExportMode } from "../src/cli/program-runtime.js";
 const program = createProgram(APP_VERSION);
-
 function formatPackageInstallWarning(failure: PackageInstallFailure): string {
   const error = failure.error as { stderr?: Buffer | string; stdout?: Buffer | string; message?: string };
   const detail = String(error.stderr || error.stdout || error.message || failure.error).trim().split(/\r?\n/)[0] ?? "unknown error";
@@ -58,13 +57,11 @@ program.action(async (promptParts, opts) => {
   const reportPackageInstallWarnings = () => {
     for (const warning of packageInstallWarnings) process.stderr.write(`${warning}\n`);
   };
-
   if (opts.rpc || opts.mode === "rpc") {
     reportPackageInstallWarnings();
     await runRpcMode(hooks, opts);
     return;
   }
-
   const providerRegistry = new ProviderRegistry();
   const detectedProvidersOnce = await providerRegistry.refresh();
 
@@ -79,7 +76,6 @@ program.action(async (promptParts, opts) => {
     }
     return;
   }
-
   if (opts.mode === "text") opts.print = true;
   applyRuntimeToolSelection(opts.tools, toolsDisabled);
 
@@ -132,7 +128,6 @@ program.action(async (promptParts, opts) => {
     }
     return;
   }
-
   const app = new App();
   app.setVersion(program.version() ?? APP_VERSION);
   let currentMode: Mode = getSettings().mode;
@@ -157,7 +152,6 @@ program.action(async (promptParts, opts) => {
     systemPrompt = buildRuntimeSystemPrompt(activeModel?.provider?.id);
     if (options?.status) app.setStatus(options.status);
   };
-
   let session: Session;
   const sessionTarget = opts.sessionId;
   if (sessionTarget && getSettings().autoSaveSessions) {
@@ -188,7 +182,6 @@ program.action(async (promptParts, opts) => {
     session = new Session();
   }
   const getContextOptimizer = (): ReturnType<Session["getContextOptimizer"]> => session.getContextOptimizer();
-
   app.start();
   for (const warning of packageInstallWarnings) app.addMessage("system", warning);
   app.setSessionName(session.getName());
@@ -197,7 +190,6 @@ program.action(async (promptParts, opts) => {
   void checkForNewVersion(APP_VERSION).then((update) => update && app.setStatus(`Update available: v${update.latestVersion}. ${update.command ? "Run /update to install it." : update.instruction}`)).catch(() => {});
 
   let scopedModelIndex = -1;
-
   app.onModeToggle((newMode) => {
     applyMode(newMode);
   });
@@ -206,7 +198,6 @@ program.action(async (promptParts, opts) => {
     reloadContext();
     systemPrompt = buildRuntimeSystemPrompt(activeModel?.provider?.id);
   });
-
   app.onScopedModelCycle(() => {
     const scoped = getSettings().scopedModels;
     if (scoped.length === 0) {
@@ -240,13 +231,11 @@ program.action(async (promptParts, opts) => {
   let currentModelId = "";
   let smallModelId = "";
   let lastToolCalls: string[] = [];
-
   async function refreshProviderState(force = false): Promise<DetectedProvider[]> {
     providers = await providerRegistry.refresh(force);
     app.setDetectedProviders(providers.map((p) => p.name));
     return providers;
   }
-
   function rebuildSmallModelState(): void {
     const next = computeSmallModelState(providerRegistry, activeModel, currentModelId);
     smallModel = next.smallModel;
