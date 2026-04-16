@@ -161,6 +161,7 @@ describe("tool routing", () => {
       expect(result.files.length).toBeLessThanOrEqual(120);
       expect(result.totalEntries).toBe(120);
       expect(result.truncated).toBe(true);
+      expect(result.details?.truncation).toMatchObject({ kind: "entries", limit: 120 });
     } finally {
       process.chdir(previous);
     }

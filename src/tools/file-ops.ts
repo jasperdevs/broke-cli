@@ -4,6 +4,7 @@ import { checkFilesystemPathAccess, ensureNetworkAllowed } from "../core/permiss
 import { resolveReadPath, resolveToCwd } from "../core/path-utils.js";
 import { localFileOperations, type EditOperations, type ListOperations, type ReadOperations, type SearchOperations, type WriteOperations } from "./file-operations.js";
 import { fetchRemoteGitHubFile, listRemoteGitHubTree, tryParseRemoteGitHubTarget } from "./file-ops-remote.js";
+import { truncation } from "./tool-metadata.js";
 import {
   buildMemoizedReadSummary,
   buildReadMemoKey,
@@ -187,10 +188,7 @@ export function readFileDirect({ path, cwd = process.cwd(), offset, limit, mode,
 
     if (content.length > MAX_READ_CHARS) {
       content = content.slice(0, MAX_READ_CHARS);
-      return {
-        success: true as const, path, content, totalLines, truncated: true, mode: readMode,
-        note: `File truncated in ${readMode} mode. Use offset/limit to read specific sections.`,
-      };
+      return { success: true as const, path, content, totalLines, truncated: true, mode: readMode, details: truncation("chars", content.length, MAX_READ_CHARS, raw.length), note: `File truncated in ${readMode} mode. Use offset/limit to read specific sections.` };
     }
 
     memoContext?.rememberToolResult(memoKey, fingerprint, {
@@ -263,7 +261,7 @@ export function listFilesDirect({ path: dir = ".", cwd = process.cwd(), maxDepth
     return false;
   };
   visit(root, 0);
-  const result = { files, totalEntries, truncated: capped };
+  const result = { files, totalEntries, truncated: capped, details: capped ? truncation("entries", files.length, MAX_LIST_FILES, totalEntries) : undefined };
   memoContext?.rememberToolResult(memoKey, workspaceFingerprint, result);
   return result;
 }
@@ -333,6 +331,7 @@ export function grepDirect({ pattern, path: dir = ".", cwd = process.cwd(), incl
     summary: buildGrepSummary(matches),
     totalMatches: matches.length,
     capped: matches.length >= MAX_GREP_MATCHES,
+    details: matches.length >= MAX_GREP_MATCHES ? truncation("matches", matches.length, MAX_GREP_MATCHES) : undefined,
   };
   memoContext?.rememberToolResult(memoKey, workspaceFingerprint, {
     summary: result.summary,
@@ -426,6 +425,7 @@ export function semSearchDirect({
     totalResults: ranked.length,
     query,
     terms: tokens,
+    details: results.length > ranked.length ? truncation("results", ranked.length, maxResults, results.length) : undefined,
   };
   memoContext?.rememberToolResult(memoKey, workspaceFingerprint, {
     results: ranked,

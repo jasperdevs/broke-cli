@@ -28,6 +28,7 @@ describe("efficiency caps", () => {
     expect(result.success).toBe(true);
     expect(result.truncated).toBe(true);
     expect(result.content).toHaveLength(6000);
+    expect(result.details?.truncation).toMatchObject({ kind: "chars", shown: 6000, total: 7000, limit: 6000 });
   });
 
   it("keeps @file injection smaller than normal reads", () => {
