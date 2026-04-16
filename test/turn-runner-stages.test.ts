@@ -143,5 +143,17 @@ describe("turn runner stages", () => {
       resolvedRoute: "small",
       toolActivity: false,
     })).toBe(false);
+    expect(shouldRetryOnMainModel({
+      completion: "error",
+      resolvedRoute: "small",
+      toolActivity: false,
+      errorMessage: "Cancelled.",
+    })).toBe(false);
+    expect(shouldRetryOnMainModel({
+      completion: "error",
+      resolvedRoute: "small",
+      toolActivity: false,
+      steeringInterrupted: true,
+    })).toBe(false);
   });
 });

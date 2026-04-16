@@ -46,6 +46,8 @@ export interface TurnExecutionResultLike {
   completion: "success" | "empty" | "error" | "insufficient";
   resolvedRoute: "main" | "small";
   toolActivity: boolean;
+  errorMessage?: string;
+  steeringInterrupted?: boolean;
 }
 
 function buildTransientFileContext(fileContexts?: Map<string, string>): { transcriptNote: string; promptBlock: string } | null {
@@ -381,6 +383,7 @@ export function shouldRetryOnMainModel(
   result: TurnExecutionResultLike,
   forceRoute?: "main" | "small",
 ): boolean {
+  if (result.steeringInterrupted || result.errorMessage === "Cancelled.") return false;
   return result.resolvedRoute === "small"
     && !forceRoute
     && !result.toolActivity
