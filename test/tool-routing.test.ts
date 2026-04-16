@@ -4,6 +4,7 @@ import { join } from "path";
 import { afterEach, describe, expect, it } from "vitest";
 import { bashTool, createBashTool } from "../src/tools/bash.js";
 import { listFilesDirect, readFileDirect, semSearchDirect } from "../src/tools/file-ops.js";
+import { createListFilesTool, createReadFileTool, createWriteFileTool } from "../src/tools/file-ops-tools.js";
 
 describe("tool routing", () => {
   const tempDirs: string[] = [];
@@ -93,6 +94,28 @@ describe("tool routing", () => {
     expect(calls[0]?.command).toContain("echo hooked");
     expect(calls[0]?.cwd).toBe("/sandbox");
     expect(calls[0]?.env?.BROKECLI_TEST).toBe("1");
+  });
+
+  it("supports pi-style custom file operations", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "brokecli-file-ops-"));
+    tempDirs.push(dir);
+    const files = new Map<string, string>([[join(dir, "note.txt"), "hello from ops"]]);
+    const operations = {
+      readFile: (path: string) => Buffer.from(files.get(path) ?? ""),
+      stat: (path: string) => ({ isDirectory: () => path === dir, size: files.get(path)?.length ?? 0, mtimeMs: 1 }),
+      readdir: () => ["note.txt", "out.txt"],
+      mkdir: () => {},
+      writeFile: (path: string, content: string) => files.set(path, content),
+    };
+
+    const readResult = await (createReadFileTool(dir, { operations }) as any).execute({ path: "note.txt" });
+    const writeResult = await (createWriteFileTool(dir, { operations }) as any).execute({ path: "out.txt", content: "written by ops" });
+    const listResult = await (createListFilesTool(dir, { operations }) as any).execute({ path: "." });
+
+    expect(readResult.content).toContain("hello from ops");
+    expect(writeResult.success).toBe(true);
+    expect(files.get(join(dir, "out.txt"))).toBe("written by ops");
+    expect(listResult.files).toEqual(expect.arrayContaining(["note.txt", "out.txt"]));
   });
 
   it("normalizes at-prefixed paths against the scoped cwd", () => {

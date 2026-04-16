@@ -1,8 +1,8 @@
-import { readFileSync, writeFileSync, readdirSync, statSync, mkdirSync } from "fs";
 import { basename, dirname, join, relative } from "path";
 import { createCheckpoint } from "../core/git.js";
 import { checkFilesystemPathAccess, ensureNetworkAllowed } from "../core/permissions.js";
 import { resolveReadPath, resolveToCwd } from "../core/path-utils.js";
+import { localFileOperations, type EditOperations, type ListOperations, type ReadOperations, type SearchOperations, type WriteOperations } from "./file-operations.js";
 import { fetchRemoteGitHubFile, listRemoteGitHubTree, tryParseRemoteGitHubTarget } from "./file-ops-remote.js";
 import {
   buildMemoizedReadSummary,
@@ -25,10 +25,12 @@ const MAX_SEM_SEARCH_RESULTS = 8;
 const SKIP_DIRS = new Set([".git", "node_modules", "dist", "coverage", ".omx", ".tmp"]);
 
 interface ReadFileDirectOptions {
-  path: string; cwd?: string; offset?: number; limit?: number; mode?: ReadMode; tail?: number; refresh?: boolean;
+  path: string; cwd?: string; offset?: number; limit?: number; mode?: ReadMode; tail?: number; refresh?: boolean; operations?: ReadOperations;
 }
 
-interface WalkFileOptions { dir: string; cwd: string; maxDepth: number; include?: string; onFile: (fullPath: string) => boolean | void; }
+interface WalkFileOptions { dir: string; cwd: string; maxDepth: number; include?: string; operations: ListOperations; onFile: (fullPath: string) => boolean | void; }
+
+function bufferToUtf8(value: Buffer | string): string { return typeof value === "string" ? value : value.toString("utf-8"); }
 
 function escapeRegex(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -48,15 +50,15 @@ function matchesInclude(filePath: string, include?: string): boolean {
   return matcher.test(normalized) || matcher.test(basename(normalized));
 }
 
-function walkFiles({ dir, cwd, maxDepth, include, onFile }: WalkFileOptions): void {
+function walkFiles({ dir, cwd, maxDepth, include, operations, onFile }: WalkFileOptions): void {
   const visit = (current: string, depth: number): boolean => {
     if (depth > maxDepth) return false;
     try {
-      for (const entry of readdirSync(current)) {
+      for (const entry of operations.readdir(current)) {
         if (entry.startsWith(".") && !entry.startsWith(".env")) continue;
         if (SKIP_DIRS.has(entry)) continue;
         const full = join(current, entry);
-        const stat = statSync(full);
+        const stat = operations.stat(full);
         if (stat.isDirectory()) {
           if (visit(full, depth + 1)) return true;
           continue;
@@ -130,14 +132,10 @@ function buildGrepSummary(matches: Array<{ file: string; line: number; text: str
     acc[match.file].push({ line: match.line, text: match.text });
     return acc;
   }, {});
-  return Object.entries(grouped).map(([file, fileMatches]) => ({
-    file,
-    count: fileMatches.length,
-    examples: fileMatches.slice(0, 2),
-  }));
+  return Object.entries(grouped).map(([file, fileMatches]) => ({ file, count: fileMatches.length, examples: fileMatches.slice(0, 2) }));
 }
 
-export function readFileDirect({ path, cwd = process.cwd(), offset, limit, mode, tail, refresh }: ReadFileDirectOptions) {
+export function readFileDirect({ path, cwd = process.cwd(), offset, limit, mode, tail, refresh, operations = localFileOperations }: ReadFileDirectOptions) {
   const access = checkFilesystemPathAccess(path, "read", cwd);
   if (!access.allowed) {
     return { success: false as const, error: access.reason ?? "Read not permitted." };
@@ -149,7 +147,7 @@ export function readFileDirect({ path, cwd = process.cwd(), offset, limit, mode,
       if (!variantAccess.allowed) return { success: false as const, error: variantAccess.reason ?? "Read not permitted." };
       filePath = variantAccess.normalizedPath ?? filePath;
     }
-    const fileStat = statSync(filePath);
+    const fileStat = operations.stat(filePath);
     const readMode = mode ?? "full";
     const memoContext = getMemoContext();
     const memoKey = buildReadMemoKey({ path: filePath, offset, limit, mode: readMode, tail });
@@ -172,7 +170,7 @@ export function readFileDirect({ path, cwd = process.cwd(), offset, limit, mode,
       }
     }
 
-    const raw = readFileSync(filePath, "utf-8");
+    const raw = bufferToUtf8(operations.readFile(filePath));
     let content = raw;
     const lines = raw.split("\n");
 
@@ -207,7 +205,7 @@ export function readFileDirect({ path, cwd = process.cwd(), offset, limit, mode,
   }
 }
 
-export function listFilesDirect({ path: dir = ".", cwd = process.cwd(), maxDepth, include }: { path?: string; cwd?: string; maxDepth?: number; include?: string }) {
+export function listFilesDirect({ path: dir = ".", cwd = process.cwd(), maxDepth, include, operations = localFileOperations }: { path?: string; cwd?: string; maxDepth?: number; include?: string; operations?: ListOperations }) {
   const access = checkFilesystemPathAccess(dir, "read", cwd);
   if (!access.allowed) {
     return { files: [], totalEntries: 0, truncated: false, error: access.reason };
@@ -235,11 +233,11 @@ export function listFilesDirect({ path: dir = ".", cwd = process.cwd(), maxDepth
   const visit = (current: string, depth: number): boolean => {
     if (depth > max) return false;
     try {
-      for (const entry of readdirSync(current)) {
+      for (const entry of operations.readdir(current)) {
         if (entry.startsWith(".") && !entry.startsWith(".env")) continue;
         if (SKIP_DIRS.has(entry)) continue;
         const full = join(current, entry);
-        const stat = statSync(full);
+        const stat = operations.stat(full);
         const rel = relative(cwd, full);
         if (stat.isDirectory()) {
           totalEntries += 1;
@@ -270,7 +268,7 @@ export function listFilesDirect({ path: dir = ".", cwd = process.cwd(), maxDepth
   return result;
 }
 
-export function grepDirect({ pattern, path: dir = ".", cwd = process.cwd(), include }: { pattern: string; path?: string; cwd?: string; include?: string }) {
+export function grepDirect({ pattern, path: dir = ".", cwd = process.cwd(), include, operations = localFileOperations }: { pattern: string; path?: string; cwd?: string; include?: string; operations?: SearchOperations }) {
   const access = checkFilesystemPathAccess(dir, "read", cwd);
   if (!access.allowed) {
     return {
@@ -308,9 +306,10 @@ export function grepDirect({ pattern, path: dir = ".", cwd = process.cwd(), incl
     cwd,
     maxDepth: 12,
     include,
+    operations,
     onFile: (full) => {
       try {
-        const content = readFileSync(full, "utf-8");
+        const content = bufferToUtf8(operations.readFile(full));
         const lines = content.split("\n");
         for (let i = 0; i < lines.length; i++) {
           if (regex.test(lines[i])) {
@@ -348,12 +347,14 @@ export function semSearchDirect({
   cwd = process.cwd(),
   include,
   limit,
+  operations = localFileOperations,
 }: {
   query: string;
   path?: string;
   cwd?: string;
   include?: string;
   limit?: number;
+  operations?: SearchOperations;
 }) {
   const access = checkFilesystemPathAccess(dir, "read", cwd);
   if (!access.allowed) {
@@ -394,9 +395,10 @@ export function semSearchDirect({
     cwd,
     maxDepth: 10,
     include,
+    operations,
     onFile: (full) => {
       try {
-        const raw = readFileSync(full, "utf-8");
+        const raw = bufferToUtf8(operations.readFile(full));
         const content = raw.length > 24000 ? raw.slice(0, 24000) : raw;
         const rel = relative(cwd, full);
         const score = scoreSemanticMatch(normalizedQuery, rel, content, tokens);
@@ -443,7 +445,7 @@ export async function readFileMaybeRemote(options: ReadFileDirectOptions) {
   return readFileDirect(options);
 }
 
-export async function listFilesMaybeRemote(options: { path?: string; cwd?: string; maxDepth?: number; include?: string }) {
+export async function listFilesMaybeRemote(options: { path?: string; cwd?: string; maxDepth?: number; include?: string; operations?: ListOperations }) {
   const remote = tryParseRemoteGitHubTarget(options.path ?? ".");
   if (remote) {
     const network = ensureNetworkAllowed();
@@ -453,16 +455,16 @@ export async function listFilesMaybeRemote(options: { path?: string; cwd?: strin
   return listFilesDirect(options);
 }
 
-export function writeFileDirect({ path, cwd = process.cwd(), content }: { path: string; cwd?: string; content: string }) {
+export function writeFileDirect({ path, cwd = process.cwd(), content, operations = localFileOperations }: { path: string; cwd?: string; content: string; operations?: WriteOperations }) {
   const access = checkFilesystemPathAccess(path, "write", cwd);
   if (!access.allowed) {
     return { success: false as const, error: access.reason ?? "Write not permitted." };
   }
   try {
     const filePath = access.normalizedPath ?? resolveToCwd(path, cwd);
-    mkdirSync(dirname(filePath), { recursive: true });
+    operations.mkdir(dirname(filePath));
     createCheckpoint();
-    writeFileSync(filePath, content, "utf-8");
+    operations.writeFile(filePath, content);
     getMemoContext()?.invalidateToolResults();
     return { success: true as const, bytesWritten: content.length };
   } catch (err: unknown) {
@@ -470,14 +472,14 @@ export function writeFileDirect({ path, cwd = process.cwd(), content }: { path: 
   }
 }
 
-export function editFileDirect({ path, cwd = process.cwd(), old_string, new_string }: { path: string; cwd?: string; old_string: string; new_string: string }) {
+export function editFileDirect({ path, cwd = process.cwd(), old_string, new_string, operations = localFileOperations }: { path: string; cwd?: string; old_string: string; new_string: string; operations?: EditOperations }) {
   const access = checkFilesystemPathAccess(path, "write", cwd);
   if (!access.allowed) {
     return { success: false as const, error: access.reason ?? "Edit not permitted." };
   }
   try {
     const filePath = access.normalizedPath ?? resolveToCwd(path, cwd);
-    const content = readFileSync(filePath, "utf-8");
+    const content = bufferToUtf8(operations.readFile(filePath));
     const occurrences = content.split(old_string).length - 1;
     if (occurrences === 0) {
       return { success: false as const, error: "old_string not found in file" };
@@ -487,7 +489,7 @@ export function editFileDirect({ path, cwd = process.cwd(), old_string, new_stri
     }
     createCheckpoint();
     const updated = content.replace(old_string, new_string);
-    writeFileSync(filePath, updated, "utf-8");
+    operations.writeFile(filePath, updated);
     getMemoContext()?.invalidateToolResults();
     return { success: true as const };
   } catch (err: unknown) {
