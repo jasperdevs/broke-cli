@@ -111,4 +111,23 @@ describe("keybinding regressions", () => {
     app.handleKey({ name: "linefeed", char: "\n", ctrl: false, meta: false, shift: false });
     expect(app.input.getText()).toBe("hello\n");
   });
+
+  it("supports common macOS and Linux terminal editing chords", () => {
+    const app = new App() as any;
+    app.handlePaste("hello brave new world");
+    app.input.setCursor(app.input.getText().length);
+    app.handleKey({ name: "backspace", char: "", ctrl: false, meta: true, shift: false });
+    expect(app.input.getText()).toBe("hello brave new ");
+    app.handleKey({ name: "backspace", char: "", ctrl: false, meta: false, shift: false, super: true });
+    expect(app.input.getText()).toBe("");
+
+    app.handlePaste("alpha beta gamma");
+    app.input.setCursor(6);
+    app.handleKey({ name: "delete", char: "", ctrl: true, meta: false, shift: false });
+    expect(app.input.getText()).toBe("alpha gamma");
+    app.handleKey({ name: "right", char: "", ctrl: false, meta: true, shift: false });
+    expect(app.input.getCursor()).toBe("alpha gamma".length);
+    app.handleKey({ name: "left", char: "", ctrl: false, meta: false, shift: false, super: true });
+    expect(app.input.getCursor()).toBe(0);
+  });
 });

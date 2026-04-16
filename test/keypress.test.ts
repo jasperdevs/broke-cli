@@ -23,6 +23,15 @@ describe("decodeSpecialKeySequence", () => {
     expect(decodeSpecialKeySequence("\x1b\r")).toEqual({ name: "return", char: "", ctrl: false, meta: false, shift: true });
     expect(decodeSpecialKeySequence("\x1b[13;2~")).toEqual({ name: "return", char: "", ctrl: false, meta: false, shift: true });
   });
+
+  it("decodes modified navigation and deletion sequences across terminal protocols", () => {
+    expect(decodeSpecialKeySequence("\x1b[3~")).toEqual({ name: "delete", char: "", ctrl: false, meta: false, shift: false });
+    expect(decodeSpecialKeySequence("\x1b[3;5~")).toEqual({ name: "delete", char: "", ctrl: true, meta: false, shift: false });
+    expect(decodeSpecialKeySequence("\x1b[1;3D")).toEqual({ name: "left", char: "", ctrl: false, meta: true, shift: false });
+    expect(decodeSpecialKeySequence("\x1b[1;9D")).toEqual({ name: "left", char: "", ctrl: false, meta: false, shift: false, super: true });
+    expect(decodeSpecialKeySequence("\x1b[127;9u")).toEqual({ name: "backspace", char: "", ctrl: false, meta: false, shift: false, super: true });
+    expect(decodeSpecialKeySequence("\x1b[113;5u")).toEqual({ name: "q", char: "", ctrl: true, meta: false, shift: false });
+  });
 });
 
 describe("escape sequence assembly", () => {

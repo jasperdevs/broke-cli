@@ -31,15 +31,9 @@ export class InputWidget {
   }
   getText(): string { return this.text; }
   getCursor(): number { return this.cursor; }
-  getElements(): InputElement[] {
-    return this.elements.map((element) => ({ ...element }));
-  }
-  private clampCursor(): void {
-    this.cursor = Math.max(0, Math.min(this.cursor, this.text.length));
-  }
-  onChange(listener: (text: string) => void): void {
-    this.changeListeners.push(listener);
-  }
+  getElements(): InputElement[] { return this.elements.map((element) => ({ ...element })); }
+  private clampCursor(): void { this.cursor = Math.max(0, Math.min(this.cursor, this.text.length)); }
+  onChange(listener: (text: string) => void): void { this.changeListeners.push(listener); }
 
   setText(text: string, placeCursorAtEnd = true, elements?: InputElement[]): void {
     text = this.normalizeInsertedText(text);
@@ -53,30 +47,10 @@ export class InputWidget {
     this.snapCursorOutsideElement();
     this.emitChange();
   }
-  setCursor(cursor: number): void {
-    this.cursor = Math.max(0, Math.min(cursor, this.text.length));
-    this.preferredColumn = null;
-    this.clampCursor();
-    this.snapCursorOutsideElement();
-  }
-  clear(): void {
-    this.text = "";
-    this.cursor = 0;
-    this.preferredColumn = null;
-    this.historyIndex = -1;
-    this.elements = [];
-    this.emitChange();
-  }
-  submit(): string {
-    const value = this.text;
-    const historyValue = value.trim();
-    if (historyValue) this.history.push(historyValue);
-    this.clear();
-    return value;
-  }
-  paste(text: string): void {
-    this.insertText(this.normalizeInsertedText(text));
-  }
+  setCursor(cursor: number): void { this.cursor = Math.max(0, Math.min(cursor, this.text.length)); this.preferredColumn = null; this.clampCursor(); this.snapCursorOutsideElement(); }
+  clear(): void { this.text = ""; this.cursor = 0; this.preferredColumn = null; this.historyIndex = -1; this.elements = []; this.emitChange(); }
+  submit(): string { const value = this.text; const historyValue = value.trim(); if (historyValue) this.history.push(historyValue); this.clear(); return value; }
+  paste(text: string): void { this.insertText(this.normalizeInsertedText(text)); }
   insertText(text: string): void {
     text = this.normalizeInsertedText(text);
     if (!text) return;
@@ -137,14 +111,9 @@ export class InputWidget {
     return { ...element };
   }
 
-  removeElement(id: string): InputElement | null {
-    return this.removeElementById(id);
-  }
+  removeElement(id: string): InputElement | null { return this.removeElementById(id); }
 
-  findElementById<T = unknown>(id: string): InputElement<T> | null {
-    const element = this.elements.find((candidate) => candidate.id === id);
-    return element ? { ...(element as InputElement<T>) } : null;
-  }
+  findElementById<T = unknown>(id: string): InputElement<T> | null { const element = this.elements.find((candidate) => candidate.id === id); return element ? { ...(element as InputElement<T>) } : null; }
 
   findElementContaining(cursor = this.cursor): InputElement | null {
     return this.elements.find((element) => cursor > element.start && cursor < element.end) ?? null;
@@ -162,12 +131,7 @@ export class InputWidget {
     return null;
   }
 
-  replaceElements(elements: InputElement[]): void {
-    this.elements = elements.map((element) => ({ ...element })).sort((a, b) => a.start - b.start);
-    this.clampCursor();
-    this.snapCursorOutsideElement();
-    this.emitChange();
-  }
+  replaceElements(elements: InputElement[]): void { this.elements = elements.map((element) => ({ ...element })).sort((a, b) => a.start - b.start); this.clampCursor(); this.snapCursorOutsideElement(); this.emitChange(); }
 
   updateElementLabel(id: string, label: string): void {
     const element = this.elements.find((candidate) => candidate.id === id);
@@ -203,9 +167,7 @@ export class InputWidget {
     return sanitized.replace(/[ \t]+\n/gu, "\n");
   }
 
-  private emitChange(): void {
-    for (const listener of this.changeListeners) listener(this.text);
-  }
+  private emitChange(): void { for (const listener of this.changeListeners) listener(this.text); }
 
   handleKey(key: Keypress): "submit" | "interrupt" | "none" {
     this.clampCursor();
@@ -380,10 +342,29 @@ export class InputWidget {
     this.preferredColumn = null;
     this.emitChange();
   }
+  private deleteNextWord(): void {
+    const adjacent = this.findAdjacentElement(this.cursor, "delete"); if (adjacent) { this.removeElementRange(adjacent); return; }
+    if (this.cursor >= this.text.length) return; let i = this.findWordBoundary(1); while (i < this.text.length && /\s/u.test(this.text[i] ?? "")) i++;
+    this.text = this.text.slice(0, this.cursor) + this.text.slice(i); this.shiftElements(i, this.cursor - i); this.preferredColumn = null; this.emitChange();
+  }
+  private deleteToLineStart(): void {
+    const start = this.getLineMetrics().lineStart; if (this.cursor <= start) return;
+    this.text = this.text.slice(0, start) + this.text.slice(this.cursor); this.shiftElements(this.cursor, start - this.cursor); this.cursor = start; this.preferredColumn = null; this.emitChange();
+  }
+  private deleteToLineEnd(): void {
+    const end = this.getLineMetrics().lineEnd; if (this.cursor >= end) return;
+    this.text = this.text.slice(0, this.cursor) + this.text.slice(end); this.shiftElements(end, this.cursor - end); this.preferredColumn = null; this.emitChange();
+  }
 
   private applyDeletionKey(key: Keypress): boolean {
+    if (key.super && key.name === "backspace") { this.deleteToLineStart(); return true; }
+    if (key.super && key.name === "delete") { this.deleteToLineEnd(); return true; }
     if ((key.ctrl && key.name === "backspace") || (key.meta && key.name === "backspace") || (key.ctrl && key.name === "w") || (key.ctrl && key.name === "h")) {
       this.deletePreviousWord();
+      return true;
+    }
+    if ((key.ctrl && key.name === "delete") || (key.meta && key.name === "delete") || (key.ctrl && key.name === "d") || (key.meta && key.name === "d")) {
+      this.deleteNextWord();
       return true;
     }
     if (key.name === "backspace") {
@@ -409,6 +390,13 @@ export class InputWidget {
   }
 
   private applyNavigationKey(key: Keypress): boolean {
+    if (key.super && (key.name === "left" || key.name === "home")) {
+      this.cursor = this.getLineMetrics().lineStart; this.preferredColumn = null; return true;
+    }
+    if (key.super && (key.name === "right" || key.name === "end")) {
+      this.cursor = this.getLineMetrics().lineEnd; this.preferredColumn = null; return true;
+    }
+    if ((key.meta || key.ctrl) && (key.name === "left" || key.name === "right")) { this.cursor = this.findWordBoundary(key.name === "left" ? -1 : 1); this.preferredColumn = null; this.snapCursorOutsideElement(); return true; }
     if (key.name === "left") {
       if (this.cursor > 0) this.cursor--;
       this.preferredColumn = null;
@@ -423,17 +411,14 @@ export class InputWidget {
     }
     if (key.name === "up") return this.moveCursorVertical(-1);
     if (key.name === "down") return this.moveCursorVertical(1);
-    if (key.name === "home" || (key.ctrl && key.name === "a")) {
-      this.cursor = this.getLineMetrics().lineStart;
-      this.preferredColumn = null;
-      return true;
-    }
-    if (key.name === "end" || (key.ctrl && key.name === "e")) {
-      this.cursor = this.getLineMetrics().lineEnd;
-      this.preferredColumn = null;
-      return true;
-    }
+    if (key.name === "home" || (key.ctrl && key.name === "a")) { this.cursor = this.getLineMetrics().lineStart; this.preferredColumn = null; return true; }
+    if (key.name === "end" || (key.ctrl && key.name === "e")) { this.cursor = this.getLineMetrics().lineEnd; this.preferredColumn = null; return true; }
     return false;
+  }
+  private findWordBoundary(direction: -1 | 1): number {
+    let i = this.cursor;
+    if (direction < 0) { while (i > 0 && /\s/u.test(this.text[i - 1] ?? "")) i--; while (i > 0 && !/\s/u.test(this.text[i - 1] ?? "")) i--; return i; }
+    while (i < this.text.length && /\s/u.test(this.text[i] ?? "")) i++; while (i < this.text.length && !/\s/u.test(this.text[i] ?? "")) i++; return i;
   }
 
   private applyHistoryKey(key: Keypress): boolean {
@@ -459,7 +444,11 @@ export class InputWidget {
 
   private applyEditingShortcut(key: Keypress): boolean {
     if (key.ctrl && key.name === "u") {
-      this.clear();
+      this.deleteToLineStart();
+      return true;
+    }
+    if (key.ctrl && key.name === "k") {
+      this.deleteToLineEnd();
       return true;
     }
     if (key.meta && key.name === "d") {

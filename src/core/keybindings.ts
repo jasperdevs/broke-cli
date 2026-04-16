@@ -108,17 +108,18 @@ export function getKeybinding(action: keyof Keybindings): string {
 }
 
 /** Check if a keypress matches a keybinding string like "ctrl+l" */
-export function matchesBinding(binding: string, key: { name: string; ctrl: boolean; meta: boolean; shift: boolean }): boolean {
+export function matchesBinding(binding: string, key: { name: string; ctrl: boolean; meta: boolean; shift: boolean; super?: boolean }): boolean {
   if (!binding.trim()) return false;
   const parts = binding.toLowerCase().split("+");
   const keyName = parts[parts.length - 1];
   const needCtrl = parts.includes("ctrl");
   const needMeta = parts.includes("meta") || parts.includes("alt");
+  const needSuper = parts.includes("cmd") || parts.includes("command") || parts.includes("super");
   const needShift = parts.includes("shift");
   const matchesKeyName = keyName === "return"
     ? key.name === "return" || key.name === "enter" || key.name === "linefeed"
     : key.name === keyName;
-  return matchesKeyName && key.ctrl === needCtrl && key.meta === needMeta && key.shift === needShift;
+  return matchesKeyName && key.ctrl === needCtrl && key.meta === needMeta && !!key.super === needSuper && key.shift === needShift;
 }
 
 export function formatKeypressBinding(key: Keypress): string | null {
@@ -131,6 +132,7 @@ export function formatKeypressBinding(key: Keypress): string | null {
   const parts: string[] = [];
   if (key.ctrl) parts.push("ctrl");
   if (key.meta) parts.push("alt");
+  if (key.super) parts.push(process.platform === "darwin" ? "cmd" : "super");
   if (key.shift) parts.push("shift");
   parts.push(key.name.toLowerCase());
   return parts.join("+");

@@ -4,4 +4,5 @@ export interface Keypress {
   ctrl: boolean;
   meta: boolean;
   shift: boolean;
+  super?: boolean;
 }

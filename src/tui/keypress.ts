@@ -13,14 +13,38 @@ import {
 import type { Keypress } from "../utils/keypress-types.js";
 export type { Keypress } from "../utils/keypress-types.js";
 
+function decodeModifier(mod: number): Pick<Keypress, "ctrl" | "meta" | "shift" | "super"> {
+  const mask = Math.max(0, mod - 1);
+  const modifiers: Pick<Keypress, "ctrl" | "meta" | "shift" | "super"> = {
+    shift: (mask & 1) !== 0,
+    meta: (mask & (2 | 16 | 32)) !== 0,
+    ctrl: (mask & 4) !== 0,
+  };
+  if ((mask & 8) !== 0) modifiers.super = true;
+  return modifiers;
+}
+
 function decodeModifiedKey(code: number, mod: number): Keypress | null {
-  const shift = mod === 2 || mod === 4 || mod === 6 || mod === 8;
-  const meta = mod === 3 || mod === 4 || mod === 7 || mod === 8;
-  const ctrl = mod === 5 || mod === 6 || mod === 7 || mod === 8;
-  if (code === 13) return { name: "return", char: "", ctrl, meta, shift };
-  if (code === 10) return { name: "linefeed", char: "", ctrl, meta, shift };
-  if (code === 8 || code === 127) return { name: "backspace", char: "", ctrl, meta, shift };
+  const modifiers = decodeModifier(mod);
+  if (code === 9) return { name: "tab", char: "", ...modifiers };
+  if (code === 13) return { name: "return", char: "", ...modifiers };
+  if (code === 10) return { name: "linefeed", char: "", ...modifiers };
+  if (code === 8 || code === 127) return { name: "backspace", char: "", ...modifiers };
+  if (code === 27) return { name: "escape", char: "", ...modifiers };
+  if (code >= 32 && code <= 126) {
+    const char = String.fromCharCode(code);
+    return { name: char.toLowerCase(), char: modifiers.ctrl || modifiers.meta || modifiers.super ? "" : char, ...modifiers };
+  }
   return null;
+}
+
+function decodeModifiedNamedKey(name: string, mod: number): Keypress {
+  return { name, char: "", ...decodeModifier(mod) };
+}
+
+function decodeTildeKey(code: number, mod = 1): Keypress | null {
+  const name = ({ 1: "home", 2: "insert", 3: "delete", 4: "end", 5: "pageup", 6: "pagedown", 7: "home", 8: "end" } as Record<number, string>)[code];
+  return name ? decodeModifiedNamedKey(name, mod) : null;
 }
 
 function parseCsiNumber(value: string | undefined): number | null {
@@ -47,20 +71,32 @@ export function decodeSpecialKeySequence(sequence: string): Keypress | null {
     "\x1b[10;2~": { name: "linefeed", char: "", ctrl: false, meta: false, shift: true },
     "\x1b\b": { name: "backspace", char: "", ctrl: false, meta: true, shift: false },
     "\x1b\x7f": { name: "backspace", char: "", ctrl: false, meta: true, shift: false },
+    "\x1b[3~": { name: "delete", char: "", ctrl: false, meta: false, shift: false },
+    "\x1b[H": { name: "home", char: "", ctrl: false, meta: false, shift: false },
+    "\x1b[F": { name: "end", char: "", ctrl: false, meta: false, shift: false },
   };
   if (directMap[sequence]) return directMap[sequence];
 
-  const genericModifiedCsi = /^\x1b\[([0-9:;]+)[u~]$/u.exec(sequence);
-  if (genericModifiedCsi) return decodeGenericModifiedCsi(genericModifiedCsi[1]);
+  const csiArrow = /^\x1b\[(?:1;)?(\d+)?([ABCDHF])$/u.exec(sequence);
+  if (csiArrow) {
+    const name = ({ A: "up", B: "down", C: "right", D: "left", H: "home", F: "end" } as Record<string, string>)[csiArrow[2]];
+    return decodeModifiedNamedKey(name, csiArrow[1] ? parseInt(csiArrow[1], 10) : 1);
+  }
 
   const csiU = /^\x1b\[(\d+);(\d+)u$/u.exec(sequence);
   if (csiU) return decodeModifiedKey(parseInt(csiU[1], 10), parseInt(csiU[2], 10));
 
   const csiTilde = /^\x1b\[(\d+);(\d+)~$/u.exec(sequence);
-  if (csiTilde) return decodeModifiedKey(parseInt(csiTilde[1], 10), parseInt(csiTilde[2], 10));
+  if (csiTilde) return decodeTildeKey(parseInt(csiTilde[1], 10), parseInt(csiTilde[2], 10)) ?? decodeModifiedKey(parseInt(csiTilde[1], 10), parseInt(csiTilde[2], 10));
+
+  const plainTilde = /^\x1b\[(\d+)~$/u.exec(sequence);
+  if (plainTilde) return decodeTildeKey(parseInt(plainTilde[1], 10));
+
+  const genericModifiedCsi = /^\x1b\[([0-9:;]+)[u~]$/u.exec(sequence);
+  if (genericModifiedCsi) return decodeGenericModifiedCsi(genericModifiedCsi[1]);
 
   const legacyTilde = /^\x1b\[27;(\d+);(\d+)~$/u.exec(sequence);
-  if (legacyTilde) return decodeModifiedKey(parseInt(legacyTilde[2], 10), parseInt(legacyTilde[1], 10));
+  if (legacyTilde) return decodeTildeKey(parseInt(legacyTilde[2], 10), parseInt(legacyTilde[1], 10)) ?? decodeModifiedKey(parseInt(legacyTilde[2], 10), parseInt(legacyTilde[1], 10));
 
   const swappedLegacyTilde = /^\x1b\[27;(\d+);(\d+)u$/u.exec(sequence);
   if (swappedLegacyTilde) return decodeModifiedKey(parseInt(swappedLegacyTilde[2], 10), parseInt(swappedLegacyTilde[1], 10));
