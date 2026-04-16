@@ -44,10 +44,13 @@ export function applyKeybindingDefaults(
 ): Keybindings {
   const defaultNewline = getDefaultNewlineBinding(env, platform);
   const savedNewline = raw?.newline?.trim().toLowerCase();
-  const migratedNewline = raw?.newline;
+  const migratedNewline = savedNewline && savedNewline !== "ctrl+j" ? raw?.newline : defaultNewline;
+  const savedSubmit = raw?.submit?.trim().toLowerCase();
+  const migratedSubmit = savedSubmit && savedSubmit !== "down" ? raw?.submit ?? DEFAULT_KEYBINDINGS.submit : DEFAULT_KEYBINDINGS.submit;
   return {
     ...DEFAULT_KEYBINDINGS,
     ...raw,
+    submit: migratedSubmit,
     newline: migratedNewline ?? defaultNewline,
     // The tree hotkey is intentionally retired; keep /tree as the only entry point.
     treeView: DEFAULT_KEYBINDINGS.treeView,

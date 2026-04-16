@@ -4,9 +4,12 @@ import { decodeSpecialKeySequence } from "../src/tui/keypress.js";
 describe("decodeSpecialKeySequence", () => {
   it("decodes modified enter sequences across common terminal formats", () => {
     expect(decodeSpecialKeySequence("\x1b[13;2u")).toEqual({ name: "return", char: "", ctrl: false, meta: false, shift: true });
+    expect(decodeSpecialKeySequence("\x1b[13:10;2u")).toEqual({ name: "return", char: "", ctrl: false, meta: false, shift: true });
+    expect(decodeSpecialKeySequence("\x1b[13;2;13u")).toEqual({ name: "return", char: "", ctrl: false, meta: false, shift: true });
     expect(decodeSpecialKeySequence("\x1b[13;5u")).toEqual({ name: "return", char: "", ctrl: true, meta: false, shift: false });
     expect(decodeSpecialKeySequence("\x1b[27;2;13~")).toEqual({ name: "return", char: "", ctrl: false, meta: false, shift: true });
     expect(decodeSpecialKeySequence("\x1b[27;2;13u")).toEqual({ name: "return", char: "", ctrl: false, meta: false, shift: true });
+    expect(decodeSpecialKeySequence("\x1b[27;2;13;0u")).toEqual({ name: "return", char: "", ctrl: false, meta: false, shift: true });
     expect(decodeSpecialKeySequence("\x1b[13;3~")).toEqual({ name: "return", char: "", ctrl: false, meta: true, shift: false });
   });
 

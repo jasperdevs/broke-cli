@@ -37,6 +37,16 @@ describe("keybinding regressions", () => {
     expect(bindings.newline).toBe("shift+return");
   });
 
+  it("migrates stale newline and submit bindings that break the composer contract", () => {
+    const bindings = applyKeybindingDefaults(
+      { newline: "ctrl+j", submit: "down" },
+      { TERM: "xterm-256color", TERM_PROGRAM: "" } as NodeJS.ProcessEnv,
+      "win32",
+    );
+    expect(bindings.newline).toBe("shift+return");
+    expect(bindings.submit).toBe("return");
+  });
+
   it("renders the active newline binding in the legacy footer helper", () => {
     const keybindingsPath = join(homedir(), ".brokecli", "keybindings.json");
     const previous = existsSync(keybindingsPath) ? readFileSync(keybindingsPath, "utf-8") : null;

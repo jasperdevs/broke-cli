@@ -23,6 +23,23 @@ function decodeModifiedKey(code: number, mod: number): Keypress | null {
   return null;
 }
 
+function parseCsiNumber(value: string | undefined): number | null {
+  const raw = value?.split(":")[0] ?? "";
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function decodeGenericModifiedCsi(params: string): Keypress | null {
+  const parts = params.split(";");
+  if (parts.length < 2) return null;
+
+  const codeIndex = parts[0] === "27" && parts.length >= 3 ? 2 : 0;
+  const modIndex = parts[0] === "27" && parts.length >= 3 ? 1 : 1;
+  const code = parseCsiNumber(parts[codeIndex]);
+  const mod = parseCsiNumber(parts[modIndex]);
+  return code != null && mod != null ? decodeModifiedKey(code, mod) : null;
+}
+
 export function decodeSpecialKeySequence(sequence: string): Keypress | null {
   const directMap: Record<string, Keypress> = {
     "\x1b\r": { name: "return", char: "", ctrl: false, meta: false, shift: true },
@@ -32,6 +49,9 @@ export function decodeSpecialKeySequence(sequence: string): Keypress | null {
     "\x1b\x7f": { name: "backspace", char: "", ctrl: false, meta: true, shift: false },
   };
   if (directMap[sequence]) return directMap[sequence];
+
+  const genericModifiedCsi = /^\x1b\[([0-9:;]+)[u~]$/u.exec(sequence);
+  if (genericModifiedCsi) return decodeGenericModifiedCsi(genericModifiedCsi[1]);
 
   const csiU = /^\x1b\[(\d+);(\d+)u$/u.exec(sequence);
   if (csiU) return decodeModifiedKey(parseInt(csiU[1], 10), parseInt(csiU[2], 10));
