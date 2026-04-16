@@ -23,9 +23,8 @@ export interface LocalOpenAIStreamCallbacks {
 }
 
 function toLocalMessages(opts: LocalOpenAIStreamOptions): Array<{ role: "system" | "user" | "assistant"; content: string }> {
-  const systemRole = opts.compat?.supportsDeveloperRole === false ? "system" : "system";
   return [
-    { role: systemRole, content: opts.system },
+    { role: "system", content: opts.system },
     ...opts.messages.map((message) => ({ role: message.role, content: message.content })),
   ];
 }
