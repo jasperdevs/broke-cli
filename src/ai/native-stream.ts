@@ -8,7 +8,7 @@ import { getCodexOutputSchemaPath, parseStructuredFinalText } from "./native-out
 import { estimateConversationTokens, estimateTextTokens } from "./tokens.js";
 import { resolveNativeCommand } from "./native-cli.js";
 import { resolveThinkingConfig } from "./thinking.js";
-import { getWorkspaceRoot, getAutonomySettings, getWorkspaceRootSafety } from "../core/permissions.js";
+import { formatWorkspaceScopeError, getWorkspaceRoot, getAutonomySettings, resolveWorkspaceScope } from "../core/permissions.js";
 
 interface NativeMessage {
   role: "user" | "assistant";
@@ -291,9 +291,9 @@ export async function startNativeStream(
 ): Promise<void> {
   const prompt = formatNativePrompt(opts.system, opts.messages);
   if (!opts.denyToolUse) {
-    const workspaceSafety = getWorkspaceRootSafety(opts.cwd ?? process.cwd());
-    if (!workspaceSafety.allowed) {
-      callbacks.onError(new Error(workspaceSafety.reason ?? "Unsafe workspace root."));
+    const workspace = resolveWorkspaceScope(opts.cwd ?? process.cwd());
+    if (!workspace.allowed) {
+      callbacks.onError(new Error(formatWorkspaceScopeError(workspace)));
       return;
     }
   }

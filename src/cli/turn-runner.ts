@@ -4,7 +4,7 @@ import { clearTodo } from "../tools/todo.js";
 import type { Session } from "../core/session.js";
 import type { ToolName } from "../tools/registry.js";
 import type { SpecialistModelRole } from "./model-routing.js";
-import { getWorkspaceRootSafety } from "../core/permissions.js";
+import { formatWorkspaceScopeError, resolveWorkspaceScope } from "../core/permissions.js";
 import {
   buildTouchedFilesEvidence,
   executeTurnWithRetries,
@@ -44,9 +44,9 @@ export async function runModelTurn(options: {
   toolActivity: boolean;
 }> {
   const { app, session, text, images, activeModel, currentModelId, smallModel, smallModelId, currentMode, systemPrompt, buildTools, hooks, lastToolCalls, lastActivityTime, alreadyAddedUserMessage, repairDepth = 0, forceRoute, resolveSpecialistModel } = options;
-  const workspaceSafety = getWorkspaceRootSafety(process.cwd());
-  if (!workspaceSafety.allowed) {
-    const message = `${workspaceSafety.reason ?? "Unsafe workspace root."} Change into a project folder before asking me to inspect or edit files.`;
+  const workspace = resolveWorkspaceScope(process.cwd());
+  if (!workspace.allowed) {
+    const message = formatWorkspaceScopeError(workspace);
     app.addMessage("system", message);
     return { lastToolCalls, lastActivityTime: Date.now(), completion: "error", errorMessage: message, toolActivity: false };
   }

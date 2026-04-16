@@ -1,10 +1,10 @@
 import { readdirSync, statSync, readFileSync } from "fs";
 import { join, relative } from "path";
-import { getWorkspaceRootSafety } from "../core/permissions.js";
+import { resolveWorkspaceScope } from "../core/permissions.js";
 
 /** Recursively collect project files, skipping common noise */
 export function collectProjectFiles(root: string, maxFiles = 500): string[] {
-  if (!getWorkspaceRootSafety(root).allowed) return [];
+  if (!resolveWorkspaceScope(root).allowed) return [];
   const SKIP = new Set(["node_modules", ".git", "dist", "build", ".next", ".cache", "coverage", "__pycache__", ".venv", "venv"]);
   const files: string[] = [];
 

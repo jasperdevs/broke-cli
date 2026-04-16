@@ -1,7 +1,7 @@
 import { readdir, readFile, stat, writeFile } from "fs/promises";
 import { join, relative } from "path";
 import type { Session } from "../core/session.js";
-import { getWorkspaceRootSafety } from "../core/permissions.js";
+import { resolveWorkspaceScope } from "../core/permissions.js";
 
 const IGNORED_PREFIXES = [".git", ".omx", ".tmp", "dist", "coverage", "node_modules", "generated", "__generated__", ".generated", "gen"];
 const MUTATION_ROOT_DIRS = new Set(["src", "test", "tests", "scripts", "packages", "apps", "lib", "bin"]);
@@ -194,7 +194,7 @@ export async function tryRepoTaskFastPath(options: {
   prompt: string;
   session?: Session;
 }): Promise<RepoFastPathResult | null> {
-  if (!getWorkspaceRootSafety(options.root).allowed) return null;
+  if (!resolveWorkspaceScope(options.root).allowed) return null;
   const renameTask = detectRepoRenameTask(options.prompt);
   if (renameTask) {
     return applyRepoWideRename({

@@ -3,7 +3,7 @@ import { tmpdir } from "os";
 import { parse, join } from "path";
 import { afterEach, describe, expect, it } from "vitest";
 import { clearRuntimeSettings, setRuntimeSettings } from "../src/core/config.js";
-import { getWorkspaceRootSafety } from "../src/core/permissions.js";
+import { checkShellCommandAccess, getWorkspaceRootSafety } from "../src/core/permissions.js";
 import { bashTool } from "../src/tools/bash.js";
 import { editFileDirect, writeFileDirect } from "../src/tools/file-ops.js";
 import { collectProjectFiles } from "../src/tui/file-picker.js";
@@ -58,16 +58,24 @@ describe("autonomy permissions", () => {
     expect(result.success).toBe(true);
   });
 
-  it("rejects filesystem roots as workspaces", () => {
+  it("rejects broad filesystem roots as workspaces", () => {
     const root = parse(process.cwd()).root;
     const result = getWorkspaceRootSafety(root);
 
     expect(result.allowed).toBe(false);
-    expect(result.reason).toContain("filesystem root");
+    expect(result.reason).toContain("too broad");
   });
 
-  it("does not collect files from filesystem roots for the composer picker", () => {
+  it("does not collect files from broad roots for the composer picker", () => {
     const root = parse(process.cwd()).root;
     expect(collectProjectFiles(root)).toEqual([]);
+  });
+
+  it("blocks shell access when the workspace scope is too broad", () => {
+    const root = parse(process.cwd()).root;
+    const result = checkShellCommandAccess("dir", root);
+
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("too broad");
   });
 });

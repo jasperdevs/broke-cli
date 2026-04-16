@@ -11,6 +11,13 @@ export interface PermissionDecision {
   normalizedPath?: string;
 }
 
+export interface WorkspaceScope {
+  cwd: string;
+  root: string;
+  allowed: boolean;
+  reason?: string;
+}
+
 const workspaceRootCache = new Map<string, string>();
 const DANGEROUS_SHELL_PATTERNS = [
   /\brm\s+-rf\s+(?:\/|\*|~|\\|[a-z]:\\)/i,
@@ -106,17 +113,28 @@ function buildTrustedRoots(mode: "read" | "write", cwd = process.cwd()): string[
   return [workspaceRoot, ...normalizeRootList(configured, cwd)];
 }
 
-export function getWorkspaceRootSafety(cwd = process.cwd()): PermissionDecision {
+export function resolveWorkspaceScope(cwd = process.cwd()): WorkspaceScope {
   const workspaceRoot = getWorkspaceRoot(cwd);
   if (!isUnsafeWorkspaceRoot(workspaceRoot)) {
-    return { allowed: true, scope: "workspace", normalizedPath: workspaceRoot };
+    return { cwd: resolve(cwd), root: workspaceRoot, allowed: true };
   }
   return {
+    cwd: resolve(cwd),
+    root: workspaceRoot,
     allowed: false,
-    scope: "outside-workspace",
-    normalizedPath: workspaceRoot,
-    reason: `Refusing to use filesystem root as the workspace: ${workspaceRoot}. Start brokecli inside a project folder.`,
+    reason: `The current workspace is too broad to inspect safely: ${workspaceRoot}.`,
   };
+}
+
+export function formatWorkspaceScopeError(scope: WorkspaceScope, action = "inspect or edit files"): string {
+  return `${scope.reason ?? "The current workspace is not safe to use."} Change into a project folder before asking me to ${action}.`;
+}
+
+export function getWorkspaceRootSafety(cwd = process.cwd()): PermissionDecision {
+  const scope = resolveWorkspaceScope(cwd);
+  return scope.allowed
+    ? { allowed: true, scope: "workspace", normalizedPath: scope.root }
+    : { allowed: false, scope: "outside-workspace", normalizedPath: scope.root, reason: scope.reason };
 }
 
 export function checkFilesystemPathAccess(
@@ -126,8 +144,8 @@ export function checkFilesystemPathAccess(
 ): PermissionDecision {
   const settings = getAutonomySettings();
   const normalizedPath = resolve(cwd, targetPath);
-  const workspaceSafety = getWorkspaceRootSafety(cwd);
-  if (!workspaceSafety.allowed) return workspaceSafety;
+  const workspace = resolveWorkspaceScope(cwd);
+  if (!workspace.allowed) return { allowed: false, scope: "outside-workspace", normalizedPath: workspace.root, reason: workspace.reason };
   const trustedRoots = buildTrustedRoots(mode, cwd);
 
   if (trustedRoots.some((root) => isWithinRoot(normalizedPath, root))) {
@@ -181,8 +199,8 @@ export function checkShellCommandAccess(command: string, cwd = process.cwd()): P
   if (!trimmed) return { allowed: false, reason: "Empty shell command." };
 
   const settings = getAutonomySettings();
-  const workspaceSafety = getWorkspaceRootSafety(cwd);
-  if (!workspaceSafety.allowed) return workspaceSafety;
+  const workspace = resolveWorkspaceScope(cwd);
+  if (!workspace.allowed) return { allowed: false, scope: "outside-workspace", normalizedPath: workspace.root, reason: workspace.reason };
   if (!settings.allowDestructiveShell && DANGEROUS_SHELL_PATTERNS.some((pattern) => pattern.test(trimmed))) {
     return { allowed: false, reason: `Blocked dangerous shell command: ${trimmed}` };
   }
@@ -217,7 +235,7 @@ export function describeAutonomyPolicy(cwd = process.cwd()): string[] {
     `Workspace root: ${workspaceRoot}`,
     "Autonomy rules:",
     isUnsafeWorkspaceRoot(workspaceRoot)
-      ? "- The current workspace is a filesystem root. Do not inspect files or run commands until the user changes into a project directory."
+      ? "- The current workspace is too broad. Do not inspect files or run commands until the user changes into a project directory."
       : "- Treat the workspace root as the maximum file scope for this turn.",
     "- Workspace reads and writes are allowed by default.",
     settings.allowReadOutsideWorkspace

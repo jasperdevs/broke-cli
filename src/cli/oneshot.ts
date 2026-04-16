@@ -18,7 +18,7 @@ import { applyTurnFrame } from "./turn-frame.js";
 import { buildMinimalOutputInstruction, getMinimalOutputPolicy } from "./turn-runner-support.js";
 import { getProviderCompat } from "../ai/provider-compat.js";
 import { resolveModelReferencePattern } from "../ai/model-reference.js";
-import { getWorkspaceRootSafety } from "../core/permissions.js";
+import { formatWorkspaceScopeError, resolveWorkspaceScope } from "../core/permissions.js";
 
 function canUseSdkTools(model: ModelHandle): boolean {
   return model.runtime === "sdk"
@@ -103,8 +103,8 @@ export async function runOneShotPrompt(options: {
   extraTools?: ToolSet;
 }): Promise<OneShotResult> {
   const { prompt, mode, providers, providerRegistry, opts, streamCallbacks, extraTools } = options;
-  const workspaceSafety = getWorkspaceRootSafety(process.cwd());
-  if (!workspaceSafety.allowed) throw new Error(workspaceSafety.reason ?? "Unsafe workspace root.");
+  const workspace = resolveWorkspaceScope(process.cwd());
+  if (!workspace.allowed) throw new Error(formatWorkspaceScopeError(workspace));
   const skillExpansion = expandInlineSkillInvocations(prompt);
   const modelPrompt = skillExpansion.expandedText;
   const session = new Session();

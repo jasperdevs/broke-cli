@@ -27,7 +27,7 @@ import { getTurnPolicy } from "../src/core/turn-policy.js";
 import { runBtwQuestion as runBtwQuestionRuntime } from "../src/cli/btw-runtime.js";
 import { applyProgramRuntimeSettings, applyRuntimeToolSelection, reportStartupUpdateNotice, runExportMode } from "../src/cli/program-runtime.js";
 import { runCliPrintOrJsonMode } from "../src/cli/print-mode.js";
-import { getWorkspaceRootSafety } from "../src/core/permissions.js";
+import { checkShellCommandAccess, formatWorkspaceScopeError, resolveWorkspaceScope } from "../src/core/permissions.js";
 const program = createProgram(APP_VERSION);
 function formatPackageInstallWarning(failure: PackageInstallFailure): string {
   const error = failure.error as { stderr?: Buffer | string; stdout?: Buffer | string; message?: string };
@@ -78,9 +78,8 @@ program.action(async (promptParts, opts) => {
   if (await runCliPrintOrJsonMode({ promptParts, opts, parsedModel, providers: detectedProvidersOnce, providerRegistry, hooks, reportPackageInstallWarnings })) return;
   const app = new App();
   app.setVersion(program.version() ?? APP_VERSION);
-  const startupWorkspaceSafety = getWorkspaceRootSafety(process.cwd());
-  const unsafeWorkspaceMessage = (reason?: string) => `${reason ?? "Unsafe workspace root."} Use /projects or cd into a project folder before asking me to inspect or edit files.`;
-  if (!startupWorkspaceSafety.allowed) app.addMessage("system", unsafeWorkspaceMessage(startupWorkspaceSafety.reason));
+  const startupWorkspace = resolveWorkspaceScope(process.cwd());
+  if (!startupWorkspace.allowed) app.addMessage("system", formatWorkspaceScopeError(startupWorkspace));
   let currentMode: Mode = getSettings().mode;
   let lastActivityTime = Date.now();
 
@@ -389,13 +388,12 @@ program.action(async (promptParts, opts) => {
       }
     }
 
-    const workspaceSafety = getWorkspaceRootSafety(process.cwd());
-    if (!workspaceSafety.allowed) { app.addMessage("system", unsafeWorkspaceMessage(workspaceSafety.reason)); return; }
-
     if (!templateLoaded) {
       if (text.startsWith("!!")) {
         const cmd = text.slice(2).trim();
         if (cmd) {
+          const permission = checkShellCommandAccess(cmd);
+          if (!permission.allowed) { app.addMessage("system", permission.reason ?? "Shell command blocked by autonomy policy."); return; }
           try {
             const { execSync } = await import("child_process");
             execSync(cmd, { encoding: "utf-8", timeout: 30000, cwd: process.cwd(), stdio: "ignore" });
@@ -409,6 +407,8 @@ program.action(async (promptParts, opts) => {
       if (text.startsWith("!")) {
         const cmd = text.slice(1).trim();
         if (cmd) {
+          const permission = checkShellCommandAccess(cmd);
+          if (!permission.allowed) { app.addMessage("system", permission.reason ?? "Shell command blocked by autonomy policy."); return; }
           try {
             const { execSync } = await import("child_process");
             const output = execSync(cmd, { encoding: "utf-8", timeout: 30000, maxBuffer: 1024 * 1024, cwd: process.cwd() });
