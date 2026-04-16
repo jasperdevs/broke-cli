@@ -21,7 +21,7 @@ import { bootstrapSession } from "../src/cli/session-bootstrap.js";
 import { runModelTurn } from "../src/cli/turn-runner.js";
 import { handleSlashCommand } from "../src/cli/slash-commands.js";
 import { createProgram } from "../src/cli/program.js";
-import { ensureConfiguredPackagesInstalled } from "../src/core/package-manager.js";
+import { ensureConfiguredPackagesInstalledWithOptions, type PackageInstallFailure } from "../src/core/package-manager.js";
 import { checkForNewVersion } from "../src/core/update.js";
 import { isSkippedPromptAnswer, isValidHttpBaseUrl, normalizeThinkingLevel, normalizeProgramArgv, readPromptArg, splitModelArg } from "../src/cli/cli-helpers.js";
 import { resolveConfiguredModelHandle, resolvePreferredMode, type SpecialistModelRole } from "../src/cli/model-routing.js";
@@ -30,6 +30,12 @@ import { getTurnPolicy } from "../src/core/turn-policy.js";
 import { runBtwQuestion as runBtwQuestionRuntime } from "../src/cli/btw-runtime.js";
 import { applyProgramRuntimeSettings, applyRuntimeToolSelection, runExportMode } from "../src/cli/program-runtime.js";
 const program = createProgram(APP_VERSION);
+
+function formatPackageInstallWarning(failure: PackageInstallFailure): string {
+  const error = failure.error as { stderr?: Buffer | string; stdout?: Buffer | string; message?: string };
+  const detail = String(error.stderr || error.stdout || error.message || failure.error).trim().split(/\r?\n/)[0] ?? "unknown error";
+  return `Configured package ${failure.entry.source} could not be installed; continuing without it. ${detail}`;
+}
 
 program.action(async (promptParts, opts) => {
   const parsedModel = splitModelArg(opts.model);
@@ -42,10 +48,19 @@ program.action(async (promptParts, opts) => {
     return;
   }
 
-  await ensureConfiguredPackagesInstalled();
+  const packageInstallWarnings: string[] = [];
+  await ensureConfiguredPackagesInstalledWithOptions({
+    throwOnFailure: false,
+    onFailure: (failure) => packageInstallWarnings.push(formatPackageInstallWarning(failure)),
+  });
   const hooks = loadExtensions();
 
+  const reportPackageInstallWarnings = () => {
+    for (const warning of packageInstallWarnings) process.stderr.write(`${warning}\n`);
+  };
+
   if (opts.rpc || opts.mode === "rpc") {
+    reportPackageInstallWarnings();
     await runRpcMode(hooks, opts);
     return;
   }
@@ -54,6 +69,7 @@ program.action(async (promptParts, opts) => {
   const detectedProvidersOnce = await providerRegistry.refresh();
 
   if (opts.listModels) {
+    reportPackageInstallWarnings();
     const options = providerRegistry.buildVisibleModelOptions(null, "", getSettings().scopedModels);
     for (const option of options) {
       const id = `${option.providerId}/${option.modelId}`;
@@ -68,6 +84,7 @@ program.action(async (promptParts, opts) => {
   applyRuntimeToolSelection(opts.tools, toolsDisabled);
 
   if (opts.print || opts.mode === "json") {
+    reportPackageInstallWarnings();
     const prompt = await readPromptArg(promptParts);
     if (!prompt) {
       console.error("No prompt provided for single-shot mode.");
@@ -175,6 +192,7 @@ program.action(async (promptParts, opts) => {
   const getContextOptimizer = (): ReturnType<Session["getContextOptimizer"]> => session.getContextOptimizer();
 
   app.start();
+  for (const warning of packageInstallWarnings) app.addMessage("system", warning);
   app.setSessionName(session.getName());
   hooks.emit("on_session_start", { cwd: process.cwd() });
   app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());

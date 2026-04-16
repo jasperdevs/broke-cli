@@ -1,6 +1,6 @@
 import { execFileSync } from "child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
-import { basename, isAbsolute, join, resolve } from "path";
+import { basename, dirname, isAbsolute, join, resolve } from "path";
 import { homedir } from "os";
 import { getGlobalConfigPath, getProjectConfigPath, loadGlobalConfig, loadProjectConfig, type PackageFilterSource, type PackageSource, updateSettingsPatch } from "./config.js";
 
@@ -11,6 +11,11 @@ export interface InstalledPackageInfo {
   kind: "npm" | "git" | "url" | "path";
   pinned: boolean;
   installed: boolean;
+}
+
+export interface PackageInstallFailure {
+  entry: InstalledPackageInfo;
+  error: unknown;
 }
 
 function getAgentDir(scope: "global" | "project"): string {
@@ -99,7 +104,9 @@ function savePackages(packages: PackageSource[], scope: "global" | "project"): v
 }
 
 function runCommand(command: string[], cwd?: string): void {
-  execFileSync(command[0], command.slice(1), {
+  const [file, ...args] = command;
+  const isWindowsCommandScript = process.platform === "win32" && /\.(?:bat|cmd)$/i.test(file);
+  execFileSync(isWindowsCommandScript ? process.env.ComSpec || "cmd.exe" : file, isWindowsCommandScript ? ["/d", "/s", "/c", file, ...args] : args, {
     cwd,
     stdio: "pipe",
     encoding: "utf-8",
@@ -107,9 +114,20 @@ function runCommand(command: string[], cwd?: string): void {
   });
 }
 
+export function resolveNpmCommand(configured: string[], options?: { platform?: NodeJS.Platform; execPath?: string; exists?: (path: string) => boolean }): string[] {
+  if (configured.length > 0) return configured;
+  const platform = options?.platform ?? process.platform;
+  if (platform !== "win32") return ["npm"];
+
+  const execPath = options?.execPath ?? process.execPath;
+  const exists = options?.exists ?? existsSync;
+  const bundledNpmCli = join(dirname(execPath), "node_modules", "npm", "bin", "npm-cli.js");
+  return exists(bundledNpmCli) ? [execPath, bundledNpmCli] : ["npm.cmd"];
+}
+
 function getNpmCommand(): string[] {
   const configured = loadGlobalConfig().settings?.npmCommand ?? [];
-  return configured.length > 0 ? configured : ["npm"];
+  return resolveNpmCommand(configured);
 }
 
 function ensurePackageParent(source: string, scope: "global" | "project"): void {
@@ -176,9 +194,22 @@ export function listInstalledPackages(): InstalledPackageInfo[] {
 }
 
 export async function ensureConfiguredPackagesInstalled(): Promise<InstalledPackageInfo[]> {
+  return ensureConfiguredPackagesInstalledWithOptions();
+}
+
+export async function ensureConfiguredPackagesInstalledWithOptions(options?: {
+  throwOnFailure?: boolean;
+  onFailure?: (failure: PackageInstallFailure) => void;
+}): Promise<InstalledPackageInfo[]> {
+  const throwOnFailure = options?.throwOnFailure ?? true;
   const missing = listInstalledPackages().filter((entry) => !entry.installed);
   for (const entry of missing) {
-    await installPackage(entry.source, { local: entry.scope === "project" });
+    try {
+      await installPackage(entry.source, { local: entry.scope === "project" });
+    } catch (error) {
+      options?.onFailure?.({ entry, error });
+      if (throwOnFailure) throw error;
+    }
   }
   return missing;
 }
