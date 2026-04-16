@@ -321,7 +321,6 @@ export async function executeTurn(options: {
       });
       app.setStreaming(false);
       app.updateUsage(session.getTotalCost(), session.getTotalInputTokens(), session.getTotalOutputTokens());
-      abortController = null;
       nextActivityTime = Date.now();
       if (rawPayload) {
         if (visibleAssistantText.trim()) app.rollbackLastAssistantMessage();
@@ -457,18 +456,18 @@ export async function executeTurn(options: {
   }
 
   if (rawToolPayloadText) {
+    const rawToolAbortSignal = abortController?.signal;
     const fallback = await executeRawToolPayloadFallback({
-      rawToolPayloadText,
-      text,
-      executionModel,
+      rawToolPayloadText, text, executionModel,
       policyAllowedTools: policy.allowedTools,
-      buildTools,
-      app,
-      hooks,
-      session,
-      nextToolCalls,
-      abortSignal: abortController?.signal,
+      buildTools, app, hooks, session, nextToolCalls,
+      abortSignal: rawToolAbortSignal,
     });
+    if (fallback.aborted || rawToolAbortSignal?.aborted) {
+      completion = "error";
+      errorMessage = "Cancelled.";
+      rawToolPayloadText = null;
+    }
     if (fallback.handled && fallback.summary) {
       sawToolActivity = true;
       session.addMessage("assistant", fallback.summary);
@@ -486,6 +485,7 @@ export async function executeTurn(options: {
     if (getSettings().notifyOnResponse) sendResponseNotification();
     if (app.hasPendingMessages("steering")) app.flushPendingMessages("steering");
   }
+  abortController = null;
   return {
     nextToolCalls,
     lastActivityTime: steeringInterruptRequested ? Date.now() : nextActivityTime,

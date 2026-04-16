@@ -38,7 +38,7 @@ export async function executeRawToolPayloadFallback(options: {
   session: Session;
   nextToolCalls: string[];
   abortSignal?: AbortSignal;
-}): Promise<{ handled: boolean; summary?: string }> {
+}): Promise<{ handled: boolean; summary?: string; aborted?: boolean }> {
   const {
     rawToolPayloadText,
     text,
@@ -52,6 +52,7 @@ export async function executeRawToolPayloadFallback(options: {
     abortSignal,
   } = options;
   if (!rawToolPayloadText) return { handled: false };
+  if (abortSignal?.aborted) return { handled: true, aborted: true };
   if (executionModel.runtime !== "sdk" || !LOCAL_PROVIDER_IDS.has(executionModel.provider.id) || !canUseSdkTools(executionModel)) {
     return { handled: false };
   }
@@ -64,6 +65,7 @@ export async function executeRawToolPayloadFallback(options: {
   let lastSummary = "Tool ran.";
 
   for (const call of parsedCalls) {
+    if (abortSignal?.aborted) return { handled: true, aborted: true };
     const executor = tools[call.name]?.execute;
     if (!executor) continue;
     if (typeof call.args.path !== "string" || !call.args.path) {
@@ -76,6 +78,10 @@ export async function executeRawToolPayloadFallback(options: {
     app.updateToolCallArgs(call.name, buildToolPreview(call.name, call.args), call.args);
     try {
       const result = await executor(call.args, { abortSignal });
+      if (abortSignal?.aborted) {
+        app.addToolResult(call.name, "cancelled", true);
+        return { handled: true, aborted: true };
+      }
       hooks.emit("on_tool_result", { name: call.name, result });
       const detail = observeToolResult({
         session,
@@ -91,6 +97,10 @@ export async function executeRawToolPayloadFallback(options: {
       else app.addToolResult(call.name, "ok", false, detail);
       lastSummary = summarizeParsedToolExecution(call.name, call.args, result);
     } catch (err) {
+      if (abortSignal?.aborted) {
+        app.addToolResult(call.name, "cancelled", true);
+        return { handled: true, aborted: true };
+      }
       const message = err instanceof Error ? err.message : String(err);
       app.addToolResult(call.name, message.slice(0, 80), true);
       lastSummary = `${call.name} failed.`;
