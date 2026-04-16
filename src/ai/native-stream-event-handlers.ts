@@ -49,6 +49,25 @@ function extractCodexItemText(item: unknown): string {
   return "";
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null ? value as Record<string, unknown> : null;
+}
+
+function normalizeCodexCliToolName(name: string): string {
+  if (name === "shell_command") return "bash";
+  if (name === "apply_patch") return "editFile";
+  return name;
+}
+
+function normalizeCodexCliToolArgs(name: string, args: unknown): unknown {
+  const parsed = parsePossiblyPartialJson(args);
+  const record = asRecord(parsed);
+  if (name === "shell_command" && record && typeof record.command === "string") {
+    return { command: record.command };
+  }
+  return parsed;
+}
+
 function extractClaudeToolUseNames(message: unknown): string[] {
   const record = typeof message === "object" && message !== null ? message as Record<string, unknown> : {};
   const content = Array.isArray(record.content) ? record.content : [];
@@ -100,6 +119,52 @@ export function createNativeEventHandlers(options: {
 
   const handleCodexEvent = (event: Record<string, unknown>) => {
     const type = typeof event.type === "string" ? event.type : "";
+    if (type === "response_item") {
+      const payload = asRecord(event.payload);
+      if (!payload) return;
+      const itemType = extractItemType(payload);
+      const rawToolName = extractNativeToolName(payload);
+      const toolName = rawToolName ? normalizeCodexCliToolName(rawToolName) : null;
+      const toolCallId = extractNativeToolCallId(payload);
+      if (toolName && itemType === "function_call") {
+        if (toolCallId) nativeToolNamesById.set(toolCallId, toolName);
+        startToolIfNeeded(toolName, toolCallId);
+        callbacks.onToolCall?.(toolName, normalizeCodexCliToolArgs(rawToolName ?? toolName, extractNativeToolArgs(payload)), toolCallId ?? undefined);
+        return;
+      }
+      if (/function_call_output/.test(itemType)) {
+        const name = toolCallId ? nativeToolNamesById.get(toolCallId) ?? "tool" : "tool";
+        callbacks.onToolResult?.(name, extractNativeToolResult(payload, extractCodexItemText(payload)), toolCallId ?? undefined);
+        callbacks.onAfterToolCall?.();
+        return;
+      }
+      if (itemType === "message" && payload.role === "assistant") {
+        const text = extractCodexItemText(payload);
+        if (text) {
+          emittedText = text;
+          visibleText = emitDelta(text, visibleText, callbacks.onText);
+        }
+        return;
+      }
+    }
+    if (type === "event_msg") {
+      const payload = asRecord(event.payload);
+      if (!payload) return;
+      const payloadType = typeof payload.type === "string" ? payload.type : "";
+      if (payloadType === "agent_message" && typeof payload.message === "string") {
+        emittedReasoning = emitDelta(`${emittedReasoning}${payload.message}\n`, emittedReasoning, callbacks.onReasoning);
+        return;
+      }
+      if (payloadType === "task_complete") {
+        const text = typeof payload.last_agent_message === "string" ? payload.last_agent_message : "";
+        if (text) {
+          emittedText = text;
+          visibleText = emitDelta(text, visibleText, callbacks.onText);
+        }
+        finishWithUsage(payload.usage);
+        return;
+      }
+    }
     if (type === "response.output_item.added") {
       const item = typeof event.item === "object" && event.item !== null ? event.item as Record<string, unknown> : {};
       const itemType = extractItemType(item);

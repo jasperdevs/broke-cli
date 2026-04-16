@@ -256,4 +256,103 @@ describe("native stream tool callbacks", () => {
     expect(onToolResult).toHaveBeenCalledWith("bash", "tests passed", "call_result_1");
     expect(onAfterToolCall).toHaveBeenCalledTimes(1);
   });
+
+  it("surfaces archived Codex CLI response_item tool calls and outputs", async () => {
+    const stdoutHandlers: Record<string, (chunk: string) => void> = {};
+    const processHandlers: Record<string, (code?: number) => void> = {};
+    configMocks.spawn.mockReturnValue({
+      stdout: { on: (event: string, handler: (chunk: string) => void) => { stdoutHandlers[event] = handler; } },
+      stderr: { on: vi.fn() },
+      stdin: { end: vi.fn() },
+      on: (event: string, handler: (code?: number) => void) => { processHandlers[event] = handler; },
+      kill: vi.fn(),
+    });
+
+    const onToolCallStart = vi.fn();
+    const onToolCall = vi.fn();
+    const onToolResult = vi.fn();
+    const onAfterToolCall = vi.fn();
+    const pending = startNativeStream({
+      providerId: "codex",
+      modelId: "gpt-5.4",
+      system: "system",
+      messages: [{ role: "user", content: "make a game" }],
+    }, {
+      onText: vi.fn(),
+      onReasoning: vi.fn(),
+      onFinish: vi.fn(),
+      onError: vi.fn(),
+      onToolCallStart,
+      onToolCall,
+      onToolResult,
+      onAfterToolCall,
+    });
+
+    stdoutHandlers.data?.(`${JSON.stringify({
+      type: "response_item",
+      payload: {
+        type: "function_call",
+        name: "shell_command",
+        arguments: "{\"command\":\"New-Item -ItemType Directory snake-game\"}",
+        call_id: "call_1",
+      },
+    })}\n`);
+    stdoutHandlers.data?.(`${JSON.stringify({
+      type: "response_item",
+      payload: {
+        type: "function_call_output",
+        call_id: "call_1",
+        output: "Exit code: 0\nCreated snake-game",
+      },
+    })}\n`);
+    processHandlers.close?.(0);
+
+    await pending;
+    expect(onToolCallStart).toHaveBeenCalledWith("bash", "call_1");
+    expect(onToolCall).toHaveBeenCalledWith("bash", { command: "New-Item -ItemType Directory snake-game" }, "call_1");
+    expect(onToolResult).toHaveBeenCalledWith("bash", "Exit code: 0\nCreated snake-game", "call_1");
+    expect(onAfterToolCall).toHaveBeenCalledTimes(1);
+  });
+
+  it("streams archived Codex CLI agent messages as reasoning and task completion as final text", async () => {
+    const stdoutHandlers: Record<string, (chunk: string) => void> = {};
+    const processHandlers: Record<string, (code?: number) => void> = {};
+    configMocks.spawn.mockReturnValue({
+      stdout: { on: (event: string, handler: (chunk: string) => void) => { stdoutHandlers[event] = handler; } },
+      stderr: { on: vi.fn() },
+      stdin: { end: vi.fn() },
+      on: (event: string, handler: (code?: number) => void) => { processHandlers[event] = handler; },
+      kill: vi.fn(),
+    });
+
+    const onText = vi.fn();
+    const onReasoning = vi.fn();
+    const onFinish = vi.fn();
+    const pending = startNativeStream({
+      providerId: "codex",
+      modelId: "gpt-5.4",
+      system: "system",
+      messages: [{ role: "user", content: "make a game" }],
+    }, {
+      onText,
+      onReasoning,
+      onFinish,
+      onError: vi.fn(),
+    });
+
+    stdoutHandlers.data?.(`${JSON.stringify({
+      type: "event_msg",
+      payload: { type: "agent_message", message: "I am creating the files now." },
+    })}\n`);
+    stdoutHandlers.data?.(`${JSON.stringify({
+      type: "event_msg",
+      payload: { type: "task_complete", last_agent_message: "Created snake-game with a Three.js snake game." },
+    })}\n`);
+    processHandlers.close?.(0);
+
+    await pending;
+    expect(onReasoning).toHaveBeenCalledWith("I am creating the files now.\n");
+    expect(onText).toHaveBeenCalledWith("Created snake-game with a Three.js snake game.");
+    expect(onFinish).toHaveBeenCalledTimes(1);
+  });
 });
