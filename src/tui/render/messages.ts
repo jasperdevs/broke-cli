@@ -47,19 +47,23 @@ function renderAssistantThinking(options: {
   duration?: number;
   maxWidth: number;
   wordWrap: (text: string, width: number) => string[];
-  colors: { muted: string };
+  colors: { accent: string; muted: string };
   reset: string;
 }): string[] {
   const { thinking, duration, maxWidth, wordWrap, colors, reset } = options;
   const lines: string[] = [];
   const label = duration && duration > 0 ? `Thinking · ${duration}s` : "Thinking";
-  lines.push(`${colors.muted}  ${label}${reset}`);
+  lines.push(`${colors.accent}  ${label}${reset}`);
   for (const rawLine of thinking.split("\n")) {
     for (const wrappedLine of wordWrap(rawLine, Math.max(8, maxWidth - 4))) {
       lines.push(`${colors.muted}  ${wrappedLine}${reset}`);
     }
   }
   return lines;
+}
+
+function pushBlockGap(lines: string[]): void {
+  if (lines.length > 0 && lines[lines.length - 1] !== "") lines.push("");
 }
 
 export function renderStaticMessages(options: {
@@ -87,21 +91,24 @@ export function renderStaticMessages(options: {
   while (idx < messages.length) {
     const msg = messages[idx];
     if (msg.role === "user") {
+      pushBlockGap(lines);
       const accent = "▌";
-      const availW = Math.max(1, maxWidth - 3);
+      const prefix = `  ${colors.userAccent}${accent}${reset}  `;
+      const availW = Math.max(1, maxWidth - 5);
       for (const contentLine of msg.content.split("\n")) {
         for (const text of wordWrap(contentLine, availW)) {
-          lines.push(`${colors.userAccent}${accent}${reset} ${colors.userText}${text}${reset}`);
+          lines.push(`${prefix}${colors.userText}${text}${reset}`);
         }
       }
       if (getSettings().terminal.showImages && msg.images && msg.images.length > 0) {
         const imageTag = `${colors.imageTagBg}${bold}${colors.text}[Image #1]${reset}`;
         for (const row of renderUserImageRows(msg.images, availW, imageTag)) {
-          lines.push(`${colors.userAccent}${accent}${reset} ${row}`);
+          lines.push(`${prefix}${row}`);
         }
       }
       lines.push("");
     } else if (msg.role === "assistant") {
+      pushBlockGap(lines);
       const hideThinking = getSettings().hideThinkingBlock;
       if (msg.thinking && !hideThinking) {
         lines.push(...renderAssistantThinking({
@@ -109,7 +116,7 @@ export function renderStaticMessages(options: {
           duration: msg.thinkingDuration,
           maxWidth,
           wordWrap,
-          colors: { muted: colors.muted },
+          colors: { accent: colors.userAccent, muted: colors.muted },
           reset,
         }));
         if (msg.content.trim()) lines.push("");
@@ -130,14 +137,14 @@ export function renderStaticMessages(options: {
         const themedPrefix = `${colors.text}`;
         const themedLine = cl.includes(reset) ? cl.replaceAll(reset, `${reset}${colors.text}`) : cl;
         if (plain.length <= wrapW) {
-          const lead = firstAssistantLine ? "• " : "  ";
+          const lead = firstAssistantLine ? "  • " : "    ";
           lines.push(`${lead}${themedPrefix}${themedLine}${reset}`);
           firstAssistantLine = false;
           continue;
         }
         const prefix = extractAnsiPrefix(cl);
         for (const wrappedLine of wordWrap(plain, wrapW)) {
-          const lead = firstAssistantLine ? "• " : "  ";
+          const lead = firstAssistantLine ? "  • " : "    ";
           lines.push(`${lead}${themedPrefix}${prefix}${wrappedLine}${reset}`);
           firstAssistantLine = false;
         }
@@ -154,9 +161,11 @@ export function renderStaticMessages(options: {
         lines.push(...renderActivity(msg.activity));
       }
     } else if (toolOutputCollapsed && isToolOutput(msg.content)) {
+      pushBlockGap(lines);
       while (idx + 1 < messages.length && messages[idx + 1].role === "system" && isToolOutput(messages[idx + 1].content)) idx++;
       lines.push(`${colors.muted}  [tool output hidden]${reset}`);
     } else if (msg.content.includes("\x1b[")) {
+      pushBlockGap(lines);
       const wrapW = maxWidth - 4;
       for (const cl of msg.content.split("\n")) {
         const plain = stripAnsi(cl);
@@ -170,6 +179,7 @@ export function renderStaticMessages(options: {
         }
       }
     } else {
+      pushBlockGap(lines);
       const wrapW = maxWidth - 4;
       for (const wrappedLine of wrapVisibleText(msg.content, wrapW, wordWrap)) {
         lines.push(`${colors.muted}  ${wrappedLine}${reset}`);

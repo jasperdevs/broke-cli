@@ -13,7 +13,6 @@ import { handleLogoutMenu, openEmptyItemMenu, openExportMenu, openProjectsMenu, 
 import { formatKeypressBinding, loadKeybindings, reloadKeybindings, updateKeybinding, type Keybindings } from "../core/keybindings.js";
 import { reloadContext } from "../core/context.js";
 import { undoLastCheckpoint } from "../core/git.js";
-import { listThemes } from "../core/themes.js";
 import { createSlashCommandRegistry, type RegisteredSlashCommand } from "./slash-command-registry.js";
 import type { ParsedSlashCommand, SlashCommandApp, SlashCommandResult } from "./slash-command-types.js";
 import type { ModelHandle } from "../ai/providers.js";
@@ -77,34 +76,10 @@ interface UiSlashCommandContext extends ParsedSlashCommand {}
 export const UI_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<UiSlashCommandContext, SlashCommandResult>> = [
   {
     names: ["theme"],
-    description: "switch tui theme",
-    run: ({ app, restText }) => {
-      const themes = listThemes();
-      if (themes.length === 0) {
-        app.setStatus?.("No themes available.");
-        return { handled: true };
-      }
-      const normalized = restText.trim().toLowerCase();
-      if (normalized) {
-        const match = themes.find((theme) =>
-          theme.key.toLowerCase() === normalized || theme.label.toLowerCase() === normalized);
-        if (!match) {
-          app.setStatus?.(`Unknown theme: ${restText}`);
-          return { handled: true };
-        }
-        updateSetting("theme", match.key);
-        app.setStatus?.(`Theme: ${match.label}`);
-        return { handled: true };
-      }
-      app.openItemPicker("Themes", themes.map((theme) => ({
-        id: theme.key,
-        label: theme.label,
-        detail: theme.key,
-      })), (id: string) => {
-        updateSetting("theme", id);
-        const selected = themes.find((theme) => theme.key === id);
-        app.setStatus?.(`Theme: ${selected?.label ?? id}`);
-      }, { kind: "theme" });
+    showInPicker: false,
+    description: "theme selection is disabled",
+    run: ({ app }) => {
+      app.setStatus?.("Themes are disabled; colors follow your system and terminal background.");
       return { handled: true };
     },
   },

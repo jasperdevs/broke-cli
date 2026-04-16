@@ -109,6 +109,7 @@ export function renderToolCallBlock(options: {
   const statusLabel = tc.status === "starting" ? "starting" : tc.status;
   const elapsedLabel = formatElapsedLabel(tc);
   const statusSuffix = `${colors.muted}${statusLabel}${elapsedLabel ? ` · ${elapsedLabel}` : ""}${reset}`;
+  const activeDetailColor = running ? colors.accent2 : colors.muted;
   const ordinal = typeof index === "number" ? `${colors.muted}${index + 1}.${reset} ` : "";
   const firstPrefix = `  ${ordinal}${statusIcon} `;
   const continuationPrefix = "    ";
@@ -123,13 +124,13 @@ export function renderToolCallBlock(options: {
   const a = tc.args as Record<string, string> | undefined;
 
   if (running && tc.preview === "..." && !tc.streamOutput) {
-    lines.push(`${colors.muted}  ${branch} waiting for tool details...${reset}`);
+    lines.push(`${activeDetailColor}  ${branch} waiting for tool details...${reset}`);
   }
 
   const argSummary = toolArgumentSummary(tc);
   if (argSummary && (running || (!done && !tc.resultDetail))) {
     for (const wrappedLine of renderPrefixedWrappedLines(`  ${branch} `, argSummary, maxWidth)) {
-      lines.push(`${colors.muted}${wrappedLine}${reset}`);
+      lines.push(`${activeDetailColor}${wrappedLine}${reset}`);
     }
   }
 
@@ -138,10 +139,10 @@ export function renderToolCallBlock(options: {
     const tail = outLines.slice(-5);
     for (const line of tail) {
       for (const wrappedLine of renderPrefixedWrappedLines(`  ${branch} `, line, maxWidth)) {
-        lines.push(`${colors.muted}${wrappedLine}${reset}`);
+        lines.push(`${activeDetailColor}${wrappedLine}${reset}`);
       }
     }
-    if (outLines.length > 5) lines.push(`${colors.muted}  ${branch} ... +${outLines.length - 5} lines${reset}`);
+    if (outLines.length > 5) lines.push(`${activeDetailColor}  ${branch} ... +${outLines.length - 5} lines${reset}`);
   }
 
   if (done) {
@@ -248,7 +249,8 @@ function renderActivityBlock(options: {
   const { currentActivityStep, toolExecutions, maxWidth, spinnerFrame, colors } = options;
   if (!currentActivityStep && toolExecutions.length === 0) return [];
   const lines: string[] = [];
-  lines.push(`  ${colors.dim}${toolExecutions.length > 0 ? "actions" : "status"}${colors.reset}`);
+  const hasActiveWork = !!currentActivityStep || toolExecutions.some((tc) => tc.status === "starting" || tc.status === "running");
+  lines.push(`  ${hasActiveWork ? colors.accent : colors.dim}${toolExecutions.length > 0 ? "actions" : "status"}${colors.reset}`);
   if (currentActivityStep && toolExecutions.length === 0) {
     const icon = currentActivityStep.status === "done"
       ? `${colors.dim}[done]${colors.reset}`
@@ -405,7 +407,8 @@ export function renderMessageOverlays(options: {
         : `${colors.dim}[wait]${colors.reset}`;
       const textColor = item.status === "done" ? colors.dim : item.status === "in_progress" ? `${colors.text}${colors.bold}` : colors.dim;
       const todoPrefixPlain = `  ${branch} `;
-      const todoPrefixStyled = `  ${colors.dim}${branch}${colors.reset} ${icon} `;
+      const branchColor = item.status === "in_progress" ? colors.accent : colors.dim;
+      const todoPrefixStyled = `  ${branchColor}${branch}${colors.reset} ${icon} `;
       const todoWrapWidth = Math.max(8, maxWidth - visibleWidth(todoPrefixPlain) - 6);
       wrapVisibleText(item.text, todoWrapWidth).forEach((wrappedLine, wrappedIndex) => {
         lines.push(`${wrappedIndex === 0 ? todoPrefixStyled : "      "}${textColor}${wrappedLine}${colors.reset}`);
@@ -438,7 +441,7 @@ export function renderMessageOverlays(options: {
     const label = thinkingRequested
       ? "Thinking..."
       : "Working";
-    lines.push(`  ${sparkleSpinner(spinnerFrame, colors.dim)} ${shimmerText(label, spinnerFrame, colors.dim)} ${colors.accent}(${statParts.join(" · ")})${colors.reset}`);
+    lines.push(`  ${sparkleSpinner(spinnerFrame, colors.accent)} ${shimmerText(label, spinnerFrame, colors.accent)} ${colors.accent}(${statParts.join(" · ")})${colors.reset}`);
     lines.push("");
   }
 

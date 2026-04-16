@@ -28,14 +28,14 @@ describe("mouse reporting mode", () => {
     expect(MOUSE_OFF).toBe("");
   });
 
-  it("keeps passive transcript/chat mode mouse-free so terminal selection stays native", () => {
+  it("captures mouse wheel in transcript/chat mode so scrolling stays inside the TUI", () => {
     const originalHideSidebar = getSettings().hideSidebar;
     updateSetting("hideSidebar", false);
     try {
       const app = new App() as any;
       app.messages = [{ role: "user", content: "hello" }];
       app.screen = { height: 18, width: 100, hasSidebar: true, mainWidth: 73, sidebarWidth: 24, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
-      expect(app.shouldEnableMenuMouse()).toBe(false);
+      expect(app.shouldEnableMenuMouse()).toBe(true);
     } finally {
       updateSetting("hideSidebar", originalHideSidebar);
     }
@@ -121,7 +121,7 @@ describe("message wrapping", () => {
       reset: "",
       bold: "",
     }).map((line) => stripAnsi(line));
-    expect(lines.some((line) => line.startsWith("▌"))).toBe(true);
+    expect(lines.some((line) => line.startsWith("  ▌"))).toBe(true);
   });
 
   it("drops markdown ANSI styling in light themes so assistant text stays readable", () => {

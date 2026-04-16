@@ -11,10 +11,12 @@ import type { Keypress } from "../src/tui/keypress.js";
 import { getCommandMatches } from "../src/tui/command-surface.js";
 
 describe("theme-derived panels", () => {
-  it("keeps the sidebar panel background distinct from the main app background", () => {
+  it("leaves panel backgrounds transparent so the terminal owns the background", () => {
     const theme = currentTheme();
-    expect(theme.sidebarBackground).toBeTruthy();
-    expect(theme.sidebarBackground).not.toBe(theme.background);
+    expect(theme.background).toBe("");
+    expect(theme.sidebarBackground).toBe("");
+    expect(theme.userBubble).toBe("");
+    expect(theme.codeBg).toBe("");
   });
 });
 
@@ -29,6 +31,7 @@ describe("startup home view", () => {
     let rendered: string[] = [];
     app.screen = { height: 20, width: 100, hasSidebar: true, mainWidth: 73, sidebarWidth: 24, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
     app.drawImmediate();
+    expect(rendered.join("\n")).not.toContain("\x1b[48;2;");
     const output = rendered.map((line) => stripAnsi(line)).join("\n");
     const firstCardLine = rendered.find((line) => stripAnsi(line).includes("╭")) ?? "";
     expect(stripAnsi(firstCardLine)).toContain("╭");

@@ -265,7 +265,7 @@ describe("slash command handling", () => {
     }
   });
 
-  it("updates the configured theme for /theme", async () => {
+  it("keeps /theme as a compatibility no-op while themes are disabled", async () => {
     const app = createAppStub();
     const previousTheme = loadConfig().settings?.theme ?? "brokecli";
 
@@ -278,7 +278,7 @@ describe("slash command handling", () => {
       });
 
       expect(result.handled).toBe(true);
-      expect(app.statusMessage).toBe("Theme: GitHub Dark");
+      expect(app.statusMessage).toBe("Themes are disabled; colors follow your system and terminal background.");
     } finally {
       updateSetting("theme", previousTheme);
     }

@@ -416,14 +416,14 @@ describe("tool-call visibility", () => {
 });
 
 describe("theme catalog", () => {
-  it("exposes the built-in theme catalog", () => {
+  it("disables theme selection in favor of automatic terminal colors", () => {
     const themes = listThemes();
-    expect(themes.length).toBeGreaterThan(5);
-    expect(themes.some((theme) => theme.key === "brokecli")).toBe(true);
-    expect(themes.some((theme) => theme.key === "github-dark")).toBe(true);
+    expect(themes).toEqual([]);
+    expect(currentTheme().background).toBe("");
+    expect(currentTheme().sidebarBackground).toBe("");
   });
 
-  it("tints the built-in palette when plan mode is active", () => {
+  it("tints foreground colors for plan mode without painting backgrounds", () => {
     const previousMode = getSettings().mode;
     const previousTheme = getSettings().theme;
     try {
@@ -433,8 +433,8 @@ describe("theme catalog", () => {
       updateSetting("mode", "plan");
       const planTheme = currentTheme();
       expect(planTheme.primary).not.toBe(buildTheme.primary);
-      expect(planTheme.background).not.toBe(buildTheme.background);
-      expect(planTheme.sidebarBackground).not.toBe(buildTheme.sidebarBackground);
+      expect(planTheme.background).toBe("");
+      expect(planTheme.sidebarBackground).toBe("");
     } finally {
       updateSetting("mode", previousMode);
       updateSetting("theme", previousTheme);

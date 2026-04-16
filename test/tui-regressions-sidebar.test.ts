@@ -45,14 +45,14 @@ describe("command aliases", () => {
 });
 
 describe("sidebar scrolling", () => {
-  it("keeps mouse tracking disabled for active chats so native terminal selection still works", () => {
+  it("enables mouse tracking for active chats so wheel scrolling stays in the transcript", () => {
     const originalHideSidebar = getSettings().hideSidebar;
     updateSetting("hideSidebar", false);
     try {
       const app = new App() as any;
       app.messages = [{ role: "user", content: "hello" }];
       app.screen = { height: 18, width: 100, hasSidebar: true, mainWidth: 73, sidebarWidth: 24, render: () => {}, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
-      expect(app.shouldEnableMenuMouse()).toBe(false);
+      expect(app.shouldEnableMenuMouse()).toBe(true);
     } finally {
       updateSetting("hideSidebar", originalHideSidebar);
     }

@@ -1,18 +1,13 @@
-import { bg, fg } from "../utils/ansi.js";
+import { execFileSync } from "child_process";
+import { fg } from "../utils/ansi.js";
 import { getSettings } from "./config.js";
 import type { Theme, ThemePalette } from "./theme-types.js";
-import { THEME_PALETTES_A } from "./theme-palettes-a.js";
-import { THEME_PALETTES_B } from "./theme-palettes-b.js";
-import {
-  listThemes as listThemeResources,
-  loadThemePalette as loadConfiguredThemePalette,
-} from "./resources.js";
 
 export type { Theme } from "./theme-types.js";
 
-const BASE_PALETTE: ThemePalette = {
-  key: "brokecli",
-  label: "Broke CLI",
+const AUTO_DARK_PALETTE: ThemePalette = {
+  key: "automatic",
+  label: "Automatic",
   dark: true,
   primary: [57, 193, 57],
   secondary: [57, 193, 57],
@@ -20,7 +15,7 @@ const BASE_PALETTE: ThemePalette = {
   error: [255, 112, 112],
   warning: [240, 204, 92],
   success: [57, 193, 57],
-  background: [20, 20, 20],
+  background: null,
   text: [233, 236, 239],
   textMuted: [149, 153, 159],
   border: [58, 62, 68],
@@ -34,7 +29,19 @@ const BASE_PALETTE: ThemePalette = {
   imageTagBg: [40, 145, 40],
 };
 
+const AUTO_LIGHT_PALETTE: ThemePalette = {
+  ...AUTO_DARK_PALETTE,
+  dark: false,
+  text: [28, 30, 34],
+  textMuted: [91, 97, 106],
+  dim: [103, 109, 118],
+  border: [186, 190, 198],
+  sidebarBorder: [196, 200, 207],
+  userText: [24, 26, 29],
+};
+
 const runtimeThemes = new Map<string, ThemePalette>();
+let cachedDarkMode: { value: boolean; checkedAt: number } | null = null;
 
 function mixRgb(a: [number, number, number], b: [number, number, number], ratio: number): [number, number, number] {
   const clamp = (value: number) => Math.max(0, Math.min(255, Math.round(value)));
@@ -46,46 +53,30 @@ function mixRgb(a: [number, number, number], b: [number, number, number], ratio:
 }
 
 function getModePalette(): ThemePalette {
-  if (getSettings().mode !== "plan") return BASE_PALETTE;
-  return {
-    ...BASE_PALETTE,
-    primary: [240, 204, 92],
-    secondary: [250, 222, 142],
-    dim: [148, 131, 74],
-    warning: [250, 222, 142],
-    success: [240, 204, 92],
-    textMuted: [191, 174, 119],
-    border: [92, 78, 39],
-    sidebarBorder: [82, 69, 35],
-    background: [27, 24, 18],
-    userBubble: [32, 29, 23],
-    codeBg: [34, 31, 24],
-    imageTagBg: [72, 62, 34],
-  };
+  return applyPlanTint(getAutomaticPalette());
 }
 
 function applyPlanTint(palette: ThemePalette): ThemePalette {
   if (getSettings().mode !== "plan") return palette;
+  const planAccent = mixRgb(palette.primary, [240, 204, 92], palette.dark ? 0.55 : 0.35);
   return {
     ...palette,
-    primary: mixRgb(palette.primary, [240, 204, 92], palette.dark ? 0.55 : 0.35),
+    primary: planAccent,
     secondary: mixRgb(palette.secondary, [250, 222, 142], palette.dark ? 0.45 : 0.3),
     warning: mixRgb(palette.warning, [250, 222, 142], palette.dark ? 0.4 : 0.25),
     success: mixRgb(palette.success, [240, 204, 92], palette.dark ? 0.35 : 0.2),
     textMuted: mixRgb(palette.textMuted, [191, 174, 119], palette.dark ? 0.35 : 0.2),
     border: mixRgb(palette.border, [92, 78, 39], palette.dark ? 0.4 : 0.25),
     sidebarBorder: mixRgb(palette.sidebarBorder, [82, 69, 35], palette.dark ? 0.35 : 0.2),
-    background: palette.background ? mixRgb(palette.background, [27, 24, 18], palette.dark ? 0.28 : 0.12) : palette.background,
+    background: null,
     userBubble: mixRgb(palette.userBubble, [32, 29, 23], palette.dark ? 0.25 : 0.1),
     codeBg: mixRgb(palette.codeBg, [34, 31, 24], palette.dark ? 0.22 : 0.1),
     imageTagBg: mixRgb(palette.imageTagBg, [72, 62, 34], palette.dark ? 0.28 : 0.18),
-    plan: mixRgb(palette.plan, [240, 204, 92], 0.4),
+    plan: planAccent,
   };
 }
 
 function toTheme(palette: ThemePalette): Theme {
-  const sidebarBase = palette.background ?? palette.userBubble;
-  const sidebarBackground = mixRgb(sidebarBase, palette.sidebarBorder, palette.dark ? 0.14 : 0.08);
   return {
     key: palette.key,
     label: palette.label,
@@ -96,39 +87,27 @@ function toTheme(palette: ThemePalette): Theme {
     error: fg(...palette.error),
     warning: fg(...palette.warning),
     success: fg(...palette.success),
-    background: palette.background ? bg(...palette.background) : "",
+    background: "",
     text: fg(...palette.text),
     textMuted: fg(...palette.textMuted),
     border: fg(...palette.border),
     sidebarBorder: fg(...palette.sidebarBorder),
-    sidebarBackground: bg(...sidebarBackground),
+    sidebarBackground: "",
     plan: fg(...palette.plan),
-    userBubble: bg(...palette.userBubble),
+    userBubble: "",
     userText: fg(...palette.userText),
-    codeBg: bg(...palette.codeBg),
-    diffAddBg: bg(...palette.diffAddBg),
-    diffRemoveBg: bg(...palette.diffRemoveBg),
-    imageTagBg: bg(...palette.imageTagBg),
+    codeBg: "",
+    diffAddBg: "",
+    diffRemoveBg: "",
+    imageTagBg: "",
   };
 }
 
 export function listThemes(): Theme[] {
-  const palettes = new Map<string, ThemePalette>();
-  for (const palette of [BASE_PALETTE, ...THEME_PALETTES_A, ...THEME_PALETTES_B]) palettes.set(palette.key, palette);
-  for (const palette of runtimeThemes.values()) palettes.set(palette.key, palette);
-  for (const resource of listThemeResources()) {
-    const palette = loadConfiguredThemePalette(resource.key);
-    if (palette) palettes.set(palette.key, palette);
-  }
-  return [...palettes.values()].map(toTheme).sort((a, b) => a.label.localeCompare(b.label));
+  return [];
 }
 
 export function currentTheme(): Theme {
-  const configuredKey = getSettings().theme?.trim();
-  if (configuredKey) {
-    const selected = getThemePalette(configuredKey);
-    if (selected) return toTheme(applyPlanTint(selected));
-  }
   return toTheme(getModePalette());
 }
 
@@ -148,9 +127,62 @@ export function clearRegisteredThemes(): void {
 }
 
 export function getThemePalette(key: string): ThemePalette | null {
-  if (key === BASE_PALETTE.key) return getModePalette();
+  if (key === "automatic" || key === "brokecli") return getModePalette();
   if (runtimeThemes.has(key)) return runtimeThemes.get(key) ?? null;
-  const builtIn = [...THEME_PALETTES_A, ...THEME_PALETTES_B].find((palette) => palette.key === key);
-  if (builtIn) return builtIn;
-  return loadConfiguredThemePalette(key);
+  return null;
+}
+
+function getAutomaticPalette(): ThemePalette {
+  return detectDarkMode() ? AUTO_DARK_PALETTE : AUTO_LIGHT_PALETTE;
+}
+
+function detectDarkMode(): boolean {
+  const now = Date.now();
+  if (cachedDarkMode && now - cachedDarkMode.checkedAt < 30_000) return cachedDarkMode.value;
+  const value = detectDarkModeUncached();
+  cachedDarkMode = { value, checkedAt: now };
+  return value;
+}
+
+function detectDarkModeUncached(): boolean {
+  const forced = (process.env.BROKECLI_COLOR_SCHEME || process.env.BROKECLI_THEME || "").trim().toLowerCase();
+  if (forced === "light") return false;
+  if (forced === "dark") return true;
+
+  const colorFgBg = process.env.COLORFGBG;
+  const bgCode = colorFgBg?.match(/(?:^|;)(\d+)$/)?.[1];
+  if (bgCode != null) return Number(bgCode) < 7;
+
+  if (process.platform === "win32") {
+    try {
+      const out = execFileSync("reg", [
+        "query",
+        "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+        "/v",
+        "AppsUseLightTheme",
+      ], { encoding: "utf-8", timeout: 250 });
+      const match = out.match(/AppsUseLightTheme\s+REG_DWORD\s+0x([0-9a-f]+)/i);
+      if (match) return parseInt(match[1]!, 16) === 0;
+    } catch {
+      return true;
+    }
+  }
+
+  if (process.platform === "darwin") {
+    try {
+      const out = execFileSync("defaults", ["read", "-g", "AppleInterfaceStyle"], { encoding: "utf-8", timeout: 250 });
+      return out.trim().toLowerCase() === "dark";
+    } catch {
+      return false;
+    }
+  }
+
+  try {
+    const out = execFileSync("gsettings", ["get", "org.gnome.desktop.interface", "color-scheme"], { encoding: "utf-8", timeout: 250 });
+    if (out.toLowerCase().includes("prefer-light")) return false;
+    if (out.toLowerCase().includes("prefer-dark")) return true;
+  } catch {
+    return true;
+  }
+  return true;
 }

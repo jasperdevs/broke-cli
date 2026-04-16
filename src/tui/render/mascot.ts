@@ -70,7 +70,6 @@ export function parseMascotSvgGrid(path: string): Array<Array<RgbColor | null>> 
 export function renderAnsiColorGrid(grid: Array<Array<RgbColor | null>>, reset: string): string[] {
   const lines: string[] = [];
   const fg = (color: RgbColor): string => `\x1b[38;2;${color.r};${color.g};${color.b}m`;
-  const bg = (color: RgbColor): string => `\x1b[48;2;${color.r};${color.g};${color.b}m`;
   for (let row = 0; row < grid.length; row += 2) {
     let line = "";
     for (let col = 0; col < (grid[row]?.length ?? 0); col++) {
@@ -78,9 +77,9 @@ export function renderAnsiColorGrid(grid: Array<Array<RgbColor | null>>, reset: 
       const bottom = grid[row + 1]?.[col] ?? null;
       if (top && bottom) {
         if (top.r === bottom.r && top.g === bottom.g && top.b === bottom.b) {
-          line += `${bg(top)} ${reset}`;
+          line += `${fg(top)}█${reset}`;
         } else {
-          line += `${fg(top)}${bg(bottom)}▀${reset}`;
+          line += `${fg(top)}▀${reset}`;
         }
       } else if (top) {
         line += `${fg(top)}▀${reset}`;
