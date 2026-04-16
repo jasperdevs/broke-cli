@@ -25,12 +25,9 @@ function sanitizeUrl(url: string): string | null {
   const trimmed = url.trim();
   if (!trimmed) return null;
   if (trimmed.startsWith("#")) return trimmed;
-  try {
-    const parsed = new URL(trimmed);
-    return ["http:", "https:", "mailto:"].includes(parsed.protocol) ? trimmed : null;
-  } catch {
-    return null;
-  }
+  if (!URL.canParse(trimmed)) return null;
+  const parsed = new URL(trimmed);
+  return ["http:", "https:", "mailto:"].includes(parsed.protocol) ? trimmed : null;
 }
 
 function getSafeRoleClass(role: string): "user" | "assistant" | "system" {

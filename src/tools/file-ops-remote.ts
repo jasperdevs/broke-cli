@@ -12,26 +12,23 @@ export interface RemoteGitHubTarget {
 export function tryParseRemoteGitHubTarget(input: string): RemoteGitHubTarget | null {
   const trimmed = input.trim();
   if (!/^https?:\/\//i.test(trimmed)) return null;
-  try {
-    const url = new URL(trimmed);
-    const parts = url.pathname.split("/").filter(Boolean);
-    if (url.hostname === "raw.githubusercontent.com" && parts.length >= 4) {
-      const [owner, repo, ref, ...rest] = parts;
-      return { owner, repo, ref, path: rest.join("/"), kind: "file" };
-    }
-    if (url.hostname !== "github.com" || parts.length < 2) return null;
-    const [owner, repo, section, ref, ...rest] = parts;
-    if (!owner || !repo) return null;
-    if (section === "blob" && ref && rest.length > 0) {
-      return { owner, repo, ref, path: rest.join("/"), kind: "file" };
-    }
-    if (section === "tree") {
-      return { owner, repo, ref: ref || "HEAD", path: rest.join("/"), kind: "tree" };
-    }
-    return { owner, repo, ref: "HEAD", path: "", kind: "tree" };
-  } catch {
-    return null;
+  if (!URL.canParse(trimmed)) return null;
+  const url = new URL(trimmed);
+  const parts = url.pathname.split("/").filter(Boolean);
+  if (url.hostname === "raw.githubusercontent.com" && parts.length >= 4) {
+    const [owner, repo, ref, ...rest] = parts;
+    return { owner, repo, ref, path: rest.join("/"), kind: "file" };
   }
+  if (url.hostname !== "github.com" || parts.length < 2) return null;
+  const [owner, repo, section, ref, ...rest] = parts;
+  if (!owner || !repo) return null;
+  if (section === "blob" && ref && rest.length > 0) {
+    return { owner, repo, ref, path: rest.join("/"), kind: "file" };
+  }
+  if (section === "tree") {
+    return { owner, repo, ref: ref || "HEAD", path: rest.join("/"), kind: "tree" };
+  }
+  return { owner, repo, ref: "HEAD", path: "", kind: "tree" };
 }
 
 export async function fetchRemoteGitHubFile(target: RemoteGitHubTarget) {

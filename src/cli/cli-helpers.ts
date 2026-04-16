@@ -7,12 +7,9 @@ export function isSkippedPromptAnswer(value: string | undefined | null): boolean
 }
 
 export function isValidHttpBaseUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return (url.protocol === "http:" || url.protocol === "https:") && !!url.host;
-  } catch {
-    return false;
-  }
+  if (!URL.canParse(value)) return false;
+  const url = new URL(value);
+  return (url.protocol === "http:" || url.protocol === "https:") && !!url.host;
 }
 
 export function normalizeThinkingLevel(level: string | undefined): "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | undefined {

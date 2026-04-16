@@ -76,15 +76,12 @@ function openExternalUrl(url: string): boolean {
 function parseRedirectUrl(input: string): { code?: string; state?: string } {
   const trimmed = input.trim();
   if (!trimmed) return {};
-  try {
-    const url = new URL(trimmed);
-    return {
-      code: url.searchParams.get("code") ?? undefined,
-      state: url.searchParams.get("state") ?? undefined,
-    };
-  } catch {
-    return {};
-  }
+  if (!URL.canParse(trimmed)) return {};
+  const url = new URL(trimmed);
+  return {
+    code: url.searchParams.get("code") ?? undefined,
+    state: url.searchParams.get("state") ?? undefined,
+  };
 }
 
 async function exchangeGoogleAuthCode(options: {
@@ -358,12 +355,9 @@ async function runGoogleBrowserLogin(options: {
 function normalizeGitHubDomain(input: string): string | null {
   const trimmed = input.trim();
   if (!trimmed) return null;
-  try {
-    const url = trimmed.includes("://") ? new URL(trimmed) : new URL(`https://${trimmed}`);
-    return url.hostname;
-  } catch {
-    return null;
-  }
+  const candidate = trimmed.includes("://") ? trimmed : `https://${trimmed}`;
+  if (!URL.canParse(candidate)) return null;
+  return new URL(candidate).hostname;
 }
 
 function readGitHubCliToken(hostname: string): string | null {
