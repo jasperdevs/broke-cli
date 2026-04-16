@@ -96,6 +96,16 @@ describe("tool rendering detail", () => {
     expect(output).toContain("2 -> 3 lines replaced");
   });
 
+  it("renders multi-edit argument summaries", () => {
+    const app = makeApp();
+    app.addToolCall("editFile", "src/app.ts", undefined, "call_multi_edit");
+    app.updateToolCallArgs("editFile", "src/app.ts", { path: "src/app.ts", edits: [{ oldText: "one", newText: "two" }, { oldText: "three", newText: "four" }] }, "call_multi_edit");
+    app.addToolResult("editFile", "ok", false, "2 edits · 2 -> 2 lines replaced", "call_multi_edit");
+    const output = app.renderMessages(96).map((line: string) => stripAnsi(line)).join("\n");
+    expect(output).toContain("edit src/app.ts");
+    expect(output).toContain("2 edits · 2 -> 2 lines replaced");
+  });
+
   it("labels opaque native file deltas as observed workspace changes", () => {
     const app = makeApp();
     app.addToolCall("workspaceEdit", "index.html", { path: "index.html" }, "observed_index");

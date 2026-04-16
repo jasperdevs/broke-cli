@@ -157,9 +157,10 @@ export function renderToolCallBlock(options: {
   }
 
   if (done) {
-    if (tc.name === "editFile" && a?.old_string && a?.new_string) {
-      const oldLines = a.old_string.split("\n");
-      const newLines = a.new_string.split("\n");
+    if (tc.name === "editFile" && a && (a.old_string || Array.isArray((a as any).edits))) {
+      const firstEdit = Array.isArray((a as any).edits) ? (a as any).edits[0] : null;
+      const oldLines = String(a.old_string ?? firstEdit?.oldText ?? "").split("\n");
+      const newLines = String(a.new_string ?? firstEdit?.newText ?? "").split("\n");
       const diffW = maxWidth - 6;
       lines.push(`${colors.muted}  ${branch} ${tc.resultDetail || `+${newLines.length} -${oldLines.length} lines`}${reset}`);
       for (const line of oldLines.slice(0, 4)) {

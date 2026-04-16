@@ -125,7 +125,7 @@ export function buildSimpleFileTaskPromptBlock(task: SimpleFileTask): string {
     "tool_contract:",
     "- readFile args: {\"path\":\"target\"}",
     "- writeFile args: {\"path\":\"target\",\"content\":\"complete file content\"}",
-    "- editFile args: {\"path\":\"target\",\"old_string\":\"exact unique text from read context\",\"new_string\":\"replacement\"}",
+    "- editFile args: {\"path\":\"target\",\"edits\":[{\"oldText\":\"exact unique text from read context\",\"newText\":\"replacement\"}]}",
     "</simple-file-task>",
   ].join("\n");
 }

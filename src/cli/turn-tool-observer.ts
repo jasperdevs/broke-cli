@@ -33,6 +33,9 @@ type ToolResultRecord = {
   backend?: string;
   contentType?: string;
   bytesWritten?: number;
+  editCount?: number;
+  oldLineCount?: number;
+  newLineCount?: number;
 };
 
 function fileNamesFromEntries(entries: unknown[] | undefined): string[] {
@@ -178,11 +181,10 @@ function inferToolResultDetail(
   if (toolName === "editFile" && result.success !== false) {
     const path = typeof toolArgs?.path === "string" ? toolArgs.path : "";
     if (path) session.recordRepoEdit(path, "edit");
-    const oldText = typeof toolArgs?.old_string === "string" ? toolArgs.old_string : "";
-    const newText = typeof toolArgs?.new_string === "string" ? toolArgs.new_string : "";
-    const oldLines = lineCount(oldText);
-    const newLines = lineCount(newText);
-    return `${oldLines} -> ${newLines} lines replaced`;
+    const editCount = typeof result.editCount === "number" ? result.editCount : Array.isArray(toolArgs?.edits) ? toolArgs.edits.length : 1;
+    const oldLines = typeof result.oldLineCount === "number" ? result.oldLineCount : lineCount(typeof toolArgs?.old_string === "string" ? toolArgs.old_string : "");
+    const newLines = typeof result.newLineCount === "number" ? result.newLineCount : lineCount(typeof toolArgs?.new_string === "string" ? toolArgs.new_string : "");
+    return `${editCount} edit${editCount === 1 ? "" : "s"} · ${oldLines} -> ${newLines} lines replaced`;
   }
 
   return undefined;

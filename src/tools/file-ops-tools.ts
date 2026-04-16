@@ -38,13 +38,17 @@ export function createWriteFileTool(cwd = process.cwd(), options?: { operations?
 
 export function createEditFileTool(cwd = process.cwd(), options?: { operations?: EditOperations }) {
   return tool({
-    description: "Replace an exact string in a file with new content. The old_string must match EXACTLY (including whitespace/indentation). Include enough surrounding lines to make old_string unique. Preferred over writeFile for changes to existing files and the default patch-first editing path.",
+    description: "Replace exact strings in a file. Prefer edits:[{oldText,newText}] for multiple disjoint edits; legacy old_string/new_string is also supported. Each old text must match exactly once and edits must not overlap.",
     inputSchema: z.object({
       path: z.string().describe("File path to edit"),
-      old_string: z.string().describe("Exact existing text to find (must be unique in the file)"),
-      new_string: z.string().describe("Replacement text"),
+      old_string: z.string().optional().describe("Legacy exact existing text to find"),
+      new_string: z.string().optional().describe("Legacy replacement text"),
+      edits: z.array(z.object({
+        oldText: z.string().describe("Exact existing text to find"),
+        newText: z.string().describe("Replacement text"),
+      })).optional().describe("One or more targeted replacements matched against the original file"),
     }),
-    execute: async ({ path, old_string, new_string }) => editFileDirect({ path, cwd, old_string, new_string, operations: options?.operations }),
+    execute: async ({ path, old_string, new_string, edits }) => editFileDirect({ path, cwd, old_string, new_string, edits, operations: options?.operations }),
   });
 }
 

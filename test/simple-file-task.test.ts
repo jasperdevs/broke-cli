@@ -48,7 +48,7 @@ describe("simple file task contract", () => {
     expect(block).toContain("required_tool: editFile");
     expect(block).toContain('readFile args: {"path":"target"}');
     expect(block).toContain('writeFile args: {"path":"target","content":"complete file content"}');
-    expect(block).toContain('editFile args: {"path":"target","old_string":"exact unique text from read context","new_string":"replacement"}');
+    expect(block).toContain('editFile args: {"path":"target","edits":[{"oldText":"exact unique text from read context","newText":"replacement"}]}');
     expect(block).not.toContain("steps:");
   });
 

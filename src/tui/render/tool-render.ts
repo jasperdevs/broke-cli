@@ -82,10 +82,12 @@ export function toolArgumentSummary(tc: { name: string; preview: string; args?: 
     }
     case "editFile":
     case "Edit": {
-      const oldText = typeof args.old_string === "string" ? args.old_string : "";
-      const newText = typeof args.new_string === "string" ? args.new_string : "";
+      const firstEdit = Array.isArray(args.edits) ? args.edits[0] as Record<string, unknown> | undefined : undefined;
+      const oldText = typeof args.old_string === "string" ? args.old_string : typeof firstEdit?.oldText === "string" ? firstEdit.oldText : "";
+      const newText = typeof args.new_string === "string" ? args.new_string : typeof firstEdit?.newText === "string" ? firstEdit.newText : "";
       if (!oldText && !newText) return null;
-      return `${lineCount(oldText)} -> ${lineCount(newText)} lines`;
+      const count = Array.isArray(args.edits) ? args.edits.length : 1;
+      return `${count} edit${count === 1 ? "" : "s"} · ${lineCount(oldText)} -> ${lineCount(newText)} lines`;
     }
     case "listFiles":
     case "LS": {

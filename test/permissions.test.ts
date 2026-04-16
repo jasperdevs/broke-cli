@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { parse, join } from "path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -36,6 +36,27 @@ describe("autonomy permissions", () => {
       const result = editFileDirect({ path: file, old_string: "same", new_string: "diff" });
       expect(result.success).toBe(false);
       expect(result.error).toContain("exactly once");
+    } finally {
+      rmSync(file, { force: true });
+    }
+  });
+
+  it("applies multiple edit replacements against the original file", () => {
+    const file = join(process.cwd(), "test", `.tmp-multi-edit-${Date.now()}.txt`);
+    writeFileSync(file, "alpha\nbeta\ngamma\n", "utf-8");
+    try {
+      const result = editFileDirect({
+        path: file,
+        edits: [
+          { oldText: "alpha", newText: "ALPHA" },
+          { oldText: "gamma", newText: "GAMMA" },
+        ],
+      });
+      expect(result.success).toBe(true);
+      expect(result.editCount).toBe(2);
+      expect(result.details?.diff).toContain("---");
+      expect(result.details?.firstChangedLine).toBe(1);
+      expect(readFileSync(file, "utf-8")).toBe("ALPHA\nbeta\nGAMMA\n");
     } finally {
       rmSync(file, { force: true });
     }

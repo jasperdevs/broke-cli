@@ -2,6 +2,7 @@ import { basename, dirname, join, relative } from "path";
 import { createCheckpoint } from "../core/git.js";
 import { checkFilesystemPathAccess, ensureNetworkAllowed } from "../core/permissions.js";
 import { resolveReadPath, resolveToCwd } from "../core/path-utils.js";
+import { applyEditReplacements, normalizeEditReplacements } from "./edit-support.js";
 import { getActiveToolContext } from "./runtime-context.js";
 import { localFileOperations, type EditOperations, type ListOperations, type ReadOperations, type SearchOperations, type WriteOperations } from "./file-operations.js";
 import { fetchRemoteGitHubFile, listRemoteGitHubTree, tryParseRemoteGitHubTarget } from "./file-ops-remote.js";
@@ -468,7 +469,7 @@ export function writeFileDirect({ path, cwd = process.cwd(), content, operations
   }
 }
 
-export function editFileDirect({ path, cwd = process.cwd(), old_string, new_string, operations = localFileOperations }: { path: string; cwd?: string; old_string: string; new_string: string; operations?: EditOperations }) {
+export function editFileDirect({ path, cwd = process.cwd(), old_string, new_string, edits, operations = localFileOperations }: { path: string; cwd?: string; old_string?: string; new_string?: string; edits?: Array<{ oldText?: string; newText?: string; old_string?: string; new_string?: string }>; operations?: EditOperations }) {
   const access = checkFilesystemPathAccess(path, "write", cwd);
   if (!access.allowed) {
     return { success: false as const, error: access.reason ?? "Edit not permitted." };
@@ -476,18 +477,11 @@ export function editFileDirect({ path, cwd = process.cwd(), old_string, new_stri
   try {
     const filePath = access.normalizedPath ?? resolveToCwd(path, cwd);
     const content = bufferToUtf8(operations.readFile(filePath));
-    const occurrences = content.split(old_string).length - 1;
-    if (occurrences === 0) {
-      return { success: false as const, error: "old_string not found in file" };
-    }
-    if (occurrences > 1) {
-      return { success: false as const, error: "old_string must match exactly once" };
-    }
+    const applied = applyEditReplacements(path, content, normalizeEditReplacements({ old_string, new_string, edits }));
     createCheckpoint();
-    const updated = content.replace(old_string, new_string);
-    operations.writeFile(filePath, updated);
+    operations.writeFile(filePath, applied.content);
     getMemoContext()?.invalidateToolResults();
-    return { success: true as const };
+    return { success: true as const, details: { diff: applied.diff, firstChangedLine: applied.firstChangedLine }, editCount: applied.editCount, oldLineCount: applied.oldLineCount, newLineCount: applied.newLineCount };
   } catch (err: unknown) {
     return { success: false as const, error: (err as Error).message };
   }
