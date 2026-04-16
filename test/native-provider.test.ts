@@ -147,7 +147,7 @@ describe("native provider runtime selection", () => {
   });
 
   it("rejects SDK Codex because this runtime is OAuth-only", () => {
-    expect(() => createModel("codex")).toThrow("API-key runtime is disabled");
+    expect(() => createModel("codex")).toThrow("OAuth-only runtime");
   });
 
   it("uses OAuth stream runtime for Google Cloud Code Assist providers", () => {

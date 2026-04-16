@@ -93,7 +93,7 @@ export function createModel(providerId: string, modelId?: string): ModelHandle {
   }
   if (!useNative) {
     if (providerId !== "github-copilot" && providerId !== "google-gemini-cli" && providerId !== "google-antigravity") {
-      throw new Error(`${info.name} API-key runtime is disabled. Use /login with an OAuth provider.`);
+      throw new Error(`${info.name} is not available in the OAuth-only runtime. Use /login with a supported provider.`);
     }
   }
   const nativeDefaultModel = useNative

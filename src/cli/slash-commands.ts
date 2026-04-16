@@ -56,7 +56,7 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
     names: ["connect"],
     description: "login with oauth",
     run: async ({ restText, app, providerRegistry, refreshProviderState }) => {
-      app.setStatus?.("API-key setup is disabled. Starting OAuth login.");
+      app.setStatus?.("Starting OAuth login.");
       await runLoginFlow({
         providerId: restText || undefined,
         app,
@@ -280,11 +280,18 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
             app.setStatus?.("Codex login exists, but the codex CLI is not on PATH.");
             return;
           }
-          app.setStatus?.(`${provider.name}: API keys are disabled. Use /login for OAuth providers.`);
           const nextCommand = nextProviderCommand(provider.id);
           if (provider.reason.startsWith("run ")) {
             app.setStatus?.(`${provider.name}: started ${nextCommand}.`);
+            await runLoginFlow({
+              providerId: provider.id,
+              app,
+              providerRegistry,
+              refreshProviderState,
+            });
+            return;
           }
+          app.setStatus?.(`${provider.name}: use /login for supported OAuth providers.`);
         })().catch((error: Error) => {
           app.setStatus?.(`${provider.name}: ${(error as Error).message}`);
         });

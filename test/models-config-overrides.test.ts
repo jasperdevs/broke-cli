@@ -110,7 +110,7 @@ describe.sequential("models.json overrides", () => {
     applyConfiguredProviderOverrides();
     const providers = await detectProviders();
     expect(providers.some((provider) => provider.id === "custom-openai")).toBe(false);
-    expect(() => createModel("custom-openai", "acme-coder")).toThrow("API-key runtime is disabled");
+    expect(() => createModel("custom-openai", "acme-coder")).toThrow("OAuth-only runtime");
   }, 15_000);
 
   it("lets project models.json override global models.json", () => {

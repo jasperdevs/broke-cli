@@ -163,7 +163,7 @@ function listCustomConfiguredProviders(): DetectedProvider[] {
           : !apiType
             ? "set api in models.json"
             : getConfiguredProviderApiKey(providerId)
-              ? "API key"
+              ? "configured auth"
               : "configured";
     configured.push({
       id: providerId,
