@@ -7,6 +7,7 @@ import { resolvePreferredSpecialistRole, type SpecialistModelRole } from "./mode
 import { routeMessage } from "../ai/router.js";
 import { readFileDirect } from "../tools/file-ops.js";
 import { observeToolResult } from "./turn-tool-observer.js";
+import type { Session } from "../core/session.js";
 
 const SDK_TOOL_PROVIDER_IDS = new Set([
   "anthropic", "openai", "codex", "google", "mistral", "groq", "xai",
@@ -25,7 +26,7 @@ export interface MinimalOutputPolicy {
 export function exposeSimpleReadRuntime(options: {
   simpleFileTask: { path: string; preRead?: boolean; completeWithRead?: boolean } | null;
   nextToolCalls: string[];
-  session: any;
+  session: Session;
   app: { addToolCall(name: string, preview: string, args?: unknown, callId?: string): void; addToolResult(name: string, result: string, error?: boolean, detail?: string, callId?: string): void };
 }): { content: string; totalLines?: number; failed?: boolean } | null {
   const { simpleFileTask, nextToolCalls, session, app } = options;
@@ -372,6 +373,7 @@ export function formatTurnErrorMessage(options: {
 }
 
 export function buildToolPreview(name: string, args: unknown): string {
+  const toolArgs = typeof args === "object" && args !== null ? args as Record<string, unknown> : {};
   const shortenPath = (value: string): string => {
     const normalized = value.replace(/\//g, "\\");
     const cwd = process.cwd().replace(/\//g, "\\");
@@ -385,10 +387,10 @@ export function buildToolPreview(name: string, args: unknown): string {
     return value;
   };
   if (name === "Read" || name === "readFile") {
-    const path = shortenPath((args as any)?.file_path ?? (args as any)?.path ?? "?");
-    const offset = (args as any)?.offset;
-    const limit = (args as any)?.limit;
-    const tail = (args as any)?.tail;
+    const path = shortenPath(String(toolArgs.file_path ?? toolArgs.path ?? "?"));
+    const offset = toolArgs.offset;
+    const limit = toolArgs.limit;
+    const tail = toolArgs.tail;
     if (typeof tail === "number" && tail > 0) return `${path} · last ${tail}`;
     if (typeof offset === "number" || typeof limit === "number") {
       const start = typeof offset === "number" ? offset + 1 : 1;
@@ -397,37 +399,37 @@ export function buildToolPreview(name: string, args: unknown): string {
     }
     return path;
   }
-  if (name === "Write" || name === "writeFile") return shortenPath((args as any)?.file_path ?? (args as any)?.path ?? "?");
-  if (name === "Edit" || name === "editFile") return shortenPath((args as any)?.file_path ?? (args as any)?.path ?? "?");
+  if (name === "Write" || name === "writeFile") return shortenPath(String(toolArgs.file_path ?? toolArgs.path ?? "?"));
+  if (name === "Edit" || name === "editFile") return shortenPath(String(toolArgs.file_path ?? toolArgs.path ?? "?"));
   if (name === "Glob" || name === "glob") {
-    const pattern = (args as any)?.pattern ?? "?";
-    const path = (args as any)?.path;
+    const pattern = String(toolArgs.pattern ?? "?");
+    const path = typeof toolArgs.path === "string" ? toolArgs.path : undefined;
     return path && path !== "." ? `${pattern} in ${path}` : pattern;
   }
   if (name === "LS" || name === "listFiles") {
-    const path = (args as any)?.path ?? ".";
-    const include = (args as any)?.include;
+    const path = String(toolArgs.path ?? ".");
+    const include = typeof toolArgs.include === "string" ? toolArgs.include : undefined;
     return include ? `${path} · ${include}` : path;
   }
   if (name === "grep") {
-    const path = (args as any)?.path ?? ".";
-    const pattern = (args as any)?.pattern ?? "?";
+    const path = String(toolArgs.path ?? ".");
+    const pattern = String(toolArgs.pattern ?? "?");
     return `${pattern} in ${path}`;
   }
   if (name === "semSearch") {
-    const query = (args as any)?.query ?? "?";
+    const query = String(toolArgs.query ?? "?");
     return query.length > 48 ? `${query.slice(0, 45)}...` : query;
   }
   if (name === "webSearch") {
-    const query = (args as any)?.query ?? "?";
+    const query = String(toolArgs.query ?? "?");
     return query.length > 60 ? `${query.slice(0, 57)}...` : query;
   }
   if (name === "webFetch") {
-    const url = (args as any)?.url ?? "?";
+    const url = String(toolArgs.url ?? "?");
     return url.length > 72 ? `${url.slice(0, 69)}...` : url;
   }
   if (name === "bash") {
-    const command = (args as any)?.command ?? "?";
+    const command = String(toolArgs.command ?? "?");
     return command.length > 60 ? `${command.slice(0, 57)}...` : command;
   }
   return typeof args === "object" ? JSON.stringify(args).slice(0, 50) : String(args).slice(0, 50);

@@ -9,6 +9,11 @@ export interface RemoteGitHubTarget {
   kind: "file" | "tree";
 }
 
+interface GitHubContentsEntry {
+  name: string;
+  type: string;
+}
+
 export function tryParseRemoteGitHubTarget(input: string): RemoteGitHubTarget | null {
   const trimmed = input.trim();
   if (!/^https?:\/\//i.test(trimmed)) return null;
@@ -82,10 +87,10 @@ export async function listRemoteGitHubTree(target: RemoteGitHubTarget) {
     return { success: false as const, error: `Remote list failed (${response.status})` };
   }
   const payload = await response.json();
-  const items = Array.isArray(payload) ? payload : [payload];
+  const items = (Array.isArray(payload) ? payload : [payload]) as GitHubContentsEntry[];
   const files = items
     .slice(0, MAX_LIST_FILES)
-    .map((entry: any) => entry.type === "dir" ? `${entry.name}/` : entry.name);
+    .map((entry) => entry.type === "dir" ? `${entry.name}/` : entry.name);
   return {
     files,
     totalEntries: items.length,

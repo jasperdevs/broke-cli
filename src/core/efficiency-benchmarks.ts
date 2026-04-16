@@ -151,12 +151,12 @@ function comparePolicy(caseId: string, policy: TurnPolicy, expected: PolicyExpec
     failures.push({ caseId, area: "policy", message: `expected preferSmallExecutor ${expected.preferSmallExecutor}, got ${policy.preferSmallExecutor}` });
   }
   for (const tool of expected.requiredTools ?? []) {
-    if (!policy.allowedTools.includes(tool as any)) {
+    if (!policy.allowedTools.includes(tool)) {
       failures.push({ caseId, area: "policy", message: `missing required tool ${tool}` });
     }
   }
   for (const tool of expected.forbiddenTools ?? []) {
-    if (policy.allowedTools.includes(tool as any)) {
+    if (policy.allowedTools.includes(tool)) {
       failures.push({ caseId, area: "policy", message: `forbidden tool exposed ${tool}` });
     }
   }

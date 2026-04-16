@@ -1,7 +1,7 @@
 import { execSync } from "child_process";
 import { buildSystemPrompt, reloadContext } from "../core/context.js";
 import { clearCredentials, hasStoredCredentials, listAuthenticated } from "../core/auth.js";
-import { getSettings, loadConfig, updateProviderConfig, updateSetting, type AutonomySettings, type Mode, type Settings } from "../core/config.js";
+import { getSettings, loadConfig, updateProviderConfig, updateSetting, type AutonomySettings, type CavemanLevel, type Mode, type ModeSwitchingPolicy, type Settings } from "../core/config.js";
 import { getProviderCredential } from "../core/provider-credentials.js";
 import { listProjects } from "../core/projects.js";
 import { listExtensions, reloadExtensions } from "../core/extensions.js";
@@ -16,6 +16,7 @@ import { SessionManager } from "../core/session-manager.js";
 import { getAvailableThinkingLevels, getEffectiveThinkingLevel } from "../ai/thinking.js";
 import type { ModelHandle } from "../ai/providers.js";
 import type { ExtensionHooks, SlashCommandApp } from "./slash-command-types.js";
+import type { DetectedProvider } from "../ai/detect.js";
 
 type EmptyMenuKind = "extensions" | "resume" | "projects" | "packages" | "logout" | "templates" | "skills" | "changelog";
 
@@ -61,7 +62,7 @@ export function openSettingsMenu(args: {
 }): void {
   const { app, activeModel, currentMode, onModeChange, onSystemPromptChange } = args;
   let menuMode = currentMode;
-  const modeSwitchingPolicies = ["manual", "ask", "auto"] as const;
+  const modeSwitchingPolicies: readonly ModeSwitchingPolicy[] = ["manual", "ask", "auto"];
   function buildEntries() {
     const s = getSettings();
     const thinkingLevels = getAvailableThinkingLevels({
@@ -126,7 +127,7 @@ export function openSettingsMenu(args: {
       onSystemPromptChange(buildSystemPrompt(process.cwd(), activeModel?.provider?.id, next, s.cavemanLevel ?? "auto"));
     } else if (key === "modeSwitching") {
       const current = s.modeSwitching;
-      const next = modeSwitchingPolicies[(modeSwitchingPolicies.indexOf(current as any) + 1) % modeSwitchingPolicies.length];
+      const next = modeSwitchingPolicies[(modeSwitchingPolicies.indexOf(current) + 1) % modeSwitchingPolicies.length];
       updateSetting("modeSwitching", next);
     } else if (key === "thinkingLevel") {
       const current = getEffectiveThinkingLevel({
@@ -136,15 +137,15 @@ export function openSettingsMenu(args: {
         level: s.thinkingLevel,
         enabled: s.enableThinking,
       });
-      const next = thinkingLevels[(thinkingLevels.indexOf(current as any) + 1) % thinkingLevels.length];
+      const next = thinkingLevels[(thinkingLevels.indexOf(current) + 1) % thinkingLevels.length];
       updateSetting("thinkingLevel", next);
       updateSetting("enableThinking", next !== "off");
     } else if (typeof val === "boolean") {
       updateSetting(key as keyof Settings, !val);
     } else if (key === "cavemanLevel") {
-      const levels = ["off", "lite", "auto", "ultra"] as const;
+      const levels: readonly CavemanLevel[] = ["off", "lite", "auto", "ultra"];
       const current = s.cavemanLevel ?? "auto";
-      const next = levels[(levels.indexOf(current as any) + 1) % levels.length];
+      const next = levels[(levels.indexOf(current) + 1) % levels.length];
       updateSetting("cavemanLevel", next);
       reloadContext();
       onSystemPromptChange(buildSystemPrompt(process.cwd(), activeModel?.provider?.id, menuMode, next));
@@ -436,7 +437,7 @@ export function openProjectsMenu(app: SlashCommandApp, restText: string, onProje
   return true;
 }
 
-export async function handleLogoutMenu(args: { app: SlashCommandApp; restText: string; activeModel: ModelHandle | null; refreshProviderState: (force?: boolean) => Promise<any>; }): Promise<void> {
+export async function handleLogoutMenu(args: { app: SlashCommandApp; restText: string; activeModel: ModelHandle | null; refreshProviderState: (force?: boolean) => Promise<DetectedProvider[]>; }): Promise<void> {
   const { app, restText, activeModel, refreshProviderState } = args;
   const executeLogout = async (requestedTarget: string) => {
     const normalized = requestedTarget.trim().toLowerCase();

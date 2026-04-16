@@ -1,10 +1,58 @@
 import { randomUUID } from "crypto";
-import type { ActivityStep, PendingDelivery, PendingImage, PendingMessage, ResolvedImage, TodoItem, ToolExecutionActivity } from "./app-types.js";
+import type { ActivityStep, BtwBubble, ChatMessage, PendingDelivery, PendingImage, PendingMessage, ResolvedImage, TodoItem, ToolExecutionActivity } from "./app-types.js";
 import { buildActivityLabel, cloneActivityStep, cloneToolExecution, deriveLiveActivityStep, normalizeToolName } from "./live-activity.js";
 import { createTurnTimestamp } from "../core/turn-events.js";
-import { buildTurnActivitySnapshot, clearTurnActivityState, recordTurnEvent } from "./turn-activity-state.js";
+import { buildTurnActivitySnapshot, clearTurnActivityState, recordTurnEvent, type TurnActivityState } from "./turn-activity-state.js";
+import type { InputWidget } from "./input.js";
 
-type AppState = any;
+interface AnimatedCounterLike {
+  set(value: number): void;
+  sync(): void;
+}
+
+interface AppState {
+  messages: ChatMessage[];
+  activityState: TurnActivityState;
+  streamingActivitySummary: string;
+  toolExecutions: ToolExecutionActivity[];
+  currentActivityStep: ActivityStep | null;
+  isCompacting: boolean;
+  streamStartTime: number;
+  compactStartTime: number;
+  scrollOffset: number;
+  transcriptAutoFollow: boolean;
+  composerScrollOffset: number;
+  input: InputWidget;
+  thinkingBuffer: string;
+  thinkingStartTime: number;
+  thinkingDuration: number;
+  todoItems: TodoItem[];
+  allToolsExpanded: boolean;
+  isStreaming: boolean;
+  streamTokens: number;
+  animStreamTokens: AnimatedCounterLike;
+  statusTimer: ReturnType<typeof setTimeout> | null;
+  statusMessage: string | undefined;
+  onSubmit: ((text: string) => void) | null;
+  onPendingMessagesReady: ((delivery: PendingDelivery) => void) | null;
+  pendingImages: PendingImage[];
+  pendingMessages: PendingMessage[];
+  onAbort: (() => void) | null;
+  btwBubble: BtwBubble | null;
+  compactTokens: number;
+  fileContexts: Map<string, string>;
+  screen: { forceRedraw(lines: string[]): void };
+  refreshHomeScreenData(): void;
+  invalidateMsgCache(): void;
+  draw(): void;
+  drawNow(): void;
+  scrollToBottom(): void;
+  ensureUiSpinner(): void;
+  releaseUiSpinnerIfIdle(): void;
+  refreshWindowTitle?(): void;
+  addToolCall(name: string, preview: string, args?: unknown, callId?: string): void;
+  dismissBtwBubble(): void;
+}
 
 function setCurrentActivityFromTool(app: AppState, name: string, preview: string, startedAt?: number): void {
   const label = buildActivityLabel(name, preview);
@@ -67,7 +115,7 @@ function followTranscriptIfAnchored(app: AppState): void {
   if (app.transcriptAutoFollow) app.scrollToBottom();
 }
 
-function findLastAssistantMessage(app: AppState): any | null {
+function findLastAssistantMessage(app: AppState): ChatMessage | null {
   for (let i = app.messages.length - 1; i >= 0; i--) {
     const message = app.messages[i];
     if (message?.role === "assistant") return message;
@@ -256,7 +304,7 @@ export function addToolResult(app: AppState, name: string, result: string, error
       timestamp: createTurnTimestamp(),
     }, { expanded: tc.expanded });
     syncLiveActivity(app);
-    const hasRunning = app.toolExecutions.some((tc: any) => tc.status === "starting" || tc.status === "running");
+    const hasRunning = app.toolExecutions.some((tc) => tc.status === "starting" || tc.status === "running");
     if (!hasRunning && !app.isStreaming && !app.isCompacting) app.streamingActivitySummary = "";
   }
   app.invalidateMsgCache();

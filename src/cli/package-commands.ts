@@ -6,6 +6,7 @@ import {
   renderFixedBenchmarkReport,
   runFixedBenchmarkSuite,
 } from "../benchmarks/fixed-suite.js";
+import type { TaskCategory } from "../benchmarks/fixed-suite-task-definitions.js";
 import {
   describePackageResources,
   getPackageConfigPaths,
@@ -40,6 +41,28 @@ function renderConfigOverview(): string {
 function parseRepeatedList(values: string[]): string[] | undefined {
   const items = values.flatMap((entry) => entry.split(",")).map((entry) => entry.trim()).filter(Boolean);
   return items.length > 0 ? items : undefined;
+}
+
+const BENCHMARK_TASK_IDS = new Set<TaskCategory>([
+  "read_modify",
+  "multi_file_refactor",
+  "bug_fix",
+  "test_writing",
+  "repo_exploration",
+  "stateful_refactor_followup",
+  "rename_then_answer",
+  "bugfix_then_test",
+]);
+
+function parseTaskIds(values: string[]): TaskCategory[] | undefined {
+  const taskIds = parseRepeatedList(values);
+  if (!taskIds) return undefined;
+  for (const taskId of taskIds) {
+    if (!BENCHMARK_TASK_IDS.has(taskId as TaskCategory)) {
+      throw new Error(`Unknown benchmark task: ${taskId}`);
+    }
+  }
+  return taskIds as TaskCategory[];
 }
 
 export function registerPackageCommands(program: Command): void {
@@ -184,7 +207,7 @@ export function registerPackageCommands(program: Command): void {
         mode: opts.mode === "plan" ? "plan" : "build",
         maxTurns: opts.maxTurns ? Number.parseInt(opts.maxTurns, 10) : undefined,
         keepWorkspaces: !!opts.keepWorkspaces,
-        taskIds: parseRepeatedList(opts.task) as any,
+        taskIds: parseTaskIds(opts.task),
       });
       process.stdout.write(opts.json ? `${JSON.stringify(result, null, 2)}\n` : `${renderFixedBenchmarkReport(result)}\n`);
     });
