@@ -1,4 +1,5 @@
 import type { LanguageModel, ToolSet } from "ai";
+import { startGoogleCloudCodeStream } from "../ai/google-cloud-code-stream.js";
 import { pickCheapestDetectedModel, pickDefault, type DetectedProvider } from "../ai/detect.js";
 import { startNativeStream } from "../ai/native-stream.js";
 import { startStream } from "../ai/stream.js";
@@ -7,6 +8,7 @@ import { Session } from "../core/session.js";
 import { expandInlineSkillInvocations } from "../core/skills.js";
 import { getTools, type ToolName } from "../tools/registry.js";
 import { getSettings, type Mode } from "../core/config.js";
+import { getProviderCredential } from "../core/provider-credentials.js";
 import { resolveTurnPolicy } from "../core/turn-policy.js";
 import type { ProviderRegistry } from "../ai/provider-registry.js";
 import type { ModelHandle } from "../ai/providers.js";
@@ -240,6 +242,20 @@ export async function runOneShotPrompt(options: {
         thinkingLevel: getSettings().thinkingLevel || "low",
         cwd: process.cwd(),
         structuredFinalResponse: null,
+      },
+      callbacks,
+    );
+  } else if (activeModel.runtime === "oauth-stream") {
+    const credential = getProviderCredential(activeModel.provider.id);
+    await startGoogleCloudCodeStream(
+      {
+        providerId: activeModel.provider.id as "google-gemini-cli" | "google-antigravity",
+        modelId,
+        credential: credential.value ?? "",
+        system: systemPrompt,
+        messages: turnMessages,
+        enableThinking: getSettings().enableThinking,
+        maxOutputTokens: minimalOutputPolicy?.maxOutputTokens,
       },
       callbacks,
     );

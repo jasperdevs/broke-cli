@@ -57,6 +57,7 @@ function isSelectableDetectedProvider(provider: DetectedProvider): boolean {
   if (LOCAL_PROVIDER_IDS.has(provider.id)) return true;
   if ((provider.id === "anthropic" || provider.id === "codex") && provider.reason === "native login") return true;
   if (provider.id === "github-copilot" && provider.reason === "OAuth login") return true;
+  if ((provider.id === "google-gemini-cli" || provider.id === "google-antigravity") && provider.reason === "OAuth login") return true;
   return isProviderRuntimeSelectable(provider.id);
 }
 

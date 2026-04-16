@@ -5,6 +5,17 @@ import { fileURLToPath } from "url";
 const MODELS_DEV_API_URL = "https://models.dev/api.json";
 const GENERATED_PATH = join(dirname(fileURLToPath(import.meta.url)), "..", "src", "ai", "model-catalog.generated.json");
 
+const SUPPORTED_MODELS_DEV_PROVIDERS = new Set([
+  "anthropic",
+  "github-copilot",
+  "google",
+  "groq",
+  "mistral",
+  "openai",
+  "openrouter",
+  "xai",
+]);
+
 const EXTRA_ID_ONLY_MODELS = {
   "google-gemini-cli": ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash"],
   "google-antigravity": ["gemini-3.1-pro-high", "gemini-3.1-pro-low", "gemini-3-flash", "claude-sonnet-4-6"],
@@ -74,6 +85,7 @@ function normalizeModel(modelId, raw) {
 function normalizeCatalog(rawCatalog) {
   const catalog = {};
   for (const providerId of Object.keys(rawCatalog).sort()) {
+    if (!SUPPORTED_MODELS_DEV_PROVIDERS.has(providerId)) continue;
     const rawProvider = rawCatalog[providerId];
     if (!rawProvider || typeof rawProvider !== "object" || !rawProvider.models) continue;
     const models = {};

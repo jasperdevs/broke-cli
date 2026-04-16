@@ -36,7 +36,7 @@ describe("startup home view", () => {
     const firstCardLine = rendered.find((line) => stripAnsi(line).includes("╭")) ?? "";
     expect(stripAnsi(firstCardLine)).toContain("╭");
     expect(output).toContain("Welcome");
-    expect(output).toContain("GPT-5.4-Mini");
+    expect(output).toMatch(/GPT-5\.4[- ]Mini/);
     expect(output).toContain(`~${process.platform === "win32" ? "\\" : "/"}Downloads${process.platform === "win32" ? "\\" : "/"}broke-cli`);
     expect(output).toContain("Tip:");
     expect(output).toContain("/resume");

@@ -1,6 +1,6 @@
 {
   "name": "@jasperdevs/brokecli",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "Terminal-first AI coding CLI with budget-aware model routing.",
   "type": "module",
   "exports": {
@@ -18,6 +18,7 @@
   ],
   "scripts": {
     "generate-models": "node scripts/generate-models.mjs",
+    "check:generated-models": "node scripts/check-generated-models.mjs",
     "build": "npm run generate-models && tsup",
     "dev": "tsup --watch",
     "benchmark:tasks": "npm run build && node scripts/benchmark-harness.mjs",
@@ -30,7 +31,7 @@
     "lint": "npm run typecheck && npm run quality",
     "check:cycles": "madge --circular --extensions ts src bin test",
     "check:unused-files": "npx --yes knip@6.4.1 --include files",
-    "verify": "npm run build && npm run typecheck && npm run quality && npm run check:cycles && npm run check:unused-files && npm test && npm pack --dry-run && node dist/brokecli.mjs --help && npm run test:release",
+    "verify": "npm run build && npm run check:generated-models && npm run typecheck && npm run quality && npm run check:cycles && npm run check:unused-files && npm test && npm pack --dry-run && node dist/brokecli.mjs --help && npm run test:release",
     "prepack": "npm run build",
     "prepare": "npm run build",
     "prepublishOnly": "npm run build"

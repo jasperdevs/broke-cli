@@ -49,6 +49,12 @@ const PROVIDER_CAPABILITIES: Record<string, ProviderCapabilities> = {
   google: {
     reasoningProvider: "google",
   },
+  "google-gemini-cli": {
+    reasoningProvider: "google",
+  },
+  "google-antigravity": {
+    reasoningProvider: "google",
+  },
 };
 
 const ALL_REASONING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;

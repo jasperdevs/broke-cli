@@ -20,7 +20,7 @@ export interface ProviderInfo {
   custom?: boolean;
 }
 
-export type ModelRuntime = "sdk" | "native-cli";
+export type ModelRuntime = "sdk" | "native-cli" | "oauth-stream";
 
 export interface ModelHandle {
   provider: ProviderInfo;

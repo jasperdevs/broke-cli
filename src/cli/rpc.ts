@@ -1,11 +1,13 @@
 import type { LanguageModel } from "ai";
 import { pickDefault } from "../ai/detect.js";
+import { startGoogleCloudCodeStream } from "../ai/google-cloud-code-stream.js";
 import { startNativeStream } from "../ai/native-stream.js";
 import { startStream } from "../ai/stream.js";
 import { buildSystemPrompt, resolveCavemanLevel } from "../core/context.js";
 import { Session } from "../core/session.js";
 import { getTools } from "../tools/registry.js";
 import { getSettings, type Mode } from "../core/config.js";
+import { getProviderCredential } from "../core/provider-credentials.js";
 import { resolveTurnPolicy } from "../core/turn-policy.js";
 import { loadPricing } from "../ai/cost.js";
 import { ProviderRegistry } from "../ai/provider-registry.js";
@@ -205,6 +207,20 @@ export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts:
           thinkingLevel: getSettings().thinkingLevel || "low",
           cwd: process.cwd(),
           structuredFinalResponse: null,
+        },
+        rpcCallbacks,
+      );
+    } else if (activeModel.runtime === "oauth-stream") {
+      const credential = getProviderCredential(activeModel.provider.id);
+      await startGoogleCloudCodeStream(
+        {
+          providerId: activeModel.provider.id as "google-gemini-cli" | "google-antigravity",
+          modelId: currentModelId,
+          credential: credential.value ?? "",
+          system: systemPrompt,
+          messages: turnMessages,
+          abortSignal: abortController.signal,
+          maxOutputTokens: minimalOutputPolicy?.maxOutputTokens,
         },
         rpcCallbacks,
       );

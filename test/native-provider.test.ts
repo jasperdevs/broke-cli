@@ -150,6 +150,18 @@ describe("native provider runtime selection", () => {
     expect(() => createModel("codex")).toThrow("API-key runtime is disabled");
   });
 
+  it("uses OAuth stream runtime for Google Cloud Code Assist providers", () => {
+    configMocks.getProviderCredential.mockImplementation((providerId: string) => (
+      providerId === "google-gemini-cli"
+        ? { kind: "native_oauth", value: JSON.stringify({ token: "token", projectId: "project" }), source: "brokecli-auth" }
+        : { kind: "none" }
+    ));
+
+    const model = createModel("google-gemini-cli", "gemini-2.5-pro");
+    expect(model.runtime).toBe("oauth-stream");
+    expect(model.modelId).toBe("gemini-2.5-pro");
+  });
+
   it("uses a ChatGPT-compatible default for native Codex", () => {
     configMocks.getProviderCredential.mockImplementation((providerId: string) => (
       providerId === "codex" ? { kind: "native_oauth", source: "codex-chatgpt" } : { kind: "none" }

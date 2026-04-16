@@ -1,10 +1,12 @@
 import { startNativeStream } from "../ai/native-stream.js";
+import { startGoogleCloudCodeStream } from "../ai/google-cloud-code-stream.js";
 import { startStream } from "../ai/stream.js";
 import { estimateTextTokens } from "../ai/tokens.js";
 import type { ModelHandle } from "../ai/providers.js";
 import { rewriteAssistantForCaveman } from "../core/caveman.js";
 import { resolveCavemanLevel } from "../core/context.js";
 import { getSettings, type Mode } from "../core/config.js";
+import { getProviderCredential } from "../core/provider-credentials.js";
 import { buildSimpleFileTaskPromptBlock, detectSimpleFileTask } from "../core/simple-file-task.js";
 import type { TurnPolicy } from "../core/turn-policy.js";
 import type { ToolName } from "../tools/registry.js";
@@ -415,14 +417,17 @@ export async function executeTurn(options: {
     if (executionModel.runtime === "native-cli") {
       await startNativeStream({
         providerId: executionModel.provider.id as "anthropic" | "codex",
-        modelId: executionModelId,
-        system: turnSystemPrompt,
-        messages: optimizedMessages,
-        abortSignal: abortController.signal,
-        enableThinking: resolvedRoute === "main" ? getSettings().enableThinking : false,
-        thinkingLevel: getSettings().thinkingLevel || "low",
-        cwd: process.cwd(),
-        structuredFinalResponse: null,
+        modelId: executionModelId, system: turnSystemPrompt, messages: optimizedMessages,
+        abortSignal: abortController.signal, enableThinking: resolvedRoute === "main" ? getSettings().enableThinking : false,
+        thinkingLevel: getSettings().thinkingLevel || "low", cwd: process.cwd(), structuredFinalResponse: null,
+      }, { ...streamCallbacks, ...liveToolCallbacks });
+    } else if (executionModel.runtime === "oauth-stream") {
+      const credential = getProviderCredential(executionModel.provider.id);
+      await startGoogleCloudCodeStream({
+        providerId: executionModel.provider.id as "google-gemini-cli" | "google-antigravity",
+        modelId: executionModelId, credential: credential.value ?? "", system: turnSystemPrompt,
+        messages: optimizedMessages, abortSignal: abortController.signal,
+        enableThinking: thinkingRequested, maxOutputTokens: minimalOutputPolicy?.maxOutputTokens,
       }, { ...streamCallbacks, ...liveToolCallbacks });
     } else {
       await startStream({

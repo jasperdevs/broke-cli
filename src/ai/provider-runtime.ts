@@ -45,7 +45,11 @@ export function shouldUseNativeProvider(providerId: string): boolean {
 export function isProviderRuntimeSelectable(providerId: string): boolean {
   if (LOCAL_PROVIDER_IDS.has(providerId)) return true;
   if (providerId === "anthropic" || providerId === "codex") return shouldUseNativeProvider(providerId);
-  return providerId === "github-copilot" && getProviderCredential(providerId).kind === "native_oauth";
+  return (
+    providerId === "github-copilot"
+    || providerId === "google-gemini-cli"
+    || providerId === "google-antigravity"
+  ) && getProviderCredential(providerId).kind === "native_oauth";
 }
 
 function parseCredentialValue(value: string): string {
@@ -88,7 +92,7 @@ export function createModel(providerId: string, modelId?: string): ModelHandle {
     throw new Error(`${info.name} login found, but the ${command} CLI is not on PATH.`);
   }
   if (!useNative) {
-    if (providerId !== "github-copilot") {
+    if (providerId !== "github-copilot" && providerId !== "google-gemini-cli" && providerId !== "google-antigravity") {
       throw new Error(`${info.name} API-key runtime is disabled. Use /login with an OAuth provider.`);
     }
   }
@@ -133,6 +137,11 @@ export function createModel(providerId: string, modelId?: string): ModelHandle {
     }
     const copilot = createOpenAI({ apiKey: token, baseURL, headers: { ...COPILOT_HEADERS } });
     return { model: copilot.chat(model), provider, modelId: model, runtime: "sdk" };
+  }
+
+  if (providerId === "google-gemini-cli" || providerId === "google-antigravity") {
+    getOAuthAccessToken(providerId);
+    return { provider: info, modelId: model, runtime: "oauth-stream" };
   }
 
   if (info.custom && info.apiType) {

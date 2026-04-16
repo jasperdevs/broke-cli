@@ -1,8 +1,10 @@
 import type { ModelHandle } from "../ai/providers.js";
 import { getPrettyModelName } from "../ai/model-catalog.js";
+import { startGoogleCloudCodeStream } from "../ai/google-cloud-code-stream.js";
 import { startNativeStream } from "../ai/native-stream.js";
 import { startStream } from "../ai/stream.js";
 import { getSettings } from "../core/config.js";
+import { getProviderCredential } from "../core/provider-credentials.js";
 import { rewriteAssistantForCaveman } from "../core/caveman.js";
 import { resolveCavemanLevel } from "../core/context.js";
 import type { Session } from "../core/session.js";
@@ -117,6 +119,28 @@ export async function runBtwQuestion(options: RunBtwQuestionOptions): Promise<vo
       thinkingLevel,
       cwd: process.cwd(),
       denyToolUse: true,
+    }, {
+      onText: (delta) => {
+        btwDraft += delta;
+        app.appendBtwBubble(delta);
+      },
+      onReasoning: () => {},
+      onFinish,
+      onError,
+    });
+    return;
+  }
+
+  if (model.runtime === "oauth-stream") {
+    const credential = getProviderCredential(model.provider.id);
+    await startGoogleCloudCodeStream({
+      providerId: model.provider.id as "google-gemini-cli" | "google-antigravity",
+      modelId,
+      credential: credential.value ?? "",
+      system: sideSystemPrompt,
+      messages: sideMessages,
+      abortSignal: abortController.signal,
+      enableThinking: useThinking,
     }, {
       onText: (delta) => {
         btwDraft += delta;
