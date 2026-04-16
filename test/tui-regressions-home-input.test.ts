@@ -87,7 +87,7 @@ describe("startup home view", () => {
       const output = rendered.map((line) => stripAnsi(line)).join("\n");
       expect(output).toContain("Current model");
       expect(output).not.toContain("Mode");
-      expect(output).toContain("Role models");
+      expect(output).not.toContain("Role models");
     } finally {
       updateSetting("hideSidebar", originalHideSidebar);
     }

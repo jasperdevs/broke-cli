@@ -297,7 +297,7 @@ export async function detectProviders(): Promise<DetectedProvider[]> {
 /** Pick the best default provider from detected ones */
 export function pickDefault(providers: DetectedProvider[]): DetectedProvider | undefined {
   // Prefer cloud providers that are available, then local
-  const priority = ["anthropic", "github-copilot", "google-gemini-cli", "google-antigravity", "openai", "codex", "google", "groq", "mistral", "xai", "openrouter", "ollama", "lmstudio", "llamacpp", "jan", "vllm"];
+  const priority = ["codex", "anthropic", "github-copilot", "google-gemini-cli", "google-antigravity", "openai", "google", "groq", "mistral", "xai", "openrouter", "ollama", "lmstudio", "llamacpp", "jan", "vllm"];
   for (const id of priority) {
     const p = providers.find((x) => x.id === id && x.available);
     if (p) return p;

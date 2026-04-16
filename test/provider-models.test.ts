@@ -55,6 +55,23 @@ describe("provider model filtering", () => {
     expect(visible).toContain("mixtral");
   });
 
+  it("hides legacy OpenAI reasoning models unless a routing slot preserves them", () => {
+    const visible = filterModelIdsForDisplay("openai", [
+      "gpt-5.4-mini",
+      "gpt-5.4",
+      "gpt-4.1",
+      "o3",
+      "o4-mini",
+    ]);
+
+    expect(visible).toContain("gpt-5.4-mini");
+    expect(visible).not.toContain("gpt-4.1");
+    expect(visible).not.toContain("o3");
+    expect(visible).not.toContain("o4-mini");
+
+    expect(filterModelIdsForDisplay("openai", ["gpt-5.4-mini", "o3"], ["o3"])).toContain("o3");
+  });
+
   it("does not keep undetected local providers visible in the model picker", () => {
     const spy = vi.spyOn(config, "getBaseUrl").mockReturnValue(undefined);
     const registry = new ProviderRegistry() as any;

@@ -125,6 +125,7 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
         try {
           if (provId === AUTO_MODEL_PROVIDER_ID && modId === AUTO_MODEL_ID) {
             updateSetting("autoRoute", true);
+            updateSetting("lastModel", `${AUTO_MODEL_PROVIDER_ID}/${AUTO_MODEL_ID}`);
             app.setStatus?.("Auto routing enabled.");
             onModelRoutingChange?.();
             app.updateModelPickerOptions?.(getPickerOptions(), `${AUTO_MODEL_PROVIDER_ID}/${AUTO_MODEL_ID}`);

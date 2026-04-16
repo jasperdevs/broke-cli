@@ -154,7 +154,7 @@ export function renderSidebarViewport(options: {
   muted: string;
   reset: string;
 }): { lines: string[]; scrollOffset: number } {
-  const { allLines, visibleHeight, sidebarFocused, muted, reset } = options;
+  const { allLines, visibleHeight } = options;
   let scrollOffset = options.sidebarScrollOffset;
   const maxScroll = Math.max(0, allLines.length - visibleHeight);
   if (scrollOffset > maxScroll) scrollOffset = maxScroll;
@@ -164,12 +164,5 @@ export function renderSidebarViewport(options: {
     return { lines: allLines, scrollOffset };
   }
 
-  const visible = allLines.slice(scrollOffset, scrollOffset + visibleHeight);
-  if (visible.length > 0) {
-    if (scrollOffset > 0) visible[0] = `${muted}^ more${sidebarFocused ? " · scroll" : ""}${reset}`;
-    if (scrollOffset + visibleHeight < allLines.length) {
-      visible[visible.length - 1] = `${muted}v more${sidebarFocused ? " · scroll" : ""}${reset}`;
-    }
-  }
-  return { lines: visible, scrollOffset };
+  return { lines: allLines.slice(scrollOffset, scrollOffset + visibleHeight), scrollOffset };
 }

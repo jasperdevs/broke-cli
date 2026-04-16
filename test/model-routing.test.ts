@@ -178,10 +178,40 @@ describe("specialist model routing", () => {
       providerRegistry as any,
       mainModel as any,
       "gpt-5.4-mini",
-      [],
+      [
+        { id: "openai", name: "OpenAI", available: true, reason: "API key" },
+        { id: "anthropic", name: "Anthropic", available: true, reason: "API key" },
+        { id: "google", name: "Google", available: true, reason: "API key" },
+      ] as any,
       new Set(["openai/gpt-5.4-mini", "anthropic/claude-sonnet-4-6"]),
     );
 
     expect(fallbacks.map((entry) => entry.key)).toEqual(["google/gemini-3-pro"]);
+  });
+
+  it("limits auto fallback candidates to currently detected providers", () => {
+    const providerRegistry = {
+      buildVisibleModelOptions: () => [
+        { providerId: "openai", providerName: "OpenAI", modelId: "gpt-5.4-mini", active: false },
+        { providerId: "anthropic", providerName: "Anthropic", modelId: "claude-sonnet-4-6", active: false },
+        { providerId: "google", providerName: "Google", modelId: "gemini-3-pro", active: false },
+      ],
+      createModel: (providerId: string, modelId: string) => ({
+        provider: { id: providerId, name: providerId, defaultModel: modelId, models: [modelId] },
+        runtime: "sdk",
+        model: {},
+        modelId,
+      }),
+    };
+
+    const fallbacks = resolveAutoFallbackModels(
+      providerRegistry as any,
+      mainModel as any,
+      "gpt-5.4-mini",
+      [{ id: "anthropic", name: "Anthropic", available: true, reason: "API key" }] as any,
+      new Set(["openai/gpt-5.4-mini"]),
+    );
+
+    expect(fallbacks.map((entry) => entry.key)).toEqual(["anthropic/claude-sonnet-4-6"]);
   });
 });

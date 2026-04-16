@@ -67,6 +67,7 @@ export function filterModelIdsForDisplay(providerId: string, modelIds: string[],
 
     const lower = modelId.toLowerCase();
     const spec = getModelSpec(modelId, providerId);
+    if (providerId === "openai" && /^(?:gpt-4\.1|o[34])(?:-|$)/.test(lower)) return false;
     if (getProviderCompat(providerId, modelId).supportsTools === false) return false;
     const family = spec?.family?.toLowerCase() ?? "";
     const inputModalities = spec?.modalities?.input ?? [];

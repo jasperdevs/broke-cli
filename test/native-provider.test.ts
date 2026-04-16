@@ -99,17 +99,14 @@ describe("native provider runtime selection", () => {
     expect(model.provider.id).toBe("codex");
   });
 
-  it("does not select the native runtime when the CLI is missing", () => {
+  it("fails clearly instead of falling back to SDK when native Codex CLI is missing", () => {
     configMocks.getProviderCredential.mockImplementation((providerId: string) => (
       providerId === "codex" ? { kind: "native_oauth", source: "codex-chatgpt" } : { kind: "none" }
     ));
     configMocks.spawnSync.mockReturnValue({ status: 1, stdout: "", error: undefined });
 
     expect(shouldUseNativeProvider("codex")).toBe(false);
-
-    const model = createModel("codex", "gpt-5.4-mini");
-    expect(model.runtime).toBe("sdk");
-    expect(model.nativeCommand).toBeUndefined();
+    expect(() => createModel("codex", "gpt-5.4-mini")).toThrow("codex CLI is not on PATH");
   });
 
   it("normalizes bare Windows shims to a runnable cmd path", async () => {

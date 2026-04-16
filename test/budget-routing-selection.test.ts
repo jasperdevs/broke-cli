@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pickCheapestDetectedModel } from "../src/ai/detect.js";
+import { pickCheapestDetectedModel, pickDefault } from "../src/ai/detect.js";
 import { resolveOneShotModel } from "../src/cli/oneshot.js";
 
 describe("budget-first provider selection", () => {
@@ -61,6 +61,15 @@ describe("budget-first provider selection", () => {
       providerId: "codex",
       modelId: "gpt-5.4-mini",
     });
+  });
+
+  it("prefers native Codex over OpenAI API keys for default startup", () => {
+    const resolved = pickDefault([
+      { id: "openai", name: "OpenAI", available: true, reason: "API key" },
+      { id: "codex", name: "Codex", available: true, reason: "native login" },
+    ]);
+
+    expect(resolved?.id).toBe("codex");
   });
 
   it("leans token-first across priced hosted candidates before using lower cost as a tie-breaker", () => {

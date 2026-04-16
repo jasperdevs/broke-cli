@@ -44,6 +44,11 @@ export function createModel(providerId: string, modelId?: string): ModelHandle {
   if (!info) throw new Error(`Unknown provider: ${providerId}`);
 
   const useNative = shouldUseNativeProvider(providerId);
+  const credential = getProviderCredential(providerId);
+  if ((providerId === "anthropic" || providerId === "codex") && credential.kind === "native_oauth" && !useNative) {
+    const command = providerId === "anthropic" ? "claude" : "codex";
+    throw new Error(`${info.name} login found, but the ${command} CLI is not on PATH.`);
+  }
   const nativeDefaultModel = useNative
     ? getProviderNativeDefaultModelId(providerId) ?? info.defaultModel
     : info.defaultModel;

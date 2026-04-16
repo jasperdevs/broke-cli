@@ -378,6 +378,8 @@ describe("slash command handling", () => {
   });
 
   it("lets the model picker enable auto routing from the synthetic auto entry", async () => {
+    const previousAutoRoute = getSettings().autoRoute;
+    const previousLastModel = getSettings().lastModel;
     updateSetting("autoRoute", false);
     const app = createAppStub();
     let pickerSelect: ((providerId: string, modelId: string) => void) | null = null;
@@ -404,9 +406,11 @@ describe("slash command handling", () => {
       expect(pickerOptions[0]).toMatchObject({ providerId: "__auto__", modelId: "__auto__", displayName: "Auto" });
       pickerSelect?.("__auto__", "__auto__");
       expect(getSettings().autoRoute).toBe(true);
+      expect(getSettings().lastModel).toBe("__auto__/__auto__");
       expect(app.statusMessage).toBe("Auto routing enabled.");
     } finally {
-      updateSetting("autoRoute", true);
+      updateSetting("autoRoute", previousAutoRoute);
+      updateSetting("lastModel", previousLastModel);
     }
   });
 

@@ -102,8 +102,7 @@ export function buildMenuView(_app: AppState, entries: MenuEntry[], cursor: numb
     }
   }
 
-  const shouldShowOverflowMarkers = maxVisibleLines >= 6;
-  while (shouldShowOverflowMarkers && used + (start > 0 ? 1 : 0) + (end < entries.length ? 1 : 0) > maxVisibleLines && end - start > 1) {
+  while (used > maxVisibleLines && end - start > 1) {
     const linesAbove = cursorEntryIndex - start;
     const linesBelow = end - cursorEntryIndex - 1;
     if (linesBelow > linesAbove && end - 1 > cursorEntryIndex) {
@@ -124,10 +123,7 @@ export function buildMenuView(_app: AppState, entries: MenuEntry[], cursor: numb
     break;
   }
 
-  const visible = entries.slice(start, end);
-  if (shouldShowOverflowMarkers && start > 0) visible.unshift({ lines: [` ${DIM}↑ more${RESET}`] });
-  if (shouldShowOverflowMarkers && end < entries.length) visible.push({ lines: [` ${DIM}↓ more${RESET}`] });
-  return visible;
+  return entries.slice(start, end);
 }
 
 export function registerMenuClickTarget(_app: AppState, targets: Array<{ lineIndex: number; action: () => void }>, lines: string[], action: () => void): void {

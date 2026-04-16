@@ -79,8 +79,12 @@ export function resolveAutoFallbackModels(
   attemptedKeys: ReadonlySet<string>,
 ): AutoFallbackModel[] {
   const currentKey = `${activeModel.provider.id}/${currentModelId}`;
+  const availableProviderIds = new Set(providers.filter((provider) => provider.available !== false).map((provider) => provider.id));
   const options = buildVisibleRuntimeModelOptions(providerRegistry, activeModel, currentModelId, providers)
-    .filter((option) => option.providerId !== AUTO_MODEL_PROVIDER_ID && option.modelId !== AUTO_MODEL_ID);
+    .filter((option) =>
+      option.providerId !== AUTO_MODEL_PROVIDER_ID
+      && option.modelId !== AUTO_MODEL_ID
+      && availableProviderIds.has(option.providerId));
   const currentIndex = options.findIndex((option) => `${option.providerId}/${option.modelId}` === currentKey);
   const ordered = currentIndex >= 0
     ? [...options.slice(currentIndex + 1), ...options.slice(0, currentIndex)]

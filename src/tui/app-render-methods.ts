@@ -342,24 +342,28 @@ export function renderUpdateBanner(app: AppState, width: number): string[] {
 
 export function buildSidebarLines(app: AppState): string[] {
   const chatModelLabel = getPrettyModelName(app.modelName, app.modelProviderId);
-  const resolveSlotLabel = (slot: "default" | "small" | "btw" | "review" | "planning" | "ui" | "architecture"): string => {
+  const chatModelKey = `${app.modelProviderId}/${app.modelName}`;
+  const resolveSlotModel = (slot: "default" | "small" | "btw" | "review" | "planning" | "ui" | "architecture"): { value: string; key: string } => {
     const configured = getConfiguredModelPreference(slot);
-    if (!configured) return chatModelLabel;
+    if (!configured) return { value: chatModelLabel, key: chatModelKey };
     const slashIndex = configured.indexOf("/");
     const providerId = slashIndex > 0 ? configured.slice(0, slashIndex) : app.modelProviderId;
     const modelId = slashIndex > 0 ? configured.slice(slashIndex + 1) : configured;
-    if (!supportsProviderModel(providerId, modelId)) return "unset";
-    return getPrettyModelName(modelId, providerId);
+    if (!supportsProviderModel(providerId, modelId)) return { value: "unset", key: "unset" };
+    return { value: getPrettyModelName(modelId, providerId), key: `${providerId}/${modelId}` };
   };
   const roleModels = [
-    { label: "Chat", value: chatModelLabel },
-    { label: "Fast", value: resolveSlotLabel("small") },
-    { label: "BTW", value: resolveSlotLabel("btw") },
-    { label: "Review", value: resolveSlotLabel("review") },
-    { label: "Planning", value: resolveSlotLabel("planning") },
-    { label: "Design/UI", value: resolveSlotLabel("ui") },
-    { label: "Architecture", value: resolveSlotLabel("architecture") },
-  ].filter((slot) => slot.value !== "unset");
+    { label: "Chat", value: chatModelLabel, key: chatModelKey },
+    { label: "Fast", ...resolveSlotModel("small") },
+    { label: "BTW", ...resolveSlotModel("btw") },
+    { label: "Review", ...resolveSlotModel("review") },
+    { label: "Planning", ...resolveSlotModel("planning") },
+    { label: "Design/UI", ...resolveSlotModel("ui") },
+    { label: "Architecture", ...resolveSlotModel("architecture") },
+  ].filter((slot) => slot.key !== "unset");
+  const visibleRoleModels = roleModels.some((slot) => slot.key !== chatModelKey)
+    ? roleModels.map(({ label, value }) => ({ label, value }))
+    : [];
   return composeSidebarLines({
     width: app.screen.sidebarWidth,
     sessionName: app.sessionName,
@@ -367,7 +371,7 @@ export function buildSidebarLines(app: AppState): string[] {
     sessionDetails: [
       { label: "Current model", value: chatModelLabel },
     ],
-    roleModels,
+    roleModels: visibleRoleModels,
     mcpConnections: app.mcpConnections,
     shortCwd: app.formatShortCwd(Math.max(4, app.screen.sidebarWidth - 2)),
     gitBranch: app.gitBranch,

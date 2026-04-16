@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { App } from "../src/tui/app.js";
-import { getSettings, updateSetting } from "../src/core/config.js";
+import { getConfiguredModelPreference, getSettings, updateModelPreference, updateSetting } from "../src/core/config.js";
 import stripAnsi from "strip-ansi";
 
 describe("command aliases", () => {
@@ -58,9 +58,9 @@ describe("sidebar scrolling", () => {
     }
   });
 
-  it("enables mouse capture only for genuinely interactive surfaces", () => {
+  it("keeps mouse capture enabled so wheel input cannot escape to terminal scrollback", () => {
     const app = new App() as any;
-    expect(app.shouldEnableMenuMouse()).toBe(false);
+    expect(app.shouldEnableMenuMouse()).toBe(true);
 
     app.itemPicker = { title: "Projects", items: [], cursor: 0 };
     expect(app.shouldEnableMenuMouse()).toBe(true);
@@ -97,7 +97,7 @@ describe("sidebar scrolling", () => {
     app.scrollSidebar(4, 12);
     const after = app.renderSidebar(12).map((line: string) => stripAnsi(line));
     expect(before.join("\n")).toContain("Directory");
-    expect(after[0]).toContain("^ more");
+    expect(after[0]).not.toContain("^ more");
     expect(after.join("\n")).toContain("Connection");
   });
 
@@ -242,7 +242,7 @@ describe("sidebar scrolling", () => {
       expect(output).toContain("Commands");
       expect(output).toContain("Current model");
       expect(output).not.toContain("Mode");
-      expect(output).toContain("Role models");
+      expect(output).not.toContain("Role models");
       expect(output).not.toContain("same as chat");
       expect(output).not.toContain("Files");
     } finally {
@@ -272,12 +272,52 @@ describe("sidebar scrolling", () => {
       app.drawImmediate();
       const output = rendered.map((line) => stripAnsi(line)).join("\n");
       expect(output).toContain("build");
-      expect(output).toContain("Role models");
-      expect(output).toContain("Chat");
+      expect(output).not.toContain("Role models");
+      expect(output).not.toContain("Chat");
       const footer = app.renderSidebarFooter().map((line: string) => stripAnsi(line)).join("\n");
       expect(footer).toContain("0 total");
     } finally {
       updateSetting("hideSidebar", originalHideSidebar);
+    }
+  });
+
+  it("shows role models only when at least one lane differs from the current model", () => {
+    const originalHideSidebar = getSettings().hideSidebar;
+    const originalReview = getConfiguredModelPreference("review") ?? null;
+    updateSetting("hideSidebar", false);
+    try {
+      const app = new App() as any;
+      let rendered: string[] = [];
+      app.messages = [{ role: "user", content: "hello" }];
+      app.setModel("OpenAI", "gpt-5.4-mini", { providerId: "openai", runtime: "sdk" });
+      app.screen = {
+        height: 18,
+        width: 100,
+        hasSidebar: true,
+        mainWidth: 73,
+        sidebarWidth: 24,
+        render: (lines: string[]) => { rendered = lines; },
+        setCursor: () => {},
+        hideCursor: () => {},
+        forceRedraw: () => {},
+      };
+      app.drawImmediate();
+      expect(rendered.map((line) => stripAnsi(line)).join("\n")).not.toContain("Role models");
+
+      updateModelPreference("review", "anthropic/claude-sonnet-4-6");
+      app.drawImmediate();
+      const output = rendered.map((line) => stripAnsi(line)).join("\n");
+      expect(output).toContain("Role models");
+      expect(output).toContain("Review:");
+
+      updateModelPreference("review", "codex/gpt-5.4-mini");
+      app.drawImmediate();
+      const sameLabelOutput = rendered.map((line) => stripAnsi(line)).join("\n");
+      expect(sameLabelOutput).toContain("Role models");
+      expect(sameLabelOutput).toContain("Review: GPT-5.4 mini");
+    } finally {
+      updateSetting("hideSidebar", originalHideSidebar);
+      updateModelPreference("review", originalReview);
     }
   });
 

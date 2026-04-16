@@ -24,7 +24,7 @@ import { ensureConfiguredPackagesInstalledWithOptions, type PackageInstallFailur
 import { checkForNewVersion } from "../src/core/update.js";
 import { isSkippedPromptAnswer, isValidHttpBaseUrl, normalizeThinkingLevel, normalizeProgramArgv, splitModelArg } from "../src/cli/cli-helpers.js";
 import { resolveConfiguredModelHandle, resolvePreferredMode, type SpecialistModelRole } from "../src/cli/model-routing.js";
-import { buildVisibleRuntimeModelOptions, rebuildSmallModelState as computeSmallModelState, resolveAutoFallbackModels, resolveSpecialistRuntimeModel } from "../src/cli/runtime-models.js";
+import { AUTO_MODEL_ID, AUTO_MODEL_PROVIDER_ID, buildVisibleRuntimeModelOptions, rebuildSmallModelState as computeSmallModelState, resolveAutoFallbackModels, resolveSpecialistRuntimeModel } from "../src/cli/runtime-models.js";
 import { getTurnPolicy } from "../src/core/turn-policy.js";
 import { runBtwQuestion as runBtwQuestionRuntime } from "../src/cli/btw-runtime.js";
 import { applyProgramRuntimeSettings, applyRuntimeToolSelection, reportStartupUpdateNotice, runExportMode } from "../src/cli/program-runtime.js";
@@ -142,6 +142,9 @@ program.action(async (promptParts, opts) => {
   void checkForNewVersion(APP_VERSION).then((update) => reportStartupUpdateNotice(app, update)).catch(() => {});
 
   let scopedModelIndex = -1;
+  const startupSettings = getSettings();
+  let autoModelMode = startupSettings.autoRoute && startupSettings.lastModel === `${AUTO_MODEL_PROVIDER_ID}/${AUTO_MODEL_ID}`;
+  if (startupSettings.autoRoute && !autoModelMode) updateSetting("autoRoute", false);
   app.onModeToggle((newMode) => {
     applyMode(newMode);
   });
@@ -216,7 +219,7 @@ program.action(async (promptParts, opts) => {
   }
 
   function canAutoFallbackModels(): boolean {
-    return getSettings().autoRoute && !opts.provider && !opts.model && !parsedModel.provider && !parsedModel.model;
+    return autoModelMode && getSettings().autoRoute && !opts.provider && !opts.model && !parsedModel.provider && !parsedModel.model;
   }
 
   async function runBtwQuestion(question: string): Promise<void> {
@@ -345,6 +348,7 @@ program.action(async (promptParts, opts) => {
           applyMode(nextMode);
         },
         onModelRoutingChange: () => {
+          autoModelMode = getSettings().autoRoute && getSettings().lastModel === `${AUTO_MODEL_PROVIDER_ID}/${AUTO_MODEL_ID}`;
           rebuildSmallModelState();
         },
         onSystemPromptChange: (nextSystemPrompt) => {

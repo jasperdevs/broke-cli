@@ -67,7 +67,7 @@ export async function bootstrapSession(options: {
     if (config.defaultProvider) providerId = config.defaultProvider;
     if (!modelId && config.defaultModel) modelId = config.defaultModel;
     const lastModel = getSettings().lastModel;
-    if (lastModel) {
+    if (lastModel && lastModel !== "__auto__/__auto__") {
       const slashIdx = lastModel.indexOf("/");
       if (slashIdx > 0) {
         providerId = lastModel.slice(0, slashIdx);
