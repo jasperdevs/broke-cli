@@ -10,7 +10,7 @@ import {
   syncCloudProviderModelsFromCatalog,
   type ModelHandle,
 } from "./providers.js";
-import { getConfiguredProviderBaseUrl, listConfiguredProviderIds } from "../core/models-config.js";
+import { getConfiguredProviderBaseUrl } from "../core/models-config.js";
 import { getProviderCredential } from "../core/provider-credentials.js";
 import { applyConfiguredProviderOverrides } from "./provider-overrides.js";
 import { resetRuntimeProviders } from "./provider-definitions.js";
@@ -81,16 +81,13 @@ export class ProviderRegistry {
     const detectedIds = new Set(this.providers.map((provider) => provider.id));
     const credential = getProviderCredential(providerId);
     if (detectedIds.has(providerId)) {
-      if (providerId in LOCAL_PROVIDER_DEFAULTS) return "connected · local";
       if (credential.kind === "native_oauth") return "connected · native";
-      if (credential.kind === "api_key") return "connected · ready";
       return "connected";
     }
     if (credential.kind === "native_oauth") {
       return `${getNativeCliLabel(providerId)} login found`;
     }
-    if (credential.kind === "api_key") return "API key found";
-    if (providerId in LOCAL_PROVIDER_DEFAULTS) return "local endpoint";
+    if (providerId in LOCAL_PROVIDER_DEFAULTS) return "local APIs disabled";
     return "not connected";
   }
 
@@ -112,19 +109,6 @@ export class ProviderRegistry {
     }
 
     const visibleProviderIds = new Set(this.providers.map((provider) => provider.id));
-    for (const localProviderId of Object.keys(LOCAL_PROVIDER_DEFAULTS)) {
-      if (getConfiguredProviderBaseUrl(localProviderId)) visibleProviderIds.add(localProviderId);
-    }
-    for (const providerId of listConfiguredProviderIds()) visibleProviderIds.add(providerId);
-    if (activeModel?.provider.id) visibleProviderIds.add(activeModel.provider.id);
-    for (const pinnedModel of pinnedModels) {
-      const slashIndex = pinnedModel.indexOf("/");
-      if (slashIndex > 0) visibleProviderIds.add(pinnedModel.slice(0, slashIndex));
-    }
-    for (const preservedModel of preservedModels) {
-      const slashIndex = preservedModel.indexOf("/");
-      if (slashIndex > 0) visibleProviderIds.add(preservedModel.slice(0, slashIndex));
-    }
     const currentKey = activeModel ? `${activeModel.provider.id}/${currentModelId}` : "";
     const options: VisibleModelOption[] = [];
 

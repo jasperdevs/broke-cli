@@ -1,4 +1,4 @@
-import { spawn, type SpawnOptionsWithoutStdio } from "child_process";
+import { spawn, spawnSync, type ChildProcessWithoutNullStreams, type SpawnOptionsWithoutStdio } from "child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -8,7 +8,7 @@ import { getCodexOutputSchemaPath, parseStructuredFinalText } from "./native-out
 import { estimateConversationTokens, estimateTextTokens } from "./tokens.js";
 import { resolveNativeCommand } from "./native-cli.js";
 import { resolveThinkingConfig } from "./thinking.js";
-import { getWorkspaceRoot, getAutonomySettings } from "../core/permissions.js";
+import { getWorkspaceRoot, getAutonomySettings, getWorkspaceRootSafety } from "../core/permissions.js";
 
 interface NativeMessage {
   role: "user" | "assistant";
@@ -195,6 +195,21 @@ function buildCodexArgs(opts: NativeStreamOptions): string[] {
   return args;
 }
 
+function terminateProcessTree(child: ChildProcessWithoutNullStreams): void {
+  if (!child.pid) {
+    child.kill();
+    return;
+  }
+  if (process.platform === "win32") {
+    spawnSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+    return;
+  }
+  child.kill("SIGTERM");
+  setTimeout(() => {
+    if (!child.killed) child.kill("SIGKILL");
+  }, 1200).unref?.();
+}
+
 function imageExtensionForMimeType(mimeType: string): string {
   switch (mimeType.toLowerCase()) {
     case "image/jpeg": return "jpg";
@@ -275,6 +290,13 @@ export async function startNativeStream(
   callbacks: NativeStreamCallbacks,
 ): Promise<void> {
   const prompt = formatNativePrompt(opts.system, opts.messages);
+  if (!opts.denyToolUse) {
+    const workspaceSafety = getWorkspaceRootSafety(opts.cwd ?? process.cwd());
+    if (!workspaceSafety.allowed) {
+      callbacks.onError(new Error(workspaceSafety.reason ?? "Unsafe workspace root."));
+      return;
+    }
+  }
   const estimatedInputTokens = estimateConversationTokens(opts.system, opts.messages, opts.modelId);
   const commandName = opts.providerId === "anthropic" ? "claude" : "codex";
   const command = resolveNativeCommand(commandName) ?? commandName;
@@ -363,7 +385,7 @@ export async function startNativeStream(
     if (opts.abortSignal) {
       opts.abortSignal.addEventListener("abort", () => {
         aborted = true;
-        child.kill();
+        terminateProcessTree(child);
         if (codexImages) rmSync(codexImages.dir, { recursive: true, force: true });
         resolve();
       }, { once: true });

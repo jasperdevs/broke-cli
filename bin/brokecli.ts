@@ -11,7 +11,6 @@ import { setBashOutputCallback } from "../src/tools/bash.js";
 import { setTodoChangeCallback } from "../src/tools/todo.js";
 import { getSettings, updateSetting, type Mode } from "../src/core/config.js";
 import { clearRuntimeSettings, setRuntimeSettings } from "../src/core/config.js";
-import { getApiKey, setRuntimeProviderApiKey } from "../src/core/provider-credentials.js";
 import { loadExtensions } from "../src/core/extensions.js";
 import { APP_VERSION } from "../src/core/app-meta.js";
 import { ProviderRegistry } from "../src/ai/provider-registry.js";
@@ -224,7 +223,7 @@ program.action(async (promptParts, opts) => {
 
   async function runBtwQuestion(question: string): Promise<void> {
     if (!activeModel) {
-      app.setStatus("No provider configured. Run /connect.");
+      app.setStatus("No OAuth provider configured. Run /login codex.");
       return;
     }
 
@@ -422,7 +421,7 @@ program.action(async (promptParts, opts) => {
     }
 
     if (!activeModel) {
-      app.addMessage("system", "No provider configured. Run /connect.");
+      app.addMessage("system", "No OAuth provider configured. Run /login codex.");
       return;
     }
     const modeSwitching = getSettings().modeSwitching;

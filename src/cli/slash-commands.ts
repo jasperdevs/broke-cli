@@ -3,7 +3,6 @@ import { buildCompactionContextMessage, compactMessages, getTotalContextTokens, 
 import { getConfiguredModelPreference, getSettings, updateModelPreference, updateSetting, type Mode, type ModelPreferenceSlot } from "../core/config.js";
 import { createDefaultSessionName } from "../core/session.js";
 import { inspectProviders } from "../ai/detect.js";
-import { runConnectFlow } from "./connect-flow.js";
 import { runLoginFlow } from "./login-flow.js";
 import { openExtensionsMenu, openPackagesMenu, openSettingsMenu } from "./slash-command-menus.js";
 import { createSlashCommandRegistry, type RegisteredSlashCommand } from "./slash-command-registry.js";
@@ -20,10 +19,8 @@ function nextProviderCommand(providerId: string): string {
   if (providerId === "github-copilot" || providerId === "google-gemini-cli" || providerId === "google-antigravity") {
     return `/login ${providerId}`;
   }
-  if (providerId === "anthropic" || providerId === "codex") {
-    return `/connect ${providerId}`;
-  }
-  return `/connect ${providerId}`;
+  if (providerId === "anthropic" || providerId === "codex") return `/login ${providerId}`;
+  return "/login";
 }
 
 function providerNeedsLogin(providerId: string): boolean {
@@ -57,15 +54,14 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
   },
   {
     names: ["connect"],
-    description: "connect api key or local endpoint",
-    run: async ({ restText, app, providerRegistry, refreshProviderState, isSkippedPromptAnswer, isValidHttpBaseUrl }) => {
-      await runConnectFlow({
+    description: "login with oauth",
+    run: async ({ restText, app, providerRegistry, refreshProviderState }) => {
+      app.setStatus?.("API-key setup is disabled. Starting OAuth login.");
+      await runLoginFlow({
         providerId: restText || undefined,
         app,
         providerRegistry,
         refreshProviderState,
-        isSkippedPromptAnswer,
-        isValidHttpBaseUrl,
       });
       return { handled: true };
     },
@@ -98,7 +94,7 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
       );
       const allOptions = getPickerOptions();
       if (allOptions.length === 0) {
-        app.setStatus?.("No connected providers found. Run /connect.");
+        app.setStatus?.("No OAuth providers found. Run /login codex.");
         return { handled: true };
       }
       const normalizedQuery = restText.toLowerCase();
@@ -243,7 +239,7 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
   {
     names: ["providers"],
     description: "inspect provider availability",
-    run: async ({ app, providerRegistry, refreshProviderState, isSkippedPromptAnswer, isValidHttpBaseUrl }) => {
+    run: async ({ app, providerRegistry, refreshProviderState }) => {
       app.dismissBtwBubble?.();
       const providers = await inspectProviders();
       const items = providers.map((provider) => ({
@@ -284,14 +280,7 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
             app.setStatus?.("Codex login exists, but the codex CLI is not on PATH.");
             return;
           }
-          await runConnectFlow({
-            providerId: provider.id,
-            app,
-            providerRegistry,
-            refreshProviderState,
-            isSkippedPromptAnswer,
-            isValidHttpBaseUrl,
-          });
+          app.setStatus?.(`${provider.name}: API keys are disabled. Use /login for OAuth providers.`);
           const nextCommand = nextProviderCommand(provider.id);
           if (provider.reason.startsWith("run ")) {
             app.setStatus?.(`${provider.name}: started ${nextCommand}.`);

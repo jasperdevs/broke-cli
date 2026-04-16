@@ -55,7 +55,7 @@ export const HOME_TIPS = [
   "Use /resume to jump back into an older session.",
   "Use /sessions as a natural alias for /resume.",
   "Use /providers when a model or login looks wrong.",
-  "Use /connect to add an API key or native provider login.",
+  "Use /login to connect Codex, Claude Code, Copilot, Gemini CLI, or Antigravity with OAuth.",
   "Use /login for providers that support native OAuth flows.",
   "Use /settings to tweak behavior without leaving the keyboard.",
   "Use Shift+Tab to toggle build and plan mode for the current session.",

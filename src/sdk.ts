@@ -2,7 +2,6 @@ import { chdir } from "process";
 import { ProviderRegistry } from "./ai/provider-registry.js";
 import { Session } from "./core/session.js";
 import { clearRuntimeSettings, setRuntimeSettings, type Mode } from "./core/config.js";
-import { setRuntimeProviderApiKey } from "./core/provider-credentials.js";
 import { SessionManager } from "./core/session-manager.js";
 import { SettingsManager } from "./core/settings-manager.js";
 import { runOneShotPrompt, type OneShotResult } from "./cli/oneshot.js";
@@ -16,7 +15,6 @@ export interface CreateRuntimeOptions {
   sessionId?: string;
   sessionDir?: string;
   autoSaveSessions?: boolean;
-  apiKey?: string;
   systemPrompt?: string;
   appendSystemPrompt?: string;
   settingsManager?: SettingsManager;
@@ -46,7 +44,6 @@ export class AgentSessionRuntime {
     this.settingsManager = options.settingsManager ?? SettingsManager.create();
     if (options.sessionDir) setRuntimeSettings({ sessionDir: options.sessionDir });
     if (options.autoSaveSessions === false) setRuntimeSettings({ autoSaveSessions: false });
-    if (options.apiKey) setRuntimeProviderApiKey(this.provider ?? "openai", options.apiKey);
     this.sessionManager = options.sessionManager
       ?? (options.autoSaveSessions === false ? SessionManager.inMemory(this.cwd) : SessionManager.create(this.cwd, options.sessionDir));
     this.session = options.sessionId

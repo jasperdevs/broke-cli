@@ -1,6 +1,7 @@
 import type { LanguageModel } from "ai";
 import {
   getProviderDefaultModelId,
+  getProviderNativePreferredDisplayModelIds,
   getProviderPreferredDisplayModelIds,
 } from "./model-catalog.js";
 import type { ProviderApiType } from "../core/models-config.js";
@@ -67,8 +68,8 @@ export const BUILTIN_PROVIDERS: Record<string, ProviderInfo> = {
   codex: {
     id: "codex",
     name: "Codex",
-    defaultModel: getProviderDefaultModelId("codex") ?? "gpt-5-mini",
-    models: [...getProviderPreferredDisplayModelIds("codex")],
+    defaultModel: getProviderDefaultModelId("codex") ?? "gpt-5.4",
+    models: [...new Set([...getProviderNativePreferredDisplayModelIds("codex"), ...getProviderPreferredDisplayModelIds("codex")])],
   },
   ollama: {
     id: "ollama",

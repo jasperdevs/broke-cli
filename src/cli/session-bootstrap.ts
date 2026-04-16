@@ -77,7 +77,7 @@ export async function bootstrapSession(options: {
     if (!providerId) {
       const def = pickDefault(providers);
       if (!def) {
-        app.addMessage("system", "No providers found. Run /connect, set an API key, or start a local model server.");
+        app.addMessage("system", "No OAuth providers found. Run /login codex, /login anthropic, or another OAuth login.");
         return {
           providers,
           activeModel: null,

@@ -1,7 +1,6 @@
 import { buildHtmlExport } from "./exports.js";
 import { SessionManager } from "../core/session-manager.js";
 import { clearRuntimeSettings, setRuntimeSettings } from "../core/config.js";
-import { setRuntimeProviderApiKey } from "../core/provider-credentials.js";
 import type { UpdateInfo } from "../core/update.js";
 import type { ThinkingLevel } from "../core/config-types.js";
 import { writePrivateTextFile } from "../core/private-files.js";
@@ -24,13 +23,13 @@ type RuntimeProgramOptions = {
   extension?: string[];
   skill?: string[];
   promptTemplate?: string[];
-  apiKey?: string;
   provider?: string;
   exportOut?: string;
   tools?: string;
 };
 
 export function applyProgramRuntimeSettings(opts: RuntimeProgramOptions, parsedModel: ParsedModelArg, thinkingOverride?: ThinkingLevel): void {
+  void parsedModel;
   clearRuntimeSettings();
   if (opts.sessionDir) setRuntimeSettings({ sessionDir: opts.sessionDir });
   if (opts.session === false) setRuntimeSettings({ autoSaveSessions: false });
@@ -42,7 +41,6 @@ export function applyProgramRuntimeSettings(opts: RuntimeProgramOptions, parsedM
   if (opts.extension?.length) setRuntimeSettings({ extensions: opts.extension });
   if (opts.skill?.length) setRuntimeSettings({ skills: opts.skill });
   if (opts.promptTemplate?.length) setRuntimeSettings({ prompts: opts.promptTemplate });
-  if (opts.apiKey) setRuntimeProviderApiKey(parsedModel.provider ?? opts.provider ?? "openai", opts.apiKey);
 }
 
 export function applyRuntimeToolSelection(toolsOption: string | undefined, toolsDisabled: boolean): void {

@@ -279,11 +279,9 @@ function handleEscapeAndBindings(app: AppState, key: Keypress): boolean {
     return true;
   }
   if (key.ctrl && key.name === "c") {
+    if (app.isStreaming && app.onAbort) { app.clearInterruptPrompt(); app.onAbort(); return true; }
     app.ctrlCCount++;
-    if (app.ctrlCCount >= 2) {
-      app.stop();
-      return true;
-    }
+    if (app.ctrlCCount >= 2) { app.stop(); return true; }
     app.primeCtrlCExit();
     return true;
   }

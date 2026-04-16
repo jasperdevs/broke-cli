@@ -171,16 +171,10 @@ export async function inspectProviders(): Promise<DetectedProvider[]> {
   const config = loadConfig();
   const providerDisabled = (providerId: string): boolean => !!config.providers?.[providerId]?.disabled;
   const anthropicCredential = getProviderCredential("anthropic");
-  const openaiCredential = getProviderCredential("openai");
   const codexCredential = getProviderCredential("codex");
   const githubCopilotCredential = getProviderCredential("github-copilot");
   const googleGeminiCliCredential = getProviderCredential("google-gemini-cli");
   const googleAntigravityCredential = getProviderCredential("google-antigravity");
-  const googleCredential = getProviderCredential("google");
-  const groqCredential = getProviderCredential("groq");
-  const mistralCredential = getProviderCredential("mistral");
-  const xaiCredential = getProviderCredential("xai");
-  const openrouterCredential = getProviderCredential("openrouter");
   const claudeCli = hasNativeCommand("claude");
   const codexCli = hasNativeCommand("codex");
 
@@ -188,33 +182,19 @@ export async function inspectProviders(): Promise<DetectedProvider[]> {
   results.push(
     providerDisabled("anthropic")
       ? { id: "anthropic", name: "Anthropic", available: false, reason: "disabled" }
-      : anthropicCredential.kind === "api_key"
-        ? { id: "anthropic", name: "Anthropic", available: true, reason: "API key" }
-        : anthropicCredential.kind === "native_oauth"
+      : anthropicCredential.kind === "native_oauth"
           ? { id: "anthropic", name: "Claude Code", available: claudeCli, reason: claudeCli ? "native login" : "claude CLI missing" }
-          : { id: "anthropic", name: "Anthropic", available: false, reason: "run /connect or /login anthropic" },
-    providerDisabled("openai")
-      ? { id: "openai", name: "OpenAI", available: false, reason: "disabled" }
-      : openaiCredential.kind === "api_key"
-        ? { id: "openai", name: "OpenAI", available: true, reason: "API key" }
-        : { id: "openai", name: "OpenAI", available: false, reason: "run /connect openai" },
+          : { id: "anthropic", name: "Claude Code", available: false, reason: "run /login anthropic" },
     providerDisabled("codex")
       ? { id: "codex", name: "Codex", available: false, reason: "disabled" }
-      : codexCredential.kind === "api_key"
-        ? { id: "codex", name: "Codex", available: true, reason: "API key" }
-        : codexCredential.kind === "native_oauth"
+      : codexCredential.kind === "native_oauth"
           ? { id: "codex", name: "Codex", available: codexCli, reason: codexCli ? "native login" : "codex CLI missing" }
-          : { id: "codex", name: "Codex", available: false, reason: "run /connect or /login codex" },
+          : { id: "codex", name: "Codex", available: false, reason: "run /login codex" },
     providerDisabled("github-copilot")
       ? { id: "github-copilot", name: "GitHub Copilot", available: false, reason: "disabled" }
       : githubCopilotCredential.kind === "native_oauth"
         ? { id: "github-copilot", name: "GitHub Copilot", available: true, reason: "OAuth login" }
         : { id: "github-copilot", name: "GitHub Copilot", available: false, reason: "run /login github-copilot" },
-    providerDisabled("google")
-      ? { id: "google", name: "Google", available: false, reason: "disabled" }
-      : googleCredential.kind === "api_key"
-        ? { id: "google", name: "Google", available: true, reason: "API key" }
-        : { id: "google", name: "Google", available: false, reason: "run /connect google" },
     providerDisabled("google-gemini-cli")
       ? { id: "google-gemini-cli", name: "Google Cloud Code Assist", available: false, reason: "disabled" }
       : googleGeminiCliCredential.kind === "native_oauth"
@@ -225,65 +205,7 @@ export async function inspectProviders(): Promise<DetectedProvider[]> {
       : googleAntigravityCredential.kind === "native_oauth"
         ? { id: "google-antigravity", name: "Antigravity", available: true, reason: "OAuth login" }
         : { id: "google-antigravity", name: "Antigravity", available: false, reason: "run /login google-antigravity" },
-    providerDisabled("groq")
-      ? { id: "groq", name: "Groq", available: false, reason: "disabled" }
-      : groqCredential.kind === "api_key"
-        ? { id: "groq", name: "Groq", available: true, reason: "API key" }
-        : { id: "groq", name: "Groq", available: false, reason: "run /connect groq" },
-    providerDisabled("mistral")
-      ? { id: "mistral", name: "Mistral", available: false, reason: "disabled" }
-      : mistralCredential.kind === "api_key"
-        ? { id: "mistral", name: "Mistral", available: true, reason: "API key" }
-        : { id: "mistral", name: "Mistral", available: false, reason: "run /connect mistral" },
-    providerDisabled("xai")
-      ? { id: "xai", name: "xAI", available: false, reason: "disabled" }
-      : xaiCredential.kind === "api_key"
-        ? { id: "xai", name: "xAI", available: true, reason: "API key" }
-        : { id: "xai", name: "xAI", available: false, reason: "run /connect xai" },
-    providerDisabled("openrouter")
-      ? { id: "openrouter", name: "OpenRouter", available: false, reason: "disabled" }
-      : openrouterCredential.kind === "api_key"
-        ? { id: "openrouter", name: "OpenRouter", available: true, reason: "API key" }
-        : { id: "openrouter", name: "OpenRouter", available: false, reason: "run /connect openrouter" },
   );
-
-  // Local providers — probe in parallel
-  const [ollama, lmStudio, llamaCpp, jan, vllm] = await Promise.all([
-    providerDisabled("ollama")
-      ? Promise.resolve(false)
-      : probeBaseUrl(getConfiguredProviderBaseUrl("ollama") ?? "http://127.0.0.1:11434/v1", "/models").then((ok) => ok || probeLocal(11434, "/api/tags")),
-    providerDisabled("lmstudio")
-      ? Promise.resolve(false)
-      : probeAny(getConfiguredProviderBaseUrl("lmstudio") ?? "http://127.0.0.1:1234/v1", ["/models", "/lmstudio/models"]),
-    providerDisabled("llamacpp")
-      ? Promise.resolve(false)
-      : probeAny(getConfiguredProviderBaseUrl("llamacpp") ?? "http://127.0.0.1:8080/v1", ["/models"]).then((ok) => ok || probeAny((getConfiguredProviderBaseUrl("llamacpp") ?? "http://127.0.0.1:8080/v1").replace(/\/v1\/?$/, ""), ["/models", "/slots"])),
-    providerDisabled("jan")
-      ? Promise.resolve(false)
-      : probeBaseUrl(getConfiguredProviderBaseUrl("jan") ?? "http://127.0.0.1:1337/v1"),
-    providerDisabled("vllm")
-      ? Promise.resolve(false)
-      : probeBaseUrl(getConfiguredProviderBaseUrl("vllm") ?? "http://127.0.0.1:8000/v1"),
-  ]);
-
-  results.push(
-    providerDisabled("ollama")
-      ? { id: "ollama", name: "Ollama", available: false, reason: "disabled" }
-      : { id: "ollama", name: "Ollama", available: ollama, reason: ollama ? "running" : `start ${getConfiguredProviderBaseUrl("ollama") ?? "http://127.0.0.1:11434/v1"}` },
-    providerDisabled("lmstudio")
-      ? { id: "lmstudio", name: "LM Studio", available: false, reason: "disabled" }
-      : { id: "lmstudio", name: "LM Studio", available: lmStudio, reason: lmStudio ? "running" : `start ${getConfiguredProviderBaseUrl("lmstudio") ?? "http://127.0.0.1:1234/v1"}` },
-    providerDisabled("llamacpp")
-      ? { id: "llamacpp", name: "llama.cpp", available: false, reason: "disabled" }
-      : { id: "llamacpp", name: "llama.cpp", available: llamaCpp, reason: llamaCpp ? "running" : `start ${getConfiguredProviderBaseUrl("llamacpp") ?? "http://127.0.0.1:8080/v1"}` },
-    providerDisabled("jan")
-      ? { id: "jan", name: "Jan", available: false, reason: "disabled" }
-      : { id: "jan", name: "Jan", available: jan, reason: jan ? "running" : `start ${getConfiguredProviderBaseUrl("jan") ?? "http://127.0.0.1:1337/v1"}` },
-    providerDisabled("vllm")
-      ? { id: "vllm", name: "vLLM", available: false, reason: "disabled" }
-      : { id: "vllm", name: "vLLM", available: vllm, reason: vllm ? "running" : `start ${getConfiguredProviderBaseUrl("vllm") ?? "http://127.0.0.1:8000/v1"}` },
-  );
-  results.push(...listCustomConfiguredProviders());
 
   return results;
 }

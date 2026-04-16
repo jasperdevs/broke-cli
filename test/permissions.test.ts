@@ -1,8 +1,9 @@
 import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
-import { join } from "path";
+import { parse, join } from "path";
 import { afterEach, describe, expect, it } from "vitest";
 import { clearRuntimeSettings, setRuntimeSettings } from "../src/core/config.js";
+import { getWorkspaceRootSafety } from "../src/core/permissions.js";
 import { bashTool } from "../src/tools/bash.js";
 import { editFileDirect, writeFileDirect } from "../src/tools/file-ops.js";
 
@@ -54,5 +55,13 @@ describe("autonomy permissions", () => {
     const result = writeFileDirect({ path: join(dir, "allowed.txt"), content: "ok" });
 
     expect(result.success).toBe(true);
+  });
+
+  it("rejects filesystem roots as workspaces", () => {
+    const root = parse(process.cwd()).root;
+    const result = getWorkspaceRootSafety(root);
+
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("filesystem root");
   });
 });

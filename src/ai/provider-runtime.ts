@@ -49,6 +49,9 @@ export function createModel(providerId: string, modelId?: string): ModelHandle {
     const command = providerId === "anthropic" ? "claude" : "codex";
     throw new Error(`${info.name} login found, but the ${command} CLI is not on PATH.`);
   }
+  if (!useNative) {
+    throw new Error(`${info.name} API-key runtime is disabled. Use /login with an OAuth provider.`);
+  }
   const nativeDefaultModel = useNative
     ? getProviderNativeDefaultModelId(providerId) ?? info.defaultModel
     : info.defaultModel;

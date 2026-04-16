@@ -10,7 +10,6 @@ export function createProgram(appVersion: string): Command {
     .option("--broke", "Route to cheapest capable model")
     .option("--provider <provider>", "Provider to use")
     .option("-m, --model <model>", "Model to use (provider/model-id)")
-    .option("--api-key <key>", "Runtime API key override")
     .option("-c, --continue", "Continue last session")
     .option("-r, --resume", "Resume the most recent session")
     .option("--session-id <id>", "Open a specific saved session")

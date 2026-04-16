@@ -1,6 +1,6 @@
 import stripAnsi from "strip-ansi";
 import { execSync, spawnSync } from "child_process";
-import { clearRuntimeSettings, getSettings, loadConfig, setRuntimeSettings } from "../core/config.js";
+import { clearRuntimeSettings, getSettings, setRuntimeSettings } from "../core/config.js";
 import { listAuthenticated } from "../core/auth.js";
 import { BOLD, DIM, RESET } from "../utils/ansi.js";
 import { truncateVisible, visibleWidth } from "../utils/terminal-width.js";
@@ -323,12 +323,11 @@ export function appendTreePicker(app: AppState, lines: string[], maxItems: numbe
 }
 
 export function getCommandMatches(app: AppState) {
-  const configuredAuth = Object.values(loadConfig().providers ?? {}).some((provider) => !!provider?.apiKey);
   return findCommandMatches(app.input.getText(), {
     hasMessages: app.messages.length > 0,
     hasAssistantContent: !!app.getLastAssistantContent(),
     canResume: getSettings().autoSaveSessions,
-    hasStoredAuth: configuredAuth || listAuthenticated().length > 0,
+    hasStoredAuth: listAuthenticated().length > 0,
   });
 }
 
@@ -350,6 +349,9 @@ export function start(app: AppState): void {
 export function stop(app: AppState): void {
   if (!app.running) return;
   app.running = false;
+  const abort = app.onAbort;
+  app.onAbort = null;
+  abort?.();
   clearRuntimeSettings();
   if (app.spinnerTimer) clearInterval(app.spinnerTimer);
   app.clearInterruptPrompt();

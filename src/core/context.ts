@@ -239,6 +239,12 @@ export function buildSystemPrompt(cwd: string, providerId?: string, mode?: Mode,
   try { execSync("git rev-parse --is-inside-work-tree", { cwd, stdio: "pipe" }); isGit = true; } catch {}
 
   parts.push(`<env>git:${isGit ? "yes" : "no"} platform:${process.platform}</env>`);
+  parts.push([
+    "Workspace discipline:",
+    "- Do not enumerate an entire drive, home directory, or filesystem root.",
+    "- Use the smallest targeted read/search/list that answers the request.",
+    "- If the working directory is too broad, ask the user to cd into the project instead of exploring broadly.",
+  ].join("\n"));
 
   if (profile === "full") {
     parts.push(`<autonomy>

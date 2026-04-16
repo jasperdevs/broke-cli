@@ -146,9 +146,8 @@ describe("native provider runtime selection", () => {
     }
   });
 
-  it("keeps the cheaper GPT-5 mini default for SDK Codex", () => {
-    const model = createModel("codex");
-    expect(model.modelId).toBe("gpt-5-mini");
+  it("rejects SDK Codex because this runtime is OAuth-only", () => {
+    expect(() => createModel("codex")).toThrow("API-key runtime is disabled");
   });
 
   it("uses a ChatGPT-compatible default for native Codex", () => {
@@ -158,19 +157,20 @@ describe("native provider runtime selection", () => {
 
     const model = createModel("codex");
     expect(model.runtime).toBe("native-cli");
-    expect(model.modelId).toBe("gpt-5.4-mini");
-    expect(model.provider.defaultModel).toBe("gpt-5.4-mini");
+    expect(model.modelId).toBe("gpt-5.4");
+    expect(model.provider.defaultModel).toBe("gpt-5.4");
   });
 
-  it("falls back to the native-compatible Codex model when an unsupported one is requested", () => {
+  it("falls back to the native-compatible Codex default when an unsupported one is requested", () => {
     configMocks.getProviderCredential.mockImplementation((providerId: string) => (
       providerId === "codex" ? { kind: "native_oauth", source: "codex-chatgpt" } : { kind: "none" }
     ));
 
     const model = createModel("codex", "gpt-5-mini");
     expect(model.runtime).toBe("native-cli");
-    expect(model.modelId).toBe("gpt-5.4-mini");
-    expect(model.provider.models).toEqual(["gpt-5.4-mini"]);
+    expect(model.modelId).toBe("gpt-5.4");
+    expect(model.provider.models).toContain("gpt-5.4");
+    expect(model.provider.models).toContain("gpt-5.3-codex");
   });
 
   it("propagates the runtime-resolved native Codex default through one-shot resolution", async () => {
@@ -185,8 +185,8 @@ describe("native provider runtime selection", () => {
     });
 
     expect(resolved.activeModel.runtime).toBe("native-cli");
-    expect(resolved.activeModel.modelId).toBe("gpt-5.4-mini");
-    expect(resolved.modelId).toBe("gpt-5.4-mini");
+    expect(resolved.activeModel.modelId).toBe("gpt-5.4");
+    expect(resolved.modelId).toBe("gpt-5.4");
   });
 
   it("clamps wildly inflated native Codex input usage back to estimated prompt size", () => {

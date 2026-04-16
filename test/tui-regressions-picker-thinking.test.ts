@@ -443,7 +443,7 @@ describe("theme catalog", () => {
 });
 
 describe("interrupt prompts", () => {
-  it("primes escape before aborting a stream and keeps ctrl+c inline", () => {
+  it("primes escape before aborting a stream and lets ctrl+c abort immediately", () => {
     const app = new App() as any;
     let aborted = 0;
     app.setStreaming(true);
@@ -453,7 +453,8 @@ describe("interrupt prompts", () => {
     app.handleKey({ name: "escape", char: "", ctrl: false, meta: false, shift: false });
     expect(aborted).toBe(1);
     app.handleKey({ name: "c", char: "\u0003", ctrl: true, meta: false, shift: false });
-    expect(app.ctrlCCount).toBe(1);
+    expect(aborted).toBe(2);
+    expect(app.ctrlCCount).toBe(0);
     expect(app.statusMessage).toBeUndefined();
   });
 });

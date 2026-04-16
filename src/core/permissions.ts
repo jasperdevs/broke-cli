@@ -1,6 +1,6 @@
 import { spawnSync } from "child_process";
 import { existsSync } from "fs";
-import { isAbsolute, relative, resolve, sep } from "path";
+import { isAbsolute, parse, relative, resolve, sep } from "path";
 import { getSettings, updateSetting } from "./config.js";
 import type { AutonomySettings } from "./config-types.js";
 
@@ -75,6 +75,11 @@ export function getWorkspaceRoot(cwd = process.cwd()): string {
   return root;
 }
 
+export function isUnsafeWorkspaceRoot(root: string): boolean {
+  const normalized = resolve(root);
+  return normalized === parse(normalized).root;
+}
+
 function normalizeRootList(roots: string[], cwd = process.cwd()): string[] {
   return [...new Set(
     roots
@@ -101,6 +106,19 @@ function buildTrustedRoots(mode: "read" | "write", cwd = process.cwd()): string[
   return [workspaceRoot, ...normalizeRootList(configured, cwd)];
 }
 
+export function getWorkspaceRootSafety(cwd = process.cwd()): PermissionDecision {
+  const workspaceRoot = getWorkspaceRoot(cwd);
+  if (!isUnsafeWorkspaceRoot(workspaceRoot)) {
+    return { allowed: true, scope: "workspace", normalizedPath: workspaceRoot };
+  }
+  return {
+    allowed: false,
+    scope: "outside-workspace",
+    normalizedPath: workspaceRoot,
+    reason: `Refusing to use filesystem root as the workspace: ${workspaceRoot}. Start brokecli inside a project folder.`,
+  };
+}
+
 export function checkFilesystemPathAccess(
   targetPath: string,
   mode: "read" | "write",
@@ -108,6 +126,8 @@ export function checkFilesystemPathAccess(
 ): PermissionDecision {
   const settings = getAutonomySettings();
   const normalizedPath = resolve(cwd, targetPath);
+  const workspaceSafety = getWorkspaceRootSafety(cwd);
+  if (!workspaceSafety.allowed) return workspaceSafety;
   const trustedRoots = buildTrustedRoots(mode, cwd);
 
   if (trustedRoots.some((root) => isWithinRoot(normalizedPath, root))) {
@@ -161,6 +181,8 @@ export function checkShellCommandAccess(command: string, cwd = process.cwd()): P
   if (!trimmed) return { allowed: false, reason: "Empty shell command." };
 
   const settings = getAutonomySettings();
+  const workspaceSafety = getWorkspaceRootSafety(cwd);
+  if (!workspaceSafety.allowed) return workspaceSafety;
   if (!settings.allowDestructiveShell && DANGEROUS_SHELL_PATTERNS.some((pattern) => pattern.test(trimmed))) {
     return { allowed: false, reason: `Blocked dangerous shell command: ${trimmed}` };
   }
@@ -194,6 +216,9 @@ export function describeAutonomyPolicy(cwd = process.cwd()): string[] {
   const lines = [
     `Workspace root: ${workspaceRoot}`,
     "Autonomy rules:",
+    isUnsafeWorkspaceRoot(workspaceRoot)
+      ? "- The current workspace is a filesystem root. Do not inspect files or run commands until the user changes into a project directory."
+      : "- Treat the workspace root as the maximum file scope for this turn.",
     "- Workspace reads and writes are allowed by default.",
     settings.allowReadOutsideWorkspace
       ? "- Reads outside the workspace are allowed by config."

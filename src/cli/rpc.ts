@@ -6,7 +6,6 @@ import { buildSystemPrompt, resolveCavemanLevel } from "../core/context.js";
 import { Session } from "../core/session.js";
 import { getTools } from "../tools/registry.js";
 import { getSettings, type Mode } from "../core/config.js";
-import { setRuntimeProviderApiKey } from "../core/provider-credentials.js";
 import { resolveTurnPolicy } from "../core/turn-policy.js";
 import { loadPricing } from "../ai/cost.js";
 import { ProviderRegistry } from "../ai/provider-registry.js";
@@ -25,7 +24,7 @@ function canUseSdkTools(model: ModelHandle): boolean {
     && getProviderCompat(model.provider.id, model.modelId).supportsTools !== false;
 }
 
-export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts: { model?: string; provider?: string; apiKey?: string; systemPrompt?: string; appendSystemPrompt?: string }): Promise<void> {
+export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts: { model?: string; provider?: string; systemPrompt?: string; appendSystemPrompt?: string }): Promise<void> {
   const rpcMode: Mode = getSettings().mode;
   let abortController: AbortController | null = null;
   const providerRegistry = new ProviderRegistry();
@@ -58,8 +57,6 @@ export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts:
     }
     providerId = def.id;
   }
-
-  if (opts.apiKey) setRuntimeProviderApiKey(providerId, opts.apiKey);
 
   let activeModel: ModelHandle;
   try {

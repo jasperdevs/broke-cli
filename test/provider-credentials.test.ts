@@ -23,13 +23,12 @@ describe("provider credential parsing", () => {
     expect(parsed.kind).toBe("native_oauth");
   });
 
-  it("keeps explicit Codex API-key auth usable", () => {
+  it("ignores explicit Codex API-key auth in the OAuth-only runtime", () => {
     const parsed = parseCodexAuthData({
       auth_mode: "ApiKey",
       OPENAI_API_KEY: "sk-test-key",
     });
 
-    expect(parsed.kind).toBe("api_key");
-    expect(parsed.value).toBe("sk-test-key");
+    expect(parsed.kind).toBe("none");
   });
 });

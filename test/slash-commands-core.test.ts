@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Session } from "../src/core/session.js";
 import { handleSlashCommand } from "../src/cli/slash-commands.js";
-import { getSettings, loadConfig, updateProviderConfig, updateSetting } from "../src/core/config.js";
+import { getSettings, loadConfig, updateSetting } from "../src/core/config.js";
 import {
   cleanupSlashCommandFixtures,
   coreTemplatePath,
@@ -151,43 +151,22 @@ describe("slash command handling", () => {
     });
   });
 
-  it("routes /connect to the non-oauth connect flow", async () => {
+  it("keeps /connect as an OAuth-only compatibility command", async () => {
     const app = createAppStub();
-    let prompt = "";
-    app.showQuestion = async (nextPrompt: string) => {
-      prompt = nextPrompt;
-      return "sk-test-key";
-    };
-    const previousOpenAiEnv = process.env.OPENAI_API_KEY;
-    const previousProviderConfig = loadConfig().providers?.openai
-      ? { ...loadConfig().providers!.openai }
-      : undefined;
-    delete process.env.OPENAI_API_KEY;
-    updateProviderConfig("openai", { apiKey: null, disabled: null }, "global");
-
     const providerRegistry = {
       getProviderInfo: () => ({ id: "openai", name: "OpenAI" }),
-      getConnectStatus: () => "api key",
+      getConnectStatus: () => "OAuth only",
     } as any;
-    try {
-      const result = await handleSlashCommand({
-        text: "/connect openai",
-        app,
-        session: new Session(`test-connect-${Date.now()}`),
-        ...createSlashArgs({ providerRegistry }),
-      });
 
-      expect(result.handled).toBe(true);
-      expect(prompt).toBe("Paste OpenAI API key");
-    } finally {
-      if (previousOpenAiEnv) process.env.OPENAI_API_KEY = previousOpenAiEnv;
-      else delete process.env.OPENAI_API_KEY;
-      updateProviderConfig("openai", {
-        apiKey: previousProviderConfig?.apiKey ?? null,
-        baseUrl: previousProviderConfig?.baseUrl ?? null,
-        disabled: previousProviderConfig?.disabled ?? null,
-      }, "global");
-    }
+    const result = await handleSlashCommand({
+      text: "/connect openai",
+      app,
+      session: new Session(`test-connect-${Date.now()}`),
+      ...createSlashArgs({ providerRegistry }),
+    });
+
+    expect(result.handled).toBe(true);
+    expect(app.statusMessage).toContain("Unknown OAuth provider: openai");
   });
 
   it("does not add transcript comments for /thinking and /caveman toggles", async () => {

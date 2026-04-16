@@ -15,13 +15,9 @@ function readJsonFile(path: string): unknown {
 export function parseClaudeCredentialsData(data: unknown): ProviderCredential {
   const record = typeof data === "object" && data !== null ? data as Record<string, unknown> : {};
   const explicitApiKey = record.anthropic_api_key;
-  if (typeof explicitApiKey === "string" && explicitApiKey.trim().length > 10) {
-    return { kind: "api_key", value: explicitApiKey.trim(), source: "claude-credentials" };
-  }
+  void explicitApiKey;
   const explicitEnvKey = record.ANTHROPIC_API_KEY;
-  if (typeof explicitEnvKey === "string" && explicitEnvKey.trim().length > 10) {
-    return { kind: "api_key", value: explicitEnvKey.trim(), source: "claude-credentials" };
-  }
+  void explicitEnvKey;
   const oauth = record.claudeAiOauth;
   if (typeof oauth === "object" && oauth !== null) {
     const accessToken = (oauth as Record<string, unknown>).accessToken;
@@ -35,9 +31,7 @@ export function parseClaudeCredentialsData(data: unknown): ProviderCredential {
 export function parseCodexAuthData(data: unknown): ProviderCredential {
   const record = typeof data === "object" && data !== null ? data as Record<string, unknown> : {};
   const apiKey = record.OPENAI_API_KEY;
-  if (typeof apiKey === "string" && apiKey.trim().length > 10) {
-    return { kind: "api_key", value: apiKey.trim(), source: "codex-auth" };
-  }
+  void apiKey;
   const authMode = typeof record.auth_mode === "string" ? record.auth_mode.toLowerCase() : "";
   const tokens = typeof record.tokens === "object" && record.tokens !== null ? record.tokens as Record<string, unknown> : null;
   const accessToken = tokens?.access_token;
@@ -56,16 +50,6 @@ function readClaudeCredential(): ProviderCredential {
     if (existsSync(oauthCredsPath)) {
       const parsed = parseClaudeCredentialsData(readJsonFile(oauthCredsPath));
       if (parsed.kind !== "none") return parsed;
-    }
-
-    const apiKeyFiles = ["api_key", ".claude_api_key"];
-    for (const file of apiKeyFiles) {
-      const path = join(claudeDir, file);
-      if (!existsSync(path)) continue;
-      const content = readFileSync(path, "utf-8").trim();
-      if (content.length > 10 && !content.includes("\n")) {
-        return { kind: "api_key", value: content, source: `claude:${file}` };
-      }
     }
 
     const credsPath = join(claudeDir, "credentials.json");
@@ -121,25 +105,21 @@ function readStoredOauthCredential(provider: string): ProviderCredential {
 }
 
 export function getProviderCredential(provider: string): ProviderCredential {
-  const runtimeApiKey = getRuntimeProviderApiKey(provider);
-  if (runtimeApiKey) return { kind: "api_key", value: runtimeApiKey, source: "runtime" };
+  void getRuntimeProviderApiKey(provider);
   const config = loadConfig();
   const fromConfig = config.providers?.[provider]?.apiKey;
-  if (fromConfig) return { kind: "api_key", value: fromConfig, source: "config" };
+  void fromConfig;
   const fromModelsConfig = getConfiguredProviderApiKey(provider);
-  if (fromModelsConfig) return { kind: "api_key", value: fromModelsConfig, source: "models-config" };
+  void fromModelsConfig;
 
   switch (provider) {
     case "anthropic":
-      if (process.env.ANTHROPIC_API_KEY) return { kind: "api_key", value: process.env.ANTHROPIC_API_KEY, source: "env" };
       {
         const credential = readClaudeCredential();
         return credential.kind !== "none" ? credential : readStoredOauthCredential("anthropic");
       }
     case "openai":
-      return process.env.OPENAI_API_KEY
-        ? { kind: "api_key", value: process.env.OPENAI_API_KEY, source: "env" }
-        : { kind: "none" };
+      return { kind: "none" };
     case "codex":
       {
         const credential = readCodexCredential();
@@ -148,38 +128,23 @@ export function getProviderCredential(provider: string): ProviderCredential {
     case "github-copilot":
       return readGitHubCopilotCredential();
     case "google":
-      return process.env.GOOGLE_API_KEY
-        ? { kind: "api_key", value: process.env.GOOGLE_API_KEY, source: "env" }
-        : process.env.GOOGLE_GENERATIVE_AI_API_KEY
-          ? { kind: "api_key", value: process.env.GOOGLE_GENERATIVE_AI_API_KEY, source: "env" }
-          : { kind: "none" };
+      return { kind: "none" };
     case "google-gemini-cli":
     case "google-antigravity":
       return readStoredOauthCredential(provider);
     case "groq":
-      return process.env.GROQ_API_KEY
-        ? { kind: "api_key", value: process.env.GROQ_API_KEY, source: "env" }
-        : { kind: "none" };
     case "mistral":
-      return process.env.MISTRAL_API_KEY
-        ? { kind: "api_key", value: process.env.MISTRAL_API_KEY, source: "env" }
-        : { kind: "none" };
     case "xai":
-      return process.env.XAI_API_KEY
-        ? { kind: "api_key", value: process.env.XAI_API_KEY, source: "env" }
-        : { kind: "none" };
     case "openrouter":
-      return process.env.OPENROUTER_API_KEY
-        ? { kind: "api_key", value: process.env.OPENROUTER_API_KEY, source: "env" }
-        : { kind: "none" };
+      return { kind: "none" };
     default:
       return { kind: "none" };
   }
 }
 
 export function getApiKey(provider: string): string | undefined {
-  const credential = getProviderCredential(provider);
-  return credential.kind === "api_key" ? credential.value : undefined;
+  void provider;
+  return undefined;
 }
 
 export { clearRuntimeProviderApiKeys, setRuntimeProviderApiKey };

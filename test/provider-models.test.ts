@@ -89,7 +89,7 @@ describe("provider model filtering", () => {
     spy.mockRestore();
   });
 
-  it("keeps an explicitly configured local provider visible in the model picker", () => {
+  it("keeps explicitly configured local providers hidden in the OAuth-only model picker", () => {
     const spy = vi.spyOn(config, "getBaseUrl").mockImplementation((providerId: string) => (
       providerId === "llamacpp" ? "http://127.0.0.1:8080/v1" : undefined
     ));
@@ -101,7 +101,7 @@ describe("provider model filtering", () => {
     const options = registry.buildVisibleModelOptions(null, "", []);
     const providerIds = new Set(options.map((option: any) => option.providerId));
 
-    expect(providerIds.has("llamacpp")).toBe(true);
+    expect(providerIds.has("llamacpp")).toBe(false);
     spy.mockRestore();
   });
 
@@ -112,7 +112,7 @@ describe("provider model filtering", () => {
   });
 
   it("falls back to the provider default when a restored model id is no longer visible", () => {
-    expect(resolveVisibleProviderModelId("codex", "gpt-4.1")).toBe("gpt-5-mini");
+    expect(resolveVisibleProviderModelId("codex", "gpt-4.1")).toBe("gpt-5.4");
   });
 
   it("does not surface stale pinned or current model ids that the provider no longer supports", () => {

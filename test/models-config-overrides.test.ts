@@ -76,7 +76,7 @@ describe.sequential("models.json overrides", () => {
     expect(getContextLimit("acme-coder", "openai")).toBe(64000);
   });
 
-  it("detects and creates custom configured providers", async () => {
+  it("does not detect custom API providers in the OAuth-only runtime", async () => {
     process.env.CUSTOM_PROVIDER_KEY = "test-custom-key";
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -109,15 +109,8 @@ describe.sequential("models.json overrides", () => {
 
     applyConfiguredProviderOverrides();
     const providers = await detectProviders();
-    expect(providers).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: "custom-openai", name: "Custom OpenAI", available: true }),
-    ]));
-
-    const model = createModel("custom-openai", "acme-coder");
-    expect(model.runtime).toBe("sdk");
-    expect(model.provider.id).toBe("custom-openai");
-    expect(model.provider.name).toBe("Custom OpenAI");
-    expect(model.modelId).toBe("acme-coder");
+    expect(providers.some((provider) => provider.id === "custom-openai")).toBe(false);
+    expect(() => createModel("custom-openai", "acme-coder")).toThrow("API-key runtime is disabled");
   }, 15_000);
 
   it("lets project models.json override global models.json", () => {
