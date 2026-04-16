@@ -56,4 +56,14 @@ describe("simple file task contract", () => {
     expect(detectSimpleFileTask("Fix add() in bug.js so npm test passes, add a regression test, and run npm test.")).toBeNull();
     expect(detectSimpleFileTask("edit README.md and run the test")).toBeNull();
   });
+
+  it("does not treat framework names as target files", () => {
+    expect(detectSimpleFileTask("make a folder and a simple snake game in Three.js")).toBeNull();
+    expect(detectSimpleFileTask("make a folder and a simple Three.js snake game")).toBeNull();
+    expect(detectSimpleFileTask("create a page with React.js")).toBeNull();
+    expect(detectSimpleFileTask("create index.html")).toMatchObject({
+      kind: "create",
+      path: "index.html",
+    });
+  });
 });

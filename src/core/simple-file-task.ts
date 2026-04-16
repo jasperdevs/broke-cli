@@ -15,14 +15,31 @@ export interface SimpleFileTask {
 }
 
 const EXTENSIONS = ["html", "css", "js", "ts", "tsx", "jsx", "json", "md", "txt"];
+const BARE_LIBRARY_REFERENCES = new Set(["three.js", "react.js", "vue.js", "node.js", "d3.js", "p5.js", "babylon.js", "phaser.js", "pixi.js", "matter.js"]);
 
 function normalizePath(path: string): string {
   return path.replace(/\\/g, "/").replace(/^\.\//, "");
 }
 
+function looksLikeLibraryReference(text: string, index: number, candidate: string): boolean {
+  if (/[\\/]/.test(candidate) || candidate.startsWith(".")) return false;
+  if (!/\.(?:js|ts|jsx|tsx)$/i.test(candidate)) return false;
+  const lower = candidate.toLowerCase();
+  if (BARE_LIBRARY_REFERENCES.has(lower)) return true;
+  if (/^[A-Z][A-Za-z0-9_-]*\.(?:js|ts|jsx|tsx)$/.test(candidate)) return true;
+  const prefix = text.slice(Math.max(0, index - 24), index).toLowerCase();
+  return /\b(?:in|with|using|via|for)\s+$/.test(prefix);
+}
+
 function explicitPath(text: string): string | null {
-  const match = text.match(/\b[A-Za-z0-9_./-]+\.(?:html|css|js|ts|tsx|jsx|json|md|txt)\b/i);
-  return match ? normalizePath(match[0]!) : null;
+  const matcher = /\b[A-Za-z0-9_./-]+\.(?:html|css|js|ts|tsx|jsx|json|md|txt)\b/ig;
+  let match: RegExpExecArray | null;
+  while ((match = matcher.exec(text)) !== null) {
+    const candidate = match[0]!;
+    if (looksLikeLibraryReference(text, match.index, candidate)) continue;
+    return normalizePath(candidate);
+  }
+  return null;
 }
 
 function inferredPath(text: string, cwd: string): string | null {
