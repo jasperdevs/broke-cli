@@ -1,6 +1,6 @@
 import { calculateCost, type TokenUsage } from "./cost.js";
 import { estimateConversationTokens, estimateTextTokens } from "./tokens.js";
-import type { ProviderCompatSettings } from "./provider-compat.js";
+import type { ProviderCompatSettings } from "./provider-compat-types.js";
 
 export interface LocalOpenAIStreamOptions {
   baseURL: string;

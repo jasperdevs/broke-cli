@@ -3,7 +3,7 @@ import {
   getConfiguredProviderModelOverride,
   type ConfiguredModelDefinition,
 } from "../core/models-config.js";
-import type { ModelSpec } from "./model-catalog.js";
+import type { ModelSpec } from "./model-types.js";
 
 function asConfiguredModelSpec(providerId: string, model: ConfiguredModelDefinition): ModelSpec {
   return {

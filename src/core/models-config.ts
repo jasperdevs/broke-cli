@@ -5,7 +5,7 @@ import { homedir } from "os";
 import { parse as parseJsonc } from "jsonc-parser";
 import { z } from "zod";
 import { getBaseUrl } from "./config.js";
-import type { ProviderCompatSettings } from "../ai/provider-compat.js";
+import type { ProviderCompatSettings } from "../ai/provider-compat-types.js";
 
 export type ProviderApiType = "openai-completions" | "anthropic-messages" | "google-generative-ai";
 

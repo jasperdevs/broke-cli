@@ -4,7 +4,7 @@ import {
   getProviderPreferredDisplayModelIds,
 } from "./model-catalog.js";
 import type { ProviderApiType } from "../core/models-config.js";
-import type { ProviderCompatSettings } from "./provider-compat.js";
+import type { ProviderCompatSettings } from "./provider-compat-types.js";
 
 export interface ProviderInfo {
   id: string;

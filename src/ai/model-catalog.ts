@@ -6,39 +6,12 @@ import { writePrivateTextFile } from "../core/private-files.js";
 import { listConfiguredProviderIds } from "../core/models-config.js";
 import { getConfiguredModelSpec, mergeConfiguredModelOverride } from "./model-spec-overrides.js";
 import { getLocalModelMetadata } from "./local-model-metadata.js";
+import type { ModelPricing, ModelSpec } from "./model-types.js";
+
+export type { ModelLimits, ModelPricing, ModelSpec } from "./model-types.js";
 
 const MODELS_DEV_API_URL = "https://models.dev/api.json";
 const MODEL_CATALOG_CACHE_PATH = join(homedir(), ".brokecli", "model-catalog-cache.json");
-
-export interface ModelPricing {
-  input: number;
-  output: number;
-  reasoning?: number;
-  cacheRead?: number;
-  cacheWrite?: number;
-}
-
-export interface ModelLimits {
-  context?: number;
-  input?: number;
-  output?: number;
-}
-
-export interface ModelSpec {
-  id: string;
-  name: string;
-  family?: string;
-  cost?: ModelPricing;
-  limit: ModelLimits;
-  providerId: string;
-  attachment?: boolean;
-  reasoning?: boolean;
-  toolCall?: boolean;
-  modalities?: {
-    input?: string[];
-    output?: string[];
-  };
-}
 
 const modelSchema = z.object({
   id: z.string(),

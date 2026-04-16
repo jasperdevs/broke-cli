@@ -1,15 +1,7 @@
 import { getConfiguredProviderDefinition, getConfiguredProviderModel, getConfiguredProviderModelOverride } from "../core/models-config.js";
+import type { ProviderCompatSettings } from "./provider-compat-types.js";
 
-export type ThinkingFormat = "openai" | "qwen";
-
-export interface ProviderCompatSettings {
-  supportsDeveloperRole?: boolean;
-  supportsReasoningEffort?: boolean;
-  supportsUsageInStreaming?: boolean;
-  supportsTools?: boolean;
-  maxTokensField?: "max_completion_tokens" | "max_tokens";
-  thinkingFormat?: ThinkingFormat;
-}
+export type { ProviderCompatSettings, ThinkingFormat } from "./provider-compat-types.js";
 
 const BUILTIN_COMPAT: Record<string, ProviderCompatSettings> = {
   anthropic: {
