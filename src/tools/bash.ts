@@ -140,20 +140,20 @@ function truncateOutput(output: string): string {
 
 export function createBashTool(cwd: CwdProvider = process.cwd()) {
   return tool({
-  description: "Run a shell command and return stdout/stderr. Use for: builds, tests, git, installs, system commands. Do NOT use for file reads (use readFile), file writes (use writeFile), or search (use grep). Commands run in the project's working directory.",
-  inputSchema: z.object({
-    command: z.string().describe("Shell command to execute"),
-    timeout: z.number().optional().describe("Timeout in ms (default 30000)"),
-  }),
-  execute: async ({ command, timeout }, options) => {
-    const workingDirectory = resolveCwd(cwd);
-    const rerouted = rerouteSimpleShellCommand(command, workingDirectory);
-    if (rerouted) return rerouted;
+    description: "Run a shell command and return stdout/stderr. Use for: builds, tests, git, installs, system commands. Do NOT use for file reads (use readFile), file writes (use writeFile), or search (use grep). Commands run in the project's working directory.",
+    inputSchema: z.object({
+      command: z.string().describe("Shell command to execute"),
+      timeout: z.number().optional().describe("Timeout in ms (default 30000)"),
+    }),
+    execute: async ({ command, timeout }, options) => {
+      const workingDirectory = resolveCwd(cwd);
+      const rerouted = rerouteSimpleShellCommand(command, workingDirectory);
+      if (rerouted) return rerouted;
 
-    const permission = checkShellCommandAccess(command, workingDirectory);
-    if (!permission.allowed) {
-      return { success: false as const, output: "", error: permission.reason ?? "Shell command blocked by autonomy policy." };
-    }
+      const permission = checkShellCommandAccess(command, workingDirectory);
+      if (!permission.allowed) {
+        return { success: false as const, output: "", error: permission.reason ?? "Shell command blocked by autonomy policy." };
+      }
 
     const timeoutMs = timeout ?? 30000;
 
@@ -252,7 +252,7 @@ export function createBashTool(cwd: CwdProvider = process.cwd()) {
         resolve({ success: false as const, output: "", error: err.message });
       });
     });
-  },
+    },
   });
 }
 

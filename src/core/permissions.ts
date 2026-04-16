@@ -3,6 +3,7 @@ import { existsSync } from "fs";
 import { isAbsolute, parse, relative, resolve, sep } from "path";
 import { getSettings, updateSetting } from "./config.js";
 import type { AutonomySettings } from "./config-types.js";
+import { resolveToCwd } from "./path-utils.js";
 
 export interface PermissionDecision {
   allowed: boolean;
@@ -92,7 +93,7 @@ function normalizeRootList(roots: string[], cwd = process.cwd()): string[] {
     roots
       .map((entry) => entry.trim())
       .filter(Boolean)
-      .map((entry) => resolve(cwd, entry)),
+      .map((entry) => resolveToCwd(entry, cwd)),
   )];
 }
 
@@ -143,7 +144,7 @@ export function checkFilesystemPathAccess(
   cwd = process.cwd(),
 ): PermissionDecision {
   const settings = getAutonomySettings();
-  const normalizedPath = resolve(cwd, targetPath);
+  const normalizedPath = resolveToCwd(targetPath, cwd);
   const workspace = resolveWorkspaceScope(cwd);
   if (!workspace.allowed) return { allowed: false, scope: "outside-workspace", normalizedPath: workspace.root, reason: workspace.reason };
   const trustedRoots = buildTrustedRoots(mode, cwd);

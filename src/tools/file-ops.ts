@@ -1,7 +1,8 @@
 import { readFileSync, writeFileSync, readdirSync, statSync, mkdirSync } from "fs";
-import { basename, dirname, join, relative, resolve } from "path";
+import { basename, dirname, join, relative } from "path";
 import { createCheckpoint } from "../core/git.js";
 import { checkFilesystemPathAccess, ensureNetworkAllowed } from "../core/permissions.js";
+import { resolveReadPath, resolveToCwd } from "../core/path-utils.js";
 import { fetchRemoteGitHubFile, listRemoteGitHubTree, tryParseRemoteGitHubTarget } from "./file-ops-remote.js";
 import {
   buildMemoizedReadSummary,
@@ -27,10 +28,7 @@ interface ReadFileDirectOptions {
   path: string; cwd?: string; offset?: number; limit?: number; mode?: ReadMode; tail?: number; refresh?: boolean;
 }
 
-interface WalkFileOptions {
-  dir: string; cwd: string; maxDepth: number; include?: string;
-  onFile: (fullPath: string) => boolean | void;
-}
+interface WalkFileOptions { dir: string; cwd: string; maxDepth: number; include?: string; onFile: (fullPath: string) => boolean | void; }
 
 function escapeRegex(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -145,7 +143,12 @@ export function readFileDirect({ path, cwd = process.cwd(), offset, limit, mode,
     return { success: false as const, error: access.reason ?? "Read not permitted." };
   }
   try {
-    const filePath = access.normalizedPath ?? resolve(cwd, path);
+    let filePath = resolveReadPath(path, cwd);
+    if (filePath !== access.normalizedPath) {
+      const variantAccess = checkFilesystemPathAccess(filePath, "read", cwd);
+      if (!variantAccess.allowed) return { success: false as const, error: variantAccess.reason ?? "Read not permitted." };
+      filePath = variantAccess.normalizedPath ?? filePath;
+    }
     const fileStat = statSync(filePath);
     const readMode = mode ?? "full";
     const memoContext = getMemoContext();
@@ -186,13 +189,8 @@ export function readFileDirect({ path, cwd = process.cwd(), offset, limit, mode,
 
     if (content.length > MAX_READ_CHARS) {
       content = content.slice(0, MAX_READ_CHARS);
-        return {
-          success: true as const,
-          path,
-          content,
-          totalLines,
-          truncated: true,
-        mode: readMode,
+      return {
+        success: true as const, path, content, totalLines, truncated: true, mode: readMode,
         note: `File truncated in ${readMode} mode. Use offset/limit to read specific sections.`,
       };
     }
@@ -214,7 +212,7 @@ export function listFilesDirect({ path: dir = ".", cwd = process.cwd(), maxDepth
   if (!access.allowed) {
     return { files: [], totalEntries: 0, truncated: false, error: access.reason };
   }
-  const root = access.normalizedPath ?? resolve(cwd, dir);
+  const root = access.normalizedPath ?? resolveToCwd(dir, cwd);
   const memoContext = getMemoContext();
   const memoKey = ["list", root, maxDepth ?? 3, include ?? ""].join("|");
   const workspaceFingerprint = `${memoKey}|v${memoContext?.getWorkspaceVersion() ?? 0}`;
@@ -283,7 +281,7 @@ export function grepDirect({ pattern, path: dir = ".", cwd = process.cwd(), incl
       error: access.reason,
     };
   }
-  const root = access.normalizedPath ?? resolve(cwd, dir);
+  const root = access.normalizedPath ?? resolveToCwd(dir, cwd);
   const memoContext = getMemoContext();
   const memoKey = ["grep", root, pattern, include ?? ""].join("|");
   const workspaceFingerprint = `${memoKey}|v${memoContext?.getWorkspaceVersion() ?? 0}`;
@@ -367,7 +365,7 @@ export function semSearchDirect({
       error: access.reason,
     };
   }
-  const root = access.normalizedPath ?? resolve(cwd, dir);
+  const root = access.normalizedPath ?? resolveToCwd(dir, cwd);
   const memoContext = getMemoContext();
   const normalizedQuery = query.trim().toLowerCase();
   const memoKey = ["sem", root, normalizedQuery, include ?? "", limit ?? ""].join("|");
@@ -461,7 +459,7 @@ export function writeFileDirect({ path, cwd = process.cwd(), content }: { path: 
     return { success: false as const, error: access.reason ?? "Write not permitted." };
   }
   try {
-    const filePath = access.normalizedPath ?? resolve(cwd, path);
+    const filePath = access.normalizedPath ?? resolveToCwd(path, cwd);
     mkdirSync(dirname(filePath), { recursive: true });
     createCheckpoint();
     writeFileSync(filePath, content, "utf-8");
@@ -478,7 +476,7 @@ export function editFileDirect({ path, cwd = process.cwd(), old_string, new_stri
     return { success: false as const, error: access.reason ?? "Edit not permitted." };
   }
   try {
-    const filePath = access.normalizedPath ?? resolve(cwd, path);
+    const filePath = access.normalizedPath ?? resolveToCwd(path, cwd);
     const content = readFileSync(filePath, "utf-8");
     const occurrences = content.split(old_string).length - 1;
     if (occurrences === 0) {

@@ -3,7 +3,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, describe, expect, it } from "vitest";
 import { bashTool, createBashTool } from "../src/tools/bash.js";
-import { listFilesDirect, semSearchDirect } from "../src/tools/file-ops.js";
+import { listFilesDirect, readFileDirect, semSearchDirect } from "../src/tools/file-ops.js";
 
 describe("tool routing", () => {
   const tempDirs: string[] = [];
@@ -69,6 +69,17 @@ describe("tool routing", () => {
     } finally {
       process.chdir(previous);
     }
+  });
+
+  it("normalizes at-prefixed paths against the scoped cwd", () => {
+    const dir = mkdtempSync(join(tmpdir(), "brokecli-path-"));
+    tempDirs.push(dir);
+    writeFileSync(join(dir, "README.md"), "# Scoped path\n", "utf-8");
+
+    const result = readFileDirect({ path: "@README.md", cwd: dir });
+
+    expect(result.success).toBe(true);
+    expect(result.content).toContain("# Scoped path");
   });
 
   it("returns ranked semantic-style matches for natural language queries", () => {

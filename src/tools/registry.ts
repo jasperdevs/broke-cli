@@ -1,6 +1,13 @@
 import type { ToolSet } from "ai";
 import { createBashTool } from "./bash.js";
-import { createReadFileTool, createWriteFileTool, createEditFileTool, createListFilesTool, createGrepTool, createSemSearchTool } from "./file-ops-tools.js";
+import {
+  createEditFileTool,
+  createGrepTool,
+  createListFilesTool,
+  createReadFileTool,
+  createSemSearchTool,
+  createWriteFileTool,
+} from "./file-ops-tools.js";
 import { webSearchTool, webFetchTool } from "./web.js";
 import { todoWriteTool } from "./todo.js";
 import { getExtensionTools } from "../core/extensions.js";
@@ -23,16 +30,16 @@ export type ToolName = typeof TOOL_NAMES[number] | string;
 
 function createBaseTools(cwd = process.cwd()): ToolSet {
   return {
-  bash: createBashTool(cwd),
-  readFile: createReadFileTool(cwd),
-  writeFile: createWriteFileTool(cwd),
-  editFile: createEditFileTool(cwd),
-  listFiles: createListFilesTool(cwd),
-  grep: createGrepTool(cwd),
-  semSearch: createSemSearchTool(cwd),
-  webSearch: webSearchTool,
-  webFetch: webFetchTool,
-  todoWrite: todoWriteTool,
+    bash: createBashTool(cwd),
+    readFile: createReadFileTool(cwd),
+    writeFile: createWriteFileTool(cwd),
+    editFile: createEditFileTool(cwd),
+    listFiles: createListFilesTool(cwd),
+    grep: createGrepTool(cwd),
+    semSearch: createSemSearchTool(cwd),
+    webSearch: webSearchTool,
+    webFetch: webFetchTool,
+    todoWrite: todoWriteTool,
   };
 }
 
