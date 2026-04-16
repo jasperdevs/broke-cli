@@ -7,6 +7,7 @@ import { listConfiguredProviderIds } from "../core/models-config.js";
 import { getConfiguredModelSpec, mergeConfiguredModelOverride } from "./model-spec-overrides.js";
 import { getLocalModelMetadata } from "./local-model-metadata.js";
 import type { ModelPricing, ModelSpec } from "./model-types.js";
+import generatedCatalog from "./model-catalog.generated.json";
 
 export type { ModelLimits, ModelPricing, ModelSpec } from "./model-types.js";
 
@@ -48,148 +49,7 @@ const catalogSchema = z.record(providerSchema);
 
 type Catalog = z.infer<typeof catalogSchema>;
 
-const modelIdOnly = (providerId: string, id: string): ModelSpec => ({ providerId, id, name: id, limit: {} });
-
-const FALLBACK_SPECS: ModelSpec[] = [
-  {
-    providerId: "anthropic",
-    id: "claude-sonnet-4-6",
-    name: "Claude Sonnet 4.6",
-    cost: { input: 3.0, output: 15.0, cacheRead: 0.3, cacheWrite: 3.75 },
-    limit: { context: 1_000_000, output: 64_000 },
-    reasoning: true,
-  },
-  {
-    providerId: "anthropic",
-    id: "claude-opus-4-6",
-    name: "Claude Opus 4.6",
-    cost: { input: 5.0, output: 25.0, cacheRead: 0.5, cacheWrite: 6.25 },
-    limit: { context: 1_000_000, output: 128_000 },
-    reasoning: true,
-  },
-  {
-    providerId: "anthropic",
-    id: "claude-haiku-4-5-20251001",
-    name: "Claude Haiku 4.5",
-    cost: { input: 1.0, output: 5.0, cacheRead: 0.1, cacheWrite: 1.25 },
-    limit: { context: 200_000, output: 64_000 },
-  },
-  {
-    providerId: "openai",
-    id: "gpt-5-mini",
-    name: "GPT-5 mini",
-    cost: { input: 0.25, output: 2.0, reasoning: 0.25, cacheRead: 0.025 },
-    limit: { context: 400_000, output: 128_000 },
-    reasoning: true,
-  },
-  {
-    providerId: "openai",
-    id: "gpt-5.4-mini",
-    name: "GPT-5.4 mini",
-    cost: { input: 0.75, output: 4.5, reasoning: 0.75, cacheRead: 0.075 },
-    limit: { context: 400_000, output: 128_000 },
-    reasoning: true,
-  },
-  {
-    providerId: "openai",
-    id: "gpt-5.4",
-    name: "GPT-5.4",
-    cost: { input: 2.5, output: 15.0, reasoning: 2.5, cacheRead: 0.25 },
-    limit: { context: 1_050_000, output: 128_000 },
-    reasoning: true,
-  },
-  {
-    providerId: "openai",
-    id: "gpt-4o-mini",
-    name: "GPT-4o mini",
-    cost: { input: 0.15, output: 0.6, cacheRead: 0.08 },
-    limit: { context: 128_000, output: 16_384 },
-  },
-  {
-    providerId: "openai",
-    id: "gpt-4o",
-    name: "GPT-4o",
-    cost: { input: 2.5, output: 10.0 },
-    limit: { context: 128_000, output: 16_384 },
-  },
-  {
-    providerId: "openai",
-    id: "gpt-4.1-mini",
-    name: "GPT-4.1 mini",
-    cost: { input: 0.4, output: 1.6, cacheRead: 0.1 },
-    limit: { context: 1_047_576, output: 32_768 },
-  },
-  {
-    providerId: "openai",
-    id: "gpt-4.1",
-    name: "GPT-4.1",
-    cost: { input: 2.0, output: 8.0, cacheRead: 0.5 },
-    limit: { context: 1_047_576, output: 32_768 },
-  },
-  {
-    providerId: "openai",
-    id: "o3-mini",
-    name: "o3-mini",
-    cost: { input: 1.1, output: 4.4, cacheRead: 0.55 },
-    limit: { context: 200_000, output: 100_000 },
-    reasoning: true,
-  },
-  {
-    providerId: "openai",
-    id: "o3",
-    name: "o3",
-    cost: { input: 2.0, output: 8.0, cacheRead: 0.5 },
-    limit: { context: 200_000, output: 100_000 },
-    reasoning: true,
-  },
-  {
-    providerId: "openai",
-    id: "o4-mini",
-    name: "o4-mini",
-    cost: { input: 1.1, output: 4.4, cacheRead: 0.28 },
-    limit: { context: 200_000, output: 100_000 },
-    reasoning: true,
-  },
-  {
-    providerId: "google",
-    id: "gemini-2.5-flash",
-    name: "Gemini 2.5 Flash",
-    cost: { input: 0.3, output: 2.5, cacheRead: 0.075 },
-    limit: { context: 1_048_576, output: 65_536 },
-    reasoning: true,
-  },
-  {
-    providerId: "google",
-    id: "gemini-2.5-pro",
-    name: "Gemini 2.5 Pro",
-    cost: { input: 1.25, output: 10.0, cacheRead: 0.31 },
-    limit: { context: 1_048_576, output: 65_536 },
-    reasoning: true,
-  },
-  {
-    providerId: "google",
-    id: "gemini-2.0-flash",
-    name: "Gemini 2.0 Flash",
-    cost: { input: 0.1, output: 0.4, cacheRead: 0.025 },
-    limit: { context: 1_048_576, output: 8_192 },
-  },
-  modelIdOnly("github-copilot", "gpt-4o"),
-  modelIdOnly("github-copilot", "gpt-5.4"),
-  modelIdOnly("github-copilot", "gpt-5.4-mini"),
-  modelIdOnly("github-copilot", "gpt-5.3-codex"),
-  modelIdOnly("github-copilot", "gpt-5.2-codex"),
-  modelIdOnly("github-copilot", "claude-sonnet-4.6"),
-  modelIdOnly("github-copilot", "claude-opus-4.6"),
-  modelIdOnly("github-copilot", "gemini-2.5-pro"),
-  modelIdOnly("github-copilot", "grok-code-fast-1"),
-  modelIdOnly("google-gemini-cli", "gemini-2.5-pro"),
-  modelIdOnly("google-gemini-cli", "gemini-2.5-flash"),
-  modelIdOnly("google-gemini-cli", "gemini-2.0-flash"),
-  modelIdOnly("google-antigravity", "gemini-3.1-pro-high"),
-  modelIdOnly("google-antigravity", "gemini-3.1-pro-low"),
-  modelIdOnly("google-antigravity", "gemini-3-flash"),
-  modelIdOnly("google-antigravity", "claude-sonnet-4-6"),
-];
+const GENERATED_CATALOG = catalogSchema.parse(generatedCatalog);
 
 const providerAliases: Record<string, string> = { codex: "openai" };
 
@@ -274,37 +134,7 @@ const PROVIDER_MODEL_PROFILES: Record<string, ProviderModelProfile> = {
   },
 };
 
-let catalogCache: Catalog | null = null, fallbackCatalog: Catalog | null = null;
-
-function buildFallbackCatalog(): Catalog {
-  if (fallbackCatalog) return fallbackCatalog;
-  const catalog: Catalog = {};
-  for (const spec of FALLBACK_SPECS) {
-    if (!catalog[spec.providerId]) {
-      catalog[spec.providerId] = {
-        id: spec.providerId,
-        name: spec.providerId,
-        models: {},
-      };
-    }
-    catalog[spec.providerId].models[spec.id] = {
-      id: spec.id,
-      name: spec.name,
-      family: spec.family,
-      reasoning: spec.reasoning,
-      cost: spec.cost ? {
-        input: spec.cost.input,
-        output: spec.cost.output,
-        reasoning: spec.cost.reasoning,
-        cache_read: spec.cost.cacheRead,
-        cache_write: spec.cost.cacheWrite,
-      } : undefined,
-      limit: spec.limit,
-    };
-  }
-  fallbackCatalog = catalog;
-  return catalog;
-}
+let catalogCache: Catalog | null = null;
 
 function normalizeProviderId(providerId?: string): string | undefined {
   if (!providerId) return undefined;
@@ -339,7 +169,7 @@ function asModelSpec(providerId: string, model: z.infer<typeof modelSchema>): Mo
   };
 }
 
-function getCatalog(): Catalog { return catalogCache ?? buildFallbackCatalog(); }
+function getCatalog(): Catalog { return catalogCache ?? GENERATED_CATALOG; }
 
 function readCachedCatalog(): Catalog | null {
   if (!existsSync(MODEL_CATALOG_CACHE_PATH)) return null;
@@ -370,7 +200,7 @@ export async function loadModelCatalog(): Promise<void> {
     catalogCache = parsed;
     writeCachedCatalog(parsed);
   } catch {
-    catalogCache = readCachedCatalog() ?? buildFallbackCatalog();
+    catalogCache = readCachedCatalog() ?? GENERATED_CATALOG;
   }
 }
 

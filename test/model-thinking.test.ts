@@ -11,7 +11,7 @@ describe("model reasoning support", () => {
 
   it("keeps non-reasoning models off", () => {
     expect(modelSupportsReasoning("gpt-4o-mini", "openai")).toBe(false);
-    expect(modelSupportsReasoning("claude-haiku-4-5-20251001", "anthropic")).toBe(false);
+    expect(modelSupportsReasoning("claude-3-haiku-20240307", "anthropic")).toBe(false);
     expect(modelSupportsReasoning("default", "llamacpp")).toBe(false);
   });
 

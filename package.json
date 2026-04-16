@@ -17,7 +17,8 @@
     "logos"
   ],
   "scripts": {
-    "build": "tsup",
+    "generate-models": "node scripts/generate-models.mjs",
+    "build": "npm run generate-models && tsup",
     "dev": "tsup --watch",
     "benchmark:tasks": "npm run build && node scripts/benchmark-harness.mjs",
     "test": "vitest run",
