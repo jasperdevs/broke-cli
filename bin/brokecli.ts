@@ -158,7 +158,6 @@ program.action(async (promptParts, opts) => {
     if (options?.status) app.setStatus(options.status);
   };
 
-  // Resume or new session
   let session: Session;
   const sessionTarget = opts.sessionId;
   if (sessionTarget && getSettings().autoSaveSessions) {
@@ -178,7 +177,6 @@ program.action(async (promptParts, opts) => {
       const loaded = Session.load(recent[0].id);
       session = loaded ?? new Session();
       if (loaded) {
-        // Replay messages into UI
         for (const msg of loaded.getMessages()) {
           app.addMessage(msg.role, msg.content);
         }
@@ -362,7 +360,6 @@ program.action(async (promptParts, opts) => {
   async function processUserMessage(text: string, images?: Array<{ mimeType: string; data: string }>) {
     if (!text.trim()) return;
 
-    // Slash commands
     let templateLoaded = false;
     if (text.startsWith("/")) {
       const slashResult = await handleSlashCommand({
@@ -433,7 +430,6 @@ program.action(async (promptParts, opts) => {
     }
 
     if (!templateLoaded) {
-      // !bash shortcuts
       if (text.startsWith("!!")) {
         const cmd = text.slice(2).trim();
         if (cmd) {
@@ -454,7 +450,6 @@ program.action(async (promptParts, opts) => {
             const { execSync } = await import("child_process");
             const output = execSync(cmd, { encoding: "utf-8", timeout: 30000, maxBuffer: 1024 * 1024, cwd: process.cwd() });
             app.addMessage("system", `$ ${cmd}\n${output.trim()}`);
-            // Send output to LLM as context
             if (activeModel) {
               session.addMessage("user", `I ran \`${cmd}\` and got:\n\`\`\`\n${output.trim().slice(0, 2000)}\n\`\`\``);
             }

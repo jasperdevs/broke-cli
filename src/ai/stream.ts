@@ -69,7 +69,6 @@ export async function startStream(
       providerId: opts.providerId,
       modelId: opts.modelId,
     });
-    // Convert messages to AI SDK format with images
     const messages = opts.messages.map((m, index) => {
       const messageCacheable = capabilities.caching.messageEphemeral
         && index < Math.min(2, Math.max(0, opts.messages.length - 1));
@@ -77,7 +76,6 @@ export async function startStream(
         ? { anthropic: { cacheControl: { type: "ephemeral" } } }
         : undefined;
       if (m.images && m.images.length > 0 && m.role === "user") {
-        // Create content array with text and images
         const content: Array<{ type: "text"; text: string } | { type: "image"; image: string }> = [
           { type: "text", text: m.content },
         ];
@@ -89,7 +87,6 @@ export async function startStream(
       return { role: m.role, content: m.content, ...(messageProviderOptions ? { providerOptions: messageProviderOptions } : {}) };
     });
 
-    // Build provider options (thinking/reasoning for supported providers)
     const providerOptions: Record<string, Record<string, any>> = {};
     const estimatedInputTokens = estimateConversationTokens(opts.system, messages as Array<{ role: "user" | "assistant"; content: string | Array<{ type: "text"; text: string } | { type: "image"; image: string }> }>, opts.modelId);
     const thinking = resolveThinkingConfig({
@@ -156,13 +153,11 @@ export async function startStream(
             callbacks.onToolResult?.(tr.toolName, tr.output, callId);
             if (callId) emittedToolResultIds.add(callId);
           }
-          // Trigger after tool call callback for pending messages
           callbacks.onAfterToolCall?.();
         }
       },
     });
 
-    // Use fullStream for reasoning + text + tool events
     // Tool calls are caught here in real-time (not waiting for onStepFinish)
     // Local models embed thinking in <think>...</think> tags in text stream
     let inThinkTag = false;
@@ -181,7 +176,6 @@ export async function startStream(
             if (inThinkTag) {
               const closeIdx = text.indexOf("</think>");
               if (closeIdx >= 0) {
-                // End of think block
                 const reasoningChunk = text.slice(0, closeIdx);
                 emittedReasoning += reasoningChunk;
                 callbacks.onReasoning(reasoningChunk);
@@ -189,7 +183,6 @@ export async function startStream(
                 inThinkTag = false;
                 thinkBuffer = "";
               } else {
-                // Still inside think block
                 emittedReasoning += text;
                 callbacks.onReasoning(text);
                 text = "";
@@ -197,7 +190,6 @@ export async function startStream(
             } else {
               const openIdx = text.indexOf("<think>");
               if (openIdx >= 0) {
-                // Start of think block — emit text before it
                 if (openIdx > 0) {
                   const textChunk = text.slice(0, openIdx);
                   emittedText += textChunk;
@@ -248,7 +240,6 @@ export async function startStream(
           if (callId) toolInputByCallId.set(callId, { name: toolName, input: next });
           callbacks.onToolCall?.(toolName, parsePossiblyPartialJson(next), callId);
         } else if (part.type === "tool-call") {
-          // Tool call fully formed — pass complete args
           const tc = part as any;
           callbacks.onToolCall?.(tc.toolName, tc.input, normalizeToolCallId(tc));
         } else if ((part as any).type === "tool-result") {

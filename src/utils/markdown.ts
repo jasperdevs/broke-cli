@@ -108,7 +108,6 @@ function renderInline(tokens: Token[], parentStyle = ""): string {
         out += t.text ?? "";
         break;
       case "html":
-        // Strip HTML tags, show text content
         out += (t.text ?? "").replace(/<[^>]+>/g, "");
         break;
       default:
@@ -141,7 +140,6 @@ function renderBlock(token: Token, indent = ""): string[] {
 
     case "paragraph": {
       const text = renderInline(token.tokens ?? []);
-      // Split long lines for readability
       const paraLines = text.split("\n");
       for (const l of paraLines) {
         lines.push(`${indent}${TXT()}${l}${RESET}`);
@@ -194,12 +192,10 @@ function renderBlock(token: Token, indent = ""): string[] {
         const item = items[i];
         const bullet = ordered ? `${MUTED()}${startNum + i}.${RESET}` : `${T()}\u2022${RESET}`;
 
-        // Render item content
         const itemTokens = item.tokens ?? [];
         let firstLine = true;
         for (const child of itemTokens) {
           if (child.type === "text" && child.tokens) {
-            // Inline text within list item
             const text = renderInline(child.tokens);
             const textLines = text.split("\n");
             for (const tl of textLines) {
@@ -212,7 +208,6 @@ function renderBlock(token: Token, indent = ""): string[] {
               }
             }
           } else if (child.type === "list") {
-            // Nested list
             const nested = renderBlock(child, indent + "  ");
             for (const nl of nested) lines.push(nl);
           } else {
@@ -238,7 +233,6 @@ function renderBlock(token: Token, indent = ""): string[] {
       const rows = token.rows ?? [];
       const aligns = token.align ?? [];
 
-      // Calculate column widths
       const colCount = header.length;
       const colWidths: number[] = new Array(colCount).fill(0);
       for (let c = 0; c < colCount; c++) {
@@ -252,18 +246,14 @@ function renderBlock(token: Token, indent = ""): string[] {
         }
       }
 
-      // Cap column widths
       for (let c = 0; c < colCount; c++) {
         colWidths[c] = Math.min(colWidths[c], 40);
       }
 
-      // Header
       const hCells = header.map((h, i) => padCell(renderInline(h), colWidths[i], aligns[i]));
       lines.push(`${indent}${MUTED()}${BOLD}${hCells.join(` ${MUTED()}|${RESET} ${MUTED()}${BOLD}`)}${RESET}`);
-      // Separator
       const sepCells = colWidths.map(w => "─".repeat(w));
       lines.push(`${indent}${MUTED()}${sepCells.join("─┼─")}${RESET}`);
-      // Rows
       for (const row of rows) {
         const rCells = row.map((cell, i) => padCell(renderInline(cell), colWidths[i], aligns[i]));
         lines.push(`${indent}${rCells.join(` ${MUTED()}|${RESET} `)}`);
@@ -282,7 +272,6 @@ function renderBlock(token: Token, indent = ""): string[] {
       break;
 
     case "html":
-      // Render HTML blocks as dimmed raw text
       if (token.text) {
         for (const l of token.text.split("\n")) {
           lines.push(`${indent}${MUTED()}${l}${RESET}`);
@@ -291,7 +280,6 @@ function renderBlock(token: Token, indent = ""): string[] {
       break;
 
     default:
-      // Fallback — render raw text
       if (token.tokens) {
         lines.push(`${indent}${TXT()}${renderInline(token.tokens)}${RESET}`);
       } else if (token.text) {
@@ -335,7 +323,6 @@ export function renderMarkdown(text: string): string {
       for (const l of blockLines) lines.push(l);
     }
 
-    // Trim trailing empty lines
     while (lines.length > 0 && lines[lines.length - 1] === "") {
       lines.pop();
     }
