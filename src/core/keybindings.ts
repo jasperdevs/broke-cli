@@ -13,6 +13,8 @@ export interface Keybindings {
   deleteNextWord: string;
   toggleThinking: string;
   cycleScopedModel: string;
+  queueMessage: string;
+  restoreQueuedMessage: string;
   toggleMode: string;
 }
 
@@ -47,11 +49,14 @@ export function applyKeybindingDefaults(
   const migratedNewline = savedNewline && savedNewline !== "ctrl+j" ? raw?.newline : defaultNewline;
   const savedSubmit = raw?.submit?.trim().toLowerCase();
   const migratedSubmit = savedSubmit && savedSubmit !== "down" ? raw?.submit ?? DEFAULT_KEYBINDINGS.submit : DEFAULT_KEYBINDINGS.submit;
+  const savedToggleMode = raw?.toggleMode?.trim().toLowerCase();
+  const migratedToggleMode = savedToggleMode && savedToggleMode !== "tab" ? raw?.toggleMode ?? DEFAULT_KEYBINDINGS.toggleMode : DEFAULT_KEYBINDINGS.toggleMode;
   return {
     ...DEFAULT_KEYBINDINGS,
     ...raw,
     submit: migratedSubmit,
     newline: migratedNewline ?? defaultNewline,
+    toggleMode: migratedToggleMode,
     // The tree hotkey is intentionally retired; keep /tree as the only entry point.
     treeView: DEFAULT_KEYBINDINGS.treeView,
   };
@@ -67,7 +72,9 @@ export const DEFAULT_KEYBINDINGS: Keybindings = {
   deleteNextWord: "ctrl+d",
   toggleThinking: "ctrl+t",
   cycleScopedModel: "ctrl+p",
-  toggleMode: "tab",
+  queueMessage: "tab",
+  restoreQueuedMessage: "alt+up",
+  toggleMode: "shift+tab",
 };
 
 let cached: Keybindings | null = null;

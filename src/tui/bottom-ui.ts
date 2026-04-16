@@ -264,13 +264,15 @@ export function buildFooterLines(app: AppState, hasSidebar: boolean, mainW: numb
   const infoRows = packFooterParts(buildInfoBarParts(app, hasSidebar), mainW);
   const lines = infoRows.length > 0 ? [...infoRows] : [];
   if (app.isStreaming && app.input.getText().trim().length > 0) {
-    lines.push(` ${DIM}tab to queue message${RESET}`);
+    lines.push(` ${DIM}${formatFooterBinding(getKeybinding("queueMessage"))} to queue message${RESET}`);
   }
   return lines;
 }
 
 export function buildLegacyFooterLines(app: AppState, hasSidebar: boolean, mainW: number): string[] {
   const newlineBinding = formatFooterBinding(getKeybinding("newline"));
+  const queueBinding = formatFooterBinding(getKeybinding("queueMessage"));
+  const modeBinding = formatFooterBinding(getKeybinding("toggleMode"));
   const rows: Array<[{ text: string; plain: string }, { text: string; plain: string } | null]> = [
     [
       renderFooterShortcut("/", "for commands"),
@@ -278,7 +280,7 @@ export function buildLegacyFooterLines(app: AppState, hasSidebar: boolean, mainW
     ],
     [
       renderFooterShortcut(newlineBinding, "for newline"),
-      renderFooterShortcut("tab", "to queue message"),
+      renderFooterShortcut(queueBinding, "to queue message"),
     ],
     [
       renderFooterShortcut("@", "for file paths"),
@@ -286,7 +288,7 @@ export function buildLegacyFooterLines(app: AppState, hasSidebar: boolean, mainW
     ],
     [
       renderFooterShortcut("ctrl + t", "to cycle thinking"),
-      renderFooterShortcut("shift + tab", "to change mode"),
+      renderFooterShortcut(modeBinding, "to change mode"),
     ],
   ];
 

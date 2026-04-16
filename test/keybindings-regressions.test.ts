@@ -39,12 +39,13 @@ describe("keybinding regressions", () => {
 
   it("migrates stale newline and submit bindings that break the composer contract", () => {
     const bindings = applyKeybindingDefaults(
-      { newline: "ctrl+j", submit: "down" },
+      { newline: "ctrl+j", submit: "down", toggleMode: "tab" },
       { TERM: "xterm-256color", TERM_PROGRAM: "" } as NodeJS.ProcessEnv,
       "win32",
     );
     expect(bindings.newline).toBe("shift+return");
     expect(bindings.submit).toBe("return");
+    expect(bindings.toggleMode).toBe("shift+tab");
   });
 
   it("renders the active newline binding in the legacy footer helper", () => {
@@ -78,6 +79,25 @@ describe("keybinding regressions", () => {
       app.handlePaste("hello");
       app.handleKey({ name: "return", char: "", ctrl: false, meta: false, shift: true });
       expect(app.input.getText()).toBe("hello\n");
+    } finally {
+      if (previous == null) rmSync(keybindingsPath, { force: true });
+      else writeFileSync(keybindingsPath, previous, "utf-8");
+      reloadKeybindings();
+    }
+  });
+
+  it("honors the configured queue-message binding in the live composer path", () => {
+    const keybindingsPath = join(homedir(), ".brokecli", "keybindings.json");
+    const previous = existsSync(keybindingsPath) ? readFileSync(keybindingsPath, "utf-8") : null;
+    try {
+      mkdirSync(join(homedir(), ".brokecli"), { recursive: true });
+      writeFileSync(keybindingsPath, JSON.stringify({ queueMessage: "ctrl+q" }), "utf-8");
+      reloadKeybindings();
+      const app = new App() as any;
+      app.isStreaming = true; app.onSubmit = () => {};
+      app.input.paste("queued");
+      app.handleKey({ name: "q", char: "", ctrl: true, meta: false, shift: false });
+      expect(app.pendingMessages).toEqual([{ text: "queued", images: [], delivery: "followup" }]);
     } finally {
       if (previous == null) rmSync(keybindingsPath, { force: true });
       else writeFileSync(keybindingsPath, previous, "utf-8");

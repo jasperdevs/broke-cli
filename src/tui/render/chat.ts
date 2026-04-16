@@ -10,6 +10,23 @@ export interface PendingRenderMessage {
   delivery: PendingDelivery;
 }
 
+const PENDING_PREVIEW_LIMIT = 3;
+
+function pushPreview(lines: string[], text: string, maxWidth: number, dim: string, reset: string, italic = false): void {
+  const sourceLines = text.trim().split(/\r?\n/).map((line) => line.replace(/\s+/g, " ").trim()).filter(Boolean);
+  let count = 0;
+  for (const line of sourceLines.length > 0 ? sourceLines : [""]) {
+    for (const wrappedLine of wrapVisibleText(line, Math.max(8, maxWidth - 8))) {
+      if (count >= PENDING_PREVIEW_LIMIT) {
+        lines.push(`  ${dim}    ...${reset}`);
+        return;
+      }
+      lines.push(`  ${dim}↳ ${italic ? "\x1b[3m" : ""}${wrappedLine}${italic ? "\x1b[23m" : ""}${reset}`);
+      count++;
+    }
+  }
+}
+
 export function renderPendingMessagesBlock(options: {
   pendingMessages: PendingRenderMessage[];
   maxWidth: number;
@@ -27,10 +44,7 @@ export function renderPendingMessagesBlock(options: {
     lines.push(`  ${dim}• Messages to be submitted after next tool call${reset}`);
     lines.push(`  ${dim}  (press esc to interrupt and send immediately)${reset}`);
     for (const item of steeringItems.slice(-4)) {
-      const preview = item.text.replace(/\s+/g, " ").trim();
-      for (const wrappedLine of wrapVisibleText(preview, Math.max(8, maxWidth - 8))) {
-        lines.push(`  ${dim}↳ ${wrappedLine}${reset}`);
-      }
+      pushPreview(lines, item.text, maxWidth, dim, reset);
     }
   }
 
@@ -38,10 +52,7 @@ export function renderPendingMessagesBlock(options: {
     if (lines.length > 0) lines.push("");
     lines.push(`  ${dim}• Queued follow-up messages${reset}`);
     for (const item of followUpItems.slice(-4)) {
-      const preview = item.text.replace(/\s+/g, " ").trim();
-      for (const wrappedLine of wrapVisibleText(preview, Math.max(8, maxWidth - 8))) {
-        lines.push(`  ${dim}↳ ${wrappedLine}${reset}`);
-      }
+      pushPreview(lines, item.text, maxWidth, dim, reset, true);
     }
     lines.push(`  ${dim}  alt + ↑ edit last queued message${reset}`);
   }

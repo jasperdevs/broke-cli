@@ -292,7 +292,9 @@ program.action(async (promptParts, opts) => {
           batch = app.takePendingMessages("steering");
         } else if (pendingFlushes.delete("followup")) {
           const steering = app.takePendingMessages("steering");
-          batch = steering.length > 0 ? steering : app.takePendingMessages("followup");
+          const followup = steering.length > 0 ? undefined : app.takeNextPendingMessage("followup");
+          batch = steering.length > 0 ? steering : followup ? [followup] : [];
+          if (app.hasPendingMessages("followup")) pendingFlushes.add("followup");
         } else {
           break;
         }

@@ -260,7 +260,7 @@ function handleEscapeAndBindings(app: AppState, key: Keypress): boolean {
     app.drawNow();
     return true;
   }
-  if (key.meta && key.name === "up") {
+  if (matchesBinding(getKeybinding("restoreQueuedMessage"), key)) {
     restoreQueuedMessage(app);
     return true;
   }
@@ -402,7 +402,8 @@ export function handleKey(app: AppState, key: Keypress): void {
     return;
   }
 
-  if (key.shift && key.name === "tab") {
+  const bindings = loadKeybindings();
+  if (matchesBinding(bindings.toggleMode, key)) {
     app.mode = app.mode === "build" ? "plan" : "build";
     if (app.onModeChange) app.onModeChange(app.mode);
     app.draw();
@@ -417,7 +418,7 @@ export function handleKey(app: AppState, key: Keypress): void {
     return;
   }
   if ((app.isStreaming || app.isCompacting) && app.input.getText().trim().length > 0) {
-    if (key.name === "tab") {
+    if (matchesBinding(bindings.queueMessage, key)) {
       queueCurrentInput(app, "followup");
       return;
     }
@@ -426,7 +427,7 @@ export function handleKey(app: AppState, key: Keypress): void {
       return;
     }
   }
-  if (key.name === "tab" && !key.ctrl && !key.meta && !key.shift && app.input.getText().trim().length > 0) { submitInput(app); return; }
+  if (matchesBinding(bindings.queueMessage, key) && app.input.getText().trim().length > 0) { submitInput(app); return; }
   const inputText = app.input.getText();
   if (inputText.startsWith("/")) {
     const suggestions = app.getCommandMatches();

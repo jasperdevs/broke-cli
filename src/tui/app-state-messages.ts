@@ -4,17 +4,7 @@ import { buildActivityLabel, cloneActivityStep, cloneToolExecution, deriveLiveAc
 import { createTurnTimestamp } from "../core/turn-events.js";
 import { buildTurnActivitySnapshot, clearTurnActivityState, recordTurnEvent, type TurnActivityState } from "./turn-activity-state.js";
 import type { InputWidget } from "./input.js";
-import {
-  addPendingMessage,
-  clearPendingMessages,
-  flushPendingMessages,
-  getPendingMessagesCount,
-  hasPendingMessages,
-  onPendingMessagesReadyHandler,
-  takeLastPendingMessage,
-  takePendingImages,
-  takePendingMessages,
-} from "./app-pending-messages.js";
+import { addPendingMessage, clearPendingMessages, flushPendingMessages, getPendingMessagesCount, hasPendingMessages, onPendingMessagesReadyHandler, takeLastPendingMessage, takeNextPendingMessage, takePendingImages, takePendingMessages } from "./app-pending-messages.js";
 interface AnimatedCounterLike {
   set(value: number): void;
   sync(): void;
@@ -447,7 +437,7 @@ export interface AppStateMessageMethods {
   onPendingMessagesReadyHandler(handler: (delivery: PendingDelivery) => void): void;
   takePendingImages(): PendingImage[];
   addPendingMessage(text: string, images?: ResolvedImage[], delivery?: PendingDelivery): void;
-  takePendingMessages(delivery?: PendingDelivery): PendingMessage[];
+  takePendingMessages(delivery?: PendingDelivery): PendingMessage[]; takeNextPendingMessage(delivery: PendingDelivery): PendingMessage | undefined;
   takeLastPendingMessage(): PendingMessage | undefined;
   clearPendingMessages(delivery?: PendingDelivery): void;
   hasPendingMessages(delivery?: PendingDelivery): boolean;
@@ -487,6 +477,7 @@ export const appStateMessageMethods: AppStateMessageMethods = {
   takePendingImages(this: AppState) { return takePendingImages(this); },
   addPendingMessage(this: AppState, text, images, delivery) { return addPendingMessage(this, text, images, delivery); },
   takePendingMessages(this: AppState, delivery) { return takePendingMessages(this, delivery); },
+  takeNextPendingMessage(this: AppState, delivery) { return takeNextPendingMessage(this, delivery); },
   takeLastPendingMessage(this: AppState) { return takeLastPendingMessage(this); },
   clearPendingMessages(this: AppState, delivery) { return clearPendingMessages(this, delivery); },
   hasPendingMessages(this: AppState, delivery) { return hasPendingMessages(this, delivery); },

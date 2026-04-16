@@ -67,6 +67,8 @@ function getHotkeyLabels(bindings: Keybindings): Array<{ id: keyof Keybindings; 
     { id: "modelPicker", label: "Open model menu", detail: bindings.modelPicker },
     { id: "toggleThinking", label: "Cycle thinking", detail: bindings.toggleThinking },
     { id: "cycleScopedModel", label: "Cycle pinned model", detail: bindings.cycleScopedModel },
+    { id: "queueMessage", label: "Queue message", detail: bindings.queueMessage },
+    { id: "restoreQueuedMessage", label: "Edit queued message", detail: bindings.restoreQueuedMessage },
     { id: "toggleMode", label: "Toggle build / plan", detail: bindings.toggleMode },
     { id: "deleteWord", label: "Delete word", detail: bindings.deleteWord },
     { id: "deleteNextWord", label: "Delete next word", detail: bindings.deleteNextWord },

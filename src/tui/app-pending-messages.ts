@@ -33,6 +33,13 @@ export function takePendingMessages(app: PendingMessageState, delivery?: Pending
   return messages;
 }
 
+export function takeNextPendingMessage(app: PendingMessageState, delivery: PendingDelivery): PendingMessage | undefined {
+  const index = app.pendingMessages.findIndex((entry) => entry.delivery === delivery);
+  if (index < 0) return undefined;
+  const [message] = app.pendingMessages.splice(index, 1);
+  return message;
+}
+
 export function takeLastPendingMessage(app: PendingMessageState): PendingMessage | undefined {
   if (app.pendingMessages.length === 0) return undefined;
   return app.pendingMessages.pop();

@@ -20,7 +20,24 @@ describe("composer spacing", () => {
     expect(output.join("\n")).toContain("next step");
     expect(queueIndex).toBeGreaterThan(-1);
     expect(inputIndex).toBeGreaterThan(queueIndex);
-    expect(inputIndex - queueIndex).toBeLessThanOrEqual(6);
+    expect(inputIndex - queueIndex).toBeLessThanOrEqual(8);
+  });
+
+  it("caps queued-message previews so long drafts cannot shove the composer away", () => {
+    const app = new App() as any;
+    let rendered: string[] = [];
+    app.messages = [{ role: "assistant", content: "working" }];
+    app.isStreaming = true;
+    app.streamStartTime = Date.now() - 1000;
+    app.screen = { height: 18, width: 60, hasSidebar: false, mainWidth: 60, sidebarWidth: 0, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
+    app.input.paste("draft");
+    app.addPendingMessage("one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen", [], "followup");
+    app.drawImmediate();
+    const output = rendered.map((line) => stripAnsi(line));
+    const queueIndex = output.findIndex((line) => line.includes("Queued follow-up messages"));
+    const inputIndex = output.findIndex((line) => line.includes("> draft"));
+    expect(queueIndex).toBeGreaterThan(-1);
+    expect(inputIndex - queueIndex).toBeLessThanOrEqual(8);
   });
 
   it("keeps a spacer row above the composer so the input is not glued to the transcript", () => {
