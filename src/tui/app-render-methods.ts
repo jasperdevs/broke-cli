@@ -142,7 +142,9 @@ export function renderMessages(app: AppState, maxWidth: number): string[] {
 export function renderCompactHeader(app: AppState): string {
   const settings = getSettings();
   const parts: string[] = [];
-  parts.push(`${T()}${getPrettyModelName(app.modelName, app.modelProviderId)}${RESET}`);
+  const modelLabel = getPrettyModelName(app.modelName, app.modelProviderId);
+  const providerLabel = app.providerName && app.providerName !== "---" ? `${app.providerName} / ` : "";
+  parts.push(`${T()}${providerLabel}${modelLabel}${RESET}`);
   parts.push(`${DIM}${app.formatShortCwd(Math.max(8, Math.floor(process.stdout.columns / 5) || 16))}${RESET}`);
   if (app.gitBranch) parts.push(`${MUTED()}${app.gitBranch}${app.gitDirty ? "*" : ""}${RESET}`);
   if (app.isStreaming) parts.push(`${DIM}esc stop${RESET}`);

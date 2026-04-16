@@ -93,6 +93,19 @@ describe("startup home view", () => {
     }
   });
 
+  it("shows provider and model in the compact chat header", () => {
+    const app = new App() as any;
+    app.providerName = "Codex";
+    app.modelProviderId = "codex";
+    app.modelName = "gpt-5.4-mini";
+    app.messages = [{ role: "user", content: "hello" }];
+    let rendered: string[] = [];
+    app.screen = { height: 10, width: 90, hasSidebar: false, mainWidth: 90, sidebarWidth: 0, render: (lines: string[]) => { rendered = lines; }, setCursor: () => {}, hideCursor: () => {}, forceRedraw: () => {} };
+    app.drawImmediate();
+
+    expect(rendered.map((line) => stripAnsi(line)).join("\n")).toContain("Codex / GPT-5.4 mini");
+  });
+
   it("falls back to a compact startup card on very narrow widths", () => {
     const app = new App() as any;
     let rendered: string[] = [];

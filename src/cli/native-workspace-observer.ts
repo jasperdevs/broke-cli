@@ -1,5 +1,5 @@
 import { execFileSync } from "child_process";
-import { existsSync, statSync, readdirSync } from "fs";
+import { existsSync } from "fs";
 import { join } from "path";
 import type { Session } from "../core/session.js";
 import type { TurnArchetype } from "../core/turn-policy.js";
@@ -7,7 +7,7 @@ import type { ToolName } from "../tools/registry.js";
 
 export interface NativeWorkspaceBaseline {
   cwd: string;
-  mtimes: Map<string, number>;
+  dirtyPaths: Set<string>;
 }
 
 const IGNORE_PREFIXES = [".omx/", ".tmp/", "dist/", "coverage/", "node_modules/"];
@@ -34,7 +34,16 @@ function parseGitStatusPorcelain(raw: string): string[] {
     });
 }
 
-function getChangedFiles(cwd: string): string[] {
+function isGitRepository(cwd: string): boolean {
+  try {
+    execFileSync("git", ["rev-parse", "--is-inside-work-tree"], { cwd, stdio: "ignore", windowsHide: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function getGitStatusFiles(cwd: string): string[] {
   try {
     const output = execFileSync("git", ["status", "--porcelain=v1", "-z", "--untracked-files=all"], {
       cwd,
@@ -48,49 +57,9 @@ function getChangedFiles(cwd: string): string[] {
   }
 }
 
-function collectWorkspaceFiles(cwd: string): string[] {
-  const files: string[] = [];
-  const visit = (relativeDir: string): void => {
-    const fullDir = relativeDir ? join(cwd, relativeDir) : cwd;
-    let entries: Array<{ name: string; isDirectory(): boolean }>;
-    try {
-      entries = readdirSync(fullDir, { withFileTypes: true }) as Array<{ name: string; isDirectory(): boolean }>;
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      const relativePath = relativeDir ? `${relativeDir}/${entry.name}` : entry.name;
-      const normalized = relativePath.replace(/\\/g, "/");
-      if (!shouldTrackPath(normalized)) continue;
-      if (entry.isDirectory()) {
-        visit(normalized);
-        continue;
-      }
-      files.push(normalized);
-    }
-  };
-  visit("");
-  return files;
-}
-
-function getWorkspaceTrackedFiles(cwd: string): string[] {
-  const gitFiles = getChangedFiles(cwd);
-  if (gitFiles.length > 0) return gitFiles;
-  return collectWorkspaceFiles(cwd);
-}
-
-export function captureNativeWorkspaceBaseline(cwd: string): NativeWorkspaceBaseline {
-  const mtimes = new Map<string, number>();
-  for (const relativePath of getWorkspaceTrackedFiles(cwd)) {
-    const fullPath = join(cwd, relativePath);
-    if (!existsSync(fullPath)) continue;
-    try {
-      mtimes.set(relativePath.replace(/\\/g, "/"), statSync(fullPath).mtimeMs);
-    } catch {
-      continue;
-    }
-  }
-  return { cwd, mtimes };
+export function captureNativeWorkspaceBaseline(cwd: string): NativeWorkspaceBaseline | null {
+  if (!isGitRepository(cwd)) return null;
+  return { cwd, dirtyPaths: new Set(getGitStatusFiles(cwd)) };
 }
 
 export function recordNativeWorkspaceDelta(
@@ -99,19 +68,10 @@ export function recordNativeWorkspaceDelta(
 ): string[] {
   if (!baseline) return [];
   const touched: string[] = [];
-  const afterPaths = getWorkspaceTrackedFiles(baseline.cwd);
+  const afterPaths = getGitStatusFiles(baseline.cwd);
   for (const relativePath of afterPaths) {
     const normalized = relativePath.replace(/\\/g, "/");
-    const fullPath = join(baseline.cwd, relativePath);
-    let changed = !baseline.mtimes.has(normalized);
-    if (!changed && existsSync(fullPath)) {
-      try {
-        changed = statSync(fullPath).mtimeMs !== baseline.mtimes.get(normalized);
-      } catch {
-        changed = true;
-      }
-    }
-    if (!changed) continue;
+    if (baseline.dirtyPaths.has(normalized)) continue;
     session.recordRepoEdit(normalized, "edit");
     touched.push(normalized);
   }

@@ -35,6 +35,9 @@ describe("turn policy", () => {
     expect(getTurnPolicy("hey").allowedTools).toEqual([]);
     expect(getTurnPolicy("what").allowedTools).toEqual([]);
     expect(getTurnPolicy("what?").allowedTools).toEqual([]);
+    const essay = getTurnPolicy("make me an essay here");
+    expect(essay.archetype).toBe("question");
+    expect(essay.allowedTools).toEqual([]);
 
     expect(getTurnPolicy("read package.json").allowedTools).toEqual(["readFile"]);
 

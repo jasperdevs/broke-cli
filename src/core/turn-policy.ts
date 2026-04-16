@@ -8,16 +8,7 @@ import { getSettings } from "./config.js";
 import { getExtensionTools } from "./extensions.js";
 import type { SessionRepoState } from "./session-types.js";
 import type { ToolName } from "../tools/registry.js";
-export type TurnArchetype =
-  | "casual"
-  | "question"
-  | "explore"
-  | "shell"
-  | "edit"
-  | "bugfix"
-  | "review"
-  | "research"
-  | "planning";
+export type TurnArchetype = "casual" | "question" | "explore" | "shell" | "edit" | "bugfix" | "review" | "research" | "planning";
 export type PromptProfile = "full" | "casual" | "lean" | "edit" | "followup";
 export type ScaffoldSource = "builtin" | "planned";
 export interface PlannerContext {
@@ -87,10 +78,13 @@ function isCasualTurn(userMessage: string): boolean {
   return CASUAL_MESSAGE_PATTERNS.some((pattern) => pattern.test(msg));
 }
 
+function isPlainWritingTurn(userMessage: string): boolean { const msg = userMessage.toLowerCase(); return extractExplicitPaths(msg).length === 0 && !/\b(file|repo|code|component|page|app|script|test|readme|html|css|js|ts|tsx|json|md)\b/i.test(msg) && /\b(write|draft|compose|make|create)\b/i.test(msg) && /\b(essay|story|poem|paragraph|email|message|letter|caption|post|blurb|summary|copy|text)\b/i.test(msg); }
+
 export function classifyTurnArchetype(userMessage: string, lastToolCalls: string[] = []): TurnArchetype {
   const msg = userMessage.toLowerCase().trim();
 
   if (isCasualTurn(msg)) return "casual";
+  if (isPlainWritingTurn(msg)) return "question";
   if (/\b(plan|roadmap|strategy|tradeoff|approach)\b/i.test(msg)) return "planning";
   if (/\b(review|audit|inspect|critique)\b/i.test(msg)) return "review";
   if (/\b(search web|research|look up|docs?|documentation|source)\b/i.test(msg)) return "research";
