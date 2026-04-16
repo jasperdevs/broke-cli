@@ -193,14 +193,12 @@ export async function executeTurn(options: {
     if (touched.length > 0) sawToolActivity = true;
   };
 
-  if (minimalOutputPolicy) {
-    turnSystemPrompt += `\n\n${buildMinimalOutputInstruction({
-      archetype: policy.archetype,
-    })}`;
-  }
+  if (minimalOutputPolicy) turnSystemPrompt += `\n\n${buildMinimalOutputInstruction({ archetype: policy.archetype })}`;
 
   app.onAbortRequest(() => {
     abortController?.abort();
+    completion = "error";
+    errorMessage = "Cancelled.";
     app.setThinkingRequested(false);
     app.setStreaming(false);
     app.addMessage("system", "Cancelled.");

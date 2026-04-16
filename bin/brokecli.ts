@@ -9,8 +9,7 @@ import { touchProject } from "../src/core/projects.js";
 import { getTools, TOOL_NAMES, type ToolName } from "../src/tools/registry.js";
 import { setBashOutputCallback } from "../src/tools/bash.js";
 import { setTodoChangeCallback } from "../src/tools/todo.js";
-import { getSettings, updateSetting, type Mode } from "../src/core/config.js";
-import { clearRuntimeSettings, setRuntimeSettings } from "../src/core/config.js";
+import { clearRuntimeSettings, getSettings, setRuntimeSettings, updateSetting, type Mode } from "../src/core/config.js";
 import { loadExtensions } from "../src/core/extensions.js";
 import { APP_VERSION } from "../src/core/app-meta.js";
 import { ProviderRegistry } from "../src/ai/provider-registry.js";
@@ -28,6 +27,7 @@ import { getTurnPolicy } from "../src/core/turn-policy.js";
 import { runBtwQuestion as runBtwQuestionRuntime } from "../src/cli/btw-runtime.js";
 import { applyProgramRuntimeSettings, applyRuntimeToolSelection, reportStartupUpdateNotice, runExportMode } from "../src/cli/program-runtime.js";
 import { runCliPrintOrJsonMode } from "../src/cli/print-mode.js";
+import { getWorkspaceRootSafety } from "../src/core/permissions.js";
 const program = createProgram(APP_VERSION);
 function formatPackageInstallWarning(failure: PackageInstallFailure): string {
   const error = failure.error as { stderr?: Buffer | string; stdout?: Buffer | string; message?: string };
@@ -41,10 +41,7 @@ program.action(async (promptParts, opts) => {
   applyProgramRuntimeSettings(opts, parsedModel, thinkingOverride);
   const toolsDisabled = process.argv.includes("--no-tools");
 
-  if (opts.export) {
-    runExportMode(opts.export, opts.sessionDir, opts.exportOut);
-    return;
-  }
+  if (opts.export) { runExportMode(opts.export, opts.sessionDir, opts.exportOut); return; }
 
   const packageInstallWarnings: string[] = [];
   await ensureConfiguredPackagesInstalledWithOptions({
@@ -81,6 +78,9 @@ program.action(async (promptParts, opts) => {
   if (await runCliPrintOrJsonMode({ promptParts, opts, parsedModel, providers: detectedProvidersOnce, providerRegistry, hooks, reportPackageInstallWarnings })) return;
   const app = new App();
   app.setVersion(program.version() ?? APP_VERSION);
+  const startupWorkspaceSafety = getWorkspaceRootSafety(process.cwd());
+  const unsafeWorkspaceMessage = (reason?: string) => `${reason ?? "Unsafe workspace root."} Use /projects or cd into a project folder before asking me to inspect or edit files.`;
+  if (!startupWorkspaceSafety.allowed) app.addMessage("system", unsafeWorkspaceMessage(startupWorkspaceSafety.reason));
   let currentMode: Mode = getSettings().mode;
   let lastActivityTime = Date.now();
 
@@ -388,6 +388,9 @@ program.action(async (promptParts, opts) => {
         return;
       }
     }
+
+    const workspaceSafety = getWorkspaceRootSafety(process.cwd());
+    if (!workspaceSafety.allowed) { app.addMessage("system", unsafeWorkspaceMessage(workspaceSafety.reason)); return; }
 
     if (!templateLoaded) {
       if (text.startsWith("!!")) {

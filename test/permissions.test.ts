@@ -6,6 +6,7 @@ import { clearRuntimeSettings, setRuntimeSettings } from "../src/core/config.js"
 import { getWorkspaceRootSafety } from "../src/core/permissions.js";
 import { bashTool } from "../src/tools/bash.js";
 import { editFileDirect, writeFileDirect } from "../src/tools/file-ops.js";
+import { collectProjectFiles } from "../src/tui/file-picker.js";
 
 describe("autonomy permissions", () => {
   const tempDirs: string[] = [];
@@ -63,5 +64,10 @@ describe("autonomy permissions", () => {
 
     expect(result.allowed).toBe(false);
     expect(result.reason).toContain("filesystem root");
+  });
+
+  it("does not collect files from filesystem roots for the composer picker", () => {
+    const root = parse(process.cwd()).root;
+    expect(collectProjectFiles(root)).toEqual([]);
   });
 });

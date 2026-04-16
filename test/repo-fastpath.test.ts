@@ -1,6 +1,6 @@
 import { mkdtemp, mkdir, readFile, writeFile } from "fs/promises";
 import { tmpdir } from "os";
-import { dirname, join } from "path";
+import { dirname, join, parse } from "path";
 import { afterEach, describe, expect, it } from "vitest";
 import { Session } from "../src/core/session.js";
 import { tryRepoTaskFastPath } from "../src/cli/repo-fastpath.js";
@@ -25,6 +25,15 @@ afterEach(async () => {
 });
 
 describe("repo task fast path", () => {
+  it("refuses filesystem roots before collecting candidate files", async () => {
+    const result = await tryRepoTaskFastPath({
+      root: parse(process.cwd()).root,
+      prompt: "Without changing any files, answer in one sentence which files now import parseSettings.",
+    });
+
+    expect(result).toBeNull();
+  });
+
   it("renames an exact symbol across the repo without invoking a model", async () => {
     const workspace = await createWorkspace({
       "src/math.js": "export function sumNumbers(a, b) { return a + b; }\n",

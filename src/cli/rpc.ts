@@ -18,6 +18,7 @@ import { tryRepoTaskFastPath } from "./repo-fastpath.js";
 import { applyTurnFrame } from "./turn-frame.js";
 import { buildMinimalOutputInstruction, getMinimalOutputPolicy } from "./turn-runner-support.js";
 import { getProviderCompat } from "../ai/provider-compat.js";
+import { getWorkspaceRootSafety } from "../core/permissions.js";
 
 function canUseSdkTools(model: ModelHandle): boolean {
   return model.runtime === "sdk"
@@ -99,6 +100,12 @@ export async function runRpcMode(hooks: ReturnType<typeof loadExtensions>, opts:
 
     if (msg.type !== "message" || !msg.content) {
       writeLine({ type: "error", message: 'Expected {"type":"message", "content":"..."}' });
+      continue;
+    }
+
+    const workspaceSafety = getWorkspaceRootSafety(process.cwd());
+    if (!workspaceSafety.allowed) {
+      writeLine({ type: "error", message: workspaceSafety.reason ?? "Unsafe workspace root." });
       continue;
     }
 

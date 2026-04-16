@@ -44,6 +44,7 @@ export async function startStream(
   opts: StreamOptions,
   callbacks: StreamCallbacks,
 ): Promise<void> {
+  if (opts.abortSignal?.aborted) return;
   const origStderrWrite = process.stderr.write.bind(process.stderr);
   process.stderr.write = () => true;
 
@@ -166,8 +167,16 @@ export async function startStream(
     let emittedText = "";
     let emittedReasoning = "";
     const toolInputByCallId = new Map<string, { name: string; input: string }>();
+    const abortPromise = opts.abortSignal
+      ? new Promise<IteratorResult<unknown>>((resolve) => opts.abortSignal!.addEventListener("abort", () => resolve({ done: true, value: undefined }), { once: true }))
+      : null;
+    const iterator = result.fullStream[Symbol.asyncIterator]();
     try {
-      for await (const part of result.fullStream) {
+      while (true) {
+        const next = abortPromise ? await Promise.race([iterator.next(), abortPromise]) : await iterator.next();
+        if (opts.abortSignal?.aborted) return;
+        if (next.done) break;
+        const part = next.value as Awaited<typeof result.fullStream extends AsyncIterable<infer T> ? T : never>;
         if (part.type === "text-delta") {
           let text: string = (part as any).text ?? (part as any).delta ?? "";
 
