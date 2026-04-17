@@ -51,7 +51,7 @@ describe.sequential("provider runtime config overrides", () => {
     const config = resolveProviderSdkConfig("openai", info);
     expect(config.baseURL).toBe("https://proxy.example.com/v1");
     expect(config.headers).toEqual({ "x-route": "alpha" });
-    expect(config.apiKey).toBe("sk-proxy");
+    expect(config.apiKey).toBeUndefined();
   });
 
   it("uses provider info overrides when already merged into runtime providers", () => {
@@ -72,7 +72,7 @@ describe.sequential("provider runtime config overrides", () => {
     expect(config.headers).toEqual({ "x-custom": "beta" });
   });
 
-  it("can read unsupported-provider config without making it creatable", () => {
+  it("applies local-provider headers and baseUrl overrides through the shared SDK config path", () => {
     writeFileSync(globalModelsPath, JSON.stringify({
       providers: {
         ollama: {

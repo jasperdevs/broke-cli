@@ -10,7 +10,8 @@ import { observeToolResult } from "./turn-tool-observer.js";
 import type { Session } from "../core/session.js";
 
 const SDK_TOOL_PROVIDER_IDS = new Set([
-  "anthropic", "openai", "google", "mistral", "xai",
+  "anthropic", "openai", "codex", "github-copilot", "google", "mistral", "groq", "xai",
+  "openrouter", "ollama", "lmstudio", "llamacpp", "jan", "vllm",
 ]);
 
 const VERBOSE_OUTPUT_PATTERNS = [
@@ -186,7 +187,7 @@ export function resolveExecutionTarget(options: {
   const settings = getSettings();
   const canAutoRoute = !!smallModel
     && settings.autoRoute
-    && activeModel.runtime === "sdk";
+    && !(activeModel.provider.id === "codex" && activeModel.runtime === "native-cli");
   const requestedRoute = forceRoute ?? (canAutoRoute
     ? routeMessage(text, sessionMessageCount, lastToolCalls)
     : "main");

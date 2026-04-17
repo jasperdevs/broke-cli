@@ -1,6 +1,6 @@
 {
   "name": "@jasperdevs/brokecli",
-  "version": "0.0.29",
+  "version": "0.0.28",
   "description": "Terminal-first AI coding CLI with budget-aware model routing.",
   "type": "module",
   "exports": {
@@ -46,9 +46,7 @@
     "budget",
     "anthropic",
     "openai",
-    "google",
-    "mistral",
-    "xai"
+    "ollama"
   ],
   "author": "jasperdevs",
   "license": "MIT",

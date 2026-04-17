@@ -23,7 +23,7 @@ import { formatWorkspaceScopeError, resolveWorkspaceScope } from "../core/permis
 function canUseSdkTools(model: ModelHandle): boolean {
   return model.runtime === "sdk"
     && !!model.model
-    && ["anthropic", "openai", "google", "mistral", "xai"].includes(model.provider.id)
+    && ["anthropic", "openai", "codex", "github-copilot", "google", "mistral", "groq", "xai", "openrouter", "ollama", "lmstudio", "llamacpp", "jan", "vllm"].includes(model.provider.id)
     && getProviderCompat(model.provider.id, model.modelId).supportsTools !== false;
 }
 

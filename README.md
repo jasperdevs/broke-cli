@@ -31,7 +31,8 @@ brokecli --broke -p "summarize this repo"
 
 Inside the app:
 
-- configure one of the supported SDK providers: OpenAI, Anthropic, Google, Mistral, or xAI
+- `/login <provider>` for supported native/OAuth login flows
+- `/connect <provider>` as a compatibility alias for `/login`
 - `/model` to switch models
 - `/packages` to inspect installed packages or search/install from npm
 - `/settings` to change runtime behavior
@@ -91,7 +92,7 @@ Built-in workflows like <code>/login</code>, <code>/model</code>, <code>/setting
 <tr>
 <td width="40%" valign="middle">
 <h3>Provider + session tools</h3>
-Vercel AI SDK providers, session persistence, branch forking in the session tree, exports, self-update, and benchmark tasks in one CLI.
+Native/OAuth logins, local runtimes, session persistence, branch forking in the session tree, exports, self-update, and benchmark tasks in one CLI.
 </td>
 <td width="60%">
 &nbsp;

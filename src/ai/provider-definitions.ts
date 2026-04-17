@@ -1,6 +1,7 @@
 import type { LanguageModel } from "ai";
 import {
   getProviderDefaultModelId,
+  getProviderNativePreferredDisplayModelIds,
   getProviderPreferredDisplayModelIds,
 } from "./model-catalog.js";
 import type { ProviderApiType } from "../core/models-config.js";
@@ -29,19 +30,26 @@ export interface ModelHandle {
   nativeCommand?: "claude" | "codex";
 }
 
-export const SUPPORTED_PROVIDER_IDS = ["openai", "anthropic", "google", "mistral", "xai"] as const;
-export type SupportedProviderId = typeof SUPPORTED_PROVIDER_IDS[number];
-export const SUPPORTED_PROVIDER_ID_SET = new Set<string>(SUPPORTED_PROVIDER_IDS);
-
 export const PROVIDER_POPULARITY: Record<string, number> = {
-  openai: 1,
+  codex: 1,
   anthropic: 2,
-  google: 3,
-  mistral: 4,
-  xai: 5,
+  "github-copilot": 3,
+  "google-gemini-cli": 4,
+  "google-antigravity": 5,
+  openai: 6,
+  google: 7,
+  groq: 8,
+  mistral: 9,
+  xai: 10,
+  openrouter: 11,
+  ollama: 12,
+  lmstudio: 13,
+  llamacpp: 14,
+  jan: 15,
+  vllm: 16,
 };
 
-export const LOCAL_PROVIDER_IDS = new Set<string>();
+export const LOCAL_PROVIDER_IDS = new Set(["ollama", "lmstudio", "llamacpp", "jan", "vllm"]);
 
 export const BUILTIN_PROVIDERS: Record<string, ProviderInfo> = {
   anthropic: {
@@ -60,6 +68,60 @@ export const BUILTIN_PROVIDERS: Record<string, ProviderInfo> = {
     defaultModel: getProviderDefaultModelId("openai") ?? "gpt-5.4-mini",
     models: [...getProviderPreferredDisplayModelIds("openai")],
   },
+  codex: {
+    id: "codex",
+    name: "Codex",
+    defaultModel: getProviderDefaultModelId("codex") ?? "gpt-5.4",
+    models: [...new Set([...getProviderNativePreferredDisplayModelIds("codex"), ...getProviderPreferredDisplayModelIds("codex")])],
+  },
+  "github-copilot": {
+    id: "github-copilot",
+    name: "GitHub Copilot",
+    defaultModel: getProviderDefaultModelId("github-copilot") ?? "gpt-4o",
+    models: [...getProviderPreferredDisplayModelIds("github-copilot")],
+  },
+  "google-gemini-cli": {
+    id: "google-gemini-cli",
+    name: "Google Cloud Code Assist",
+    defaultModel: getProviderDefaultModelId("google-gemini-cli") ?? "gemini-2.5-pro",
+    models: [...getProviderPreferredDisplayModelIds("google-gemini-cli")],
+  },
+  "google-antigravity": {
+    id: "google-antigravity",
+    name: "Antigravity",
+    defaultModel: getProviderDefaultModelId("google-antigravity") ?? "gemini-3.1-pro-high",
+    models: [...getProviderPreferredDisplayModelIds("google-antigravity")],
+  },
+  ollama: {
+    id: "ollama",
+    name: "Ollama",
+    defaultModel: "qwen2.5-coder:7b",
+    models: ["qwen2.5-coder:7b", "llama3.1:8b", "codellama:13b", "deepseek-coder-v2:16b"],
+  },
+  lmstudio: {
+    id: "lmstudio",
+    name: "LM Studio",
+    defaultModel: "default",
+    models: ["default"],
+  },
+  llamacpp: {
+    id: "llamacpp",
+    name: "llama.cpp",
+    defaultModel: "default",
+    models: ["default"],
+  },
+  jan: {
+    id: "jan",
+    name: "Jan",
+    defaultModel: "default",
+    models: ["default"],
+  },
+  vllm: {
+    id: "vllm",
+    name: "vLLM",
+    defaultModel: "default",
+    models: ["default"],
+  },
   google: {
     id: "google",
     name: "Google",
@@ -72,11 +134,23 @@ export const BUILTIN_PROVIDERS: Record<string, ProviderInfo> = {
     defaultModel: "mistral-small-latest",
     models: ["mistral-small-latest", "mistral-medium-latest", "mistral-large-latest", "codestral-latest"],
   },
+  groq: {
+    id: "groq",
+    name: "Groq",
+    defaultModel: "llama-3.3-70b-versatile",
+    models: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"],
+  },
   xai: {
     id: "xai",
     name: "xAI",
     defaultModel: "grok-3-mini",
     models: ["grok-3-mini", "grok-3"],
+  },
+  openrouter: {
+    id: "openrouter",
+    name: "OpenRouter",
+    defaultModel: getProviderDefaultModelId("openrouter") ?? "anthropic/claude-sonnet-4",
+    models: [...getProviderPreferredDisplayModelIds("openrouter")],
   },
 };
 

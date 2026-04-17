@@ -1,11 +1,23 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { rmSync } from "fs";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { rmSync, statSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import { resetAuthCacheForTests, saveCredentials } from "../src/core/auth.js";
 import { loadConfig, updateProviderConfig } from "../src/core/config.js";
 import { getProviderCredential } from "../src/core/provider-credentials.js";
 import { detectProviders } from "../src/ai/detect.js";
+
+vi.mock("../src/ai/native-cli.js", () => ({
+  hasNativeCommand: vi.fn(() => false),
+}));
+
+vi.mock("child_process", async () => {
+  const actual = await vi.importActual<typeof import("child_process")>("child_process");
+  return {
+    ...actual,
+    spawnSync: vi.fn(() => ({ status: 1, stdout: "", error: undefined })),
+  };
+});
 
 const authPath = join(homedir(), ".brokecli", "auth.json");
 
@@ -14,19 +26,26 @@ afterEach(() => {
   resetAuthCacheForTests();
 });
 
-describe("unsupported OAuth credential filtering", () => {
-  it("ignores stored OAuth credentials for providers outside the SDK-only set", () => {
+describe("oauth credential detection", () => {
+  it("treats stored Gemini CLI auth as a native oauth provider", () => {
     saveCredentials("google-gemini-cli", JSON.stringify({ token: "test-token", projectId: "proj-123" }));
-    expect(getProviderCredential("google-gemini-cli")).toEqual({ kind: "none" });
+    expect(getProviderCredential("google-gemini-cli")).toEqual({
+      kind: "native_oauth",
+      value: JSON.stringify({ token: "test-token", projectId: "proj-123" }),
+      source: "brokecli-auth",
+    });
+    if (process.platform !== "win32") {
+      expect(statSync(authPath).mode & 0o777).toBe(0o600);
+    }
   });
 
-  it("does not detect stored OAuth-only providers", async () => {
+  it("includes stored oauth providers in detected provider results", async () => {
     const previousDisabled = loadConfig().providers?.["google-antigravity"]?.disabled;
     try {
       updateProviderConfig("google-antigravity", { disabled: false });
       saveCredentials("google-antigravity", JSON.stringify({ token: "test-token", projectId: "proj-456" }));
       const providers = await detectProviders();
-      expect(providers.some((provider) => provider.id === "google-antigravity")).toBe(false);
+      expect(providers.some((provider) => provider.id === "google-antigravity")).toBe(true);
     } finally {
       updateProviderConfig("google-antigravity", { disabled: previousDisabled ?? null });
     }

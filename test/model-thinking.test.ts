@@ -5,7 +5,7 @@ import { buildModelVisibleThinkingInstruction, shouldEnforceToolFirstTurn, shoul
 describe("model reasoning support", () => {
   it("tracks reasoning-capable frontier models from the catalog", () => {
     expect(modelSupportsReasoning("gpt-5.4-mini", "openai")).toBe(true);
-    expect(modelSupportsReasoning("claude-sonnet-4-6", "anthropic")).toBe(true);
+    expect(modelSupportsReasoning("gpt-5-mini", "codex")).toBe(true);
     expect(modelSupportsReasoning("gemini-2.5-pro", "google")).toBe(true);
   });
 
@@ -17,14 +17,14 @@ describe("model reasoning support", () => {
 
   it("does not ask models to externalize private reasoning into visible text", () => {
     expect(shouldRequestThinkTags({
-      provider: { id: "openai", name: "OpenAI", defaultModel: "gpt-4o-mini", models: ["gpt-4o-mini"] },
-      modelId: "gpt-4o-mini",
+      provider: { id: "llamacpp", name: "llama.cpp", defaultModel: "default", models: ["default"] },
+      modelId: "default",
       runtime: "sdk",
     }, true)).toBe(false);
     expect(shouldRequestThinkTags({
-      provider: { id: "anthropic", name: "Anthropic", defaultModel: "claude-sonnet-4-6", models: ["claude-sonnet-4-6"] },
-      modelId: "claude-sonnet-4-6",
-      runtime: "sdk",
+      provider: { id: "codex", name: "Codex", defaultModel: "gpt-5-mini", models: ["gpt-5-mini"] },
+      modelId: "gpt-5-mini",
+      runtime: "native-cli",
     }, true)).toBe(false);
   });
 
@@ -35,8 +35,8 @@ describe("model reasoning support", () => {
       toolActivity: false,
       policy: { archetype: "edit", allowedTools: ["readFile", "writeFile"] },
       model: {
-        provider: { id: "openai", name: "OpenAI", defaultModel: "gpt-5.4-mini", models: ["gpt-5.4-mini"] },
-        modelId: "gpt-5.4-mini",
+        provider: { id: "llamacpp", name: "llama.cpp", defaultModel: "default", models: ["default"] },
+        modelId: "default",
         runtime: "sdk",
         model: {} as any,
       },
@@ -47,8 +47,8 @@ describe("model reasoning support", () => {
       toolActivity: false,
       policy: { archetype: "edit", allowedTools: ["readFile", "writeFile"] },
       model: {
-        provider: { id: "openai", name: "OpenAI", defaultModel: "gpt-5.4-mini", models: ["gpt-5.4-mini"] },
-        modelId: "gpt-5.4-mini",
+        provider: { id: "llamacpp", name: "llama.cpp", defaultModel: "default", models: ["default"] },
+        modelId: "default",
         runtime: "sdk",
         model: {} as any,
       },

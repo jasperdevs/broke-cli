@@ -9,7 +9,7 @@ describe("local model metadata", () => {
     clearLocalModelMetadata();
   });
 
-  it("keeps local metadata usable for display helpers without making local providers accepted", () => {
+  it("uses discovered local metadata for visibility and display", () => {
     setLocalProviderModelMetadata("ollama", {
       "tool-model": {
         name: "Tool Model",
@@ -24,7 +24,7 @@ describe("local model metadata", () => {
     });
 
     const visible = filterModelIdsForDisplay("ollama", ["tool-model", "chat-model"]);
-    expect(visible).toEqual(["chat-model", "tool-model"]);
+    expect(visible).toEqual(["tool-model"]);
     expect(getPrettyModelName("tool-model", "ollama")).toBe("Tool Model");
     expect(getContextLimit("tool-model", "ollama")).toBe(64000);
   });

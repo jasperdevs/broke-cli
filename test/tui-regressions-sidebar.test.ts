@@ -310,12 +310,12 @@ describe("sidebar scrolling", () => {
       expect(output).toContain("Role models");
       expect(output).toContain("Review:");
 
-      updateModelPreference("review", "mistral/codestral-latest");
+      updateModelPreference("review", "codex/gpt-5.4-mini");
       app.drawImmediate();
       const sameLabelOutput = rendered.map((line) => stripAnsi(line)).join("\n");
       expect(sameLabelOutput).toContain("Role models");
-      expect(sameLabelOutput).toContain("Review: Mistral /");
-      expect(sameLabelOutput).toContain("Codestral");
+      expect(sameLabelOutput).toContain("Review: Codex /");
+      expect(sameLabelOutput).toContain("GPT-5.4 mini");
     } finally {
       updateSetting("hideSidebar", originalHideSidebar);
       updateModelPreference("review", originalReview);
