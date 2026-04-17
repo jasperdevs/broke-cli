@@ -94,7 +94,7 @@ vi.mock("../src/tools/todo.js", () => ({
 
 import { runModelTurn } from "../src/cli/turn-runner.js";
 
-describe("raw tool payload fallback", () => {
+describe("raw tool payload handling", () => {
   beforeEach(() => {
     streamTextMock.mockReset();
     stepCountIsMock.mockClear();
@@ -104,16 +104,15 @@ describe("raw tool payload fallback", () => {
     });
   });
 
-  it("executes tool-like assistant text from weak local models instead of leaving it in chat", async () => {
-    let assistantContent = "";
+  it("hides raw tool syntax from supported SDK providers instead of executing it", async () => {
     const app = {
       addMessage: vi.fn(),
-      appendToLastMessage: vi.fn((delta: string) => { assistantContent += delta; }),
+      appendToLastMessage: vi.fn(),
       appendThinking: vi.fn(),
       setThinkingRequested: vi.fn(),
-      getLastAssistantContent: vi.fn(() => assistantContent),
+      getLastAssistantContent: vi.fn(() => ""),
       replaceLastAssistantMessage: vi.fn(),
-      rollbackLastAssistantMessage: vi.fn(() => { assistantContent = ""; }),
+      rollbackLastAssistantMessage: vi.fn(),
       setStreaming: vi.fn(),
       setStreamTokens: vi.fn(),
       updateUsage: vi.fn(),
@@ -156,8 +155,8 @@ describe("raw tool payload fallback", () => {
       app: app as any,
       session,
       text: "make raw-local-test.html",
-      activeModel: { provider: { id: "llamacpp", name: "llama.cpp", defaultModel: "default", models: ["default"] }, runtime: "sdk", model: {} as any, modelId: "default" },
-      currentModelId: "default",
+      activeModel: { provider: { id: "openai", name: "OpenAI", defaultModel: "gpt-5.4-mini", models: ["gpt-5.4-mini"] }, runtime: "sdk", model: {} as any, modelId: "gpt-5.4-mini" },
+      currentModelId: "gpt-5.4-mini",
       smallModel: null,
       smallModelId: "",
       currentMode: "build",
@@ -172,87 +171,8 @@ describe("raw tool payload fallback", () => {
       lastActivityTime: Date.now(),
     });
 
-    expect(app.addToolCall).toHaveBeenCalledWith("writeFile", "...");
-    expect(app.updateToolCallArgs).toHaveBeenCalledWith("writeFile", "raw-local-test.html", expect.objectContaining({ path: "raw-local-test.html" }));
-    expect(app.addToolResult).toHaveBeenCalledWith("writeFile", "ok", false, "1 line · 15 bytes written");
-    expect(session.addMessage).toHaveBeenCalledWith("assistant", "raw-local-test.html created.");
-  });
-
-  it("keeps raw-tool fallback cancellable after the stream finishes", async () => {
-    let assistantContent = "";
-    let abortHandler: (() => void) | undefined;
-    const app = {
-      addMessage: vi.fn(),
-      appendToLastMessage: vi.fn((delta: string) => { assistantContent += delta; }),
-      appendThinking: vi.fn(),
-      setThinkingRequested: vi.fn(),
-      getLastAssistantContent: vi.fn(() => assistantContent),
-      replaceLastAssistantMessage: vi.fn(),
-      rollbackLastAssistantMessage: vi.fn(() => { assistantContent = ""; }),
-      setStreaming: vi.fn(),
-      setStreamTokens: vi.fn(),
-      updateUsage: vi.fn(),
-      setContextUsage: vi.fn(),
-      setCompacting: vi.fn(),
-      setStatus: vi.fn(),
-      addToolCall: vi.fn(),
-      updateToolCallArgs: vi.fn(),
-      addToolResult: vi.fn(),
-      onAbortRequest: vi.fn((handler: () => void) => { abortHandler = handler; }),
-      hasPendingMessages: vi.fn(() => false),
-      flushPendingMessages: vi.fn(),
-    };
-    const session = {
-      getTotalCost: () => 0,
-      getChatMessages: () => [{ role: "user", content: "make raw-local-test.html" }],
-      addMessage: vi.fn(),
-      addUsage: vi.fn(),
-      recordTurn: vi.fn(),
-      recordToolResult: vi.fn(),
-      recordRepoRead: vi.fn(),
-      recordRepoEdit: vi.fn(),
-      recordIdleCacheCliff: vi.fn(),
-      replaceConversation: vi.fn(),
-      recordCompaction: vi.fn(),
-      getContextOptimizer: () => ({ optimizeMessages: (messages: any[]) => messages, nextTurn: vi.fn(), trackFileRead: vi.fn() }),
-      getCwd: () => process.cwd(),
-      getTotalInputTokens: () => 0,
-      getTotalOutputTokens: () => 0,
-    } as any;
-
-    streamTextMock.mockReturnValueOnce({
-      fullStream: (async function* () {
-        yield { type: "text-delta", text: "writeFile{content:\"<!DOCTYPE html>\"}" };
-      })(),
-      usage: Promise.resolve({ inputTokens: 1, outputTokens: 1 }),
-    });
-
-    await runModelTurn({
-      app: app as any,
-      session,
-      text: "make raw-local-test.html",
-      activeModel: { provider: { id: "llamacpp", name: "llama.cpp", defaultModel: "default", models: ["default"] }, runtime: "sdk", model: {} as any, modelId: "default" },
-      currentModelId: "default",
-      smallModel: null,
-      smallModelId: "",
-      currentMode: "build",
-      systemPrompt: "system",
-      buildTools: () => ({
-        writeFile: {
-          execute: vi.fn(async (_args: Record<string, unknown>, options?: { abortSignal?: AbortSignal }) => {
-            expect(options?.abortSignal).toBeInstanceOf(AbortSignal);
-            abortHandler?.();
-            return { success: true };
-          }),
-        },
-      }),
-      hooks: { emit: () => {} },
-      lastToolCalls: [],
-      lastActivityTime: Date.now(),
-    });
-
-    expect(app.addToolResult).toHaveBeenCalledWith("writeFile", "cancelled", true);
-    expect(app.addMessage).toHaveBeenCalledWith("system", "Cancelled.");
-    expect(session.addMessage).not.toHaveBeenCalledWith("assistant", "raw-local-test.html created.");
+    expect(app.addToolCall).not.toHaveBeenCalled();
+    expect(app.addMessage).toHaveBeenCalledWith("system", "Model emitted raw tool syntax. Hidden from chat.");
+    expect(session.addMessage).toHaveBeenCalledWith("assistant", "[raw tool payload hidden]");
   });
 });

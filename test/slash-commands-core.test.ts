@@ -125,7 +125,7 @@ describe("slash command handling", () => {
     expect(capturedEntries.some((entry) => entry.key === "followUpMode")).toBe(false);
   });
 
-  it("routes /login to the oauth login flow", async () => {
+  it("keeps /login as SDK-provider setup guidance", async () => {
     const app = createAppStub();
     let ranLogin: { title: string; command: string; args: string[] } | null = null;
     app.runExternalCommand = (title: string, command: string, args: string[]) => {
@@ -144,14 +144,11 @@ describe("slash command handling", () => {
     });
 
     expect(result.handled).toBe(true);
-    expect(ranLogin).toEqual({
-      title: "Login to ChatGPT Plus/Pro (Codex Subscription)",
-      command: "codex",
-      args: ["login"],
-    });
+    expect(ranLogin).toBeNull();
+    expect(app.statusMessage).toContain("OAuth/native login is disabled");
   });
 
-  it("keeps /connect as an OAuth-only compatibility command", async () => {
+  it("keeps /connect as SDK-provider setup guidance", async () => {
     const app = createAppStub();
     const providerRegistry = {
       getProviderInfo: () => ({ id: "openai", name: "OpenAI" }),
@@ -166,7 +163,7 @@ describe("slash command handling", () => {
     });
 
     expect(result.handled).toBe(true);
-    expect(app.statusMessage).toContain("Unknown OAuth provider: openai");
+    expect(app.statusMessage).toContain("supported Vercel AI SDK providers");
   });
 
   it("does not add transcript comments for /thinking and /caveman toggles", async () => {
@@ -393,7 +390,7 @@ describe("slash command handling", () => {
     }
   });
 
-  it("filters unsupported native Codex models out of /model", async () => {
+  it("filters unsupported providers out of /model", async () => {
     const app = createAppStub();
     let pickerOptions: any[] = [];
     app.openModelPicker = (options: any[]) => {
@@ -403,24 +400,24 @@ describe("slash command handling", () => {
     const result = await handleSlashCommand({
       text: "/model",
       app,
-      session: new Session(`test-model-native-codex-${Date.now()}`),
+      session: new Session(`test-model-unsupported-providers-${Date.now()}`),
       activeModel: {
-        provider: { id: "codex", name: "Codex", defaultModel: "gpt-5.4-mini", models: ["gpt-5.4-mini"] },
+        provider: { id: "openai", name: "OpenAI", defaultModel: "gpt-5.4-mini", models: ["gpt-5.4-mini"] },
         modelId: "gpt-5.4-mini",
-        runtime: "native-cli",
+        runtime: "sdk",
       } as any,
       ...createSlashArgs({
         providerRegistry: {
-          getDetectedProviders: () => [{ id: "codex", name: "Codex", available: true, reason: "native login" }],
+          getDetectedProviders: () => [{ id: "openai", name: "OpenAI", available: true, reason: "configured auth" }],
           createModel: (providerId: string, modelId: string) => ({
-            provider: { id: providerId, name: "Codex", defaultModel: "gpt-5.4-mini", models: ["gpt-5.4-mini"] },
+            provider: { id: providerId, name: "OpenAI", defaultModel: "gpt-5.4-mini", models: ["gpt-5.4-mini"] },
             modelId,
-            runtime: "native-cli",
+            runtime: "sdk",
           }),
         } as any,
         buildVisibleModelOptions: () => [
-          { providerId: "codex", providerName: "Codex", modelId: "gpt-5-mini", displayName: "GPT-5 mini", active: false },
-          { providerId: "codex", providerName: "Codex", modelId: "gpt-5.4-mini", displayName: "GPT-5.4 mini", active: true },
+          { providerId: "codex", providerName: "Codex", modelId: "gpt-5.4-mini", displayName: "GPT-5.4 mini", active: false },
+          { providerId: "openai", providerName: "OpenAI", modelId: "gpt-5.4-mini", displayName: "GPT-5.4 mini", active: true },
         ] as any,
       }),
     });

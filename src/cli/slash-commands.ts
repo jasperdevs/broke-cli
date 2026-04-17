@@ -3,7 +3,6 @@ import { buildCompactionContextMessage, compactMessages, getTotalContextTokens, 
 import { getConfiguredModelPreference, getSettings, updateModelPreference, updateSetting, type Mode, type ModelPreferenceSlot } from "../core/config.js";
 import { createDefaultSessionName } from "../core/session.js";
 import { inspectProviders } from "../ai/detect.js";
-import { runLoginFlow } from "./login-flow.js";
 import { openExtensionsMenu, openPackagesMenu, openSettingsMenu } from "./slash-command-menus.js";
 import { createSlashCommandRegistry, type RegisteredSlashCommand } from "./slash-command-registry.js";
 import type { HandleSlashCommandOptions, ParsedSlashCommand, SlashCommandResult } from "./slash-command-types.js";
@@ -13,18 +12,6 @@ import { AUTO_MODEL_ID, AUTO_MODEL_PROVIDER_ID, filterUnsupportedRuntimeModelOpt
 
 interface CoreSlashCommandContext extends ParsedSlashCommand {
   waitFor: (ms: number) => Promise<void>;
-}
-
-function nextProviderCommand(providerId: string): string {
-  if (providerId === "github-copilot" || providerId === "google-gemini-cli" || providerId === "google-antigravity") {
-    return `/login ${providerId}`;
-  }
-  if (providerId === "anthropic" || providerId === "codex") return `/login ${providerId}`;
-  return "/login";
-}
-
-function providerNeedsLogin(providerId: string): boolean {
-  return providerId === "github-copilot" || providerId === "google-gemini-cli" || providerId === "google-antigravity";
 }
 
 export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<CoreSlashCommandContext, SlashCommandResult>> = [
@@ -54,28 +41,17 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
   },
   {
     names: ["connect"],
-    description: "login with oauth",
-    run: async ({ restText, app, providerRegistry, refreshProviderState }) => {
-      app.setStatus?.("Starting OAuth login.");
-      await runLoginFlow({
-        providerId: restText || undefined,
-        app,
-        providerRegistry,
-        refreshProviderState,
-      });
+    description: "show provider setup status",
+    run: ({ app }) => {
+      app.setStatus?.("Use one of the supported Vercel AI SDK providers: openai, anthropic, google, mistral, xai.");
       return { handled: true };
     },
   },
   {
     names: ["login"],
-    description: "login with subscription/oauth",
-    run: async ({ restText, app, providerRegistry, refreshProviderState }) => {
-      await runLoginFlow({
-        providerId: restText || undefined,
-        app,
-        providerRegistry,
-        refreshProviderState,
-      });
+    description: "show provider setup status",
+    run: ({ app }) => {
+      app.setStatus?.("OAuth/native login is disabled. Configure openai, anthropic, google, mistral, or xai.");
       return { handled: true };
     },
   },
@@ -94,7 +70,7 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
       );
       const allOptions = getPickerOptions();
       if (allOptions.length === 0) {
-        app.setStatus?.("No runnable OAuth models found. Run /login codex, /login anthropic, or /login github-copilot.");
+        app.setStatus?.("No supported SDK models found. Configure openai, anthropic, google, mistral, or xai.");
         return { handled: true };
       }
       const normalizedQuery = restText.toLowerCase();
@@ -263,15 +239,6 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
             app.setStatus?.(`${provider.name}: ${provider.reason}`);
             return;
           }
-          if (providerNeedsLogin(provider.id)) {
-            await runLoginFlow({
-              providerId: provider.id,
-              app,
-              providerRegistry,
-              refreshProviderState,
-            });
-            return;
-          }
           if (provider.id === "anthropic" && provider.reason === "claude CLI missing") {
             app.setStatus?.("Claude Code login exists, but the claude CLI is not on PATH.");
             return;
@@ -280,18 +247,7 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
             app.setStatus?.("Codex login exists, but the codex CLI is not on PATH.");
             return;
           }
-          const nextCommand = nextProviderCommand(provider.id);
-          if (provider.reason.startsWith("run ")) {
-            app.setStatus?.(`${provider.name}: started ${nextCommand}.`);
-            await runLoginFlow({
-              providerId: provider.id,
-              app,
-              providerRegistry,
-              refreshProviderState,
-            });
-            return;
-          }
-          app.setStatus?.(`${provider.name}: use /login for supported OAuth providers.`);
+          app.setStatus?.(`${provider.name}: ${provider.reason}. Supported providers: openai, anthropic, google, mistral, xai.`);
         })().catch((error: Error) => {
           app.setStatus?.(`${provider.name}: ${(error as Error).message}`);
         });

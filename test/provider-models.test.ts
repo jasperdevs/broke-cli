@@ -1,10 +1,13 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { filterModelIdsForDisplay, resolveVisibleProviderModelId, supportsProviderModel, syncCloudProviderModelsFromCatalog } from "../src/ai/providers.js";
 import { ProviderRegistry } from "../src/ai/provider-registry.js";
-import { buildVisibleRuntimeModelOptions } from "../src/cli/runtime-models.js";
-import * as config from "../src/core/config.js";
+import { SUPPORTED_PROVIDER_IDS, listProviders } from "../src/ai/provider-definitions.js";
 
 describe("provider model filtering", () => {
+  it("only exposes the five supported Vercel AI SDK providers", () => {
+    expect(listProviders().map((provider) => provider.id).sort()).toEqual([...SUPPORTED_PROVIDER_IDS].sort());
+  });
+
   it("removes image and embedding models while preserving useful coding/chat models", () => {
     const visible = filterModelIdsForDisplay("openai", [
       "text-embedding-3-large",
@@ -34,27 +37,6 @@ describe("provider model filtering", () => {
     expect(visible).toContain("gpt-5.2-codex");
   });
 
-  it("keeps the full detected list for local providers instead of trimming it away", () => {
-    const visible = filterModelIdsForDisplay("ollama", [
-      "llama3.2:1b",
-      "llama3.2:3b",
-      "llama3.1:8b",
-      "qwen2.5-coder:7b",
-      "deepseek-r1:8b",
-      "mistral-nemo",
-      "phi4",
-      "gemma3:4b",
-      "codestral",
-      "yi-coder",
-      "tinyllama",
-      "mixtral",
-    ]);
-
-    expect(visible).toHaveLength(12);
-    expect(visible).toContain("tinyllama");
-    expect(visible).toContain("mixtral");
-  });
-
   it("hides legacy OpenAI reasoning models unless a routing slot preserves them", () => {
     const visible = filterModelIdsForDisplay("openai", [
       "gpt-5.4-mini",
@@ -68,95 +50,29 @@ describe("provider model filtering", () => {
     expect(visible).not.toContain("gpt-4.1");
     expect(visible).not.toContain("o3");
     expect(visible).not.toContain("o4-mini");
-
     expect(filterModelIdsForDisplay("openai", ["gpt-5.4-mini", "o3"], ["o3"])).toContain("o3");
   });
 
-  it("does not keep undetected local providers visible in the model picker", () => {
-    const spy = vi.spyOn(config, "getBaseUrl").mockReturnValue(undefined);
+  it("does not surface unsupported providers in the model picker", () => {
     const registry = new ProviderRegistry() as any;
     registry.providers = [
-      { id: "anthropic", name: "Anthropic", available: true, reason: "API key" },
+      { id: "openai", name: "OpenAI", available: true, reason: "configured auth" },
       { id: "codex", name: "Codex", available: true, reason: "native login" },
+      { id: "ollama", name: "Ollama", available: true, reason: "running" },
     ];
 
     const options = registry.buildVisibleModelOptions(null, "", []);
     const providerIds = new Set(options.map((option: any) => option.providerId));
 
+    expect(providerIds.has("openai")).toBe(true);
+    expect(providerIds.has("codex")).toBe(false);
     expect(providerIds.has("ollama")).toBe(false);
-    expect(providerIds.has("lmstudio")).toBe(false);
-    expect(providerIds.has("llamacpp")).toBe(false);
-    spy.mockRestore();
   });
 
-  it("keeps explicitly configured local providers hidden in the OAuth-only model picker", () => {
-    const spy = vi.spyOn(config, "getBaseUrl").mockImplementation((providerId: string) => (
-      providerId === "llamacpp" ? "http://127.0.0.1:8080/v1" : undefined
-    ));
-    const registry = new ProviderRegistry() as any;
-    registry.providers = [
-      { id: "anthropic", name: "Anthropic", available: true, reason: "API key" },
-    ];
-
-    const options = registry.buildVisibleModelOptions(null, "", []);
-    const providerIds = new Set(options.map((option: any) => option.providerId));
-
-    expect(providerIds.has("llamacpp")).toBe(false);
-    spy.mockRestore();
-  });
-
-  it("keeps Codex limited to its curated visible model set instead of importing broad OpenAI ids", () => {
+  it("syncs catalog models only for supported providers", () => {
     syncCloudProviderModelsFromCatalog();
-    expect(supportsProviderModel("codex", "gpt-5-mini")).toBe(true);
-    expect(supportsProviderModel("codex", "gpt-4.1")).toBe(false);
-  });
-
-  it("falls back to the provider default when a restored model id is no longer visible", () => {
-    expect(resolveVisibleProviderModelId("codex", "gpt-4.1")).toBe("gpt-5.4");
-  });
-
-  it("does not surface stale pinned or current model ids that the provider no longer supports", () => {
-    const registry = new ProviderRegistry() as any;
-    registry.providers = [
-      { id: "codex", name: "Codex", available: true, reason: "native login" },
-    ];
-
-    const options = registry.buildVisibleModelOptions(
-      { provider: { id: "codex", name: "Codex", defaultModel: "gpt-5-mini", models: ["gpt-5-mini"] }, modelId: "gpt-5-mini", runtime: "native-cli" },
-      "gpt-4.1",
-      ["codex/gpt-4.1"],
-    );
-
-    const modelIds = options.filter((option) => option.providerId === "codex").map((option) => option.modelId);
-    expect(modelIds).not.toContain("gpt-4.1");
-    expect(modelIds).toContain("gpt-5-mini");
-  });
-
-  it("does not force routed-but-unavailable providers into the model picker", () => {
-    const spy = vi.spyOn(config, "getBaseUrl").mockReturnValue(undefined);
-    const registry = new ProviderRegistry() as any;
-    registry.providers = [
-      { id: "codex", name: "Codex", available: true, reason: "native login" },
-    ];
-
-    const previousReview = config.getConfiguredModelPreference("review");
-    try {
-      config.updateModelPreference("review", "llamacpp/qwen2.5-coder");
-      const options = buildVisibleRuntimeModelOptions(
-        registry,
-        { provider: { id: "codex", name: "Codex", defaultModel: "gpt-5-mini", models: ["gpt-5-mini"] }, modelId: "gpt-5-mini", runtime: "native-cli" },
-        "gpt-5-mini",
-        [{ id: "codex", name: "Codex", available: true, reason: "native login" }] as any,
-      );
-
-      const providerIds = new Set(options.map((option) => option.providerId));
-      expect(providerIds.has("codex")).toBe(true);
-      expect(providerIds.has("llamacpp")).toBe(false);
-      expect(options.some((option) => option.displayName === "GPT-5 mini")).toBe(false);
-      expect(options.some((option) => option.displayName === "GPT-5.4 mini")).toBe(true);
-    } finally {
-      config.updateModelPreference("review", previousReview ?? null);
-      spy.mockRestore();
-    }
+    expect(supportsProviderModel("openai", "gpt-5.4-mini")).toBe(true);
+    expect(supportsProviderModel("codex", "gpt-5.4-mini")).toBe(false);
+    expect(resolveVisibleProviderModelId("codex", "gpt-5.4-mini")).toBe("gpt-5.4-mini");
   });
 });

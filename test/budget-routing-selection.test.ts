@@ -3,20 +3,20 @@ import { pickCheapestDetectedModel, pickDefault } from "../src/ai/detect.js";
 import { resolveOneShotModel } from "../src/cli/oneshot.js";
 
 describe("budget-first provider selection", () => {
-  it("picks the cheapest available provider/model pair for broke mode", () => {
+  it("ignores unsupported providers when picking the cheapest available provider/model pair", () => {
     const resolved = pickCheapestDetectedModel([
-      { id: "anthropic", name: "Anthropic", available: true, reason: "API key" },
-      { id: "openai", name: "OpenAI", available: true, reason: "API key" },
+      { id: "anthropic", name: "Anthropic", available: true, reason: "configured auth" },
+      { id: "openai", name: "OpenAI", available: true, reason: "configured auth" },
       { id: "ollama", name: "Ollama", available: true, reason: "running" },
     ]);
 
     expect(resolved).toEqual({
-      providerId: "ollama",
-      modelId: "qwen2.5-coder:7b",
+      providerId: "openai",
+      modelId: "gpt-4o-mini",
     });
   });
 
-  it("uses the cheapest detected pair in one-shot broke mode", async () => {
+  it("uses the cheapest supported detected pair in one-shot broke mode", async () => {
     const providerRegistry = {
       createModel: (providerId: string, modelId?: string) => ({
         provider: { id: providerId, name: providerId, defaultModel: modelId ?? "default", models: [modelId ?? "default"] },
@@ -29,21 +29,21 @@ describe("budget-first provider selection", () => {
     const resolved = await resolveOneShotModel({
       opts: { broke: true },
       providers: [
-        { id: "anthropic", name: "Anthropic", available: true, reason: "API key" },
-        { id: "openai", name: "OpenAI", available: true, reason: "API key" },
+        { id: "anthropic", name: "Anthropic", available: true, reason: "configured auth" },
+        { id: "openai", name: "OpenAI", available: true, reason: "configured auth" },
         { id: "ollama", name: "Ollama", available: true, reason: "running" },
       ],
       providerRegistry,
     });
 
-    expect(resolved.providerId).toBe("ollama");
-    expect(resolved.modelId).toBe("qwen2.5-coder:7b");
+    expect(resolved.providerId).toBe("openai");
+    expect(resolved.modelId).toBe("gpt-4o-mini");
   });
 
-  it("prefers known-priced candidates over unpriced aggregator models", () => {
+  it("ignores aggregator providers outside the supported SDK set", () => {
     const resolved = pickCheapestDetectedModel([
-      { id: "openrouter", name: "OpenRouter", available: true, reason: "API key" },
-      { id: "anthropic", name: "Anthropic", available: true, reason: "API key" },
+      { id: "openrouter", name: "OpenRouter", available: true, reason: "configured auth" },
+      { id: "anthropic", name: "Anthropic", available: true, reason: "configured auth" },
     ]);
 
     expect(resolved).toEqual({
@@ -52,35 +52,12 @@ describe("budget-first provider selection", () => {
     });
   });
 
-  it("does not pick the unsupported SDK cheap lane for native Codex login", () => {
-    const resolved = pickCheapestDetectedModel([
-      { id: "codex", name: "Codex", available: true, reason: "native login" },
-    ]);
-
-    expect(resolved).toEqual({
-      providerId: "codex",
-      modelId: "gpt-5.4-mini",
-    });
-  });
-
-  it("prefers native Codex over OpenAI API keys for default startup", () => {
+  it("prefers the first supported available provider for default startup", () => {
     const resolved = pickDefault([
-      { id: "openai", name: "OpenAI", available: true, reason: "API key" },
       { id: "codex", name: "Codex", available: true, reason: "native login" },
+      { id: "openai", name: "OpenAI", available: true, reason: "configured auth" },
     ]);
 
-    expect(resolved?.id).toBe("codex");
-  });
-
-  it("leans token-first across priced hosted candidates before using lower cost as a tie-breaker", () => {
-    const resolved = pickCheapestDetectedModel([
-      { id: "google", name: "Google", available: true, reason: "API key" },
-      { id: "openai", name: "OpenAI", available: true, reason: "API key" },
-    ]);
-
-    expect(resolved).toEqual({
-      providerId: "openai",
-      modelId: "gpt-4o-mini",
-    });
+    expect(resolved?.id).toBe("openai");
   });
 });

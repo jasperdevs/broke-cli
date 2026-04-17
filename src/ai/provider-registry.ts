@@ -14,16 +14,10 @@ import {
 import { getConfiguredProviderBaseUrl } from "../core/models-config.js";
 import { getProviderCredential } from "../core/provider-credentials.js";
 import { applyConfiguredProviderOverrides } from "./provider-overrides.js";
-import { LOCAL_PROVIDER_IDS, resetRuntimeProviders } from "./provider-definitions.js";
+import { resetRuntimeProviders } from "./provider-definitions.js";
 import { loadModelCatalog } from "./model-catalog.js";
 
-const LOCAL_PROVIDER_DEFAULTS: Record<string, string> = {
-  ollama: "http://127.0.0.1:11434/v1",
-  lmstudio: "http://127.0.0.1:1234/v1",
-  llamacpp: "http://127.0.0.1:8080/v1",
-  jan: "http://127.0.0.1:1337/v1",
-  vllm: "http://127.0.0.1:8000/v1",
-};
+const LOCAL_PROVIDER_DEFAULTS: Record<string, string> = {};
 
 export interface VisibleModelOption {
   providerId: string;
@@ -32,19 +26,7 @@ export interface VisibleModelOption {
   active: boolean;
 }
 
-function getNativeCliLabel(providerId: string): string {
-  if (providerId === "anthropic") return "Claude Code";
-  if (providerId === "codex") return "Codex";
-  if (providerId === "github-copilot") return "GitHub Copilot";
-  if (providerId === "google-gemini-cli") return "Google Cloud Code Assist";
-  if (providerId === "google-antigravity") return "Antigravity";
-  return "native provider";
-}
-
 function isDetectedProviderRuntimeSelectable(provider: { id: string; reason: string }): boolean {
-  if (LOCAL_PROVIDER_IDS.has(provider.id)) return true;
-  if ((provider.id === "anthropic" || provider.id === "codex") && provider.reason === "native login") return true;
-  if (provider.id === "github-copilot" && provider.reason === "OAuth login") return true;
   return isProviderRuntimeSelectable(provider.id);
 }
 
@@ -91,13 +73,9 @@ export class ProviderRegistry {
     const detectedIds = new Set(this.providers.map((provider) => provider.id));
     const credential = getProviderCredential(providerId);
     if (detectedIds.has(providerId)) {
-      if (credential.kind === "native_oauth") return "connected · native";
       return "connected";
     }
-    if (credential.kind === "native_oauth") {
-      return `${getNativeCliLabel(providerId)} login found`;
-    }
-    if (providerId in LOCAL_PROVIDER_DEFAULTS) return "local APIs disabled";
+    if (credential.kind === "api_key") return "configured";
     return "not connected";
   }
 

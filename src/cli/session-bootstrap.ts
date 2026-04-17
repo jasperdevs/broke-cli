@@ -81,7 +81,7 @@ export async function bootstrapSession(options: {
     if (!providerId) {
       const def = pickDefault(providers);
       if (!def) {
-        app.addMessage("system", "No runnable OAuth model runtime found. Run /login codex, /login anthropic, or /login github-copilot.");
+        app.addMessage("system", "No supported SDK model runtime found. Configure openai, anthropic, google, mistral, or xai.");
         return {
           providers,
           activeModel: null,

@@ -57,10 +57,8 @@ vi.mock("fs", async () => {
 
 import { createModel, shouldUseNativeProvider } from "../src/ai/providers.js";
 import { isIsolatedLinuxContainerRuntime, normalizeNativeUsage, resolveCodexSandboxMode, resolveNativeSpawnCommand, startNativeStream } from "../src/ai/native-stream.js";
-import { ProviderRegistry } from "../src/ai/provider-registry.js";
-import { resolveOneShotModel } from "../src/cli/oneshot.js";
 
-describe("native provider runtime selection", () => {
+describe("provider runtime selection", () => {
   beforeEach(() => {
     configMocks.getApiKey.mockReset();
     configMocks.getBaseUrl.mockReset();
@@ -69,44 +67,31 @@ describe("native provider runtime selection", () => {
     configMocks.spawn.mockReset();
     configMocks.existsSync.mockReset();
     configMocks.getProviderCredential.mockImplementation(() => ({ kind: "none" }));
+    configMocks.getApiKey.mockImplementation((providerId: string) =>
+      ["openai", "anthropic", "google", "mistral", "xai"].includes(providerId) ? "test-key" : undefined);
     configMocks.spawnSync.mockReturnValue({ status: 0, stdout: "/usr/bin/mock\n", error: undefined });
     configMocks.existsSync.mockReturnValue(false);
   });
 
-  it("uses Claude Code runtime when native Claude OAuth is present", () => {
+  it("does not accept native provider runtime selection", () => {
     configMocks.getProviderCredential.mockImplementation((providerId: string) => (
       providerId === "anthropic" ? { kind: "native_oauth", source: "claude-oauth" } : { kind: "none" }
     ));
 
-    expect(shouldUseNativeProvider("anthropic")).toBe(true);
-
-    const model = createModel("anthropic", "claude-sonnet-4-6");
-    expect(model.runtime).toBe("native-cli");
-    expect(model.nativeCommand).toBe("claude");
-    expect(model.provider.name).toBe("Claude Code");
-  });
-
-  it("uses Codex runtime when ChatGPT auth is present", () => {
-    configMocks.getProviderCredential.mockImplementation((providerId: string) => (
-      providerId === "codex" ? { kind: "native_oauth", source: "codex-chatgpt" } : { kind: "none" }
-    ));
-
-    expect(shouldUseNativeProvider("codex")).toBe(true);
-
-    const model = createModel("codex", "gpt-5.4-mini");
-    expect(model.runtime).toBe("native-cli");
-    expect(model.nativeCommand).toBe("codex");
-    expect(model.provider.id).toBe("codex");
-  });
-
-  it("fails clearly instead of falling back to SDK when native Codex CLI is missing", () => {
-    configMocks.getProviderCredential.mockImplementation((providerId: string) => (
-      providerId === "codex" ? { kind: "native_oauth", source: "codex-chatgpt" } : { kind: "none" }
-    ));
-    configMocks.spawnSync.mockReturnValue({ status: 1, stdout: "", error: undefined });
-
+    expect(shouldUseNativeProvider("anthropic")).toBe(false);
     expect(shouldUseNativeProvider("codex")).toBe(false);
-    expect(() => createModel("codex", "gpt-5.4-mini")).toThrow("codex CLI is not on PATH");
+    expect(() => createModel("codex")).toThrow("Unsupported provider: codex");
+    expect(() => createModel("google-gemini-cli")).toThrow("Unsupported provider: google-gemini-cli");
+  });
+
+  it("creates SDK models only for the supported Vercel AI SDK providers", () => {
+    expect(createModel("openai", "gpt-5.4-mini").runtime).toBe("sdk");
+    expect(createModel("anthropic", "claude-sonnet-4-6").runtime).toBe("sdk");
+    expect(createModel("google", "gemini-2.5-flash").runtime).toBe("sdk");
+    expect(createModel("mistral", "mistral-small-latest").runtime).toBe("sdk");
+    expect(createModel("xai", "grok-3-mini").runtime).toBe("sdk");
+    expect(() => createModel("ollama")).toThrow("Unsupported provider: ollama");
+    expect(() => createModel("openrouter")).toThrow("Unsupported provider: openrouter");
   });
 
   it("normalizes bare Windows shims to a runnable cmd path", async () => {
@@ -146,65 +131,10 @@ describe("native provider runtime selection", () => {
     }
   });
 
-  it("rejects SDK Codex because this runtime is OAuth-only", () => {
-    expect(() => createModel("codex")).toThrow("OAuth-only runtime");
-  });
-
-  it("uses OAuth stream runtime for Google Cloud Code Assist providers", () => {
-    configMocks.getProviderCredential.mockImplementation((providerId: string) => (
-      providerId === "google-gemini-cli"
-        ? { kind: "native_oauth", value: JSON.stringify({ token: "token", projectId: "project" }), source: "brokecli-auth" }
-        : { kind: "none" }
-    ));
-
-    const model = createModel("google-gemini-cli", "gemini-2.5-pro");
-    expect(model.runtime).toBe("oauth-stream");
-    expect(model.modelId).toBe("gemini-2.5-pro");
-  });
-
-  it("uses a ChatGPT-compatible default for native Codex", () => {
-    configMocks.getProviderCredential.mockImplementation((providerId: string) => (
-      providerId === "codex" ? { kind: "native_oauth", source: "codex-chatgpt" } : { kind: "none" }
-    ));
-
-    const model = createModel("codex");
-    expect(model.runtime).toBe("native-cli");
-    expect(model.modelId).toBe("gpt-5.4");
-    expect(model.provider.defaultModel).toBe("gpt-5.4");
-  });
-
-  it("falls back to the native-compatible Codex default when an unsupported one is requested", () => {
-    configMocks.getProviderCredential.mockImplementation((providerId: string) => (
-      providerId === "codex" ? { kind: "native_oauth", source: "codex-chatgpt" } : { kind: "none" }
-    ));
-
-    const model = createModel("codex", "gpt-5-mini");
-    expect(model.runtime).toBe("native-cli");
-    expect(model.modelId).toBe("gpt-5.4");
-    expect(model.provider.models).toContain("gpt-5.4");
-    expect(model.provider.models).toContain("gpt-5.3-codex");
-  });
-
-  it("propagates the runtime-resolved native Codex default through one-shot resolution", async () => {
-    configMocks.getProviderCredential.mockImplementation((providerId: string) => (
-      providerId === "codex" ? { kind: "native_oauth", source: "codex-chatgpt" } : { kind: "none" }
-    ));
-
-    const resolved = await resolveOneShotModel({
-      opts: { provider: "codex" },
-      providers: [{ id: "codex", name: "Codex", available: true, reason: "native login" }],
-      providerRegistry: new ProviderRegistry(),
-    });
-
-    expect(resolved.activeModel.runtime).toBe("native-cli");
-    expect(resolved.activeModel.modelId).toBe("gpt-5.4");
-    expect(resolved.modelId).toBe("gpt-5.4");
-  });
-
   it("clamps wildly inflated native Codex input usage back to estimated prompt size", () => {
     const usage = normalizeNativeUsage({
       providerId: "codex",
-      reported: { inputTokens: 80234, outputTokens: 247 },
+      reported: { inputTokens: 80234, outputTokens: 247, cacheReadTokens: 0, cacheWriteTokens: 0 },
       estimatedInputTokens: 1342,
       estimatedOutputTokens: 19,
     });
@@ -216,7 +146,7 @@ describe("native provider runtime selection", () => {
   it("keeps plausible native Codex usage when it stays near the estimated prompt size", () => {
     const usage = normalizeNativeUsage({
       providerId: "codex",
-      reported: { inputTokens: 1810, outputTokens: 55 },
+      reported: { inputTokens: 1810, outputTokens: 55, cacheReadTokens: 0, cacheWriteTokens: 0 },
       estimatedInputTokens: 1342,
       estimatedOutputTokens: 20,
     });
@@ -227,11 +157,10 @@ describe("native provider runtime selection", () => {
 
   it("fails a native side question if Claude emits tool_use blocks", async () => {
     const stdoutHandlers: Record<string, (chunk: string) => void> = {};
-    const stderrHandlers: Record<string, (chunk: string) => void> = {};
     const processHandlers: Record<string, (code?: number) => void> = {};
     configMocks.spawn.mockReturnValue({
       stdout: { on: (event: string, handler: (chunk: string) => void) => { stdoutHandlers[event] = handler; } },
-      stderr: { on: (event: string, handler: (chunk: string) => void) => { stderrHandlers[event] = handler; } },
+      stderr: { on: vi.fn() },
       stdin: { end: vi.fn() },
       on: (event: string, handler: (code?: number) => void) => { processHandlers[event] = handler; },
       kill: vi.fn(),
@@ -409,5 +338,4 @@ describe("native provider runtime selection", () => {
       if (platform) Object.defineProperty(process, "platform", platform);
     }
   });
-
 });

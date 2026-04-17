@@ -3,7 +3,7 @@ import {
   getCatalogModelIds,
   getProviderPreferredDisplayModelIds,
 } from "./model-catalog.js";
-import { PROVIDERS } from "./provider-definitions.js";
+import { PROVIDERS, SUPPORTED_PROVIDER_IDS } from "./provider-definitions.js";
 import { filterModelIdsForDisplay } from "./provider-visibility.js";
 import { clearLocalModelMetadata, setLocalProviderModelMetadata, type LocalModelMetadata } from "./local-model-metadata.js";
 
@@ -157,23 +157,10 @@ async function fetchLocalModels(id: string, baseURL: string): Promise<LocalDisco
 }
 
 export function syncCloudProviderModelsFromCatalog(): void {
-  const mappings: Array<{ providerId: string; catalogProviderId?: string }> = [
-    { providerId: "anthropic" },
-    { providerId: "openai" },
-    { providerId: "github-copilot" },
-    { providerId: "google" },
-    { providerId: "google-gemini-cli" },
-    { providerId: "google-antigravity" },
-    { providerId: "mistral" },
-    { providerId: "groq" },
-    { providerId: "xai" },
-    { providerId: "openrouter" },
-  ];
-
-  for (const { providerId, catalogProviderId } of mappings) {
-    const modelIds = getCatalogModelIds(catalogProviderId ?? providerId);
+  for (const providerId of SUPPORTED_PROVIDER_IDS) {
+    const modelIds = getCatalogModelIds(providerId);
     if (!modelIds || modelIds.length === 0 || !PROVIDERS[providerId]) continue;
-    const preferred = [...getProviderPreferredDisplayModelIds(providerId), ...PROVIDERS[providerId].models];
+    const preferred = getProviderPreferredDisplayModelIds(providerId);
     PROVIDERS[providerId].models = filterModelIdsForDisplay(providerId, modelIds, preferred);
     if (!PROVIDERS[providerId].models.includes(PROVIDERS[providerId].defaultModel)) {
       PROVIDERS[providerId].defaultModel = PROVIDERS[providerId].models[0];

@@ -1,7 +1,7 @@
 import type { DetectedProvider } from "../ai/detect.js";
 import type { ProviderRegistry } from "../ai/provider-registry.js";
 import type { ModelHandle } from "../ai/providers.js";
-import { getPrettyModelName, getProviderNativePreferredDisplayModelIds } from "../ai/model-catalog.js";
+import { getPrettyModelName } from "../ai/model-catalog.js";
 import { getSettings } from "../core/config.js";
 import type { ModelOption } from "../ui-contracts.js";
 import { listResolvedModelPreferences, resolveConfiguredModelHandle, type SpecialistModelRole } from "./model-routing.js";
@@ -29,12 +29,10 @@ export function filterUnsupportedRuntimeModelOptions(
   activeModel: ModelHandle | null,
   providers: DetectedProvider[],
 ): ModelOption[] {
-  const codexNativeActive = activeModel?.provider.id === "codex" && activeModel.runtime === "native-cli";
-  const codexNativeDetected = providers.some((provider) => provider.id === "codex" && provider.reason === "native login");
-  if (!codexNativeActive && !codexNativeDetected) return options;
-  const allowedCodexModels = new Set(getProviderNativePreferredDisplayModelIds("codex"));
-  if (allowedCodexModels.size === 0) return options;
-  return options.filter((option) => option.providerId !== "codex" || allowedCodexModels.has(option.modelId));
+  void activeModel;
+  if (providers.length === 0) return options;
+  const providerIds = new Set(providers.map((provider) => provider.id));
+  return options.filter((option) => option.providerId === AUTO_MODEL_PROVIDER_ID || providerIds.has(option.providerId));
 }
 
 export function rebuildSmallModelState(
@@ -43,9 +41,6 @@ export function rebuildSmallModelState(
   currentModelId: string,
 ): { smallModel: ModelHandle | null; smallModelId: string } {
   if (!activeModel) return { smallModel: null, smallModelId: "" };
-  if (activeModel.provider.id === "codex" && activeModel.runtime === "native-cli") {
-    return { smallModel: null, smallModelId: "" };
-  }
   const resolved = resolveConfiguredModelHandle(providerRegistry, activeModel, currentModelId, "small");
   if (!resolved || resolved.modelId === currentModelId) {
     return { smallModel: null, smallModelId: "" };

@@ -9,7 +9,7 @@ import {
   getConfiguredProviderDefaultModel,
   listConfiguredProviderIds,
 } from "../core/models-config.js";
-import { PROVIDERS, getProviderInfo, setRuntimeProviderInfo, type ProviderInfo } from "./provider-definitions.js";
+import { PROVIDERS, SUPPORTED_PROVIDER_ID_SET, getProviderInfo, setRuntimeProviderInfo, type ProviderInfo } from "./provider-definitions.js";
 
 function inferProviderDisplayName(providerId: string): string {
   return providerId
@@ -21,6 +21,7 @@ function inferProviderDisplayName(providerId: string): string {
 
 export function applyConfiguredProviderOverrides(): void {
   for (const providerId of listConfiguredProviderIds()) {
+    if (!SUPPORTED_PROVIDER_ID_SET.has(providerId)) continue;
     const existing = getProviderInfo(providerId);
     const configuredProvider = getConfiguredProviderDefinition(providerId);
     const configuredModels = getConfiguredProviderModels(providerId);
