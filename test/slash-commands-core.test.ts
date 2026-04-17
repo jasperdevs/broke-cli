@@ -145,7 +145,7 @@ describe("slash command handling", () => {
 
     expect(result.handled).toBe(true);
     expect(ranLogin).toBeNull();
-    expect(app.statusMessage).toContain("OPENAI_API_KEY");
+    expect(app.statusMessage).toContain("OAuth/native login is disabled");
   });
 
   it("keeps /connect as SDK-provider setup guidance", async () => {
@@ -163,7 +163,7 @@ describe("slash command handling", () => {
     });
 
     expect(result.handled).toBe(true);
-    expect(app.statusMessage).toContain("OPENAI_API_KEY");
+    expect(app.statusMessage).toContain("supported Vercel AI SDK providers");
   });
 
   it("does not add transcript comments for /thinking and /caveman toggles", async () => {

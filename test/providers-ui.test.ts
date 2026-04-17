@@ -10,18 +10,18 @@ afterEach(() => {
 });
 
 describe("provider diagnostics UI", () => {
-  it("shows supported SDK provider diagnostics in a picker", async () => {
+  it("shows provider diagnostics in a picker and starts OAuth login for OAuth providers", async () => {
     const app = createAppStub();
     const opened: Array<{ title: string; items: Array<{ id: string; label: string; detail?: string }>; onSelect: (id: string) => void }> = [];
     app.openItemPicker = (title: string, items: Array<{ id: string; label: string; detail?: string }>, nextOnSelect: (id: string) => void) => {
       opened.push({ title, items, onSelect: nextOnSelect });
     };
     vi.spyOn(detect, "inspectProviders").mockResolvedValue([
-      { id: "openai", name: "OpenAI", available: false, reason: "set OPENAI_API_KEY" },
-      { id: "anthropic", name: "Anthropic", available: true, reason: "configured auth (env)" },
+      { id: "codex", name: "Codex", available: false, reason: "run /login codex" },
+      { id: "github-copilot", name: "GitHub Copilot", available: true, reason: "OAuth login" },
     ]);
     const providerRegistry = {
-      getProviderInfo: (id: string) => ({ id, name: id === "openai" ? "OpenAI" : "Anthropic" }),
+      getProviderInfo: (id: string) => ({ id, name: id === "codex" ? "Codex" : "GitHub Copilot" }),
     } as any;
 
     const result = await handleSlashCommand({
@@ -30,14 +30,14 @@ describe("provider diagnostics UI", () => {
       session: new Session(`test-providers-${Date.now()}`),
       ...createSlashArgs({
         providerRegistry,
-        refreshProviderState: async () => [{ id: "anthropic", name: "Anthropic", available: true, reason: "configured auth (env)" }] as any,
+        refreshProviderState: async () => [{ id: "codex", name: "Codex", available: true, reason: "native login" }] as any,
       }),
     });
 
     expect(result.handled).toBe(true);
     expect(opened[0]?.title).toBe("Providers");
-    expect(opened[0]?.items.map((item) => item.label)).toEqual(["OpenAI", "Anthropic"]);
-    await opened[0]?.onSelect("openai");
-    expect(app.statusMessage).toContain("OPENAI_API_KEY");
+    expect(opened[0]?.items.map((item) => item.label)).toEqual(["Codex", "GitHub Copilot"]);
+    await opened[0]?.onSelect("codex");
+    expect(app.statusMessage).toContain("Codex");
   });
 });
