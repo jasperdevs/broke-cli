@@ -68,6 +68,40 @@ function normalizeCodexCliToolArgs(name: string, args: unknown): unknown {
   return parsed;
 }
 
+function firstCodexFileChangePath(item: Record<string, unknown>): string {
+  const changes = Array.isArray(item.changes) ? item.changes : [];
+  for (const change of changes) {
+    const record = asRecord(change);
+    if (typeof record?.path === "string" && record.path.trim()) return record.path.trim();
+  }
+  return "";
+}
+
+function formatCodexFileChangeSummary(item: Record<string, unknown>): string {
+  const changes = Array.isArray(item.changes) ? item.changes : [];
+  const labels = changes
+    .map((change) => {
+      const record = asRecord(change);
+      const path = typeof record?.path === "string" ? record.path.trim() : "";
+      const kind = typeof record?.kind === "string" ? record.kind.trim() : "";
+      return path ? (kind ? `${kind} ${path}` : path) : "";
+    })
+    .filter(Boolean);
+  return labels.join(", ");
+}
+
+function codexCommandResult(item: Record<string, unknown>): { success: boolean; output: string; error?: string } {
+  const output = typeof item.aggregated_output === "string"
+    ? item.aggregated_output
+    : typeof item.output === "string"
+      ? item.output
+      : "";
+  const exitCode = typeof item.exit_code === "number" ? item.exit_code : null;
+  const status = typeof item.status === "string" ? item.status : "";
+  const success = status !== "failed" && exitCode !== null ? exitCode === 0 : status !== "failed";
+  return success ? { success, output } : { success, output, error: output || `Command failed${exitCode !== null ? ` with exit code ${exitCode}` : ""}` };
+}
+
 function extractClaudeToolUseNames(message: unknown): string[] {
   const record = typeof message === "object" && message !== null ? message as Record<string, unknown> : {};
   const content = Array.isArray(record.content) ? record.content : [];
@@ -117,8 +151,48 @@ export function createNativeEventHandlers(options: {
     callbacks.onToolCallStart?.(toolName, toolCallId);
   };
 
+  const handleCodexProcessItemEvent = (type: string, item: Record<string, unknown>): boolean => {
+    const itemType = extractItemType(item);
+    const toolCallId = extractNativeToolCallId(item);
+    if (itemType === "command_execution") {
+      if (denyToolUse) {
+        fail("Side question attempted to use bash.");
+        return true;
+      }
+      const command = typeof item.command === "string" ? item.command : "";
+      startToolIfNeeded("bash", toolCallId);
+      if (command) callbacks.onToolCall?.("bash", { command }, toolCallId ?? undefined);
+      if (type === "item.completed") {
+        callbacks.onToolResult?.("bash", codexCommandResult(item), toolCallId ?? undefined);
+        callbacks.onAfterToolCall?.();
+      }
+      return true;
+    }
+    if (itemType === "file_change") {
+      if (denyToolUse) {
+        fail("Side question attempted to edit files.");
+        return true;
+      }
+      const path = firstCodexFileChangePath(item);
+      const summary = formatCodexFileChangeSummary(item);
+      const args = { path, changes: Array.isArray(item.changes) ? item.changes : [] };
+      startToolIfNeeded("workspaceEdit", toolCallId);
+      callbacks.onToolCall?.("workspaceEdit", args, toolCallId ?? undefined);
+      if (type === "item.completed") {
+        callbacks.onToolResult?.("workspaceEdit", { success: true, output: summary || path || "changed" }, toolCallId ?? undefined);
+        callbacks.onAfterToolCall?.();
+      }
+      return true;
+    }
+    return false;
+  };
+
   const handleCodexEvent = (event: Record<string, unknown>) => {
     const type = typeof event.type === "string" ? event.type : "";
+    if (type === "item.started" || type === "item.completed") {
+      const item = asRecord(event.item);
+      if (item && handleCodexProcessItemEvent(type, item)) return;
+    }
     if (type === "response_item") {
       const payload = asRecord(event.payload);
       if (!payload) return;
@@ -168,7 +242,8 @@ export function createNativeEventHandlers(options: {
     if (type === "response.output_item.added") {
       const item = typeof event.item === "object" && event.item !== null ? event.item as Record<string, unknown> : {};
       const itemType = extractItemType(item);
-      const toolName = extractNativeToolName(item);
+      const rawToolName = extractNativeToolName(item);
+      const toolName = rawToolName ? normalizeCodexCliToolName(rawToolName) : null;
       const toolCallId = extractNativeToolCallId(item);
       if (toolName && /function_call/.test(itemType)) {
         if (toolCallId) nativeToolNamesById.set(toolCallId, toolName);
@@ -200,7 +275,8 @@ export function createNativeEventHandlers(options: {
     if (type === "response.output_item.done") {
       const item = typeof event.item === "object" && event.item !== null ? event.item as Record<string, unknown> : {};
       const itemType = extractItemType(item);
-      const toolName = extractNativeToolName(item);
+      const rawToolName = extractNativeToolName(item);
+      const toolName = rawToolName ? normalizeCodexCliToolName(rawToolName) : null;
       const toolCallId = extractNativeToolCallId(item);
       if (toolName && /tool|function/.test(itemType) && /(result|output|response)/.test(itemType)) {
         callbacks.onToolResult?.(toolName, extractNativeToolResult(item, extractCodexItemText(item)), toolCallId ?? undefined);
@@ -225,13 +301,14 @@ export function createNativeEventHandlers(options: {
         fail("Side question attempted to use a tool.");
         return;
       }
-      const toolName = extractNativeToolName(item);
+      const rawToolName = extractNativeToolName(item);
+      const toolName = rawToolName ? normalizeCodexCliToolName(rawToolName) : null;
       const toolCallId = extractNativeToolCallId(item);
       const text = extractCodexItemText(item);
       if (toolName && toolCallId) nativeToolNamesById.set(toolCallId, toolName);
       if (toolName && /tool|function/.test(itemType) && /(call|use|invocation|request|input|start)/.test(itemType)) {
         startToolIfNeeded(toolName, toolCallId);
-        callbacks.onToolCall?.(toolName, extractNativeToolArgs(item), toolCallId ?? undefined);
+        callbacks.onToolCall?.(toolName, normalizeCodexCliToolArgs(rawToolName ?? toolName, extractNativeToolArgs(item)), toolCallId ?? undefined);
       }
       if (toolName && /tool|function/.test(itemType) && /(result|output|response)/.test(itemType)) {
         callbacks.onToolResult?.(toolName, extractNativeToolResult(item, text), toolCallId ?? undefined);

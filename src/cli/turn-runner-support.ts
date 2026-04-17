@@ -401,6 +401,7 @@ export function buildToolPreview(name: string, args: unknown): string {
   }
   if (name === "Write" || name === "writeFile") return shortenPath(String(toolArgs.file_path ?? toolArgs.path ?? "?"));
   if (name === "Edit" || name === "editFile") return shortenPath(String(toolArgs.file_path ?? toolArgs.path ?? "?"));
+  if (name === "workspaceEdit") return shortenPath(String(toolArgs.path ?? "?"));
   if (name === "Glob" || name === "glob") {
     const pattern = String(toolArgs.pattern ?? "?");
     const path = typeof toolArgs.path === "string" ? toolArgs.path : undefined;
