@@ -94,7 +94,7 @@ export async function bootstrapSession(options: {
     if (!providerId) {
       const def = pickDefault(providers);
       if (!def) {
-        app.addMessage("system", "No supported SDK model runtime found. Configure openai, anthropic, google, mistral, or xai.");
+        app.addMessage("system", "No provider key found. Set OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, MISTRAL_API_KEY, or XAI_API_KEY.");
         return {
           providers,
           activeModel: null,

@@ -356,7 +356,7 @@ export function formatTurnErrorMessage(options: {
   if (msg.includes("insufficient permissions") || msg.includes("Missing scopes")) {
     msg = "Your OAuth account does not have access to this model. Try a different model with /model.";
   } else if (msg.includes("invalid_api_key") || msg.includes("Incorrect API key") || msg.includes("401")) {
-    msg = `${providerName} authentication failed. Run /login and try again.`;
+    msg = `${providerName} authentication failed. Check the provider key or env var, then try again.`;
   } else if (msg.includes("Could not resolve") || msg.includes("ECONNREFUSED") || msg.includes("fetch failed")) {
     msg = `Can't reach ${providerName}. Check your connection or if the server is running.`;
   } else if (msg.includes("429") || msg.includes("rate_limit") || msg.includes("hit your limit")) {

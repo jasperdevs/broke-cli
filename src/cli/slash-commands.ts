@@ -42,16 +42,18 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
   {
     names: ["connect"],
     description: "show provider setup status",
+    showInPicker: false,
     run: ({ app }) => {
-      app.setStatus?.("Use one of the supported Vercel AI SDK providers: openai, anthropic, google, mistral, xai.");
+      app.setStatus?.("Set one env var: OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, MISTRAL_API_KEY, or XAI_API_KEY.");
       return { handled: true };
     },
   },
   {
     names: ["login"],
     description: "show provider setup status",
+    showInPicker: false,
     run: ({ app }) => {
-      app.setStatus?.("OAuth/native login is disabled. Configure openai, anthropic, google, mistral, or xai.");
+      app.setStatus?.("Set one env var: OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, MISTRAL_API_KEY, or XAI_API_KEY.");
       return { handled: true };
     },
   },
@@ -70,7 +72,7 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
       );
       const allOptions = getPickerOptions();
       if (allOptions.length === 0) {
-        app.setStatus?.("No supported SDK models found. Configure openai, anthropic, google, mistral, or xai.");
+        app.setStatus?.("No provider key found. Set OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, MISTRAL_API_KEY, or XAI_API_KEY.");
         return { handled: true };
       }
       const normalizedQuery = restText.toLowerCase();

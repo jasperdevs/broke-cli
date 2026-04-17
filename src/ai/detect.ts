@@ -66,6 +66,16 @@ function listBudgetCandidateModelIds(provider: DetectedProvider): string[] {
   return deduped;
 }
 
+function providerEnvVar(providerId: string): string {
+  return ({
+    openai: "OPENAI_API_KEY",
+    anthropic: "ANTHROPIC_API_KEY",
+    google: "GOOGLE_GENERATIVE_AI_API_KEY",
+    mistral: "MISTRAL_API_KEY",
+    xai: "XAI_API_KEY",
+  } as Record<string, string>)[providerId] ?? `${providerId.toUpperCase()}_API_KEY`;
+}
+
 export async function inspectProviders(): Promise<DetectedProvider[]> {
   const config = loadConfig();
   return SUPPORTED_PROVIDER_IDS.map((providerId) => {
@@ -76,7 +86,7 @@ export async function inspectProviders(): Promise<DetectedProvider[]> {
     const credential = getProviderCredential(providerId);
     return credential.kind === "api_key"
       ? { id: providerId, name: info?.name ?? providerId, available: true, reason: credential.source ? `configured auth (${credential.source})` : "configured auth" }
-      : { id: providerId, name: info?.name ?? providerId, available: false, reason: `set ${providerId} API key` };
+      : { id: providerId, name: info?.name ?? providerId, available: false, reason: `set ${providerEnvVar(providerId)}` };
   });
 }
 
