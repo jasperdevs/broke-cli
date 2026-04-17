@@ -7,6 +7,7 @@ import { buildSystemPrompt } from "../core/context.js";
 import { getSettings, loadConfig, updateSetting, type Mode } from "../core/config.js";
 import type { Session } from "../core/session.js";
 import type { ProviderRegistry } from "../ai/provider-registry.js";
+import { SUPPORTED_PROVIDER_ID_SET } from "../ai/provider-definitions.js";
 
 interface BootstrapApp {
   addMessage(role: "user" | "assistant" | "system", content: string): void;
@@ -22,6 +23,19 @@ export interface BootstrapResult {
   smallModel: ModelHandle | null;
   smallModelId: string;
   systemPrompt: string;
+}
+
+function isSupportedProviderId(providerId: string | undefined): providerId is string {
+  return !!providerId && SUPPORTED_PROVIDER_ID_SET.has(providerId);
+}
+
+function parseSupportedProviderModel(value: string | undefined): { providerId: string; modelId: string } | null {
+  if (!value || value === "__auto__/__auto__") return null;
+  const slashIdx = value.indexOf("/");
+  if (slashIdx <= 0) return null;
+  const providerId = value.slice(0, slashIdx);
+  if (!isSupportedProviderId(providerId)) return null;
+  return { providerId, modelId: value.slice(slashIdx + 1) };
 }
 
 export async function bootstrapSession(options: {
@@ -68,15 +82,14 @@ export async function bootstrapSession(options: {
     }
   } else {
     const config = loadConfig();
-    if (config.defaultProvider) providerId = config.defaultProvider;
+    if (isSupportedProviderId(config.defaultProvider)) providerId = config.defaultProvider;
     if (!modelId && config.defaultModel) modelId = config.defaultModel;
-    const lastModel = getSettings().lastModel;
-    if (lastModel && lastModel !== "__auto__/__auto__") {
-      const slashIdx = lastModel.indexOf("/");
-      if (slashIdx > 0) {
-        providerId = lastModel.slice(0, slashIdx);
-        modelId = lastModel.slice(slashIdx + 1);
-      }
+    const lastModel = parseSupportedProviderModel(getSettings().lastModel);
+    if (lastModel) {
+      providerId = lastModel.providerId;
+      modelId = lastModel.modelId;
+    } else if (getSettings().lastModel && getSettings().lastModel !== "__auto__/__auto__") {
+      updateSetting("lastModel", "");
     }
     if (!providerId) {
       const def = pickDefault(providers);
@@ -96,6 +109,10 @@ export async function bootstrapSession(options: {
   }
 
   try {
+    if (!isSupportedProviderId(providerId)) {
+      updateSetting("lastModel", "");
+      throw new Error(`Unsupported provider: ${providerId ?? "none"}. Supported providers: openai, anthropic, google, mistral, xai.`);
+    }
     let resolvedModelId = modelId;
     if (explicitModelRequest && modelId) {
       const visibleOptions = providerRegistry.buildVisibleModelOptions(null, "", getSettings().scopedModels);

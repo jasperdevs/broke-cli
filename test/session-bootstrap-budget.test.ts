@@ -81,4 +81,44 @@ describe("session bootstrap budget mode", () => {
       updateSetting("lastModel", previousLastModel);
     }
   });
+
+  it("clears stale unsupported saved providers before startup fallback", async () => {
+    const previousLastModel = getSettings().lastModel;
+    const selected: Array<{ provider: string; model: string }> = [];
+    const app = {
+      addMessage() {},
+      setModel(provider: string, model: string) { selected.push({ provider, model }); },
+      setMode() {},
+      clearStatus() {},
+    };
+    const providerRegistry = {
+      createModel: (providerId: string, modelId?: string) => ({
+        provider: { id: providerId, name: providerId, defaultModel: modelId ?? "default", models: [modelId ?? "default"] },
+        modelId: modelId ?? "default",
+        runtime: "sdk",
+        model: {} as any,
+      }),
+      hasVisibleModel: () => true,
+    } as any;
+
+    try {
+      updateSetting("lastModel", "codex/gpt-5.4");
+      const result = await bootstrapSession({
+        opts: {},
+        app,
+        session: new Session(`bootstrap-stale-${Date.now()}`),
+        providerRegistry,
+        currentMode: "build",
+        refreshProviderState: async () => [
+          { id: "openai", name: "OpenAI", available: true, reason: "configured auth" },
+        ],
+      });
+
+      expect(result.activeModel?.provider.id).toBe("openai");
+      expect(getSettings().lastModel).toBe("openai/default");
+      expect(selected[0]?.provider).toBe("openai");
+    } finally {
+      updateSetting("lastModel", previousLastModel);
+    }
+  });
 });
