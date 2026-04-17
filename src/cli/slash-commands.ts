@@ -94,7 +94,7 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
       );
       const allOptions = getPickerOptions();
       if (allOptions.length === 0) {
-        app.setStatus?.("No runnable OAuth models found. Run /login codex, /login anthropic, or /login github-copilot.");
+        app.setStatus?.("No OAuth provider configured. Run /login to authenticate.");
         return { handled: true };
       }
       const normalizedQuery = restText.toLowerCase();

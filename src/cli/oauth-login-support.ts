@@ -399,7 +399,7 @@ async function fetchGitHubCopilotToken(githubToken: string, hostname: string): P
     throw new Error(`Copilot token request failed: ${response.status} ${await response.text()}`);
   }
   const payload = await response.json() as { token?: string; expires_at?: number };
-  if (!payload.token) throw new Error("GitHub did not return a Copilot API token.");
+  if (!payload.token) throw new Error("GitHub did not return a Copilot OAuth token.");
   return {
     access: payload.token,
     expiresAt: payload.expires_at ? payload.expires_at * 1000 - 5 * 60 * 1000 : undefined,

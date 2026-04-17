@@ -127,7 +127,7 @@ export function createModel(providerId: string, modelId?: string): ModelHandle {
       throw new Error("GitHub Copilot OAuth token is invalid. Run /login github-copilot again.");
     }
     if (!token.includes("proxy-ep=")) {
-      throw new Error("GitHub login found, but no Copilot API token is stored. Run /login github-copilot again.");
+      throw new Error("GitHub login found, but no Copilot OAuth session token is stored. Run /login github-copilot again.");
     }
     const baseURL = getGitHubCopilotBaseUrl(token);
     const provider = { ...info, baseUrl: baseURL, headers: { ...COPILOT_HEADERS } };
