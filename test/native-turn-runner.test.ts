@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
-const { startNativeStreamMock } = vi.hoisted(() => ({
+const { startNativeStreamMock, startGoogleCloudCodeStreamMock } = vi.hoisted(() => ({
   startNativeStreamMock: vi.fn(),
+  startGoogleCloudCodeStreamMock: vi.fn(),
 }));
 
 vi.mock("../src/ai/native-stream.js", async () => {
@@ -11,6 +12,10 @@ vi.mock("../src/ai/native-stream.js", async () => {
     startNativeStream: startNativeStreamMock,
   };
 });
+
+vi.mock("../src/ai/google-cloud-code-stream.js", () => ({
+  startGoogleCloudCodeStream: startGoogleCloudCodeStreamMock,
+}));
 
 vi.mock("../src/core/config.js", async () => {
   const actual = await vi.importActual<typeof import("../src/core/config.js")>("../src/core/config.js");
@@ -67,6 +72,11 @@ import { executeTurn } from "../src/cli/turn-execution.js";
 import { Session } from "../src/core/session.js";
 
 describe("native turn runner integration", () => {
+  beforeEach(() => {
+    startNativeStreamMock.mockReset();
+    startGoogleCloudCodeStreamMock.mockReset();
+  });
+
   it("persists native Codex tools, thinking, and final text through the turn runner", async () => {
     const appendedText: string[] = [];
     const appendedThinking: string[] = [];
@@ -147,6 +157,77 @@ describe("native turn runner integration", () => {
       content: "Created snake-game with a simple Three.js snake game.",
     });
     expect(result.toolActivity).toBe(true);
+    expect(result.completion).toBe("success");
+  });
+
+  it("shows held edit-turn final text for OAuth stream runtimes without native tool events", async () => {
+    const appendedText: string[] = [];
+    const app = {
+      addMessage: vi.fn(),
+      appendToLastMessage: vi.fn((delta: string) => appendedText.push(delta)),
+      replaceLastAssistantMessage: vi.fn(),
+      appendThinking: vi.fn(),
+      setThinkingRequested: vi.fn(),
+      getLastAssistantContent: vi.fn(() => appendedText.join("")),
+      setStreaming: vi.fn(),
+      setStreamTokens: vi.fn(),
+      updateUsage: vi.fn(),
+      setContextUsage: vi.fn(),
+      setStatus: vi.fn(),
+      addToolCall: vi.fn(),
+      updateToolCallArgs: vi.fn(),
+      addToolResult: vi.fn(),
+      onAbortRequest: vi.fn(),
+      hasPendingMessages: vi.fn(() => false),
+      flushPendingMessages: vi.fn(),
+      rollbackLastAssistantMessage: vi.fn(),
+    };
+    const session = new Session(`oauth-turn-${Date.now()}`);
+    session.addMessage("user", "make a landing page");
+
+    startGoogleCloudCodeStreamMock.mockImplementationOnce(async (_opts, callbacks) => {
+      callbacks.onText("Created the landing page in index.html.");
+      callbacks.onFinish({ inputTokens: 12, outputTokens: 6, cost: 0 });
+    });
+
+    const result = await executeTurn({
+      app: app as any,
+      session,
+      text: "make a landing page",
+      activeModel: {
+        provider: { id: "google-gemini-cli", name: "Google Cloud Code Assist", defaultModel: "gemini-2.5-pro", models: ["gemini-2.5-pro"] },
+        runtime: "oauth-stream",
+        modelId: "gemini-2.5-pro",
+      },
+      currentModelId: "gemini-2.5-pro",
+      smallModel: null,
+      smallModelId: "",
+      currentMode: "build",
+      policy: {
+        archetype: "edit",
+        allowedTools: ["writeFile", "editFile"],
+        maxToolSteps: 1,
+        scaffold: "create the requested files",
+        scaffoldSource: "builtin",
+        preferSmallExecutor: false,
+        promptProfile: "full",
+        historyWindow: null,
+      },
+      effectiveImages: undefined,
+      buildTools: () => ({}),
+      hooks: { emit: () => {} },
+      lastToolCalls: [],
+      contextLimit: 128000,
+      activeSystemPrompt: "system",
+      optimizeMessages: (messages) => messages,
+    });
+
+    expect(startGoogleCloudCodeStreamMock).toHaveBeenCalledTimes(1);
+    expect(app.appendToLastMessage).toHaveBeenCalledWith("Created the landing page in index.html.");
+    expect(session.getMessages().at(-1)).toMatchObject({
+      role: "assistant",
+      content: "Created the landing page in index.html.",
+    });
     expect(result.completion).toBe("success");
   });
 });

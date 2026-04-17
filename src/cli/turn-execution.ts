@@ -328,9 +328,7 @@ export async function executeTurn(options: {
         completion = "empty";
         return;
       }
-      if (
-        missingSimpleRequiredTool
-      ) {
+      if (missingSimpleRequiredTool) {
         if (visibleAssistantText.trim()) app.rollbackLastAssistantMessage();
         completion = "insufficient";
         return;
@@ -347,6 +345,7 @@ export async function executeTurn(options: {
         return;
       }
       if (content) {
+        if (!visibleAssistantText.trim() && !shouldSuppressPlanningNarration(rawContent, policy, executionModel.runtime)) { app.appendToLastMessage(content); visibleAssistantText = content; }
         session.addMessage("assistant", content);
         if (getSettings().notifyOnResponse) sendResponseNotification();
         if (app.hasPendingMessages("steering")) app.flushPendingMessages("steering");

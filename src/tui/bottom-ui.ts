@@ -237,6 +237,11 @@ function formatFooterBinding(binding: string): string {
     .replace(/\+/g, " + ");
 }
 
+function formatQueueBinding(): string {
+  const binding = formatFooterBinding(getKeybinding("queueMessage"));
+  return binding === "tab" ? "tab" : `tab / ${binding}`;
+}
+
 function renderFooterShortcut(key: string, label: string): { text: string; plain: string } {
   const plain = `${key} ${label}`;
   return {
@@ -264,14 +269,14 @@ export function buildFooterLines(app: AppState, hasSidebar: boolean, mainW: numb
   const infoRows = packFooterParts(buildInfoBarParts(app, hasSidebar), mainW);
   const lines = infoRows.length > 0 ? [...infoRows] : [];
   if (app.isStreaming && app.input.getText().trim().length > 0) {
-    lines.push(` ${DIM}${formatFooterBinding(getKeybinding("queueMessage"))} to queue message${RESET}`);
+    lines.push(` ${DIM}${formatQueueBinding()} to queue message${RESET}`);
   }
   return lines;
 }
 
 export function buildLegacyFooterLines(app: AppState, hasSidebar: boolean, mainW: number): string[] {
   const newlineBinding = formatFooterBinding(getKeybinding("newline"));
-  const queueBinding = formatFooterBinding(getKeybinding("queueMessage"));
+  const queueBinding = formatQueueBinding();
   const modeBinding = formatFooterBinding(getKeybinding("toggleMode"));
   const rows: Array<[{ text: string; plain: string }, { text: string; plain: string } | null]> = [
     [

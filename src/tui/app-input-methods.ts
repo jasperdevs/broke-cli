@@ -94,6 +94,8 @@ function isSidebarPointer(app: AppState, key: Keypress): boolean {
   return pointer.col > app.screen.mainWidth;
 }
 
+function isPlainTab(key: Keypress): boolean { return key.name === "tab" && !key.ctrl && !key.meta && !key.shift; }
+
 function scrollSidebarIfTargeted(app: AppState, delta: number, key?: Keypress): boolean {
   if (!app.screen.hasSidebar || getSettings().hideSidebar) return false;
   const pointerTargetsSidebar = !!key && isSidebarPointer(app, key);
@@ -303,8 +305,7 @@ export function handleKey(app: AppState, key: Keypress): void {
   ensureInlineChipElements(app);
   if (key.ctrl && key.name === "j") { app.draw(); return; }
 
-  const preText = app.input.getText();
-  const preCursor = app.input.getCursor();
+  const preText = app.input.getText(), preCursor = app.input.getCursor();
   if (tryDeleteVisiblePlaceholderFallback(app, key, preText, preCursor)) {
     app.draw();
     return;
@@ -418,7 +419,7 @@ export function handleKey(app: AppState, key: Keypress): void {
     return;
   }
   if ((app.isStreaming || app.isCompacting) && app.input.getText().trim().length > 0) {
-    if (matchesBinding(bindings.queueMessage, key)) {
+    if (matchesBinding(bindings.queueMessage, key) || isPlainTab(key)) {
       queueCurrentInput(app, "followup");
       return;
     }
@@ -427,7 +428,7 @@ export function handleKey(app: AppState, key: Keypress): void {
       return;
     }
   }
-  if (matchesBinding(bindings.queueMessage, key) && app.input.getText().trim().length > 0) { submitInput(app); return; }
+  if ((matchesBinding(bindings.queueMessage, key) || isPlainTab(key)) && app.input.getText().trim().length > 0) { submitInput(app); return; }
   const inputText = app.input.getText();
   if (inputText.startsWith("/")) {
     const suggestions = app.getCommandMatches();
