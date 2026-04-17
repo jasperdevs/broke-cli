@@ -24,6 +24,13 @@ export const OAUTH_PROVIDERS: OAuthProviderSpec[] = [
     args: ["auth", "login"],
   },
   {
+    id: "codex",
+    label: "ChatGPT Plus/Pro (Codex Subscription)",
+    kind: "external-cli",
+    command: "codex",
+    args: ["login"],
+  },
+  {
     id: "github-copilot",
     label: "GitHub Copilot",
     kind: "github-cli",
@@ -38,13 +45,6 @@ export const OAUTH_PROVIDERS: OAuthProviderSpec[] = [
     id: "google-antigravity",
     label: "Antigravity (Gemini 3, Claude, GPT-OSS)",
     kind: "google-browser-oauth",
-  },
-  {
-    id: "codex",
-    label: "ChatGPT Plus/Pro (Codex Subscription)",
-    kind: "external-cli",
-    command: "codex",
-    args: ["login"],
   },
 ];
 

@@ -16,6 +16,7 @@ import { getProviderCredential } from "../core/provider-credentials.js";
 import { applyConfiguredProviderOverrides } from "./provider-overrides.js";
 import { LOCAL_PROVIDER_IDS, resetRuntimeProviders } from "./provider-definitions.js";
 import { loadModelCatalog } from "./model-catalog.js";
+import { resolveNativeCommand } from "./native-cli.js";
 
 const LOCAL_PROVIDER_DEFAULTS: Record<string, string> = {
   ollama: "http://127.0.0.1:11434/v1",
@@ -39,6 +40,13 @@ function getNativeCliLabel(providerId: string): string {
   if (providerId === "google-gemini-cli") return "Google Cloud Code Assist";
   if (providerId === "google-antigravity") return "Antigravity";
   return "native provider";
+}
+
+function getRequiredLoginCommand(providerId: string): string | null {
+  if (providerId === "anthropic") return "claude";
+  if (providerId === "codex") return "codex";
+  if (providerId === "github-copilot") return "gh";
+  return null;
 }
 
 function isDetectedProviderRuntimeSelectable(provider: { id: string; reason: string }): boolean {
@@ -88,17 +96,22 @@ export class ProviderRegistry {
   }
 
   getConnectStatus(providerId: string): string {
-    const detectedIds = new Set(this.providers.map((provider) => provider.id));
+    const detected = this.providers.find((provider) => provider.id === providerId);
+    const command = getRequiredLoginCommand(providerId);
     const credential = getProviderCredential(providerId);
-    if (detectedIds.has(providerId)) {
-      if (credential.kind === "native_oauth") return "connected · native";
-      return "connected";
-    }
+    if (detected?.reason === "disabled") return "disabled";
     if (credential.kind === "native_oauth") {
-      return `${getNativeCliLabel(providerId)} login found`;
+      if (command && !resolveNativeCommand(command)) return `login found · ${command} CLI missing`;
+      return "logged in";
+    }
+    if (detected?.available) return "logged in";
+    if (command && !resolveNativeCommand(command)) return `unavailable · install ${command} CLI`;
+    if (detected && !detected.available) {
+      if (detected.reason.startsWith("run /login")) return "not logged in";
+      return `unavailable · ${detected.reason}`;
     }
     if (providerId in LOCAL_PROVIDER_DEFAULTS) return "local APIs disabled";
-    return "not connected";
+    return `not logged in · ${getNativeCliLabel(providerId)}`;
   }
 
   buildVisibleModelOptions(

@@ -1,6 +1,5 @@
 import { currentTheme } from "../core/themes.js";
 import { getModelSpec } from "../ai/model-catalog.js";
-import { getProviderModelLabel } from "../ai/model-display.js";
 import { getLocalModelMetadata } from "../ai/local-model-metadata.js";
 import { BOLD, DIM, RESET } from "../utils/ansi.js";
 import { truncateVisible, visibleWidth } from "../utils/terminal-width.js";
@@ -183,21 +182,9 @@ export function getModelPickerEntries(app: AppState): MenuEntry[] {
   if (!app.modelPicker) return [];
   const filtered = app.getFilteredModels();
   const autoOptions = filtered.filter((opt: ModelOption) => opt.providerId === "__auto__");
-  const labelCounts = new Map<string, number>();
-  for (const opt of filtered) {
-    if (opt.providerId === "__auto__") continue;
-    const label = opt.displayName ?? opt.modelId;
-    labelCounts.set(label, (labelCounts.get(label) ?? 0) + 1);
-  }
-  const byProvider = new Map<string, ModelOption[]>();
-  for (const opt of filtered) {
-    if (opt.providerId === "__auto__") continue;
-    if (!byProvider.has(opt.providerName)) byProvider.set(opt.providerName, []);
-    byProvider.get(opt.providerName)!.push(opt);
-  }
+  const modelOptions = filtered.filter((opt: ModelOption) => opt.providerId !== "__auto__");
   const entries: MenuEntry[] = [];
   let currentIdx = 0;
-  const showProviderHeaders = byProvider.size > 1;
   const width = getMenuBodyWidth(app);
   for (const opt of autoOptions) {
     const isCursor = currentIdx === app.modelPicker.cursor;
@@ -213,24 +200,25 @@ export function getModelPickerEntries(app: AppState): MenuEntry[] {
     });
     currentIdx++;
   }
-  if (autoOptions.length > 0 && byProvider.size > 0) entries.push({ lines: [""] });
-  for (const [provider, opts] of byProvider) {
-    if (showProviderHeaders) entries.push({ lines: [` ${DIM}${provider}${RESET}`] });
-    for (const opt of opts) {
-      const isCursor = currentIdx === app.modelPicker.cursor;
-      const pin = opt.active ? ` ${T()}*${RESET}` : "";
-      const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
-      const nameCol = isCursor ? `${TXT()}${BOLD}` : T();
-      entries.push({
-        lines: buildSelectableEntry(
-          `  ${arrow}${nameCol}`,
-          `${labelCounts.get(opt.displayName ?? opt.modelId)! > 1 ? getProviderModelLabel(opt.modelId, opt.providerId, opt.providerName) : opt.displayName ?? opt.modelId}${pin}`,
-          width,
-        ),
-        selectIndex: currentIdx,
-      });
-      currentIdx++;
-    }
+  if (autoOptions.length > 0 && modelOptions.length > 0) entries.push({ lines: [""] });
+  for (const opt of modelOptions) {
+    const isCursor = currentIdx === app.modelPicker.cursor;
+    const pin = opt.active ? ["*"] : [];
+    const badges = [...pin, ...(opt.badges ?? [])].filter((badge, index, list) => list.indexOf(badge) === index);
+    const badgeText = badges.length > 0 ? `${DIM} ${badges.join(" · ")}${RESET}` : "";
+    const display = opt.displayName && opt.displayName !== opt.modelId ? `${opt.displayName} (${opt.modelId})` : opt.modelId;
+    const label = opt.providerName && opt.providerName !== "---" ? `${opt.providerName} / ${display}` : display;
+    const arrow = isCursor ? `${T()}> ${RESET}` : "  ";
+    const nameCol = isCursor ? `${TXT()}${BOLD}` : T();
+    entries.push({
+      lines: buildSelectableEntry(
+        `  ${arrow}${nameCol}`,
+        `${label}${badgeText}`,
+        width,
+      ),
+      selectIndex: currentIdx,
+    });
+    currentIdx++;
   }
   return entries;
 }

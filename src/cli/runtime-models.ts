@@ -8,6 +8,7 @@ import { listResolvedModelPreferences, resolveConfiguredModelHandle, type Specia
 
 export const AUTO_MODEL_PROVIDER_ID = "__auto__";
 export const AUTO_MODEL_ID = "__auto__";
+const MODEL_BADGE_ORDER = ["now", "default", "small", "btw", "review", "plan", "ui", "arch", "auto"] as const;
 
 export function withAutoModelOption(options: ModelOption[]): ModelOption[] {
   if (options.length === 0 || options.some((option) => option.providerId === AUTO_MODEL_PROVIDER_ID && option.modelId === AUTO_MODEL_ID)) {
@@ -105,6 +106,12 @@ export function resolveAutoFallbackModels(
   return fallbacks;
 }
 
+function modelBadgeRank(badges: readonly string[] | undefined): number {
+  if (!badges || badges.length === 0) return MODEL_BADGE_ORDER.length;
+  const ranks = badges.map((badge) => MODEL_BADGE_ORDER.indexOf(badge as (typeof MODEL_BADGE_ORDER)[number])).filter((rank) => rank >= 0);
+  return ranks.length > 0 ? Math.min(...ranks) : MODEL_BADGE_ORDER.length;
+}
+
 export function buildVisibleRuntimeModelOptions(
   providerRegistry: ProviderRegistry,
   activeModel: ModelHandle | null,
@@ -133,5 +140,11 @@ export function buildVisibleRuntimeModelOptions(
         badges,
       };
     }), activeModel, providers);
+  options.sort((a, b) => {
+    const rank = modelBadgeRank(a.badges) - modelBadgeRank(b.badges);
+    if (rank !== 0) return rank;
+    if (a.providerName !== b.providerName) return a.providerName.localeCompare(b.providerName);
+    return (a.displayName ?? a.modelId).localeCompare(b.displayName ?? b.modelId);
+  });
   return withAutoModelOption(options);
 }

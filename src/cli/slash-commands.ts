@@ -53,21 +53,7 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
     },
   },
   {
-    names: ["connect"],
-    description: "login with oauth",
-    run: async ({ restText, app, providerRegistry, refreshProviderState }) => {
-      app.setStatus?.("Starting OAuth login.");
-      await runLoginFlow({
-        providerId: restText || undefined,
-        app,
-        providerRegistry,
-        refreshProviderState,
-      });
-      return { handled: true };
-    },
-  },
-  {
-    names: ["login"],
+    names: ["login", "connect"],
     description: "login with subscription/oauth",
     run: async ({ restText, app, providerRegistry, refreshProviderState }) => {
       await runLoginFlow({
@@ -94,7 +80,7 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
       );
       const allOptions = getPickerOptions();
       if (allOptions.length === 0) {
-        app.setStatus?.("No OAuth provider configured. Run /login to authenticate.");
+        app.setStatus?.("No visible models. Run /login or /connect to authenticate.");
         return { handled: true };
       }
       const normalizedQuery = restText.toLowerCase();
