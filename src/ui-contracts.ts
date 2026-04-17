@@ -40,7 +40,6 @@ export type MenuPromptKind =
   | "mode"
   | "name"
   | "login"
-  | "connect"
   | "settings"
   | "extensions"
   | "theme"

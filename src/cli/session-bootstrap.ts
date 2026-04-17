@@ -81,7 +81,7 @@ export async function bootstrapSession(options: {
     if (!providerId) {
       const def = pickDefault(providers);
       if (!def) {
-        app.addMessage("system", "No visible models. Run /login or /connect to authenticate.");
+        app.addMessage("system", "No visible models. Run /login to authenticate.");
         return {
           providers,
           activeModel: null,

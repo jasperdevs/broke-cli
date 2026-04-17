@@ -32,7 +32,6 @@ brokecli --broke -p "summarize this repo"
 Inside the app:
 
 - `/login <provider>` for supported native/OAuth login flows
-- `/connect <provider>` as a compatibility alias for `/login`
 - `/model` to switch models
 - `/packages` to inspect installed packages or search/install from npm
 - `/settings` to change runtime behavior

@@ -53,7 +53,7 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
     },
   },
   {
-    names: ["login", "connect"],
+    names: ["login"],
     description: "login with subscription/oauth",
     run: async ({ restText, app, providerRegistry, refreshProviderState }) => {
       await runLoginFlow({
@@ -80,7 +80,7 @@ export const CORE_SLASH_COMMAND_SPECS: ReadonlyArray<RegisteredSlashCommand<Core
       );
       const allOptions = getPickerOptions();
       if (allOptions.length === 0) {
-        app.setStatus?.("No visible models. Run /login or /connect to authenticate.");
+        app.setStatus?.("No visible models. Run /login to authenticate.");
         return { handled: true };
       }
       const normalizedQuery = restText.toLowerCase();

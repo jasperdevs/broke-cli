@@ -232,7 +232,6 @@ export function getMenuPromptPrefix(_app: AppState, kind: MenuPromptKind): strin
     case "mode": return "/mode ";
     case "name": return "/name ";
     case "login": return "/login ";
-    case "connect": return "/connect ";
     case "settings": return "/settings ";
     case "extensions": return "/extensions ";
     case "export": return "/export ";

@@ -151,24 +151,6 @@ describe("slash command handling", () => {
     });
   });
 
-  it("keeps /connect as an OAuth-only compatibility command", async () => {
-    const app = createAppStub();
-    const providerRegistry = {
-      getProviderInfo: () => ({ id: "openai", name: "OpenAI" }),
-      getConnectStatus: () => "OAuth only",
-    } as any;
-
-    const result = await handleSlashCommand({
-      text: "/connect openai",
-      app,
-      session: new Session(`test-connect-${Date.now()}`),
-      ...createSlashArgs({ providerRegistry }),
-    });
-
-    expect(result.handled).toBe(true);
-    expect(app.statusMessage).toContain("Unknown OAuth provider: openai");
-  });
-
   it("does not add transcript comments for /thinking and /caveman toggles", async () => {
     const app = createAppStub();
     const session = new Session(`test-toggle-comments-${Date.now()}`);
